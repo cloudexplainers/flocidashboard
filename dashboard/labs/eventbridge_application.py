@@ -71,7 +71,9 @@ TRUST_POLICY = {
 PRODUCER_POLICY_DOC = {
     'Version': '2012-10-17',
     'Statement': [
-        {'Effect': 'Allow', 'Action': 'events:PutEvents', 'Resource': arn('events', f'event-bus/{BUS}')},
+        # Floci 2.3 evaluates PutEvents at resource "*" before inspecting Entries.
+        # Keep the action restricted; the producer code always uses the lab bus.
+        {'Effect': 'Allow', 'Action': 'events:PutEvents', 'Resource': '*'},
         {'Effect': 'Allow', 'Action': ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'], 'Resource': arn('logs', f'log-group:/aws/lambda/{PRODUCER_FUNCTION}:*')},
     ],
 }
@@ -120,7 +122,7 @@ LAB = {
     'description': 'Build API Gateway → Lambda → EventBridge fan-out to two SQS queues and a notification Lambda, then inspect correlation and deliberately exercise failure paths.',
     'steps': [
         {'key': 'create-queues', 'title': 'Create processing, audit, and dead-letter queues', 'command': f'aws sqs create-queue --queue-name {PROCESSING_QUEUE}\naws sqs create-queue --queue-name {AUDIT_QUEUE}\naws sqs create-queue --queue-name {DLQ}', 'explanation': 'Creates isolated destinations for transformed work, the full audit envelope, and failed-target intent.'},
-        {'key': 'create-roles', 'title': 'Create least-privilege Lambda roles', 'command': f'aws iam create-role --role-name {PRODUCER_ROLE} --assume-role-policy-document file://lambda-trust.json\naws iam put-role-policy --role-name {PRODUCER_ROLE} --policy-name {PRODUCER_POLICY} --policy-document file://producer-policy.json', 'explanation': 'Separates the producer permission to PutEvents from the notification function logging permission.', 'artifact_label': 'producer-policy.json', 'artifact': json.dumps(PRODUCER_POLICY_DOC, indent=2)},
+        {'key': 'create-roles', 'title': 'Create producer and notification Lambda roles', 'command': f'aws iam create-role --role-name {PRODUCER_ROLE} --assume-role-policy-document file://lambda-trust.json\naws iam put-role-policy --role-name {PRODUCER_ROLE} --policy-name {PRODUCER_POLICY} --policy-document file://producer-policy.json', 'explanation': 'Separates producer PutEvents permission from notifier logging permission. Floci 2.3 evaluates PutEvents at resource "*"; on AWS, replace that wildcard with the lab event bus ARN to restrict publishing to one bus.', 'artifact_label': 'producer-policy.json', 'artifact': json.dumps(PRODUCER_POLICY_DOC, indent=2)},
         {'key': 'create-functions', 'title': 'Create producer and notification functions', 'command': f'aws lambda create-function --function-name {PRODUCER_FUNCTION} --runtime python3.11 --role {PRODUCER_ROLE_ARN} --handler handler.lambda_handler --zip-file fileb://producer.zip\naws lambda create-function --function-name {NOTIFIER_FUNCTION} --runtime python3.11 --role {NOTIFIER_ROLE_ARN} --handler handler.lambda_handler --zip-file fileb://notifier.zip', 'explanation': 'The API function validates requests and publishes a domain event; the target function logs a correlated notification.', 'artifact_label': 'producer-handler.py', 'artifact': PRODUCER_SOURCE, 'secondary_artifact_label': 'notifier-handler.py', 'secondary_artifact': NOTIFIER_SOURCE},
         {'key': 'create-bus-rules', 'title': 'Create the custom bus and three matching rules', 'command': f'aws events create-event-bus --name {BUS}\naws events put-rule --name {PROCESSING_RULE} --event-bus-name {BUS} --event-pattern file://order-pattern.json\naws events put-rule --name {AUDIT_RULE} --event-bus-name {BUS} --event-pattern file://order-pattern.json\naws events put-rule --name {NOTIFICATION_RULE} --event-bus-name {BUS} --event-pattern file://priority-pattern.json', 'explanation': 'Two rules match every OrderCreated event while the notification rule matches only high-priority orders.', 'artifact_label': 'order-pattern.json', 'artifact': json.dumps(ORDER_PATTERN, indent=2), 'secondary_artifact_label': 'priority-pattern.json', 'secondary_artifact': json.dumps(PRIORITY_PATTERN, indent=2)},
         {'key': 'put-targets', 'title': 'Attach transformed, audit, and Lambda targets', 'command': f'aws events put-targets --event-bus-name {BUS} --rule {PROCESSING_RULE} --targets file://processing-target.json', 'explanation': 'Transforms the processing payload, preserves the full audit envelope, and invokes the notification Lambda. Retry/DLQ fields show the AWS shape; current Floci executes transformation and delivery but does not enforce target retry/DLQ behavior.', 'artifact_label': 'processing-target.json', 'artifact': json.dumps({'Id': 'processing', 'Arn': QUEUE_ARNS[PROCESSING_QUEUE], 'InputTransformer': PROCESSING_TRANSFORMER, 'RetryPolicy': RETRY_POLICY, 'DeadLetterConfig': DEAD_LETTER_CONFIG}, indent=2)},
@@ -194,7 +196,7 @@ def create_roles() -> dict[str, Any]:
             if exc.response.get('Error', {}).get('Code') != 'EntityAlreadyExists': raise
         iam.put_role_policy(RoleName=role, PolicyName=policy_name, PolicyDocument=json.dumps(policy))
     marker('roles')
-    return result('create-roles', 'aws iam create-role ...', {'roles': [PRODUCER_ROLE, NOTIFIER_ROLE]}, True, 'Both least-privilege Lambda roles and inline policies exist.', started)
+    return result('create-roles', 'aws iam create-role ...', {'roles': [PRODUCER_ROLE, NOTIFIER_ROLE]}, True, 'Producer publishing and notifier logging policies exist. Floci evaluates PutEvents at resource "*"; on AWS, scope that statement to the event bus ARN.', started)
 
 
 def create_functions() -> dict[str, Any]:

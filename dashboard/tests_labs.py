@@ -8178,7 +8178,8 @@ class StepFunctionsLabRunnerTests(SimpleTestCase):
         mock_iam.create_role.return_value = {'Role': {'RoleName': 'FlociStepFunctionsExecutionRole'}}
         mock_sfn.create_state_machine.return_value = {'stateMachineArn': 'arn:aws:states:us-east-1:000000000000:stateMachine:lab-order-processing-workflow'}
         mock_sfn.start_execution.return_value = {'executionArn': 'arn:aws:states:us-east-1:000000000000:execution:lab-order-processing-workflow:vip-1'}
-        mock_sfn.describe_execution.return_value = {'status': 'SUCCEEDED', 'output': '{"status":"VIP_PROCESSED"}'}
+        mock_sfn.describe_execution.return_value = {'executionArn': 'arn:aws:states:us-east-1:000000000000:execution:lab-order-processing-workflow:vip-1', 'status': 'SUCCEEDED', 'output': '{"status":"VIP_PROCESSED"}'}
+        mock_sfn.get_execution_history.return_value = {'events': [{'type': 'ExecutionSucceeded'}]}
         mock_sfn.describe_state_machine.return_value = {'status': 'ACTIVE'}
 
         from dashboard.labs.stepfunctions_labs import run_step, status, reset

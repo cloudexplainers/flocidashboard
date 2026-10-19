@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import TopNavigation from '@cloudscape-design/components/top-navigation';
 import { IdentityInfo, ServiceDefinition } from '../types';
 import { AwsServiceIcon } from './AwsServiceIcons';
+import { FLAT_CURRICULUM_LABS } from '../labCurriculum';
 
 interface TopNavProps {
   identity: IdentityInfo | null;
@@ -111,7 +112,7 @@ export const TopNav: React.FC<TopNavProps> = ({
       utilities={[
         {
           type: 'button',
-          text: 'Workflow Labs (63)',
+          text: `Workflow Labs (${FLAT_CURRICULUM_LABS.length})`,
           iconName: 'folder-open',
           onClick: () => onNavigateLabs(),
         },

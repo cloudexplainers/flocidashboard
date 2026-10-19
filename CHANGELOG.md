@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.1 — 2026-10-19
+
+- Added a complete live lab audit command and disposable Floci configuration, plus Playwright coverage for every curriculum lab and real IAM/S3 browser workflows.
+- Fixed guided EC2 lab networking and guest readiness, Fargate awsvpc configuration, RDS startup timeouts, EventBridge publishing permissions, and Step Functions parallel output handling and completion verification.
+- Lab Studio now stops automated runs on failed/unverified steps, shows reset/status failures, ignores stale responses after navigation, and replaces stale browser completion with current status.
+- Validated the existing 65-service catalog against Floci 2.3.0; newer Floci services outside this catalog do not yet have dedicated dashboard pages.
+- Updated Python to 3.14, Django to 6.1.2, boto3 to 1.43.115, and AWS CLI to 1.46.1, with a resolved Python dependency lock file.
+- Updated React to 19.3.1, TypeScript to 7.0.2, Vite to 8.3.4, Lucide to 1.59.0, and Cloudscape packages and frontend tooling to their latest stable releases.
+- Fixed React ref callback typing, Vite CSS module declarations, SES v2 pagination without SDK paginator definitions, and optional unsupported Auto Scaling operations.
+- Replaced the unavailable curl health probe with Floci's built-in health-check script.
+- Docker builds now compile frontend assets in a Node.js 26 stage and exclude host node_modules from the build context.
+- Added live inventory and S3, SQS, DynamoDB, SSM, IAM/STS compatibility tests, pagination/error regressions, and CI for backend tests, frontend builds, and live Floci checks.
+- Validation: 1,173 unit tests, six live compatibility tests, all 66 labs (365 steps), and 77 Playwright tests passed. The complete Playwright suite also passed in headed Chromium.
+
 ## 2.0.0 — 2026-09-01
 
 ### Official AWS Cloudscape Design System & UI Architecture

@@ -337,6 +337,8 @@ class SESInventoryTests(SimpleTestCase):
         ses = MagicMock()
         ses.list_verified_email_addresses.return_value = {'VerifiedEmailAddresses': []}
         sesv2 = MagicMock()
+        sesv2.list_email_identities.return_value = {'EmailIdentities': []}
+        sesv2.list_email_templates.return_value = {'TemplatesMetadata': []}
         sesv2.list_configuration_sets.return_value = {'ConfigurationSets': [{'ConfigurationSetName': 'local-events'}]}
         sesv2.get_configuration_set.return_value = {
             'SendingOptions': {'SendingEnabled': False},

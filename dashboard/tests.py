@@ -3819,22 +3819,22 @@ class GuidedEC2LabTests(TestCase):
         self.assertContains(response, 'Launch an instance and inspect IMDS')
         self.assertContains(response, 'data-step-key="launch-instance"')
 
-    def test_imds_command_uses_bash_tcp_instead_of_curl(self):
+    def test_imds_command_bounds_network_wait_and_bypasses_proxy(self):
         from dashboard.labs.ec2_guided import _imds_get_command
 
         command = _imds_get_command('/latest/meta-data/instance-id')
 
-        self.assertIn('/dev/tcp/169.254.169.254/80', command)
-        self.assertIn('GET /latest/meta-data/instance-id HTTP/1.0', command)
-        self.assertNotIn('curl', command)
+        self.assertIn('http://169.254.169.254/latest/meta-data/instance-id', command)
+        self.assertIn('--max-time 2', command)
+        self.assertIn('--noproxy "*"', command)
 
     def test_http_command_supports_guest_web_server(self):
         from dashboard.labs.ec2_guided import _http_get_command
 
         command = _http_get_command('127.0.0.1', 8080, '/')
 
-        self.assertIn('/dev/tcp/127.0.0.1/8080', command)
-        self.assertIn('GET / HTTP/1.0', command)
+        self.assertIn('http://127.0.0.1:8080/', command)
+        self.assertIn('--connect-timeout 1 --max-time 2', command)
 
     @patch('dashboard.labs.ec2_guided.time.sleep')
     @patch('dashboard.labs.ec2_guided._execute')

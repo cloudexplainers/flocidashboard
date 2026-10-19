@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from botocore.exceptions import ClientError
+from botocore.config import Config
 from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
@@ -40,8 +41,10 @@ ECS_FARGATE_LAB = {
         {
             'key': 'run-task',
             'title': 'Launch Standalone Fargate Task',
-            'command': f'aws ecs run-task --cluster {CLUSTER_NAME} --task-definition {TASK_FAMILY} --launch-type FARGATE --count 1',
-            'explanation': 'Executes an on-demand container task on serverless Fargate infrastructure without provisioning EC2 instances.',
+            'command': f'aws ecs run-task --cluster {CLUSTER_NAME} --task-definition {TASK_FAMILY} --launch-type FARGATE --count 1 --network-configuration file://network.json',
+            'explanation': 'Creates a lab-owned VPC, subnet, and security group, then launches an on-demand task with the required awsvpc network configuration.',
+            'artifact_label': 'network.json',
+            'artifact': json.dumps({'awsvpcConfiguration': {'subnets': ['<lab-subnet-id>'], 'securityGroups': ['<lab-security-group-id>'], 'assignPublicIp': 'ENABLED'}}, indent=2),
         },
         {
             'key': 'describe-tasks',
@@ -52,7 +55,7 @@ ECS_FARGATE_LAB = {
         {
             'key': 'create-service',
             'title': 'Create Managed ECS Service',
-            'command': f'aws ecs create-service --cluster {CLUSTER_NAME} --service-name {SERVICE_NAME} --task-definition {TASK_FAMILY} --desired-count 2 --launch-type FARGATE',
+            'command': f'aws ecs create-service --cluster {CLUSTER_NAME} --service-name {SERVICE_NAME} --task-definition {TASK_FAMILY} --desired-count 2 --launch-type FARGATE --network-configuration file://network.json',
             'explanation': 'Maintains a specified number of running task replicas, providing automated health checking and rolling restarts.',
         },
         {
@@ -68,7 +71,9 @@ LABS = [ECS_FARGATE_LAB]
 
 
 def client(name: str):
-    return FlociClientFactory().client(name)
+    factory = FlociClientFactory()
+    factory.config = factory.config.merge(Config(read_timeout=120, retries={'max_attempts': 0}))
+    return factory.client(name)
 
 
 def marker(key: str, value: Any = True) -> None:
@@ -77,6 +82,23 @@ def marker(key: str, value: Any = True) -> None:
 
 def marked(key: str) -> Any:
     return cache.get(CACHE_PREFIX + key)
+
+
+def network_configuration() -> dict[str, Any]:
+    ec2 = client('ec2')
+    vpc_id = marked('vpc_id')
+    if not vpc_id:
+        vpc_id = ec2.create_vpc(CidrBlock='10.49.0.0/16')['Vpc']['VpcId']
+        marker('vpc_id', vpc_id)
+    subnet_id = marked('subnet_id')
+    if not subnet_id:
+        subnet_id = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.49.1.0/24')['Subnet']['SubnetId']
+        marker('subnet_id', subnet_id)
+    group_id = marked('group_id')
+    if not group_id:
+        group_id = ec2.create_security_group(VpcId=vpc_id, GroupName='lab-ecs-web', Description='ECS lab tasks')['GroupId']
+        marker('group_id', group_id)
+    return {'awsvpcConfiguration': {'subnets': [subnet_id], 'securityGroups': [group_id], 'assignPublicIp': 'ENABLED'}}
 
 
 def result(lab: str, step: str, command: str, response: Any, verified: bool, message: str, started: float) -> dict[str, Any]:
@@ -152,6 +174,7 @@ def step_run_task() -> dict[str, Any]:
         taskDefinition=td_arn,
         launchType='FARGATE',
         count=1,
+        networkConfiguration=network_configuration(),
     )
     tasks = resp.get('tasks', [])
     if tasks:
@@ -204,6 +227,7 @@ def step_create_service() -> dict[str, Any]:
             taskDefinition=td_arn,
             desiredCount=2,
             launchType='FARGATE',
+            networkConfiguration=network_configuration(),
         )
     except ClientError as exc:
         if 'ServiceAlreadyExists' in str(exc):
@@ -359,7 +383,19 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
     except Exception:
         pass
 
-    for k in ['cluster', 'task_def_arn', 'task_arn', 'service', 'scaled']:
+    task_definition = marked('task_def_arn')
+    if task_definition:
+        ecs.deregister_task_definition(taskDefinition=task_definition)
+    ec2 = client('ec2')
+    for operation, key, parameter in [
+        (ec2.delete_security_group, 'group_id', 'GroupId'),
+        (ec2.delete_subnet, 'subnet_id', 'SubnetId'),
+        (ec2.delete_vpc, 'vpc_id', 'VpcId'),
+    ]:
+        value = marked(key)
+        if value:
+            operation(**{parameter: value})
+    for k in ['cluster', 'task_def_arn', 'task_arn', 'service', 'scaled', 'vpc_id', 'subnet_id', 'group_id']:
         cache.delete(CACHE_PREFIX + k)
 
     payload = {'status': 'reset', 'deleted_resources': deleted}

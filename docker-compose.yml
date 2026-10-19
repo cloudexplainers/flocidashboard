@@ -18,7 +18,7 @@ services:
       - floci-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:4566/_floci/health"]
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 30

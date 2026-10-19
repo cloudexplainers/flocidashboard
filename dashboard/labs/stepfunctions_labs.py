@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from typing import Any, Callable
 
 from botocore.exceptions import ClientError
@@ -112,6 +113,7 @@ PARALLEL_DEFINITION = {
                     },
                 },
             ],
+            'ResultPath': '$.checks',
             'Next': 'OrderApproved',
         },
         'OrderApproved': {
@@ -184,7 +186,7 @@ PARALLEL_RETRY_LAB = {
             'key': 'execute-parallel-success',
             'title': 'Execute parallel workflow and verify branch outputs',
             'command': f'aws stepfunctions start-execution --state-machine-arn {PARALLEL_SM_ARN} --name par-exec-301 --input \'{{"order_id":"ORD-PAR-301","item":"Widget-A"}}\'',
-            'explanation': 'Runs the parallel branches concurrently and aggregates both results into an output array in the execution result.',
+            'explanation': 'Runs both branches concurrently and stores their output array at $.checks, preserving the input object for the following approval state.',
         },
         {
             'key': 'describe-parallel-execution',
@@ -208,6 +210,17 @@ def marker(key: str, value: Any = True) -> None:
 
 def marked(key: str) -> Any:
     return cache.get(CACHE_PREFIX + key)
+
+
+def wait_for_execution(sfn, arn: str) -> dict[str, Any]:
+    deadline = time.monotonic() + 30
+    while True:
+        response = sfn.describe_execution(executionArn=arn)
+        if response.get('status') != 'RUNNING':
+            return response
+        if time.monotonic() >= deadline:
+            raise ValueError('Step Functions execution did not finish within 30 seconds')
+        time.sleep(.2)
 
 
 def result(lab: str, step: str, command: str, response: Any, verified: bool, message: str, started: float) -> dict[str, Any]:
@@ -287,11 +300,11 @@ def step_execute_vip() -> dict[str, Any]:
     inp = {'order_id': 'ORD-VIP-101', 'amount': 250, 'customer': 'Acme Corp'}
     exec_resp = sfn.start_execution(
         stateMachineArn=CHOICE_SM_ARN,
-        name=f'vip-order-{int(time.time())}',
+        name=f'vip-order-{uuid.uuid4().hex[:12]}',
         input=json.dumps(inp),
     )
     arn = exec_resp['executionArn']
-    desc = sfn.describe_execution(executionArn=arn)
+    desc = wait_for_execution(sfn, arn)
     marker('vip-exec', desc)
     return result(
         'order-processing-workflow',
@@ -310,11 +323,11 @@ def step_execute_std() -> dict[str, Any]:
     inp = {'order_id': 'ORD-STD-202', 'amount': 45, 'customer': 'Jane Doe'}
     exec_resp = sfn.start_execution(
         stateMachineArn=CHOICE_SM_ARN,
-        name=f'std-order-{int(time.time())}',
+        name=f'std-order-{uuid.uuid4().hex[:12]}',
         input=json.dumps(inp),
     )
     arn = exec_resp['executionArn']
-    desc = sfn.describe_execution(executionArn=arn)
+    desc = wait_for_execution(sfn, arn)
     marker('std-exec', desc)
     return result(
         'order-processing-workflow',
@@ -330,14 +343,20 @@ def step_execute_std() -> dict[str, Any]:
 def step_inspect_history() -> dict[str, Any]:
     started = time.perf_counter()
     sfn = client('stepfunctions')
-    sm = sfn.describe_state_machine(stateMachineArn=CHOICE_SM_ARN)
-    marker('history', sm)
+    execution = marked('vip-exec') or {}
+    if not execution.get('executionArn'):
+        raise ValueError('Run the VIP execution before inspecting its history')
+    desc = sfn.describe_execution(executionArn=execution['executionArn'])
+    history = sfn.get_execution_history(executionArn=execution['executionArn'])
+    sm = {'execution': desc, 'history': history}
+    verified = desc.get('status') == 'SUCCEEDED' and bool(history.get('events'))
+    marker('history', sm if verified else False)
     return result(
         'order-processing-workflow',
         'inspect-execution-history',
         'aws stepfunctions describe-execution ...',
         sm,
-        True,
+        verified,
         f'State machine {CHOICE_SM_NAME} and execution lifecycle history verified.',
         started,
     )
@@ -345,6 +364,7 @@ def step_inspect_history() -> dict[str, Any]:
 
 def step_create_parallel_sm() -> dict[str, Any]:
     started = time.perf_counter()
+    step_create_role()
     sfn = client('stepfunctions')
     try:
         resp = sfn.create_state_machine(
@@ -374,11 +394,11 @@ def step_execute_parallel() -> dict[str, Any]:
     inp = {'order_id': 'ORD-PAR-301', 'item': 'Widget-A'}
     exec_resp = sfn.start_execution(
         stateMachineArn=PARALLEL_SM_ARN,
-        name=f'par-exec-{int(time.time())}',
+        name=f'par-exec-{uuid.uuid4().hex[:12]}',
         input=json.dumps(inp),
     )
     arn = exec_resp['executionArn']
-    desc = sfn.describe_execution(executionArn=arn)
+    desc = wait_for_execution(sfn, arn)
     marker('parallel-exec', desc)
     return result(
         'parallel-retry-workflow',
@@ -386,7 +406,7 @@ def step_execute_parallel() -> dict[str, Any]:
         'aws stepfunctions start-execution ...',
         desc,
         desc.get('status') == 'SUCCEEDED',
-        'Parallel execution succeeded with concurrent payment and inventory branches.',
+        'Parallel execution succeeded with concurrent payment and inventory branches.' if desc.get('status') == 'SUCCEEDED' else f"Parallel execution failed: {desc.get('error') or desc.get('status')}: {desc.get('cause', '')}",
         started,
     )
 
@@ -394,14 +414,24 @@ def step_execute_parallel() -> dict[str, Any]:
 def step_describe_parallel() -> dict[str, Any]:
     started = time.perf_counter()
     sfn = client('stepfunctions')
-    sm = sfn.describe_state_machine(stateMachineArn=PARALLEL_SM_ARN)
-    marker('parallel-desc', sm)
+    execution = marked('parallel-exec') or {}
+    if not execution.get('executionArn'):
+        raise ValueError('Run the parallel execution before inspecting its output')
+    sm = sfn.describe_execution(executionArn=execution['executionArn'])
+    output = json.loads(sm.get('output') or '{}')
+    verified = (
+        sm.get('status') == 'SUCCEEDED'
+        and isinstance(output, dict)
+        and output.get('checks') == [{'payment': 'VERIFIED_OK'}, {'inventory': 'IN_STOCK'}]
+        and output.get('overall_status', {}).get('status') == 'ALL_CHECKS_PASSED'
+    )
+    marker('parallel-desc', sm if verified else False)
     return result(
         'parallel-retry-workflow',
         'describe-parallel-execution',
         'aws stepfunctions describe-execution ...',
         sm,
-        True,
+        verified,
         f'Parallel state machine {PARALLEL_SM_NAME} execution output verified.',
         started,
     )
@@ -447,7 +477,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
     else:
         raise ValueError(f'Unknown Step Functions lab: {lab_key}')
 
-    checks = {step: marked(k) is not None for step, k in keys.items()}
+    checks = {}
+    for step, key in keys.items():
+        value = marked(key)
+        checks[step] = bool(value) and (not key.endswith('-exec') or value.get('status') == 'SUCCEEDED')
     return {
         'service': 'stepfunctions',
         'lab': lab_key,

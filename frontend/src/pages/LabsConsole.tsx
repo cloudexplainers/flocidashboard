@@ -45,6 +45,7 @@ export const LabsConsole: React.FC = () => {
   const [activeLab, setActiveLab] = useState<LabDefinition | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusLoading, setStatusLoading] = useState(false);
+  const [labError, setLabError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState('');
   const [selectedLevelId, setSelectedLevelId] = useState<string>('all');
   const [runningStepKey, setRunningStepKey] = useState<string | null>(null);
@@ -74,6 +75,7 @@ export const LabsConsole: React.FC = () => {
   const [stepCompleted, setStepCompleted] = useState<Record<string, boolean>>({});
 
   const cancelRunAllRef = useRef(false);
+  const labRequestId = useRef(0);
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const loadCatalog = async () => {
@@ -149,6 +151,11 @@ export const LabsConsole: React.FC = () => {
   }, [allLabsList, activeLab]);
 
   const openLab = async (lab: LabDefinition, updateUrl = true) => {
+    cancelRunAllRef.current = true;
+    const requestId = ++labRequestId.current;
+    setIsRunningAll(false);
+    setRunningStepKey(null);
+    setLabError(null);
     setActiveLab(lab);
     setStepOutputs({});
     setStepCompleted({});
@@ -163,6 +170,8 @@ export const LabsConsole: React.FC = () => {
 
     try {
       const statusData = await fetchLabStatus(lab.service, lab.key);
+      if (requestId !== labRequestId.current) return;
+      if (statusData.error) throw new Error(statusData.error);
       const completedMap: Record<string, boolean> = {};
       const outputMap: Record<string, { status: string; body: string }> = {};
 
@@ -178,19 +187,18 @@ export const LabsConsole: React.FC = () => {
       setStepCompleted(completedMap);
       setStepOutputs(outputMap);
 
-      if (statusData.complete) {
-        saveCompletedLabState(lab.service, lab.key, true);
-      }
-    } catch (err) {
-      console.error('Failed to load lab status:', err);
+      saveCompletedLabState(lab.service, lab.key, Boolean(statusData.complete));
+    } catch (err: any) {
+      if (requestId === labRequestId.current) setLabError(err.message || 'Failed to load lab status');
     } finally {
-      setStatusLoading(false);
+      if (requestId === labRequestId.current) setStatusLoading(false);
     }
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const closeLab = (updateUrl = true) => {
+    ++labRequestId.current;
     cancelRunAllRef.current = true;
     setIsRunningAll(false);
     setActiveLab(null);
@@ -216,17 +224,20 @@ export const LabsConsole: React.FC = () => {
 
   const handleRunStep = async (step: LabStep): Promise<boolean> => {
     if (!activeLab) return false;
+    const requestId = labRequestId.current;
+    setLabError(null);
     setRunningStepKey(step.key);
 
     try {
       const data = await runLabStep(activeLab.service, activeLab.key, step.key);
+      if (requestId !== labRequestId.current) return false;
       const isVerified = Boolean(data.verified);
       const outputBody = data.stdout || JSON.stringify(data.verification || data.json || data, null, 2);
 
       setStepOutputs((prev) => ({
         ...prev,
         [step.key]: {
-          status: isVerified ? 'Verified' : 'Succeeded',
+          status: isVerified ? 'Verified' : 'Not verified',
           body: outputBody,
         },
       }));
@@ -240,6 +251,7 @@ export const LabsConsole: React.FC = () => {
       });
       return isVerified;
     } catch (err: any) {
+      if (requestId !== labRequestId.current) return false;
       setStepOutputs((prev) => ({
         ...prev,
         [step.key]: {
@@ -249,7 +261,7 @@ export const LabsConsole: React.FC = () => {
       }));
       return false;
     } finally {
-      setRunningStepKey(null);
+      if (requestId === labRequestId.current) setRunningStepKey(null);
     }
   };
 
@@ -257,42 +269,50 @@ export const LabsConsole: React.FC = () => {
     if (!activeLab || isRunningAll) return;
     setIsRunningAll(true);
     cancelRunAllRef.current = false;
+    const requestId = labRequestId.current;
 
     const steps = activeLab.steps || [];
     for (let i = 0; i < steps.length; i++) {
-      if (cancelRunAllRef.current) break;
+      if (cancelRunAllRef.current || requestId !== labRequestId.current) break;
       const step = steps[i];
       if (stepCompleted[step.key]) continue; // Skip already verified steps
 
       // 1. Smoothly scroll to the target step and let the camera settle
       scrollToStep(step.key);
       await new Promise((resolve) => setTimeout(resolve, 500));
-      if (cancelRunAllRef.current) break;
+      if (cancelRunAllRef.current || requestId !== labRequestId.current) break;
 
       // 2. Execute step
-      await handleRunStep(step);
+      const verified = await handleRunStep(step);
+      if (!verified) {
+        if (requestId === labRequestId.current) setLabError('Run all stopped because this step failed or could not be verified. Review its result and retry.');
+        break;
+      }
 
       // 3. Keep step visible and readable before moving to the next step
       await new Promise((resolve) => setTimeout(resolve, 1400));
     }
 
-    setIsRunningAll(false);
+    if (requestId === labRequestId.current) setIsRunningAll(false);
   };
 
   const handleResetLab = async () => {
     if (!activeLab) return;
+    const requestId = ++labRequestId.current;
+    setLabError(null);
     cancelRunAllRef.current = true;
     setIsRunningAll(false);
     setStatusLoading(true);
     try {
       await resetLab(activeLab.service, activeLab.key);
+      if (requestId !== labRequestId.current) return;
       setStepCompleted({});
       setStepOutputs({});
       saveCompletedLabState(activeLab.service, activeLab.key, false);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      if (requestId === labRequestId.current) setLabError(err.message || 'Failed to reset lab');
     } finally {
-      setStatusLoading(false);
+      if (requestId === labRequestId.current) setStatusLoading(false);
     }
   };
 
@@ -372,6 +392,7 @@ export const LabsConsole: React.FC = () => {
   if (activeLab) {
     return (
       <SpaceBetween size="l">
+        {labError && <Alert type="error">{labError}</Alert>}
         <Container
           header={
             <Header
@@ -380,7 +401,7 @@ export const LabsConsole: React.FC = () => {
               actions={
                 <SpaceBetween direction="horizontal" size="xs">
                   <Button onClick={() => closeLab()}>← Back to Labs Directory</Button>
-                  <Button onClick={handleResetLab} loading={statusLoading}>
+                  <Button onClick={handleResetLab} loading={statusLoading} disabled={isRunningAll || runningStepKey !== null}>
                     Reset lab
                   </Button>
                   <Button
@@ -388,7 +409,7 @@ export const LabsConsole: React.FC = () => {
                     iconName="caret-right-filled"
                     onClick={handleRunAllSteps}
                     loading={isRunningAll}
-                    disabled={isLabComplete || statusLoading}
+                    disabled={isLabComplete || statusLoading || runningStepKey !== null}
                   >
                     {isLabComplete ? '✓ Lab Fully Completed' : isRunningAll ? 'Running steps...' : '▶ Run all remaining steps'}
                   </Button>
@@ -431,7 +452,7 @@ export const LabsConsole: React.FC = () => {
             return (
               <div
                 key={step.key}
-                ref={(el) => (stepRefs.current[step.key] = el)}
+                ref={(el) => { stepRefs.current[step.key] = el; }}
                 className={isDone ? 'lab-step-completed' : 'lab-step-pending'}
                 style={{
                   borderRadius: '16px',
@@ -450,7 +471,7 @@ export const LabsConsole: React.FC = () => {
                             iconName={isDone ? 'status-positive' : 'caret-right-filled'}
                             onClick={() => handleRunStep(step)}
                             loading={runningStepKey === step.key}
-                            disabled={isDone || isRunningAll}
+                            disabled={isDone || isRunningAll || statusLoading || runningStepKey !== null}
                           >
                             {isDone ? '✓ Step Complete' : 'Run step'}
                           </Button>
@@ -504,7 +525,7 @@ export const LabsConsole: React.FC = () => {
                       <Container
                         header={
                           <Header variant="h3">
-                            <StatusIndicator type={output.status === 'Failed' ? 'error' : 'success'}>
+                            <StatusIndicator type={output.status === 'Failed' ? 'error' : output.status === 'Not verified' ? 'warning' : 'success'}>
                               Execution Result: {output.status}
                             </StatusIndicator>
                           </Header>

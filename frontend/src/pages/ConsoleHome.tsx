@@ -11,6 +11,7 @@ import Badge from '@cloudscape-design/components/badge';
 import Box from '@cloudscape-design/components/box';
 import { ServiceDefinition } from '../types';
 import { AwsServiceIcon } from '../components/AwsServiceIcons';
+import { FLAT_CURRICULUM_LABS } from '../labCurriculum';
 
 interface ConsoleHomeProps {
   services: ServiceDefinition[];
@@ -48,7 +49,7 @@ export const ConsoleHome: React.FC<ConsoleHomeProps> = ({
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button variant="primary" onClick={onNavigateLabs}>
-                  Launch Workflow Labs (63)
+                  Launch Workflow Labs ({FLAT_CURRICULUM_LABS.length})
                 </Button>
                 <Button onClick={onNavigateInspector || (() => onSelectService('inspector'))}>
                   Open Inspector Inbox

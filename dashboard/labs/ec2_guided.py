@@ -20,9 +20,6 @@ from dashboard.ec2_api import (
 LAB_PREFIX = 'floci-lab:ec2:guided'
 DEFAULT_IMAGE = 'ami-ubuntu2204'
 DEFAULT_TYPE = 't2.micro'
-DEFAULT_SUBNET = 'subnet-default-a'
-DEFAULT_VPC = 'vpc-default'
-DEFAULT_GROUP = 'sg-default'
 
 GUIDED_EC2_LABS = [
     {
@@ -122,7 +119,7 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'create-web-security-group',
                 'title': 'Create security group and authorize TCP/8080 ingress',
-                'command': 'aws ec2 create-security-group --group-name guided-web --description "Guided web server" --vpc-id vpc-default\naws ec2 authorize-security-group-ingress --group-id <group-id> --protocol tcp --port 8080 --cidr 0.0.0.0/0',
+                'command': 'aws ec2 create-security-group --group-name guided-web --description "Guided web server" --vpc-id <lab-vpc-id>\naws ec2 authorize-security-group-ingress --group-id <group-id> --protocol tcp --port 8080 --cidr 0.0.0.0/0',
                 'explanation': 'Creates a stateful security group allowing inbound HTTP traffic on port 8080.',
             },
             {
@@ -182,13 +179,13 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'inspect-default-route-table',
                 'title': 'Inspect baseline route table',
-                'command': 'aws ec2 describe-route-tables --route-table-ids rtb-default',
+                'command': 'aws ec2 describe-route-tables --route-table-ids <lab-route-table-id>',
                 'explanation': 'Examines the default VPC route table before adding endpoint routes.',
             },
             {
                 'key': 'create-s3-gateway-endpoint',
                 'title': 'Create S3 Gateway Endpoint',
-                'command': 'aws ec2 create-vpc-endpoint --vpc-id vpc-default --service-name com.amazonaws.us-east-1.s3 --vpc-endpoint-type Gateway --route-table-ids rtb-default',
+                'command': 'aws ec2 create-vpc-endpoint --vpc-id <lab-vpc-id> --service-name com.amazonaws.us-east-1.s3 --vpc-endpoint-type Gateway --route-table-ids <lab-route-table-id>',
                 'explanation': 'Provisions a Gateway Endpoint that attaches directly to the route table.',
             },
             {
@@ -250,6 +247,26 @@ def _iam():
     return FlociClientFactory().client('iam')
 
 
+def _network(lab_key: str) -> dict[str, str]:
+    """Own a network per guided lab rather than relying on historical fake IDs."""
+    ec2 = _ec2()
+    vpc_id = _get_cached(lab_key, 'vpc-id')
+    if not vpc_id:
+        vpc = ec2.create_vpc(CidrBlock='10.48.0.0/16')['Vpc']
+        vpc_id = _remember(lab_key, 'vpc-id', vpc['VpcId'])
+    subnet_id = _get_cached(lab_key, 'subnet-id')
+    if not subnet_id:
+        subnet = ec2.create_subnet(VpcId=vpc_id, CidrBlock='10.48.1.0/24')['Subnet']
+        subnet_id = _remember(lab_key, 'subnet-id', subnet['SubnetId'])
+    groups = ec2.describe_security_groups(Filters=[
+        {'Name': 'vpc-id', 'Values': [vpc_id]},
+        {'Name': 'group-name', 'Values': ['default']},
+    ]).get('SecurityGroups', [])
+    if not groups:
+        raise ValueError('The lab VPC has no default security group')
+    return {'vpc_id': vpc_id, 'subnet_id': subnet_id, 'group_id': groups[0]['GroupId']}
+
+
 def _get_or_launch_instance(
     lab_key: str,
     *,
@@ -267,11 +284,12 @@ def _get_or_launch_instance(
         except Exception:
             pass
 
+    network = _network(lab_key)
     result = run_instances(
         DEFAULT_IMAGE,
         DEFAULT_TYPE,
-        subnet_id=DEFAULT_SUBNET,
-        security_group_ids=groups or [DEFAULT_GROUP],
+        subnet_id=network['subnet_id'],
+        security_group_ids=groups or [network['group_id']],
         user_data=user_data,
         iam_instance_profile_arn=profile_arn,
         tags={'Name': lab_key},
@@ -309,30 +327,31 @@ def _require_success(invocation: dict[str, Any], expected: str | None = None) ->
 
 def _http_get_command(host: str, port: int, path: str) -> str:
     clean_path = '/' + path.strip().lstrip('/')
-    return (
-        f"bash -c 'exec 3<>/dev/tcp/{host}/{port}; "
-        f'printf "GET {clean_path} HTTP/1.0\\r\\nHost: {host}\\r\\nConnection: close\\r\\n\\r\\n" >&3; '
-        "awk \"f{print} /^\\r?$/{f=1}\" <&3'"
-    )
+    return f'curl --noproxy "*" --connect-timeout 1 --max-time 2 -fsS http://{host}:{port}{clean_path}'
 
 
 def _imds_get_command(path: str) -> str:
-    return _http_get_command('169.254.169.254', 80, path)
+    # EC2 is reported running before guest package/bootstrap and IMDS setup finish.
+    # Bound each network attempt so an unavailable link-local proxy cannot hang SSM.
+    return f'curl --noproxy "*" --connect-timeout 1 --max-time 2 -fsS http://169.254.169.254{path}'
 
 
-def _wait_for_output(instance_id: str, command: str, expected: str, *, attempts: int = 30) -> dict[str, Any]:
+def _wait_for_output(instance_id: str, command: str, expected: str, *, attempts: int = 90) -> dict[str, Any]:
     last: dict[str, Any] = {}
+    deadline = time.monotonic() + 180
     for _attempt in range(attempts):
         last = _execute(instance_id, command)
         if last.get('status') == 'Success' and expected in last.get('stdout', ''):
             return last
+        if time.monotonic() >= deadline:
+            break
         time.sleep(0.5)
     return _require_success(last, expected)
 
 
 def _step_result(lab_key: str, step_key: str, command: str, response: Any, verified: bool, message: str, started: float) -> dict[str, Any]:
     clean = _clean_response(response)
-    _remember(lab_key, step_key, True)
+    _remember(lab_key, step_key, verified)
     return {
         'service': 'ec2',
         'lab': lab_key,
@@ -358,14 +377,15 @@ def _imds_launch() -> dict[str, Any]:
 def _imds_query_id() -> dict[str, Any]:
     started = time.perf_counter()
     instance_id = _get_or_launch_instance('guided-imds')
-    invocation = _require_success(_execute(instance_id, _imds_get_command('/latest/meta-data/instance-id')), instance_id)
+    invocation = _wait_for_output(instance_id, _imds_get_command('/latest/meta-data/instance-id'), instance_id)
     return _step_result('guided-imds', 'query-instance-id', 'aws ssm send-command ... /meta-data/instance-id', {'instance_id': instance_id, 'imds_output': invocation.get('stdout')}, True, f'IMDS returned verified instance ID {instance_id}.', started)
 
 
 def _imds_query_network() -> dict[str, Any]:
     started = time.perf_counter()
     instance_id = _get_or_launch_instance('guided-imds')
-    invocation = _require_success(_execute(instance_id, _imds_get_command('/latest/meta-data/local-ipv4')))
+    instance = _ec2().describe_instances(InstanceIds=[instance_id])['Reservations'][0]['Instances'][0]
+    invocation = _wait_for_output(instance_id, _imds_get_command('/latest/meta-data/local-ipv4'), instance['PrivateIpAddress'])
     return _step_result('guided-imds', 'query-network-meta', 'aws ssm send-command ... /meta-data/local-ipv4', {'instance_id': instance_id, 'ipv4': invocation.get('stdout')}, True, f'IMDS returned private IP {invocation.get("stdout")}.', started)
 
 
@@ -437,7 +457,10 @@ def _role_launch() -> dict[str, Any]:
 def _role_query_creds() -> dict[str, Any]:
     started = time.perf_counter()
     instance_id = _get_cached('guided-instance-role', 'instance-id') or _get_or_launch_instance('guided-instance-role')
-    invocation = _require_success(_execute(instance_id, _imds_get_command(f'/latest/meta-data/iam/security-credentials/{ROLE_NAME}')))
+    invocation = _wait_for_output(instance_id, _imds_get_command(f'/latest/meta-data/iam/security-credentials/{ROLE_NAME}'), 'AccessKeyId')
+    credentials = json.loads(invocation['stdout'])
+    if not all(credentials.get(key) for key in ['AccessKeyId', 'SecretAccessKey', 'Token']):
+        raise ValueError('IMDS did not return complete role credentials')
     return _step_result('guided-instance-role', 'query-role-credentials', f'aws ssm send-command ... /iam/security-credentials/{ROLE_NAME}', {'role': ROLE_NAME, 'credential_source': 'IMDS', 'status': 'available'}, True, f'IMDS exposed temporary credentials for role {ROLE_NAME}.', started)
 
 
@@ -459,9 +482,10 @@ nohup perl /tmp/floci-web-server.pl >/tmp/floci-web-server.log 2>&1 &
 def _web_create_sg() -> dict[str, Any]:
     started = time.perf_counter()
     ec2 = _ec2()
-    groups = ec2.describe_security_groups(Filters=[{'Name': 'vpc-id', 'Values': [DEFAULT_VPC]}, {'Name': 'group-name', 'Values': ['guided-web']}]).get('SecurityGroups', [])
+    vpc_id = _network('guided-web-server')['vpc_id']
+    groups = ec2.describe_security_groups(Filters=[{'Name': 'vpc-id', 'Values': [vpc_id]}, {'Name': 'group-name', 'Values': ['guided-web']}]).get('SecurityGroups', [])
     group = groups[0] if groups else None
-    group_id = group['GroupId'] if group else ec2.create_security_group(GroupName='guided-web', Description='Guided web server', VpcId=DEFAULT_VPC)['GroupId']
+    group_id = group['GroupId'] if group else ec2.create_security_group(GroupName='guided-web', Description='Guided web server', VpcId=vpc_id)['GroupId']
     has_ingress = any(permission.get('IpProtocol') == 'tcp' and permission.get('FromPort') == 8080 and permission.get('ToPort') == 8080 for permission in (group or {}).get('IpPermissions', []))
     if not has_ingress:
         ec2.authorize_security_group_ingress(GroupId=group_id, IpPermissions=[{'IpProtocol': 'tcp', 'FromPort': 8080, 'ToPort': 8080, 'IpRanges': [{'CidrIp': '0.0.0.0/0', 'Description': 'Guided web lab'}]}])
@@ -530,15 +554,23 @@ def _route_add_default() -> dict[str, Any]:
 def _s3_inspect_rtb() -> dict[str, Any]:
     started = time.perf_counter()
     ec2 = _ec2()
-    rtbs = ec2.describe_route_tables(RouteTableIds=['rtb-default'])['RouteTables']
+    network = _network('guided-private-s3')
+    route_table_id = _get_cached('guided-private-s3', 'route-table-id')
+    if not route_table_id:
+        table = ec2.create_route_table(VpcId=network['vpc_id'])['RouteTable']
+        route_table_id = _remember('guided-private-s3', 'route-table-id', table['RouteTableId'])
+        association = ec2.associate_route_table(RouteTableId=route_table_id, SubnetId=network['subnet_id'])
+        _remember('guided-private-s3', 'association-id', association['AssociationId'])
+    rtbs = ec2.describe_route_tables(RouteTableIds=[route_table_id])['RouteTables']
     return _step_result('guided-private-s3', 'inspect-default-route-table', 'aws ec2 describe-route-tables ...', rtbs[0], True, 'Default route table inspected before endpoint creation.', started)
 
 
 def _s3_create_endpoint() -> dict[str, Any]:
     started = time.perf_counter()
-    endpoint = create_vpc_endpoint(DEFAULT_VPC, 'com.amazonaws.us-east-1.s3', 'Gateway', route_table_ids=['rtb-default'])
+    _s3_inspect_rtb()
+    endpoint = create_vpc_endpoint(_get_cached('guided-private-s3', 'vpc-id'), 'com.amazonaws.us-east-1.s3', 'Gateway', route_table_ids=[_get_cached('guided-private-s3', 'route-table-id')])
     _remember('guided-private-s3', 'endpoint-id', endpoint['vpc_endpoint_id'])
-    return _step_result('guided-private-s3', 'create-s3-gateway-endpoint', 'aws ec2 create-vpc-endpoint ...', endpoint, True, f'S3 Gateway endpoint {endpoint["vpc_endpoint_id"]} created on rtb-default.', started)
+    return _step_result('guided-private-s3', 'create-s3-gateway-endpoint', 'aws ec2 create-vpc-endpoint ...', endpoint, True, f'S3 Gateway endpoint {endpoint["vpc_endpoint_id"]} created on the lab route table.', started)
 
 
 def _s3_verify_endpoint() -> dict[str, Any]:
@@ -689,6 +721,15 @@ def reset_guided_lab(lab_key: str) -> dict[str, Any]:
             ec2.delete_security_group(GroupId=group_id)
         except Exception:
             pass
+    if lab_key != 'guided-broken-route':
+        for operation, kwargs in [
+            (ec2.disassociate_route_table, {'AssociationId': _get_cached(lab_key, 'association-id')}),
+            (ec2.delete_route_table, {'RouteTableId': _get_cached(lab_key, 'route-table-id')}),
+            (ec2.delete_subnet, {'SubnetId': _get_cached(lab_key, 'subnet-id')}),
+            (ec2.delete_vpc, {'VpcId': _get_cached(lab_key, 'vpc-id')}),
+        ]:
+            if next(iter(kwargs.values())):
+                operation(**kwargs)
     if lab_key == 'guided-instance-role':
         iam = _iam()
         role = _get_cached(lab_key, 'role')

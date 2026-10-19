@@ -94,15 +94,11 @@ export async function fetchLabsProgress(): Promise<{ completed_lab_count: number
   }
 }
 
-export async function fetchLabStatus(serviceKey: string, labKey: string): Promise<{ complete: boolean; steps: Record<string, { verified: boolean; verification?: any }> }> {
-  try {
-    const res = await fetch(`/api/labs/${serviceKey}/${labKey}/status/`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    console.error('Failed to fetch lab status:', err);
-    return { complete: false, steps: {} };
-  }
+export async function fetchLabStatus(serviceKey: string, labKey: string): Promise<{ complete: boolean; error?: string; steps: Record<string, { verified: boolean; verification?: any }> }> {
+  const res = await fetch(`/api/labs/${serviceKey}/${labKey}/status/`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
 }
 
 export async function runLabStep(
@@ -128,8 +124,9 @@ export async function resetLab(serviceKey: string, labKey: string): Promise<any>
     method: 'POST',
     headers: { 'X-CSRFToken': getCsrfToken() },
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
 }
 
 export async function resetAllLabs(): Promise<any> {

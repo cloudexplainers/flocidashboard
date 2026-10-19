@@ -7,6 +7,7 @@ import time
 from typing import Any
 
 from botocore.exceptions import ClientError
+from botocore.config import Config
 from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
@@ -61,7 +62,10 @@ LABS = [RDS_LIFECYCLE_LAB]
 
 
 def client(name: str):
-    return FlociClientFactory().client(name)
+    factory = FlociClientFactory()
+    # Database image pulls and initialization outlast ordinary inventory requests.
+    factory.config = factory.config.merge(Config(read_timeout=120, retries={'max_attempts': 0}))
+    return factory.client(name)
 
 
 def marker(key: str, value: Any = True) -> None:

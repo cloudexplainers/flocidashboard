@@ -5,12 +5,15 @@ from __future__ import annotations
 import base64
 import gzip
 from typing import Any
+from botocore.config import Config
 
 from .aws import FlociClientFactory
 
 
 def _ec2_client():
-    return FlociClientFactory().client('ec2')
+    factory = FlociClientFactory()
+    factory.config = factory.config.merge(Config(read_timeout=120, retries={'max_attempts': 0}))
+    return factory.client('ec2')
 
 
 def _ssm_client():

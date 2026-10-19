@@ -1,0 +1,23 @@
+# Standalone disposable environment: docker compose -f compose.labs.yml up -d --wait
+services:
+  floci:
+    image: floci/floci:latest
+    ports:
+      - "14566:4566"
+    environment:
+      FLOCI_STORAGE_MODE: memory
+      FLOCI_HOSTNAME: floci
+      FLOCI_SERVICES_DOCKER_NETWORK: flocidashboard-lab-tests
+      FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED: "true"
+      FLOCI_AUTH_VALIDATE_SIGNATURES: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+networks:
+  default:
+    name: flocidashboard-lab-tests

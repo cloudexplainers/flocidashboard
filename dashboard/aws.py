@@ -6484,7 +6484,7 @@ def _autoscaling_optional(loader: Callable[[], Any], empty_codes: set[str]) -> A
     try:
         return _clean_response(loader())
     except ClientError as exc:
-        if _error_code(exc) in empty_codes:
+        if _error_code(exc) in empty_codes | {'UnsupportedOperation'}:
             return None
         return {'error': str(exc)}
     except (BotoCoreError, ValueError, json.JSONDecodeError) as exc:
@@ -7641,6 +7641,23 @@ def _ses_message_preview(message: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _sesv2_items(client, operation_name: str, result_key: str) -> list[Any]:
+    # SES v2 list operations expose NextToken without SDK paginator definitions.
+    items = []
+    tokens = set()
+    options = {}
+    while True:
+        response = getattr(client, operation_name)(**options)
+        items.extend(response.get(result_key, []))
+        token = response.get('NextToken')
+        if not token:
+            return items
+        if token in tokens:
+            raise ValueError(f'{operation_name} returned a repeated NextToken')
+        tokens.add(token)
+        options = {'NextToken': token}
+
+
 def ses_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     ses = factory.client('ses')
@@ -7710,11 +7727,11 @@ def ses_inventory() -> dict[str, Any]:
             messages = [_ses_message_preview(message) for message in raw_messages if isinstance(message, dict)]
 
     v2_identities = _ses_optional(
-        lambda: _paginate(sesv2, 'list_email_identities', 'EmailIdentities'),
+        lambda: _sesv2_items(sesv2, 'list_email_identities', 'EmailIdentities'),
         {'NotFoundException', 'BadRequestException'},
     )
     v2_templates = _ses_optional(
-        lambda: _paginate(sesv2, 'list_email_templates', 'TemplatesMetadata'),
+        lambda: _sesv2_items(sesv2, 'list_email_templates', 'TemplatesMetadata'),
         {'NotFoundException', 'BadRequestException'},
     )
     v2_configuration_sets = _ses_optional(

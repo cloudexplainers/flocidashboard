@@ -44,6 +44,8 @@ Floci Dashboard is a Django web application that interfaces with a local [Floci]
 
 ### Running Tests
 
+Install the tested Python dependency set with `python -m pip install -r requirements.lock`. Docker uses Python 3.14. For frontend changes, use Node.js 22.12+ and run `npm ci && npm run build` in `frontend/`; Docker builds use Node.js 26 and compile assets automatically.
+
 Execute the test suite inside the Docker container:
 
 ```bash
@@ -55,6 +57,14 @@ Or from your host virtual environment:
 ```bash
 python3 manage.py test
 ```
+
+Run the separate live Floci suite as well when changing SDKs, inventory loaders, authentication, or emulator integration:
+
+```bash
+docker compose exec -T dashboard python manage.py test dashboard.integration_tests
+```
+
+It checks every registered inventory and temporary S3, SQS, DynamoDB, SSM, and IAM/STS resources. Existing resources are preserved. Tests in `dashboard/integration_tests.py` are deliberately excluded from default unit discovery so contributors can run unit tests without an emulator.
 
 ### Checking JavaScript Syntax
 

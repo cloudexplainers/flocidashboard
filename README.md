@@ -1,6 +1,6 @@
-# Floci Dashboard 2.0
+# Floci Dashboard 2.0.1
 
-**Floci Dashboard 2.0** is an official AWS Cloudscape-powered Single Page Application for inspecting, testing, and learning against a local [Floci](https://floci.io/) AWS-compatible environment. Built with **React 18**, **TypeScript**, **Vite**, and AWS’s official **`@cloudscape-design/components`** design system, Floci Dashboard 2.0 provides production-grade AWS management consoles, real-time developer inspection tools, interactive workflow labs, and universal dynamic workbenches for all **65 supported AWS mock services**.
+**Floci Dashboard 2.0** is an official AWS Cloudscape-powered Single Page Application for inspecting, testing, and learning against a local [Floci](https://floci.io/) AWS-compatible environment. Built with **React 19**, **TypeScript 7**, **Vite 8**, and AWS’s official **`@cloudscape-design/components`** design system, Floci Dashboard 2.0 provides AWS management consoles, developer inspection tools, interactive workflow labs, and dynamic workbenches for **65 AWS services**. Compatibility is validated against **Floci 2.3.0**; Floci also provides services beyond the dashboard's current catalog.
 
 ![Floci Dashboard 2.0 Cloudscape Console UI](./flocidashboard.png)
 
@@ -76,7 +76,7 @@ Copy `.env.example` to `.env` before starting if you want to change exposed port
 
 Docker Compose is the primary path. You can still run Django directly on your host when you want the fastest edit/test loop against an already running Floci container.
 
-Create the virtual environment:
+Use Python 3.14 (also used by Docker), then create the virtual environment:
 
 ```bash
 python3 -m venv .venv
@@ -97,7 +97,7 @@ python3 -m pip install --upgrade pip
 Install the dashboard requirements:
 
 ```bash
-pip3 install -r requirements.txt
+pip3 install -r requirements.lock
 ```
 
 Set the Floci endpoint URL:
@@ -174,7 +174,7 @@ When Django runs on your host, use `http://localhost:4566`. When Django runs ins
 - Interactive Cost & Pricing Sandbox: Local Cost Explorer with stacked daily usage bar charts, cost forecast metrics, and anomaly alerts, alongside a multi-service AWS Pricing Calculator Simulator (EC2, S3, Lambda, RDS)
 - Deepened EC2 guided local compute workflows: guest IMDS socket querying (`169.254.169.254`), UserData script verification, IAM instance role assume-role validation, security-group-published web servers, broken-route diagnosis & repair, private S3 gateway endpoints, and SSM RunCommand agent dispatch
 - First-class Lambda, ECS, EKS, and ECR workbenches covering function lifecycle, local k3s cluster resources, OCI repositories, image manifests, stored policies, and Docker push/pull workflows
-- Release-aware service notes refreshed through Floci 1.5.32, including optional S3 authorization enforcement, default SSE-S3 behavior, Lambda failure destinations, Cognito session revocation, SES contact CRUD, and Step Functions JSONata variables
+- Compatibility checks against Floci 2.3.0, including all 65 registered inventories and live S3, SQS, DynamoDB, SSM, and IAM/STS workflows. Historical release notes remain available in individual service guides.
 - Loading state with the Floci cloud image while service data is fetched
 
 ## Local AWS Workflow Labs
@@ -251,7 +251,59 @@ Or on your local host virtual environment:
 python3 manage.py test
 ```
 
+Run the live compatibility suite against your configured local Floci endpoint:
+
+```bash
+docker compose exec -T dashboard python manage.py test dashboard.integration_tests
+```
+
+The live suite reads all 65 inventories and creates uniquely named temporary resources for S3, SQS, DynamoDB, SSM, and IAM/STS round trips. It cleans up its own resources. Cloud Control resource types rejected by Floci remain visible as capability gaps.
+
+Build and verify the frontend with Node.js 22.12+ (Docker and CI use Node.js 26):
+
+```bash
+cd frontend
+npm ci
+npm run build
+npm audit
+```
+
+Docker builds compile the frontend automatically. Compose bind-mounts this repository, so also run the frontend build on the host after editing its sources. The generated assets are tracked for host development without Node.js. The host unit suite runs JavaScript syntax checks when Node.js is installed; the Python-only runtime container skips that one check. CI runs both the complete unit suite and live compatibility suite with Node.js available.
+
+Direct Python dependencies are pinned in `requirements.txt`; `requirements.lock` includes their resolved transitive dependencies. Update both together in a clean environment when upgrading. Frontend versions and transitive resolutions are recorded in `frontend/package.json` and `frontend/package-lock.json`.
+
+AWS CLI 1.46.1 requires `docutils<=0.19` and `rsa<4.8`; the lock file retains the newest versions allowed by those upstream constraints.
+
 ## Contributing
+
+### Lab verification and Playwright
+
+The complete live lab audit executes every registered step, checks completion, resets each lab, and writes a JSON report. Use a disposable Floci instance: the labs use fixed teaching resource names. The standalone configuration runs on port 14566 without the dashboard's persistent volumes:
+
+```bash
+docker compose -f compose.labs.yml -p flocidashboard-lab-tests up -d --wait
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test FLOCI_AWS_PROFILE='' \
+  python manage.py check_labs --endpoint http://localhost:14566
+```
+
+Use `--service ec2` or `--service stepfunctions --lab parallel-retry-workflow` to rerun one area. Reports default to `test-results/labs.json`. EC2 guest initialization, Lambda, RDS, ECS, and EKS exercise real Docker runtimes and may download images; allow several minutes for a cold run.
+
+Playwright covers every curriculum lab's rendering and SDK tabs, catalog consistency, filtering, completion, error handling, and reset. Two separate live browser scenarios exercise IAM and S3 execution, reload, and teardown against the disposable endpoint:
+
+```bash
+cd frontend
+npm ci
+npx playwright install chromium
+npm run build
+npm run test:e2e
+npm run test:e2e:live
+```
+
+The runner starts Django on port 18000 with a separate temporary SQLite database. It uses `../.venv/bin/python` by default; override `E2E_PYTHON` if needed. `E2E_FLOCI_ENDPOINT` overrides the disposable emulator URL. Failure screenshots and traces are written to `frontend/test-results/`; the HTML report is in `frontend/playwright-report/`. UI regression tests mock lab execution/status responses; the live project and `check_labs` use real Floci.
+
+```bash
+docker compose -f compose.labs.yml -p flocidashboard-lab-tests down
+```
 
 For guidelines on adding new service workbenches, labs, or custom UI components, please see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 

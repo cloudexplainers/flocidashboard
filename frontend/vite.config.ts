@@ -5,10 +5,10 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: path.resolve(__dirname, '../dashboard/static/dashboard/dist'),
+    outDir: path.resolve(import.meta.dirname, '../dashboard/static/dashboard/dist'),
     emptyOutDir: true,
-    rollupOptions: {
-      input: path.resolve(__dirname, 'src/main.tsx'),
+    rolldownOptions: {
+      input: path.resolve(import.meta.dirname, 'src/main.tsx'),
       output: {
         entryFileNames: 'assets/app.js',
         chunkFileNames: 'assets/[name].js',

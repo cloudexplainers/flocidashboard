@@ -67,8 +67,9 @@ class NewServiceLabsLifecycleTests(TestCase):
         # Teardown reset
         reset_lab('rds', 'db-instance-lifecycle')
 
+    @patch('dashboard.labs.ecs_labs.network_configuration', return_value={'awsvpcConfiguration': {'subnets': ['subnet-lab'], 'securityGroups': ['sg-lab'], 'assignPublicIp': 'ENABLED'}})
     @patch('dashboard.labs.ecs_labs.client')
-    def test_ecs_lab_lifecycle(self, client_mock):
+    def test_ecs_lab_lifecycle(self, client_mock, network_mock):
         from django.core.cache import cache
         cache.clear()
         mock_ecs = MagicMock()
