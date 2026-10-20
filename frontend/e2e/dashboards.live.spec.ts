@@ -1,4 +1,9 @@
+/// <reference types="node" />
+import { execFileSync } from 'child_process';
 import { test, expect } from '@playwright/test';
+
+const python = process.env.E2E_PYTHON || '../.venv/bin/python';
+const flociEndpoint = process.env.E2E_FLOCI_ENDPOINT || 'http://localhost:4566';
 
 // Run explicitly against a local Floci instance:
 // E2E_FLOCI_ENDPOINT=http://localhost:4566 npx playwright test dashboards.live.spec.ts --project=live
@@ -97,7 +102,7 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
     await page.getByRole('button', { name: 'Create service', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Service Name', { exact: true }).fill('web');
-    await dialog.getByLabel('Subnet IDs', { exact: true }).fill(`${subnet},${subnet2}`);
+    await dialog.getByLabel('Subnet IDs', { exact: true }).fill(subnet);
     await dialog.getByLabel('Task Definition', { exact: true }).fill(definition);
     await dialog.getByLabel('Desired Tasks', { exact: true }).fill('0');
     const serviceResponse = page.waitForResponse(response => response.url().endsWith('/api/ecs/services/') && response.request().method() === 'POST');
@@ -395,11 +400,10 @@ test('load balancing live listeners and scoped target health survive refresh', a
 
 test('S3 and Lambda live resource links preserve emulator resource selection', async ({ page }) => {
   test.setTimeout(90_000);
-  const { execFileSync } = await import('node:child_process');
   const suffix = Date.now();
   const bucket = `ui-review-${suffix}`;
   const fn = `ui-worker-${suffix}`;
-  const run = (body: string) => execFileSync('../.venv/bin/python', ['-c', `import boto3,io,zipfile\nendpoint='http://localhost:14566'\ns3=boto3.client('s3',endpoint_url=endpoint,region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\nlam=boto3.client('lambda',endpoint_url=endpoint,region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\n${body}`], { timeout: 30_000 });
+  const run = (body: string) => execFileSync(python, ['-c', `import boto3,io,zipfile\nendpoint='${flociEndpoint}'\ns3=boto3.client('s3',endpoint_url=endpoint,region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\nlam=boto3.client('lambda',endpoint_url=endpoint,region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\n${body}`], { timeout: 30_000 });
   try {
     run(`s3.create_bucket(Bucket='${bucket}')\nbuf=io.BytesIO()\nwith zipfile.ZipFile(buf,'w') as z: z.writestr('worker.py','def handler(event, context): return event')\nlam.create_function(FunctionName='${fn}',Runtime='python3.12',Handler='worker.handler',Role='arn:aws:iam::000000000000:role/lambda-basic-execution',Code={'ZipFile':buf.getvalue()},MemorySize=256,Timeout=12)`);
     await page.goto(`/s3/objects?bucket=${bucket}`);
@@ -420,10 +424,9 @@ test('S3 and Lambda live resource links preserve emulator resource selection', a
 
 test('SNS to SQS live delivery links preserve resource context and received messages', async ({ page }) => {
   test.setTimeout(60_000);
-  const { execFileSync } = await import('node:child_process');
   const name = `ui-messaging-${Date.now()}`;
   let resources: { topic: string; queue: string } | undefined;
-  const run = (body: string) => execFileSync('../.venv/bin/python', ['-c', `import boto3,json\noptions=dict(endpoint_url='http://localhost:14566',region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\nsqs=boto3.client('sqs',**options)\nsns=boto3.client('sns',**options)\n${body}`], { timeout: 30_000 }).toString();
+  const run = (body: string) => execFileSync(python, ['-c', `import boto3,json\noptions=dict(endpoint_url='${flociEndpoint}',region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\nsqs=boto3.client('sqs',**options)\nsns=boto3.client('sns',**options)\n${body}`], { timeout: 30_000 }).toString();
   try {
     resources = JSON.parse(run(`url=sqs.create_queue(QueueName='${name}')['QueueUrl']\narn=sqs.get_queue_attributes(QueueUrl=url,AttributeNames=['All'])['Attributes']['QueueArn']\ntopic=sns.create_topic(Name='${name}')['TopicArn']\nsqs.set_queue_attributes(QueueUrl=url,Attributes={'Policy':json.dumps({'Version':'2012-10-17','Statement':[{'Effect':'Allow','Principal':{'Service':'sns.amazonaws.com'},'Action':'sqs:SendMessage','Resource':arn,'Condition':{'ArnEquals':{'aws:SourceArn':topic}}}]})})\nsns.subscribe(TopicArn=topic,Protocol='sqs',Endpoint=arn,Attributes={'RawMessageDelivery':'true'})\nsns.publish(TopicArn=topic,Message='live-messaging-delivery')\nprint(json.dumps({'topic':topic,'queue':url,'arn':arn}))`));
     await page.goto(`/sns/subscriptions?${new URLSearchParams({ topic: resources!.topic })}`);
@@ -443,8 +446,7 @@ test('SNS to SQS live delivery links preserve resource context and received mess
 });
 
 async function dataWorkflowFixture(body: string) {
-  const { execFileSync } = await import('node:child_process');
-  return execFileSync('../.venv/bin/python', ['-c', `import boto3,json\noptions=dict(endpoint_url='http://localhost:14566',region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\nddb=boto3.client('dynamodb',**options)\nsfn=boto3.client('stepfunctions',**options)\n${body}`], { timeout: 30_000 }).toString();
+  return execFileSync(python, ['-c', `import boto3,json\noptions=dict(endpoint_url='${flociEndpoint}',region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\nddb=boto3.client('dynamodb',**options)\nsfn=boto3.client('stepfunctions',**options)\n${body}`], { timeout: 30_000 }).toString();
 }
 
 test('DynamoDB live composite schema, indexes, TTL and item links survive reload', async ({ page }) => {
