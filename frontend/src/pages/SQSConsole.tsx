@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { QueueDeliveryOverview } from '../components/QueueDeliveryOverview';
+import { PolicySummary } from '../components/PolicySummary';
+import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -55,12 +57,17 @@ interface SqsMessageItem {
   MessageAttributes?: Record<string, any>;
 }
 
-export const SQSConsole: React.FC = () => {
+export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: string) => void }> = ({ resourcePath, onNavigate }) => {
+  const requested = new URLSearchParams((resourcePath || '').split('?')[1] || '').get('queue');
+  const resourceTab = (resourcePath || '').split('?')[0].split('/')[1] || 'send-receive';
+  const navigateResource = (item: QueueItem, tab = activeTabId) => {
+    if (onNavigate) onNavigate(`sqs/${tab}?${new URLSearchParams({ queue: item.QueueName })}`);
+  };
   const [queues, setQueues] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<QueueItem[]>([]);
   const [filterText, setFilterText] = useState('');
-  const [activeTabId, setActiveTabId] = useState('send-receive');
+  const [activeTabId, setActiveTabId] = useState(resourceTab);
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -95,7 +102,19 @@ export const SQSConsole: React.FC = () => {
   const [deletingQueue, setDeletingQueue] = useState(false);
   const [actionAlert, setActionAlert] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
 
+  const selectionGeneration = useRef(0);
   const activeQueue = selectedItems[0] || null;
+
+  useEffect(() => { setActiveTabId(resourceTab); }, [resourceTab]);
+  useEffect(() => {
+    if (requested) setSelectedItems(queues.filter(item => item.QueueName === requested || item.QueueArn === requested));
+  }, [requested, queues]);
+
+  useEffect(() => {
+    selectionGeneration.current += 1;
+    setReceivedMessages([]); setInspectMessage(null); setSendResult(null); setActionAlert(null); setPolling(false); setSending(false);
+    return () => { selectionGeneration.current += 1; };
+  }, [activeQueue?.QueueName]);
 
   const loadData = async () => {
     setLoading(true);
@@ -121,7 +140,7 @@ export const SQSConsole: React.FC = () => {
           ApproximateNumberOfMessages: Number(attrs.ApproximateNumberOfMessages || q.ApproximateNumberOfMessages || 0),
           ApproximateNumberOfMessagesNotVisible: Number(attrs.ApproximateNumberOfMessagesNotVisible || 0),
           ApproximateNumberOfMessagesDelayed: Number(attrs.ApproximateNumberOfMessagesDelayed || 0),
-          CreatedTimestamp: attrs.CreatedTimestamp ? new Date(Number(attrs.CreatedTimestamp) * 1000).toISOString() : new Date().toISOString(),
+          CreatedTimestamp: attrs.CreatedTimestamp ? new Date(Number(attrs.CreatedTimestamp) * 1000).toISOString() : undefined,
           VisibilityTimeout: attrs.VisibilityTimeout || '30',
           MessageRetentionPeriod: attrs.MessageRetentionPeriod || '345600',
           MaximumMessageSize: attrs.MaximumMessageSize || '262144',
@@ -137,7 +156,7 @@ export const SQSConsole: React.FC = () => {
         setSelectedItems([list[0]]);
       } else if (selectedItems.length > 0) {
         const refreshed = list.find((item) => item.QueueName === selectedItems[0].QueueName);
-        if (refreshed) setSelectedItems([refreshed]);
+        setSelectedItems(refreshed ? [refreshed] : []);
       }
     } catch (err: any) {
       console.error(err);
@@ -210,6 +229,7 @@ export const SQSConsole: React.FC = () => {
 
   const handleSendMessage = async () => {
     if (!activeQueue) return;
+    const generation = selectionGeneration.current;
     setSending(true);
     setSendResult(null);
     try {
@@ -221,24 +241,27 @@ export const SQSConsole: React.FC = () => {
         activeQueue.Type === 'FIFO' ? messageGroupId : undefined,
         activeQueue.Type === 'FIFO' && messageDeduplicationId ? messageDeduplicationId : undefined
       );
+      if (generation !== selectionGeneration.current) return;
       setSendResult(res);
       setActionAlert({ type: 'success', message: `Message published to "${activeQueue.QueueName}" (ID: ${res.message_id || 'OK'}).` });
       await loadData();
     } catch (err: any) {
-      setActionAlert({ type: 'error', message: err.message || 'Failed to send message.' });
+      if (generation === selectionGeneration.current) setActionAlert({ type: 'error', message: err.message || 'Failed to send message.' });
     } finally {
-      setSending(false);
+      if (generation === selectionGeneration.current) setSending(false);
     }
   };
 
   const handlePollMessages = async () => {
     if (!activeQueue) return;
+    const generation = selectionGeneration.current;
     setPolling(true);
     try {
       const maxNum = maxReceiveCount ? parseInt(maxReceiveCount, 10) : 5;
       const visTimeout = pollVisibilityTimeout ? parseInt(pollVisibilityTimeout, 10) : 0;
       const waitTime = pollWaitTime ? parseInt(pollWaitTime, 10) : 0;
       const res = await receiveSqsMessages(activeQueue.QueueName, maxNum, visTimeout, waitTime);
+      if (generation !== selectionGeneration.current) return;
       setReceivedMessages(res.messages || []);
       if (!res.messages || res.messages.length === 0) {
         setActionAlert({ type: 'info', message: `Polled queue "${activeQueue.QueueName}". No messages available.` });
@@ -246,9 +269,9 @@ export const SQSConsole: React.FC = () => {
         setActionAlert({ type: 'success', message: `Received ${res.messages.length} message(s) from "${activeQueue.QueueName}".` });
       }
     } catch (err: any) {
-      setActionAlert({ type: 'error', message: err.message || 'Failed to poll messages.' });
+      if (generation === selectionGeneration.current) setActionAlert({ type: 'error', message: err.message || 'Failed to poll messages.' });
     } finally {
-      setPolling(false);
+      if (generation === selectionGeneration.current) setPolling(false);
     }
   };
 
@@ -330,7 +353,7 @@ export const SQSConsole: React.FC = () => {
             id: 'name',
             header: 'Queue name',
             cell: (item) => (
-              <Button variant="inline-link" onClick={() => setSelectedItems([item])}>
+              <Button variant="inline-link" onClick={() => { setSelectedItems([item]); navigateResource(item); }}>
                 <strong>{item.QueueName}</strong>
               </Button>
             ),
@@ -369,8 +392,9 @@ export const SQSConsole: React.FC = () => {
         loading={loading}
         loadingText="Loading SQS queues..."
         selectionType="single"
+        trackBy="QueueName"
         selectedItems={selectedItems}
-        onSelectionChange={({ detail }) => setSelectedItems(detail.selectedItems)}
+        onSelectionChange={({ detail }) => { setSelectedItems(detail.selectedItems); if (detail.selectedItems[0]) navigateResource(detail.selectedItems[0]); }}
         filter={
           <TextFilter
             filteringText={filterText}
@@ -391,6 +415,7 @@ export const SQSConsole: React.FC = () => {
         }
       />
 
+      {requested && !loading && !activeQueue && <Alert type="warning">Requested queue was not found. Select an available resource.</Alert>}
       {activeQueue && (
         <Container
           header={
@@ -407,9 +432,10 @@ export const SQSConsole: React.FC = () => {
             </Header>
           }
         >
+          <QueueDeliveryOverview queue={activeQueue} onNavigate={onNavigate} />
           <Tabs
             activeTabId={activeTabId}
-            onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
+            onChange={({ detail }) => { setActiveTabId(detail.activeTabId); navigateResource(activeQueue, detail.activeTabId); }}
             tabs={[
               {
                 id: 'send-receive',
@@ -475,7 +501,7 @@ export const SQSConsole: React.FC = () => {
                       </Container>
 
                       {/* Receive Messages Card */}
-                      <Container header={<Header variant="h3">Receive & Peek messages</Header>}>
+                      <Container header={<Header variant="h3">Receive messages</Header>}>
                         <SpaceBetween size="m">
                           <ColumnLayout columns={3}>
                             <FormField label="Max messages" description="1 to 10">
@@ -485,7 +511,7 @@ export const SQSConsole: React.FC = () => {
                                 type="number"
                               />
                             </FormField>
-                            <FormField label="Visibility timeout (s)" description="0 = Non-destructive peek">
+                            <FormField label="Visibility timeout (s)" description="0 makes messages immediately visible again; receiving still increments the receive count.">
                               <Input
                                 value={pollVisibilityTimeout}
                                 onChange={({ detail }) => setPollVisibilityTimeout(detail.value)}
@@ -611,6 +637,7 @@ export const SQSConsole: React.FC = () => {
                 content: (
                   <SpaceBetween size="m">
                     <Header variant="h3">Queue Access Policy (JSON)</Header>
+                    <PolicySummary document={activeQueue.Policy || undefined} />
                     <textarea
                       readOnly
                       rows={8}
@@ -619,6 +646,7 @@ export const SQSConsole: React.FC = () => {
                       }
                       style={{
                         width: '100%',
+                        boxSizing: 'border-box',
                         fontFamily: 'monospace',
                         fontSize: '12px',
                         background: '#1b2a3a',

@@ -116,6 +116,7 @@ def create_user_pool_client(
     *,
     generate_secret: bool = True,
     allowed_oauth_scopes: Any = None,
+    explicit_auth_flows: Any = None,
 ) -> dict[str, Any]:
     scopes = _string_list(allowed_oauth_scopes)
     kwargs: dict[str, Any] = {
@@ -123,6 +124,11 @@ def create_user_pool_client(
         'ClientName': _required(name, 'Client name'),
         'GenerateSecret': bool(generate_secret),
     }
+    if explicit_auth_flows is not None:
+        flows = _string_list(explicit_auth_flows)
+        if not flows:
+            raise ValueError('At least one explicit authentication flow is required')
+        kwargs['ExplicitAuthFlows'] = flows
     if scopes:
         kwargs.update({
             'AllowedOAuthFlowsUserPoolClient': True,
@@ -292,3 +298,13 @@ def oauth_client_credentials(client_id: str, client_secret: str, *, scope: str =
     with urllib.request.urlopen(request, timeout=10) as response:
         body = response.read().decode('utf-8')
     return json.loads(body)
+
+
+def change_user_state(user_pool_id: str, username: str, action: str) -> dict[str, Any]:
+    operations = {'confirm': 'admin_confirm_sign_up', 'enable': 'admin_enable_user', 'disable': 'admin_disable_user'}
+    if action not in operations:
+        raise ValueError('Action must be confirm, enable, or disable')
+    response = getattr(_client(), operations[action])(
+        UserPoolId=_required(user_pool_id, 'User pool ID'), Username=_required(username, 'Username'),
+    )
+    return {'username': username, 'action': action, 'response': _clean_response(response)}

@@ -1,5 +1,6 @@
+import { ResourceDetails } from '../components/ResourceDetails';
 import { WorkflowGraph } from '../components/WorkflowGraph';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -51,11 +52,25 @@ const SAMPLE_ASL = JSON.stringify(
 );
 
 interface StepFunctionsConsoleProps {
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
 }
 
-export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ activeTab, onTabChange }) => {
+export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ activeTab, onTabChange, resourcePath, onNavigate }) => {
+  const route = new URLSearchParams((resourcePath || '').split('?')[1] || '');
+  const requestedMachine = route.get('machine');
+  const requestedExecution = route.get('execution');
+  const requestedPanel = route.get('panel') || 'asl';
+  const historyGeneration = useRef(0);
+  const [historyError, setHistoryError] = useState('');
+  const [executionDetails, setExecutionDetails] = useState<any>(null);
+  const navigateMachine = (machine: any, tab = selectedTabId, panel = requestedPanel, execution?: string) => {
+    const query = new URLSearchParams({ machine: machine?.arn || machine?.stateMachineArn || machine?.Arn || machine?.name || machine?.Name || '', panel });
+    if (execution) query.set('execution', execution);
+    onNavigate?.(`stepfunctions/${tab}?${query}`);
+  };
   const [data, setData] = useState<any>({ state_machines: [], executions: [] });
   const [loading, setLoading] = useState(true);
   const [filterText, setFilterText] = useState('');
@@ -122,14 +137,20 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
   }, []);
 
   const activeMachine = selectedMachines.length > 0 ? selectedMachines[0] : null;
-  const activeMachineArn = activeMachine ? activeMachine.stateMachineArn || activeMachine.arn || `arn:aws:states:us-east-1:000000000000:stateMachine:${activeMachine.name || activeMachine.Name}` : '';
+  const activeMachineArn = activeMachine ? activeMachine.stateMachineArn || activeMachine.arn || activeMachine.Arn || '' : '';
+
+  useEffect(() => {
+    if (requestedMachine) setSelectedMachines((data.state_machines || []).filter((machine: any) => [machine.arn, machine.stateMachineArn, machine.Arn, machine.name, machine.Name].includes(requestedMachine)));
+  }, [requestedMachine, data]);
+  const activeExecutions = Array.isArray(activeMachine?.executions) ? activeMachine.executions : (data.executions || []).filter((execution: any) => (execution.state_machine_arn || execution.stateMachineArn) === activeMachineArn);
+  const allExecutions = (data.state_machines || []).flatMap((machine: any) => Array.isArray(machine.executions) ? machine.executions : []);
 
   useEffect(() => {
     if (activeMachine) {
       const def = activeMachine.definition || activeMachine.Definition || '';
       setEditDefDoc(typeof def === 'object' ? JSON.stringify(def, null, 2) : String(def));
     }
-  }, [activeMachine?.Name || activeMachine?.name]);
+  }, [activeMachineArn, activeMachine?.definition, activeMachine?.Definition]);
 
   const handleCreateMachine = async () => {
     if (!machineName.trim()) return;
@@ -201,21 +222,36 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
     }
   };
 
-  const handleViewExecutionHistory = async (execArn: string) => {
-    setSelectedExecArn(execArn);
-    setSelectedExecHistory([]);
-    setLoadingHistory(true);
-    setHistoryModalOpen(true);
+  const loadExecutionHistory = async (execArn: string) => {
+    const generation = ++historyGeneration.current;
+    setSelectedExecArn(execArn); setSelectedExecHistory([]); setExecutionDetails(null); setHistoryError('');
+    setLoadingHistory(true); setHistoryModalOpen(true);
     try {
-      const res: any = await fetchStepFunctionExecutionHistory(execArn);
-      setSelectedExecHistory(res.events || res.Events || []);
+      const [events, detailResponse] = await Promise.all([
+        fetchStepFunctionExecutionHistory(execArn),
+        fetch(`/api/stepfunctions/executions/detail/${encodeURIComponent(execArn)}/`),
+      ]);
+      const details = await detailResponse.json();
+      if (!detailResponse.ok) throw new Error(details.error || 'Execution details unavailable');
+      if (generation !== historyGeneration.current) return;
+      if (details.stateMachineArn && details.stateMachineArn !== activeMachineArn) throw new Error('This execution belongs to another state machine. Open it from its workflow.');
+      setSelectedExecHistory(Array.isArray(events) ? events : []);
+      setExecutionDetails(details);
     } catch (err) {
-      console.error(err);
-      setSelectedExecHistory([]);
+      if (generation === historyGeneration.current) setHistoryError(err instanceof Error ? err.message : 'Execution history unavailable');
     } finally {
-      setLoadingHistory(false);
+      if (generation === historyGeneration.current) setLoadingHistory(false);
     }
   };
+  const handleViewExecutionHistory = (execArn: string) => {
+    if (onNavigate) navigateMachine(activeMachine, 'machines', 'history', execArn);
+    else loadExecutionHistory(execArn);
+  };
+  useEffect(() => {
+    if (requestedExecution && activeMachineArn) loadExecutionHistory(requestedExecution);
+    else { setHistoryModalOpen(false); historyGeneration.current += 1; }
+    return () => { historyGeneration.current += 1; };
+  }, [requestedExecution, activeMachineArn]);
 
   const handleCreateActivity = async () => {
     if (!newActivityName.trim()) return;
@@ -265,9 +301,9 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
   const machinesList = (data.state_machines || []).map((m: any) => ({
     ...m,
     Name: m.name || m.Name,
-    Arn: m.stateMachineArn || m.arn || `arn:aws:states:us-east-1:000000000000:stateMachine:${m.name || m.Name}`,
+    Arn: m.stateMachineArn || m.arn || m.Arn || '',
     Type: m.type || m.Type || 'STANDARD',
-    CreationDate: m.creationDate || m.CreationDate,
+    CreationDate: m.creationDate || m.CreationDate || m.created,
     Definition: m.definition || m.Definition || '',
   }));
 
@@ -323,17 +359,18 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Workflow Engine</Box>
             <Box variant="h2" color="text-status-info">
-              <span>{(data.executions || []).filter((execution: any) => execution.status === 'RUNNING').length} running executions</span>
+              <span>{(allExecutions.length ? allExecutions : data.executions || []).filter((execution: any) => execution.status === 'RUNNING').length} running executions</span>
             </Box>
           </Box>
         </div>
       </Container>
 
+      {requestedMachine && !loading && !activeMachine && <Alert type="warning">Requested state machine was not found. Select an available workflow.</Alert>}
       <Tabs
         activeTabId={selectedTabId}
         onChange={({ detail }) => {
           setSelectedTabId(detail.activeTabId);
-          onTabChange?.(detail.activeTabId);
+          if (activeMachine) navigateMachine(activeMachine, detail.activeTabId); else onTabChange?.(detail.activeTabId);
         }}
         tabs={[
           {
@@ -355,7 +392,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
                           id: 'name',
                           header: 'Name',
                           cell: (item: any) => (
-                            <Button variant="inline-link" onClick={() => setSelectedMachines([item])}>
+                            <Button variant="inline-link" onClick={() => { setSelectedMachines([item]); navigateMachine(item); }}>
                               <strong>{item.Name}</strong>
                             </Button>
                           ),
@@ -375,7 +412,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
                       items={filteredMachines}
                       selectionType="single"
                       selectedItems={selectedMachines}
-                      onSelectionChange={({ detail }) => setSelectedMachines(detail.selectedItems)}
+                      onSelectionChange={({ detail }) => { setSelectedMachines(detail.selectedItems); if (detail.selectedItems[0]) navigateMachine(detail.selectedItems[0]); }}
                       empty={<Box textAlign="center">No state machines found.</Box>}
                     />
                   </SpaceBetween>
@@ -400,6 +437,8 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
                     }
                   >
                     <Tabs
+                      activeTabId={requestedPanel}
+                      onChange={({ detail }) => navigateMachine(activeMachine, 'machines', detail.activeTabId)}
                       tabs={[
                         {
                           label: 'ASL Definition',
@@ -422,7 +461,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
                           ),
                         },
                         {
-                          label: `Executions History (${(data.executions || []).length})`,
+                          label: `Executions History (${activeExecutions.length})`,
                           id: 'history',
                           content: (
                             <Table
@@ -432,25 +471,25 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
                                   id: 'status',
                                   header: 'Status',
                                   cell: (i: any) => {
-                                    const st = i.status || 'SUCCEEDED';
-                                    return <StatusIndicator type={st === 'SUCCEEDED' ? 'success' : st === 'RUNNING' ? 'in-progress' : 'error'}>{st}</StatusIndicator>;
+                                    const st = i.status || 'Not reported';
+                                    return <StatusIndicator type={st === 'SUCCEEDED' ? 'success' : st === 'RUNNING' ? 'in-progress' : st === 'Not reported' ? 'info' : 'error'}>{st}</StatusIndicator>;
                                   },
                                   width: 140,
                                 },
-                                { id: 'time', header: 'Start Date', cell: (i: any) => i.startDate || new Date().toISOString().split('T')[0], width: 160 },
+                                { id: 'time', header: 'Start Date', cell: (i: any) => i.startDate || i.started || 'Not reported', width: 160 },
                                 {
                                   id: 'act',
                                   header: 'Actions',
                                   cell: (i: any) => (
                                     <SpaceBetween direction="horizontal" size="xs">
                                       <Button onClick={() => handleViewExecutionHistory(i.executionArn || i.arn)}>History</Button>
-                                      <Button iconName="remove" onClick={() => handleStopExecution(i.executionArn || i.arn)}>Stop</Button>
+                                      <Button iconName="remove" disabled={i.status !== 'RUNNING'} onClick={() => handleStopExecution(i.executionArn || i.arn)}>Stop</Button>
                                     </SpaceBetween>
                                   ),
                                   width: 180,
                                 },
                               ]}
-                              items={data.executions || []}
+                              items={activeExecutions}
                               empty={<Box textAlign="center">No executions recorded for this state machine.</Box>}
                             />
                           ),
@@ -619,20 +658,23 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
 
       <Modal
         visible={historyModalOpen}
-        onDismiss={() => setHistoryModalOpen(false)}
+        onDismiss={() => { setHistoryModalOpen(false); historyGeneration.current += 1; if (onNavigate) navigateMachine(activeMachine, 'machines', 'history'); }}
         header={`Execution History: ${selectedExecArn}`}
         size="large"
       >
-        <WorkflowGraph definition={editDefDoc} events={selectedExecHistory} />
+        {historyError && <Alert type="error">{historyError}</Alert>}
+        {executionDetails && <ResourceDetails title="Execution details" resource={executionDetails} />}
+        <Alert type="info">The graph shows the current state machine definition. Execution history may reflect an earlier revision. Up to 100 history events are shown.</Alert>
+        <WorkflowGraph key={selectedExecArn} definition={editDefDoc} events={selectedExecHistory} />
         <Table
           columnDefinitions={[
             { id: 'id', header: 'Step ID', cell: (h: any) => h.id || h.Id, width: 80 },
             { id: 'type', header: 'Event Type', cell: (h: any) => <Badge color="blue">{h.type || h.Type}</Badge>, width: 220 },
-            { id: 'time', header: 'Timestamp', cell: (h: any) => h.timestamp || 'Just now', width: 140 },
+            { id: 'time', header: 'Timestamp', cell: (h: any) => h.timestamp || 'Not reported', width: 140 },
             {
               id: 'details',
               header: 'Event Details',
-              cell: (h: any) => <code>{JSON.stringify(h.stateEnteredEventDetails || h.stateExitedEventDetails || h.executionSucceededEventDetails || {})}</code>,
+              cell: (h: any) => <code>{JSON.stringify(Object.fromEntries(Object.entries(h).filter(([key]) => /EventDetails$/.test(key))))}</code>,
             },
           ]}
           items={selectedExecHistory}

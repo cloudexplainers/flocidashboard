@@ -1,3 +1,6 @@
+import { normalizeLoadBalancing } from './deliveryResources';
+import { TargetGroupHealth } from '../components/TargetGroupHealth';
+import { ResourceValue } from '../components/ResourceDetails';
 import React, { useState, useEffect, useMemo } from 'react';
 import Table from '../components/ResourceTable';
 import Box from '@cloudscape-design/components/box';
@@ -9,7 +12,6 @@ import Modal from '@cloudscape-design/components/modal';
 import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Select from '@cloudscape-design/components/select';
-import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Grid from '@cloudscape-design/components/grid';
 import Badge from '@cloudscape-design/components/badge';
 import Alert from '@cloudscape-design/components/alert';
@@ -17,7 +19,6 @@ import TextFilter from '@cloudscape-design/components/text-filter';
 import Tabs from '@cloudscape-design/components/tabs';
 import Link from '@cloudscape-design/components/link';
 import {
-  fetchInventory,
   createElbv2LoadBalancer,
   deleteElbv2LoadBalancer,
   createElbv2TargetGroup,
@@ -30,10 +31,20 @@ import {
 
 interface ELBv2ConsoleProps {
   activeTab?: string;
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   onTabChange?: (tabId: string) => void;
 }
 
-export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChange }) => {
+export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChange, resourcePath = 'elasticloadbalancing', onNavigate }) => {
+  const query = new URLSearchParams(resourcePath.split('?')[1] || '');
+  const pinned = query.get('lb');
+  const [loadError, setLoadError] = useState('');
+  const showTab = (tab: string, values?: Record<string, string>) => {
+    const next = new URLSearchParams(resourcePath.split('?')[1] || '');
+    Object.entries(values || {}).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key));
+    if (onNavigate) onNavigate(`elasticloadbalancing/${tab}${next.size ? '?' + next : ''}`); else onTabChange?.(tab);
+  };
   const [data, setData] = useState<any>({
     load_balancers: [],
     target_groups: [],
@@ -51,6 +62,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
   // Create LB Modal
   const [createLbOpen, setCreateLbOpen] = useState(false);
   const [lbName, setLbName] = useState('');
+  const [lbSubnets, setLbSubnets] = useState('');
   const [lbType, setLbType] = useState<{ label: string; value: 'application' | 'network' }>({ label: 'Application Load Balancer (HTTP/HTTPS)', value: 'application' });
   const [lbScheme, setLbScheme] = useState<{ label: string; value: 'internet-facing' | 'internal' }>({ label: 'internet-facing', value: 'internet-facing' });
   const [creatingLb, setCreatingLb] = useState(false);
@@ -78,9 +90,12 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
   const [creatingListener, setCreatingListener] = useState(false);
 
   const loadData = async () => {
-    setLoading(true);
+    setLoading(true); setLoadError('');
     try {
-      const res = await fetchInventory('elasticloadbalancing');
+      const response = await fetch('/api/elasticloadbalancing/');
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || 'Inventory unavailable');
+      const res = normalizeLoadBalancing(payload);
       setData(
         res || {
           load_balancers: [],
@@ -96,8 +111,9 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
         setSelectedTgs([res.target_groups[0]]);
         setListenerTgArn(res.target_groups[0].TargetGroupArn || res.target_groups[0].target_group_arn || '');
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setLoadError(err.message || 'Inventory unavailable');
+      setData({});
     } finally {
       setLoading(false);
     }
@@ -107,10 +123,11 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
     loadData();
   }, []);
 
-  const activeLb = selectedLbs[0] || null;
+  const activeLb = (data.load_balancers || []).find((item: any) => item.LoadBalancerArn === (pinned || selectedLbs[0]?.LoadBalancerArn)) || null;
   const activeLbArn = activeLb ? activeLb.LoadBalancerArn || activeLb.load_balancer_arn : '';
 
-  const activeTg = selectedTgs[0] || null;
+  const pinnedTg = query.get('tg');
+  const activeTg = (data.target_groups || []).find((item: any) => item.TargetGroupArn === (pinnedTg || selectedTgs[0]?.TargetGroupArn)) || null;
   const activeTgArn = activeTg ? activeTg.TargetGroupArn || activeTg.target_group_arn : '';
 
   const filteredLbs = useMemo(() => {
@@ -123,9 +140,11 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
 
   const lbListeners = useMemo(() => {
     const all = data.listeners || [];
-    if (!activeLbArn) return all;
-    return all.filter((l: any) => l.LoadBalancerArn === activeLbArn || !l.LoadBalancerArn);
-  }, [data.listeners, activeLbArn]);
+    if (!activeLbArn) return pinned ? [] : all;
+    return all.filter((l: any) => l.LoadBalancerArn === activeLbArn);
+  }, [data.listeners, activeLbArn, pinned]);
+
+  const groupTargets = (data.targets || []).filter((item: any) => item.TargetGroupArn === activeTgArn);
 
   // Actions
   const handleCreateLb = async () => {
@@ -135,6 +154,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
       await createElbv2LoadBalancer({
         name: lbName.trim(),
         type: lbType.value,
+        subnets: lbSubnets.split(',').map(value => value.trim()).filter(Boolean),
         scheme: lbScheme.value,
       });
       setActionMessage({ type: 'success', text: `Load Balancer "${lbName.trim()}" created.` });
@@ -273,6 +293,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
         </Alert>
       )}
 
+      {loadError && <Alert type="error">{loadError}</Alert>}
       {/* Metrics */}
       <Grid gridDefinition={[{ colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }]}>
         <Container>
@@ -293,9 +314,17 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
         </Container>
       </Grid>
 
+      {activeLb && <Container header={<Header variant="h2" actions={<Button onClick={() => showTab('listeners')}>View listeners</Button>}>Traffic routing: {activeLb.LoadBalancerName || activeLb.name}</Header>}>
+        <div className="resource-flow"><section><Header variant="h3">Load balancer</Header><p>{activeLb.DNSName || 'DNS name not reported'}</p><p>State: {activeLb.State?.Code || 'Not reported'}</p>{activeLb.State?.Reason && <p>{activeLb.State.Reason}</p>}</section><span aria-hidden="true">→</span><section><Header variant="h3">Listeners</Header>{lbListeners.length ? lbListeners.map((listener: any) => <p key={listener.ListenerArn}>{listener.Protocol}:{listener.Port}</p>) : <p>No listeners reported for this load balancer.</p>}</section><span aria-hidden="true">→</span><section><Header variant="h3">Forwarding targets</Header>{lbListeners.flatMap((listener: any) => (listener.DefaultActions || []).flatMap((action: any) => action.TargetGroupArn ? [action.TargetGroupArn] : (action.ForwardConfig?.TargetGroups || []).map((group: any) => group.TargetGroupArn))).map((arn: string, index: number) => <p key={`${arn}-${index}`}><Button variant="inline-link" onClick={() => showTab('targets', { tg: arn })}>{arn}</Button></p>)}<Button onClick={() => showTab('targetgroups')}>View target groups</Button></section></div>
+      </Container>}
+      {pinned && !loading && !loadError && !activeLb && <Alert type="warning">Load balancer not found in the active account and Region.</Alert>}
+      {pinnedTg && !loading && !loadError && !activeTg && <Alert type="warning">Target group not found in the active account and Region.</Alert>}
+      <FormField label="Load balancer context"><Select ariaLabel="Load balancer context" selectedOption={activeLb ? { label: activeLb.LoadBalancerName, value: activeLbArn } : null} placeholder="Select a load balancer" options={(data.load_balancers || []).map((item: any) => ({ label: item.LoadBalancerName, value: item.LoadBalancerArn }))} onChange={({ detail }) => showTab(activeTab || 'listeners', { lb: detail.selectedOption.value! })} /></FormField>
+      <FormField label="Target group context"><Select ariaLabel="Target group context" selectedOption={activeTg ? { label: activeTg.TargetGroupName, value: activeTgArn } : null} placeholder="Select a target group" options={(data.target_groups || []).map((item: any) => ({ label: item.TargetGroupName, value: item.TargetGroupArn }))} onChange={({ detail }) => showTab('targets', { tg: detail.selectedOption.value! })} /></FormField>
+      {activeTg && <TargetGroupHealth group={activeTg} targets={groupTargets} />}
       <Tabs
         activeTabId={activeTab || 'loadbalancers'}
-        onChange={({ detail }) => onTabChange && onTabChange(detail.activeTabId)}
+        onChange={({ detail }) => showTab(detail.activeTabId)}
         tabs={[
           {
             label: `Load Balancers (${(data.load_balancers || []).length})`,
@@ -327,7 +356,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                         id: 'name',
                         header: 'Name',
                         cell: (item: any) => (
-                          <Button variant="inline-link" onClick={() => setSelectedLbs([item])}>
+                          <Button variant="inline-link" onClick={() => { setSelectedLbs([item]); showTab('listeners', { lb: item.LoadBalancerArn }); }}>
                             <strong>{item.LoadBalancerName || item.name}</strong>
                           </Button>
                         ),
@@ -336,9 +365,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                         id: 'dns',
                         header: 'DNS Name',
                         cell: (item: any) => (
-                          <Link href={`http://${item.DNSName || `${item.LoadBalancerName || 'alb'}.elb.localhost:4566`}`} external>
-                            {item.DNSName || `${item.LoadBalancerName || 'alb'}.elb.localhost:4566`}
-                          </Link>
+                          item.DNSName ? <Link href={`http://${item.DNSName}`} external>{item.DNSName}</Link> : <span>Not reported</span>
                         ),
                       },
                       {
@@ -360,7 +387,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                       {
                         id: 'state',
                         header: 'State',
-                        cell: (item: any) => <StatusIndicator type="success">{item.State?.Code || 'active'}</StatusIndicator>,
+                        cell: (item: any) => <ResourceValue name="status" value={item.State?.Code} />,
                         width: 120,
                       },
                       {
@@ -380,7 +407,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                     items={filteredLbs}
                     selectionType="single"
                     selectedItems={selectedLbs}
-                    onSelectionChange={({ detail }) => setSelectedLbs(detail.selectedItems)}
+                    onSelectionChange={({ detail }) => { setSelectedLbs(detail.selectedItems); showTab(activeTab || 'loadbalancers', { lb: detail.selectedItems[0]?.LoadBalancerArn || '' }); }}
                     empty={<Box textAlign="center">No load balancers found.</Box>}
                   />
                 </SpaceBetween>
@@ -411,7 +438,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                       id: 'name',
                       header: 'Target Group Name',
                       cell: (item: any) => (
-                        <Button variant="inline-link" onClick={() => setSelectedTgs([item])}>
+                        <Button variant="inline-link" onClick={() => { setSelectedTgs([item]); showTab('targets', { tg: item.TargetGroupArn }); }}>
                           <strong>{item.TargetGroupName || item.name}</strong>
                         </Button>
                       ),
@@ -419,19 +446,19 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                     {
                       id: 'protocol',
                       header: 'Protocol / Port',
-                      cell: (item: any) => `${item.Protocol || 'HTTP'}:${item.Port || 80}`,
+                      cell: (item: any) => `${item.Protocol || 'Not reported'}:${item.Port ?? 'Not reported'}`,
                       width: 140,
                     },
                     {
                       id: 'type',
                       header: 'Target Type',
-                      cell: (item: any) => <Badge color="blue">{item.TargetType || 'instance'}</Badge>,
+                      cell: (item: any) => <Badge color="blue">{item.TargetType || 'Not reported'}</Badge>,
                       width: 140,
                     },
                     {
                       id: 'health',
                       header: 'Health Check Path',
-                      cell: (item: any) => <code>{item.HealthCheckPath || '/'}</code>,
+                      cell: (item: any) => <code>{item.HealthCheckPath || 'Not reported'}</code>,
                       width: 180,
                     },
                     {
@@ -451,7 +478,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                   items={data.target_groups || []}
                   selectionType="single"
                   selectedItems={selectedTgs}
-                  onSelectionChange={({ detail }) => setSelectedTgs(detail.selectedItems)}
+                  onSelectionChange={({ detail }) => { setSelectedTgs(detail.selectedItems); showTab(activeTab || 'targetgroups', { tg: detail.selectedItems[0]?.TargetGroupArn || '' }); }}
                   empty={<Box textAlign="center">No target groups created.</Box>}
                 />
               </Container>
@@ -481,18 +508,18 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                     {
                       id: 'id',
                       header: 'Target ID / Instance',
-                      cell: (item: any) => <code>{item.Target?.Id || item.Id || item.id || 'i-0123456789abcdef0'}</code>,
+                      cell: (item: any) => <code>{item.Target?.Id || item.Id || item.id || 'Not reported'}</code>,
                     },
                     {
                       id: 'port',
                       header: 'Port',
-                      cell: (item: any) => item.Target?.Port || item.Port || 80,
+                      cell: (item: any) => item.Target?.Port ?? item.Port ?? 'Not reported',
                       width: 120,
                     },
                     {
                       id: 'health',
                       header: 'Health State',
-                      cell: (item: any) => <StatusIndicator type="success">{item.TargetHealth?.State || 'healthy'}</StatusIndicator>,
+                      cell: (item: any) => <ResourceValue name="status" value={item.TargetHealth?.State} />,
                       width: 140,
                     },
                     {
@@ -509,7 +536,8 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                       width: 130,
                     },
                   ]}
-                  items={data.targets?.length > 0 ? data.targets : [{ Id: 'i-0123456789abcdef0', Port: 80, TargetHealth: { State: 'healthy' } }]}
+                  items={groupTargets}
+                  empty={<span>No targets reported for this target group.</span>}
                 />
               </Container>
             ),
@@ -538,18 +566,18 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                     {
                       id: 'listenerArn',
                       header: 'Listener ARN',
-                      cell: (item: any) => <code>{item.ListenerArn || item.listener_arn}</code>,
+                      cell: (item: any) => <code style={{ display: 'block', maxWidth: 360, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{item.ListenerArn || item.listener_arn}</code>,
                     },
                     {
                       id: 'port',
                       header: 'Port / Protocol',
-                      cell: (item: any) => `${item.Protocol || 'HTTP'}:${item.Port || 80}`,
+                      cell: (item: any) => `${item.Protocol || 'Not reported'}:${item.Port ?? 'Not reported'}`,
                       width: 150,
                     },
                     {
                       id: 'defaultAction',
                       header: 'Default Action (Forward To)',
-                      cell: (item: any) => <code>{item.DefaultActions?.[0]?.TargetGroupArn || 'Forward to TargetGroup'}</code>,
+                      cell: (item: any) => <code>{item.DefaultActions?.[0]?.TargetGroupArn || item.DefaultActions?.[0]?.Type || 'Not reported'}</code>,
                     },
                     {
                       id: 'actions',
@@ -590,6 +618,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
         }
       >
         <SpaceBetween size="m">
+          <FormField label="Subnet IDs" description="Comma-separated subnet IDs. Application Load Balancers require subnets in at least two Availability Zones."><Input value={lbSubnets} onChange={({ detail }) => setLbSubnets(detail.value)} /></FormField>
           <FormField label="Load Balancer Name">
             <Input value={lbName} onChange={({ detail }) => setLbName(detail.value)} placeholder="app-alb" />
           </FormField>

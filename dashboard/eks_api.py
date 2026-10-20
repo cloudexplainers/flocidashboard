@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from botocore.config import Config
+
 from .aws import FlociClientFactory, _clean_response
 
 
-def _client():
-    return FlociClientFactory().client('eks')
+def _client(*, long_running: bool = False):
+    factory = FlociClientFactory()
+    if long_running:
+        # Real EKS cluster operations can wait for a local k3s container to start/stop.
+        # Do not retry a mutation that may already have succeeded after a read timeout.
+        factory.config = factory.config.merge(Config(read_timeout=120, retries={'max_attempts': 0}))
+    return factory.client('eks')
 
 
 def _required(value: Any, label: str) -> str:
@@ -94,7 +101,7 @@ def create_cluster(
     if clean_tags:
         kwargs['tags'] = clean_tags
 
-    response = _client().create_cluster(**kwargs)
+    response = _client(long_running=True).create_cluster(**kwargs)
     cluster = response.get('cluster', {})
     return {
         'name': cluster.get('name') or kwargs['name'],
@@ -108,7 +115,7 @@ def create_cluster(
 
 def delete_cluster(name: str) -> dict[str, Any]:
     clean_name = _required(name, 'Cluster name')
-    response = _client().delete_cluster(name=clean_name)
+    response = _client(long_running=True).delete_cluster(name=clean_name)
     cluster = response.get('cluster', {})
     return {
         'name': cluster.get('name') or clean_name,

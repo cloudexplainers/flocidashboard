@@ -1,5 +1,6 @@
+import { useSession } from '../components/SessionContext';
 import { FunctionOverview, FunctionLogs } from '../components/FunctionOverview';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -49,14 +50,28 @@ interface FunctionItem {
   LastModified?: string;
   Environment?: { Variables?: Record<string, string> };
   Layers?: any[];
+  State?: string;
+  StateReason?: string;
+  LastUpdateStatus?: string;
+  Role?: string;
 }
 
 interface LambdaConsoleProps {
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
 }
 
-export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabChange }) => {
+export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabChange, resourcePath, onNavigate }) => {
+  const { identity } = useSession();
+  const [inventoryError, setInventoryError] = useState('');
+  const requestedResource = new URLSearchParams((resourcePath || '').split('?')[1] || '').get('function');
+  const detailGeneration = useRef(0);
+  const navigateResource = (name: string, tab = selectedTabId) => {
+    if (onNavigate) onNavigate(`lambda/${tab}?${new URLSearchParams({ function: name })}`);
+    else onTabChange?.(tab);
+  };
   const [functions, setFunctions] = useState<FunctionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFunctions, setSelectedFunctions] = useState<FunctionItem[]>([]);
@@ -116,19 +131,24 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
 
   const loadFunctions = async () => {
     setLoading(true);
+    setInventoryError('');
     try {
       const data = await fetchServiceInventory('lambda');
       const list = (data.functions || data.Functions || []).map((f: any) => ({
         FunctionName: f.FunctionName || f.name || 'my-function',
         FunctionArn: f.FunctionArn || f.arn || 'Unavailable',
-        Runtime: f.Runtime || f.runtime || 'python3.12',
-        Handler: f.Handler || f.handler || 'index.handler',
+        Runtime: f.Runtime || f.runtime || 'Unavailable',
+        Handler: f.Handler || f.handler || 'Unavailable',
         CodeSize: f.CodeSize ?? f.configuration?.CodeSize,
-        Description: f.Description || f.description || 'Serverless compute function',
+        Description: f.Description || f.description || '',
         Timeout: f.Timeout ?? f.timeout ?? 30,
         MemorySize: f.MemorySize ?? f.memory_size ?? 128,
         LastModified: f.LastModified || f.last_modified || 'Unavailable',
         Environment: f.Environment || f.environment,
+        State: f.State || f.state || f.configuration?.State,
+        StateReason: f.StateReason || f.configuration?.StateReason,
+        LastUpdateStatus: f.LastUpdateStatus || f.configuration?.LastUpdateStatus,
+        Role: f.Role || f.role || f.configuration?.Role,
         Layers: f.Layers || f.layers || [],
       }));
       setFunctions(list);
@@ -136,6 +156,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
         setSelectedFunctions([list[0]]);
       }
     } catch (err) {
+      setInventoryError(err instanceof Error ? err.message : 'Inventory unavailable');
       console.error(err);
     } finally {
       setLoading(false);
@@ -146,9 +167,15 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
     loadFunctions();
   }, []);
 
+  useEffect(() => {
+    if (requestedResource) setSelectedFunctions(functions.filter(item => item.FunctionName === requestedResource));
+  }, [requestedResource, functions]);
+
   const activeFunction = selectedFunctions[0] || null;
 
   const loadFunctionDetails = async (fn: FunctionItem) => {
+    const generation = ++detailGeneration.current;
+    setFunctionUrlConfig(null); setTriggers([]); setVersions([]); setAliases([]);
     try {
       const [urlRes, triggersRes, versionsRes, aliasesRes] = await Promise.all([
         fetchLambdaFunctionUrl(fn.FunctionName),
@@ -156,6 +183,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
         fetchLambdaVersions(fn.FunctionName),
         fetchLambdaAliases(fn.FunctionName),
       ]);
+      if (generation !== detailGeneration.current) return;
       setFunctionUrlConfig(urlRes);
       setTriggers(triggersRes || []);
       setVersions(versionsRes || []);
@@ -164,6 +192,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
       console.error(err);
     }
 
+    if (generation !== detailGeneration.current) return;
     setCfgMemory(String(fn.MemorySize || 128));
     setCfgTimeout(String(fn.Timeout || 30));
     setCfgDescription(fn.Description || '');
@@ -183,6 +212,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
       setVersions([]);
       setAliases([]);
     }
+    return () => { detailGeneration.current += 1; };
   }, [activeFunction?.FunctionName]);
 
   const handleCreateFunction = async () => {
@@ -222,6 +252,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
 
   const handleInvokeFunction = async () => {
     if (!activeFunction) return;
+    try { JSON.parse(invokePayload); } catch { setActionMessage({ type: 'error', text: 'Test event must be valid JSON.' }); return; }
     setInvoking(true);
     setActionMessage(null);
     try {
@@ -420,13 +451,13 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Active Region</Box>
             <Box variant="h2" color="text-status-info">
-              us-east-1
+              {identity?.region || 'Unavailable'}
             </Box>
           </Box>
           <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Execution Engine</Box>
+            <Box variant="awsui-key-label">Inventory status</Box>
             <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">Serverless Ready</StatusIndicator>
+              <StatusIndicator type={inventoryError ? 'error' : loading ? 'loading' : 'success'}>{inventoryError || (loading ? 'Loading inventory' : 'Inventory loaded')}</StatusIndicator>
             </Box>
           </Box>
         </div>
@@ -452,7 +483,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
                 id: 'name',
                 header: 'Function name',
                 cell: (item) => (
-                  <Button variant="inline-link" onClick={() => setSelectedFunctions([item])}>
+                  <Button variant="inline-link" onClick={() => { setSelectedFunctions([item]); navigateResource(item.FunctionName); }}>
                     <strong>{item.FunctionName}</strong>
                   </Button>
                 ),
@@ -479,7 +510,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
             items={filteredFunctions}
             selectionType="single"
             selectedItems={selectedFunctions}
-            onSelectionChange={({ detail }) => setSelectedFunctions(detail.selectedItems)}
+            onSelectionChange={({ detail }) => { setSelectedFunctions(detail.selectedItems); if (detail.selectedItems[0]) navigateResource(detail.selectedItems[0].FunctionName); }}
             empty={
               <Box textAlign="center" color="inherit">
                 <b>No Lambda functions found</b>
@@ -490,6 +521,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
         </SpaceBetween>
       </Container>
 
+      {requestedResource && !loading && !activeFunction && <Alert type="warning">Function “{requestedResource}” was not found. Select an available function.</Alert>}
       {activeFunction && (
         <Container
           header={
@@ -498,12 +530,12 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
             </Header>
           }
         >
-          <FunctionOverview name={activeFunction.FunctionName} runtime={activeFunction.Runtime} triggers={triggers} onShowTriggers={() => { setSelectedTabId('triggers'); onTabChange?.('triggers'); }} />
+          <FunctionOverview name={activeFunction.FunctionName} runtime={activeFunction.Runtime} triggers={triggers} onShowTriggers={() => { setSelectedTabId('triggers'); navigateResource(activeFunction.FunctionName, 'triggers'); }} />
           <Tabs
             activeTabId={selectedTabId}
             onChange={({ detail }) => {
               setSelectedTabId(detail.activeTabId);
-              onTabChange?.(detail.activeTabId);
+              if (activeFunction) navigateResource(activeFunction.FunctionName, detail.activeTabId); else onTabChange?.(detail.activeTabId);
             }}
             tabs={[
               {
@@ -522,6 +554,11 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
                         columns={2}
                         items={[
                           { label: 'Function ARN', value: activeFunction.FunctionArn },
+                          { label: 'State', value: <StatusIndicator type={activeFunction.State === 'Active' ? 'success' : activeFunction.State === 'Failed' ? 'error' : 'info'}>{activeFunction.State || 'Unavailable'}</StatusIndicator> },
+                          { label: 'State reason', value: activeFunction.StateReason || 'Unavailable' },
+                          { label: 'Last update status', value: activeFunction.LastUpdateStatus || 'Unavailable' },
+                          { label: 'Execution role', value: activeFunction.Role || 'Unavailable' },
+                          { label: 'Last modified', value: activeFunction.LastModified },
                           { label: 'Runtime', value: activeFunction.Runtime },
                           { label: 'Handler', value: activeFunction.Handler },
                           { label: 'Code Size', value: activeFunction.CodeSize == null ? 'Unavailable' : `${activeFunction.CodeSize} Bytes` },
@@ -835,6 +872,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
         }
       >
         <SpaceBetween size="m">
+          {actionMessage && <Alert type={actionMessage.type}>{actionMessage.text}</Alert>}
           <FormField label="Event JSON Payload">
             <Textarea
               rows={8}

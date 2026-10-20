@@ -72,6 +72,9 @@ def eventbridge_pattern_test(request):
     try:
         from .eventbridge_api import test_event_pattern
         body = parse_json_body(request)
+        if body.get('engine') == 'emulator':
+            from .eventbridge_api import test_emulator_event_pattern
+            return JsonResponse(test_emulator_event_pattern(body.get('event_pattern'), body.get('event')))
         return JsonResponse(test_event_pattern(
             event_pattern=body.get('event_pattern'),
             event=body.get('event'),

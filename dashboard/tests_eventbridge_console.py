@@ -99,3 +99,24 @@ class EventBridgeFirstClassConsoleTests(SimpleTestCase):
         self.assertIn('ec2_instance_state', data)
         self.assertIn('s3_object_created', data)
         self.assertIn('custom_order_event', data)
+
+
+class EmulatorPatternTests(SimpleTestCase):
+    def test_emulator_pattern_endpoint_uses_events_api(self):
+        from unittest.mock import patch
+        with patch('dashboard.eventbridge_api._events_client') as client:
+            client.return_value.test_event_pattern.return_value = {'Result': False}
+            response = self.client.post(reverse('dashboard:eventbridge-pattern-test'), data=json.dumps({
+                'engine': 'emulator', 'event_pattern': {'source': ['orders']}, 'event': {'source': 'other'},
+            }), content_type='application/json')
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.json()['result'])
+            self.assertEqual(response.json()['engine'], 'emulator')
+            arguments = client.return_value.test_event_pattern.call_args.kwargs
+            self.assertEqual(json.loads(arguments['EventPattern']), {'source': ['orders']})
+
+    def test_emulator_pattern_endpoint_rejects_arrays(self):
+        response = self.client.post(reverse('dashboard:eventbridge-pattern-test'), data=json.dumps({
+            'engine': 'emulator', 'event_pattern': [], 'event': {},
+        }), content_type='application/json')
+        self.assertEqual(response.status_code, 400)

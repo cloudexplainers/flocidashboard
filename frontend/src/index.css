@@ -5,11 +5,7 @@ body,
 button,
 input,
 select,
-textarea,
-div,
-span,
-a,
-p {
+textarea {
   font-family: "Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -48,3 +44,43 @@ p {
   gap: 12px;
   align-items: start;
 }
+
+/* Keep long resource identifiers inside their panels at narrow widths. */
+.resource-flow section { overflow-wrap: anywhere; }
+.resource-flow section p { margin-block: 8px; }
+
+/* Top navigation custom links */
+.floci-top-nav-wrapper header:not([aria-hidden="true"]) [class*="identity"] {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+}
+
+.learn-cloud-link {
+  font-family: var(--font-family-heading-f20kh9, "Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif);
+  font-size: var(--font-size-heading-m-cqvsuv, 18px);
+  line-height: var(--line-height-heading-m-d6lkzb, 22px);
+  letter-spacing: var(--letter-spacing-heading-m-iab0ug, -0.01em);
+  font-weight: var(--font-weight-bold-xpar9m, 700);
+  -webkit-font-smoothing: var(--font-smoothing-webkit-dpz0hr, antialiased);
+  -moz-osx-font-smoothing: var(--font-smoothing-moz-osx-kjlydy, grayscale);
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--color-text-top-navigation-title-7vpkqe, #0f141a);
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.12s ease;
+}
+
+.learn-cloud-link:hover {
+  color: var(--color-text-accent-1mglsg, #006ce0);
+  text-decoration: underline;
+}
+
+.learn-cloud-link:focus-visible {
+  outline: 2px solid var(--color-border-item-focused-sewkzn, #006ce0);
+  outline-offset: 2px;
+  border-radius: var(--border-radius-control-default-focus-ring-akwhsf, 4px);
+}
+
+#resource-operations { scroll-margin-top: 96px; }

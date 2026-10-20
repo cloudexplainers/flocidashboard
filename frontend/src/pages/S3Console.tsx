@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useSession } from '../components/SessionContext';
+import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -55,6 +56,8 @@ interface BucketItem {
 }
 
 interface S3ConsoleProps {
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
 }
@@ -73,7 +76,15 @@ const CORS_SAMPLE = JSON.stringify(
   2
 );
 
-export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) => {
+export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, resourcePath, onNavigate }) => {
+  const { identity } = useSession();
+  const [inventoryError, setInventoryError] = useState('');
+  const requestedResource = new URLSearchParams((resourcePath || '').split('?')[1] || '').get('bucket');
+  const detailGeneration = useRef(0);
+  const navigateResource = (name: string, tab = selectedTabId) => {
+    if (onNavigate) onNavigate(`s3/${tab}?${new URLSearchParams({ bucket: name })}`);
+    else onTabChange?.(tab);
+  };
   const [buckets, setBuckets] = useState<BucketItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedBuckets, setSelectedBuckets] = useState<BucketItem[]>([]);
@@ -161,20 +172,22 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
 
   const loadBuckets = async () => {
     setLoading(true);
+    setInventoryError('');
     try {
       const data = await fetchServiceInventory('s3');
       const list = (data.buckets || data.items || []).map((b: any) => ({
         Name: typeof b === 'string' ? b : b.Name || b.name,
-        CreationDate: b.CreationDate || b.created || new Date().toISOString().split('T')[0],
-        Region: b.Region || 'us-east-1',
-        ObjectCount: b.ObjectCount ?? 0,
-        Size: b.Size ?? 0,
+        CreationDate: b.CreationDate || b.created || 'Unavailable',
+        Region: b.Region || b.region || 'Unavailable',
+        ObjectCount: b.ObjectCount ?? b.object_count ?? 0,
+        Size: b.Size ?? b.total_bytes ?? 0,
       }));
       setBuckets(list);
       if (list.length > 0 && selectedBuckets.length === 0) {
         setSelectedBuckets([list[0]]);
       }
     } catch (err) {
+      setInventoryError(err instanceof Error ? err.message : 'Inventory unavailable');
       console.error(err);
     } finally {
       setLoading(false);
@@ -185,63 +198,84 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
     loadBuckets();
   }, []);
 
+  useEffect(() => {
+    if (requestedResource) setSelectedBuckets(buckets.filter(item => item.Name === requestedResource));
+  }, [requestedResource, buckets]);
+
   const activeBucket = selectedBuckets.length > 0 ? selectedBuckets[0] : null;
 
   const loadBucketDetails = async (bucket: BucketItem) => {
+    const generation = ++detailGeneration.current;
+    setObjects([]);
+    setSelectedObjects([]);
+    setInspectModalOpen(false);
     setLoadingObjects(true);
     try {
       const objs = await fetchS3Objects(bucket.Name);
+      if (generation !== detailGeneration.current) return;
       setObjects(Array.isArray(objs) ? objs : (objs?.contents || []));
     } catch (err) {
+      if (generation !== detailGeneration.current) return;
       console.error(err);
       setObjects([]);
     } finally {
-      setLoadingObjects(false);
+      if (generation === detailGeneration.current) setLoadingObjects(false);
     }
 
     try {
       const ws = await fetchS3Website(bucket.Name);
+      if (generation !== detailGeneration.current) return;
       setWebsiteConfig(ws);
       if (ws?.IndexDocument?.Suffix) setWebsiteIndexDoc(ws.IndexDocument.Suffix);
       if (ws?.ErrorDocument?.Key) setWebsiteErrorDoc(ws.ErrorDocument.Key);
     } catch {
+      if (generation !== detailGeneration.current) return;
       setWebsiteConfig(null);
     }
 
     try {
       const notifs = await fetchS3Notifications(bucket.Name);
+      if (generation !== detailGeneration.current) return;
       setNotificationsConfig(notifs || {});
     } catch {
+      if (generation !== detailGeneration.current) return;
       setNotificationsConfig({});
     }
 
     try {
       const v = await fetchS3BucketVersioning(bucket.Name);
+      if (generation !== detailGeneration.current) return;
       setVersioningStatus(v.status || 'Suspended');
     } catch {
+      if (generation !== detailGeneration.current) return;
       setVersioningStatus('Suspended');
     }
 
     try {
       const pol = await fetchS3BucketPolicy(bucket.Name);
+      if (generation !== detailGeneration.current) return;
       setBucketPolicyText(pol || '');
     } catch {
+      if (generation !== detailGeneration.current) return;
       setBucketPolicyText('');
     }
 
     try {
       const cors = await fetchS3BucketCors(bucket.Name);
+      if (generation !== detailGeneration.current) return;
       if (cors && (cors.CORSRules || cors.cors_rules)) {
         setCorsText(JSON.stringify(cors.CORSRules || cors.cors_rules, null, 2));
       } else {
         setCorsText(CORS_SAMPLE);
       }
     } catch {
+      if (generation !== detailGeneration.current) return;
       setCorsText(CORS_SAMPLE);
     }
 
     try {
       const pab = await fetchS3BucketPublicAccessBlock(bucket.Name);
+      if (generation !== detailGeneration.current) return;
       if (pab) {
         setPabBlockAcls(pab.BlockPublicAcls ?? true);
         setPabIgnoreAcls(pab.IgnorePublicAcls ?? true);
@@ -249,6 +283,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
         setPabRestrictBuckets(pab.RestrictPublicBuckets ?? true);
       }
     } catch {
+      if (generation !== detailGeneration.current) return;
       // Defaults to true
     }
   };
@@ -257,6 +292,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
     if (activeBucket) {
       loadBucketDetails(activeBucket);
     }
+    return () => { detailGeneration.current += 1; };
   }, [activeBucket?.Name]);
 
   const handleCreateBucket = async () => {
@@ -580,7 +616,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
+        <div className="console-summary">
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Total Buckets</Box>
             <Box variant="h1" color="text-status-info">
@@ -590,16 +626,16 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Active Region</Box>
             <Box variant="h2" color="text-status-info">
-              us-east-1
+              {identity?.region || 'Unavailable'}
             </Box>
           </Box>
           <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">S3 Engine Status</Box>
+            <Box variant="awsui-key-label">Inventory status</Box>
             <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">Storage Engine Ready</StatusIndicator>
+              <StatusIndicator type={inventoryError ? 'error' : loading ? 'loading' : 'success'}>{inventoryError || (loading ? 'Loading inventory' : 'Inventory loaded')}</StatusIndicator>
             </Box>
           </Box>
-        </Grid>
+        </div>
       </Container>
 
       {/* Buckets Table */}
@@ -626,7 +662,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
                 id: 'name',
                 header: 'Bucket name',
                 cell: (item) => (
-                  <Button variant="inline-link" onClick={() => setSelectedBuckets([item])}>
+                  <Button variant="inline-link" onClick={() => { setSelectedBuckets([item]); navigateResource(item.Name); }}>
                     <strong>{item.Name}</strong>
                   </Button>
                 ),
@@ -640,7 +676,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
               {
                 id: 'access',
                 header: 'Access',
-                cell: () => <Badge color="green">Bucket and objects not public</Badge>,
+                cell: () => <span>Not evaluated</span>,
                 width: 250,
               },
               {
@@ -657,7 +693,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
             items={filteredBuckets}
             selectionType="single"
             selectedItems={selectedBuckets}
-            onSelectionChange={({ detail }) => setSelectedBuckets(detail.selectedItems)}
+            onSelectionChange={({ detail }) => { setSelectedBuckets(detail.selectedItems); if (detail.selectedItems[0]) navigateResource(detail.selectedItems[0].Name); }}
             empty={
               <Box textAlign="center" color="inherit">
                 <b>No buckets found</b>
@@ -668,6 +704,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
         </SpaceBetween>
       </Container>
 
+      {requestedResource && !loading && !activeBucket && <Alert type="warning">Bucket “{requestedResource}” was not found. Select an available bucket.</Alert>}
       {/* Active Bucket Inspector */}
       {activeBucket && (
         <Container
@@ -684,7 +721,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
             activeTabId={selectedTabId}
             onChange={({ detail }) => {
               setSelectedTabId(detail.activeTabId);
-              onTabChange?.(detail.activeTabId);
+              if (activeBucket) navigateResource(activeBucket.Name, detail.activeTabId); else onTabChange?.(detail.activeTabId);
             }}
             tabs={[
               {

@@ -4912,6 +4912,7 @@ def eks_inventory() -> dict[str, Any]:
             'logging': cluster.get('logging'),
             'identity': cluster.get('identity'),
             'status': cluster.get('status'),
+            'health': cluster.get('health'),
             'certificate_authority': cluster.get('certificateAuthority'),
             'platform_version': cluster.get('platformVersion'),
             'tags': cluster.get('tags'),
@@ -7142,6 +7143,12 @@ def ecs_inventory() -> dict[str, Any]:
             lambda: _paginate(ecs, 'list_tasks', 'taskArns', cluster=cluster_arn),
             {'ClusterNotFoundException'},
         )
+        stopped_task_arns = _ecs_optional(
+            lambda: _paginate(ecs, 'list_tasks', 'taskArns', cluster=cluster_arn, desiredStatus='STOPPED'),
+            {'ClusterNotFoundException'},
+        )
+        if isinstance(task_arns, list) and isinstance(stopped_task_arns, list):
+            task_arns = list(dict.fromkeys(task_arns + stopped_task_arns))
         service_arns = _ecs_optional(
             lambda: _paginate(ecs, 'list_services', 'serviceArns', cluster=cluster_arn),
             {'ClusterNotFoundException'},
@@ -7970,6 +7977,20 @@ def cloudfront_inventory() -> dict[str, Any]:
         ) if operation in operations else []
 
     distributions = nested('ListDistributions', 'list_distributions', 'DistributionList')
+
+    def distribution_configuration(distribution):
+        if 'GetDistributionConfig' not in operations:
+            return distribution
+        try:
+            response = cloudfront.get_distribution_config(Id=distribution['Id'])
+            return {**distribution, **response.get('DistributionConfig', {}), 'ETag': response.get('ETag')}
+        except (ClientError, BotoCoreError, ValueError) as exc:
+            return {**distribution, 'configuration_error': str(exc)}
+
+    if distributions:
+        with ThreadPoolExecutor(max_workers=min(8, len(distributions))) as executor:
+            distributions = list(executor.map(distribution_configuration, distributions))
+
     streaming_distributions = nested(
         'ListStreamingDistributions',
         'list_streaming_distributions',

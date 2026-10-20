@@ -1,3 +1,4 @@
+import { ResourceDetails } from '../components/ResourceDetails';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -120,7 +121,7 @@ export const SecretsManagerConsole: React.FC = () => {
     ARN: s.ARN || s.arn,
     Description: s.Description || s.description || '—',
     LastChangedDate: s.LastChangedDate || s.last_changed_date,
-    Stages: Object.keys(s.SecretVersionsToStages || {}),
+    Stages: [...new Set(Object.values(s.SecretVersionsToStages || s.VersionIdsToStages || {}).flat())] as string[],
   }));
 
   const filteredSecrets = secretsList.filter((s: any) => {
@@ -221,7 +222,7 @@ export const SecretsManagerConsole: React.FC = () => {
                 id: 'name',
                 header: 'Secret Name',
                 cell: (item) => (
-                  <Button variant="inline-link" onClick={() => handleRevealSecret(item)}>
+                  <Button variant="inline-link" onClick={() => setSelectedSecrets([item])}>
                     <strong>{item.Name}</strong>
                   </Button>
                 ),
@@ -270,6 +271,7 @@ export const SecretsManagerConsole: React.FC = () => {
         </SpaceBetween>
       </Container>
 
+      {selectedSecrets[0] && <ResourceDetails resource={Object.fromEntries(Object.entries(selectedSecrets[0]).filter(([key]) => !/secretstring|secretbinary|value/i.test(key)))} title={`Secret: ${selectedSecrets[0].Name}`} />}
       {/* Store Secret Modal */}
       <Modal
         visible={createModalOpen}

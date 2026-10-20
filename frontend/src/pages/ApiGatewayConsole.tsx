@@ -1,4 +1,6 @@
+import { ApiRequestFlow } from '../components/ApiRequestFlow';
 import React, { useEffect, useRef, useState } from 'react';
+import ExpandableSection from '@cloudscape-design/components/expandable-section';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -20,7 +22,7 @@ import { CodeSnippet } from '../components/CodeSnippet';
 type Api = Record<string, any> & { id: string; name: string; api_type: string };
 const rows = (value: unknown): any[] => Array.isArray(value) ? value : [];
 
-export const ApiGatewayConsole: React.FC<{ activeTab?: string; onTabChange?: (tabId: string) => void }> = ({ activeTab, onTabChange }) => {
+export const ApiGatewayConsole: React.FC<{ activeTab?: string; onTabChange?: (tabId: string) => void; resourcePath?: string; onNavigate?: (path: string) => void }> = ({ activeTab, onTabChange, resourcePath = 'apigateway', onNavigate }) => {
   const [apis, setApis] = useState<Api[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [filter, setFilter] = useState('');
@@ -39,13 +41,16 @@ export const ApiGatewayConsole: React.FC<{ activeTab?: string; onTabChange?: (ta
   const [headers, setHeaders] = useState('{}');
   const [body, setBody] = useState('');
   const [result, setResult] = useState<any>(null);
-  const api = apis.find(item => item.id === selectedId);
+  const queryApi = new URLSearchParams(resourcePath.split('?')[1] || '').get('api');
+  const effectiveApiId = queryApi || selectedId;
+  const api = apis.find(item => item.id === effectiveApiId);
+  const selectApi = (id: string) => { setSelectedId(id); onNavigate?.(`apigateway/${tab}?${new URLSearchParams({ api: id })}`); };
   const stages = rows(api?.stages);
   const stageName = (item: any) => item.StageName || item.stageName || item.name;
   const selectedStage = stages.some(item => stageName(item) === stage) ? stage : (stages.length ? stageName(stages[0]) : '');
   const http = api?.api_type === 'http';
-  const currentApiId = useRef(selectedId);
-  currentApiId.current = selectedId;
+  const currentApiId = useRef(effectiveApiId);
+  currentApiId.current = effectiveApiId;
 
   useEffect(() => { if (activeTab) setTab(activeTab); }, [activeTab]);
   const load = async () => {
@@ -68,13 +73,13 @@ export const ApiGatewayConsole: React.FC<{ activeTab?: string; onTabChange?: (ta
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
-  useEffect(() => { setStage(''); setResult(null); setPath('/'); setDeleteOpen(false); }, [selectedId]);
+  useEffect(() => { setStage(''); setResult(null); setPath('/'); setDeleteOpen(false); }, [effectiveApiId]);
   const run = async (task: () => Promise<void>) => {
     setBusy(true); setNotice(null);
     try { await task(); } catch (error: any) { setNotice({ type: 'error', text: error.message }); }
     finally { setBusy(false); }
   };
-  const showTab = (id: string) => { setTab(id); onTabChange?.(id); };
+  const showTab = (id: string) => { setTab(id); if (api && onNavigate) onNavigate(`apigateway/${id}?${new URLSearchParams({ api: api.id })}`); else onTabChange?.(id); };
   const configured = (value: unknown, label: string) => {
     const error = typeof value === 'string' ? value : value && typeof value === 'object' && 'error' in value ? String(value.error) : '';
     return error ? <Alert type="warning">{label} could not be retrieved: {error}</Alert> : null;
@@ -92,22 +97,31 @@ export const ApiGatewayConsole: React.FC<{ activeTab?: string; onTabChange?: (ta
       filter={<TextFilter filteringText={filter} filteringPlaceholder="Find APIs by name, ID, or protocol" onChange={({ detail }) => { setFilter(detail.filteringText); setSelectedId(''); }} />}
       items={apis.filter(item => `${item.name} ${item.id} ${item.api_type}`.toLowerCase().includes(filter.toLowerCase()))}
       loading={loading} loadingText="Loading APIs" selectionType="single" trackBy="id" selectedItems={api ? [api] : []}
-      onSelectionChange={({ detail }) => setSelectedId(detail.selectedItems[0]?.id || '')}
+      onSelectionChange={({ detail }) => selectApi(detail.selectedItems[0]?.id || '')}
       columnDefinitions={[
-        { id: 'name', header: 'API name', cell: item => <Button variant="inline-link" onClick={() => setSelectedId(item.id)}>{item.name}</Button> },
+        { id: 'name', header: 'API name', cell: item => <Button variant="inline-link" onClick={() => selectApi(item.id)}>{item.name}</Button> },
         { id: 'id', header: 'API ID', cell: item => item.id },
         { id: 'api_type', header: 'Protocol', cell: item => item.api_type.toUpperCase() },
         { id: 'stage_count', header: 'Stages', cell: item => Array.isArray(item.stages) ? item.stages.length : 'Unavailable' },
       ]} empty={empty(filter ? 'No APIs match your filter.' : 'No APIs found. Create an API to get started.')} />
+    {queryApi && !loading && !api && <Alert type="warning" header="API not found">The selected API is not reported in the current account and Region.</Alert>}
     {api && <Container header={<Header variant="h2" description={`${api.api_type.toUpperCase()} API · ${api.id}`}>{api.name}</Header>}>
       <SpaceBetween size="m">
         <KeyValuePairs columns={3} items={[
           { label: 'API ID', value: api.id }, { label: 'Protocol', value: api.api_type.toUpperCase() },
+          { label: 'Deployed stages', value: stages.map(stageName).join(', ') || 'No deployed stages reported' },
           { label: 'Endpoint', value: api.api_endpoint || api.ApiEndpoint || api.execute_url_pattern || 'Not reported' },
         ]} />
+        <ApiRequestFlow key={api.id} api={api} onTest={(verb, requestPath, selectedStage) => { setMethod(verb); setPath(requestPath); setStage(selectedStage); showTab('test'); }} />
         <Tabs activeTabId={tab} onChange={({ detail }) => showTab(detail.activeTabId)} tabs={[
           { id: 'resources', label: http ? 'Routes' : 'Resources and methods', content: <SpaceBetween size="m">
             {configured(http ? api.routes : api.resources, http ? 'Routes' : 'Resources')}
+            {!http && <ExpandableSection defaultExpanded headerText="Resource and method tree">
+              <ul aria-label="API resource paths" style={{ listStyle: 'none', padding: 0 }}>{rows(api.resources).slice().sort((a, b) => String(a.path || '/').localeCompare(String(b.path || '/'))).map(resource => <li key={resource.id} style={{ padding: '8px', paddingInlineStart: `${Math.max(0, String(resource.path || '/').split('/').filter(Boolean).length - 1) * 20 + 8}px` }}>
+                <strong>{resource.path || '/'}</strong>{Object.keys(resource.resourceMethods || {}).map(verb => <Button key={verb} variant="inline-link" onClick={() => { setMethod(verb === 'ANY' ? 'GET' : verb); setPath(resource.path || '/'); showTab('test'); }}>{verb}</Button>)}
+                {!Object.keys(resource.resourceMethods || {}).length && <span> · No methods</span>}
+              </li>)}</ul>
+            </ExpandableSection>}
             <Table items={rows(http ? api.routes : api.resources)} columnDefinitions={http ? [
               { id: 'RouteKey', header: 'Route', cell: (item: any) => <Button variant="inline-link" onClick={() => {
                 const [verb, ...parts] = (item.RouteKey || '').split(' '); setMethod(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(verb) ? verb : 'GET'); setPath(parts.join(' ') || '/'); showTab('test');

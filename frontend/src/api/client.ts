@@ -586,18 +586,14 @@ export async function simulateIamPolicy(principalArn: string, actionNames: strin
 
 // DynamoDB Deepening APIs
 export async function fetchDynamoDbTableScan(tableName: string, limit: number = 50, startKey?: any): Promise<{ items: any[]; count: number; scanned_count: number; last_evaluated_key?: any }> {
-  try {
-    const res = await fetch(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/scan/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-      body: JSON.stringify({ limit, exclusive_start_key: startKey }),
-    });
-    if (!res.ok) return { items: [], count: 0, scanned_count: 0 };
-    return await res.json();
-  } catch (err) {
-    console.error('Failed to scan DynamoDB table:', err);
-    return { items: [], count: 0, scanned_count: 0 };
-  }
+  const response = await fetch(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/scan/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify({ limit, exclusive_start_key: startKey }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || 'Unable to scan table');
+  return data;
 }
 
 export async function executeDynamoDbPartiQL(statement: string, limit: number = 50): Promise<{ items: any[]; count: number }> {
@@ -737,7 +733,7 @@ export async function createCognitoUser(userPoolId: string, username: string, pa
     body: JSON.stringify({
       username,
       temporary_password: password,
-      user_attributes: email ? [{ Name: 'email', Value: email }] : [],
+      attributes: email ? [{ Name: 'email', Value: email }] : [],
     }),
   });
   const data = await res.json();
@@ -745,11 +741,11 @@ export async function createCognitoUser(userPoolId: string, username: string, pa
   return data;
 }
 
-export async function createCognitoAppClient(userPoolId: string, clientName: string): Promise<any> {
+export async function createCognitoAppClient(userPoolId: string, clientName: string, enablePasswordAuth = true): Promise<any> {
   const res = await fetch(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/clients/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ client_name: clientName }),
+    body: JSON.stringify({ name: clientName, generate_secret: false, ...(enablePasswordAuth ? { explicit_auth_flows: ['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'] } : {}) }),
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to create app client');
@@ -1820,12 +1816,10 @@ export async function putCloudWatchLogRetention(logGroupName: string, retentionI
 
 // Step Functions Additional APIs
 export async function fetchStepFunctionExecutionHistory(executionArn: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('stepfunctions', 'get_execution_history', { execution_arn: executionArn });
-    return res.events || res.Events || [];
-  } catch {
-    return [];
-  }
+  const response = await fetch(`/api/stepfunctions/executions/history/${encodeURIComponent(executionArn)}/`);
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || 'Execution history unavailable');
+  return data.events || [];
 }
 
 export async function stopStepFunctionExecution(executionArn: string, error: string = 'UserCancelled', cause: string = 'Execution stopped manually from workbench'): Promise<any> {
@@ -1875,13 +1869,8 @@ export async function fetchCognitoUserGroups(userPoolId: string): Promise<any[]>
   }
 }
 
-export async function createCognitoUserGroup(userPoolId: string, groupName: string, description: string = '', precedence: number = 0): Promise<any> {
-  return await executeServiceAction('cognito-idp', 'create_group', {
-    user_pool_id: userPoolId,
-    group_name: groupName,
-    description,
-    precedence,
-  });
+export async function createCognitoUserGroup(userPoolId: string, groupName: string, description: string = ''): Promise<any> {
+  return postConsoleAction(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/groups/`, { group_name: groupName, description });
 }
 
 export async function addUserToCognitoGroup(userPoolId: string, groupName: string, username: string): Promise<any> {
@@ -1901,33 +1890,20 @@ export async function removeUserFromCognitoGroup(userPoolId: string, groupName: 
 }
 
 export async function adminSetCognitoUserPassword(userPoolId: string, username: string, password: string, permanent: boolean = true): Promise<any> {
-  return await executeServiceAction('cognito-idp', 'admin_set_user_password', {
-    user_pool_id: userPoolId,
-    username,
-    password,
-    permanent,
-  });
+  return postConsoleAction(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/password/`, { password, permanent });
 }
 
 export async function adminConfirmCognitoSignUp(userPoolId: string, username: string): Promise<any> {
-  return await executeServiceAction('cognito-idp', 'admin_confirm_sign_up', {
-    user_pool_id: userPoolId,
-    username,
-  });
+  return postConsoleAction(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/state/`, { action: 'confirm' });
 }
 
 export async function adminToggleCognitoUserState(userPoolId: string, username: string, enabled: boolean): Promise<any> {
-  const action = enabled ? 'admin_enable_user' : 'admin_disable_user';
-  return await executeServiceAction('cognito-idp', action, { user_pool_id: userPoolId, username });
+  return postConsoleAction(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/state/`, { action: enabled ? 'enable' : 'disable' });
 }
 
 export async function fetchCognitoIdentityPools(): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('cognito-identity', 'list_identity_pools', { max_results: 50 });
-    return res.identity_pools || res.IdentityPools || [];
-  } catch {
-    return [];
-  }
+  const res = await executeServiceAction('cognito-identity', 'list_identity_pools', { max_results: 50 });
+  return res.identity_pools || res.IdentityPools || [];
 }
 
 export async function createCognitoIdentityPool(identityPoolName: string, allowUnauthenticated: boolean = false): Promise<any> {
@@ -2157,6 +2133,7 @@ export async function stopEcsTask(cluster: string, task: string, reason?: string
 }
 
 export async function createEcsService(params: {
+  network_configuration?: any;
   cluster: string;
   service_name: string;
   task_definition: string;
@@ -2323,6 +2300,7 @@ export async function runEcrGarbageCollection(): Promise<any> {
 // Phase 3: CloudFront APIs
 // ==========================================
 export async function createCloudFrontDistribution(params: {
+  caller_reference?: string;
   origin_domain_name: string;
   origin_id?: string;
   comment?: string;
@@ -2335,6 +2313,7 @@ export async function createCloudFrontDistribution(params: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({
+      caller_reference: params.caller_reference || crypto.randomUUID(),
       origin_domain_name: params.origin_domain_name,
       origin_id: params.origin_id || `origin-${Date.now()}`,
       comment: params.comment || '',
@@ -3091,4 +3070,22 @@ export async function runAppSyncGraphQL(apiId: string, query: string, variables:
   const result = await response.json();
   if (!response.ok || result.error) throw new Error(result.error || 'GraphQL execution failed');
   return result;
+}
+
+/** Strict inventory reads for resource consoles that display retrieval state. */
+export async function fetchConsoleInventory(service: 'route53' | 'cognito'): Promise<any> {
+  const response = await fetch(`/api/${service}/`);
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || `Unable to load ${service} inventory (HTTP ${response.status})`);
+  return data;
+}
+
+export async function postConsoleAction(path: string, payload: Record<string, unknown>): Promise<any> {
+  const response = await fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || `Action failed (HTTP ${response.status})`);
+  return data;
 }

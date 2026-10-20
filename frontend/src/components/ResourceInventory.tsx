@@ -8,10 +8,10 @@ import Alert from '@cloudscape-design/components/alert';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Box from '@cloudscape-design/components/box';
 import Table from './ResourceTable';
-import { CodeSnippet } from './CodeSnippet';
+import { ResourceDetails, ResourceValue, attributeLabel } from './ResourceDetails';
 import { ServiceDefinition } from '../types';
 
-const label = (value: string) => value.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+const label = attributeLabel;
 export function ResourceInventory({ service, revision = 0, onSelectResource }: { service: ServiceDefinition; revision?: number; onSelectResource?: (resource: any) => void }) {
   const [collections, setCollections] = useState<Record<string, any[]>>({});
   const [kind, setKind] = useState('');
@@ -39,15 +39,17 @@ export function ResourceInventory({ service, revision = 0, onSelectResource }: {
     return () => { alive = false; };
   }, [service.key, service.api_path, refresh, revision]);
   const items = collections[kind] || [];
-  const keys = [...new Set(items.flatMap(item => Object.keys(item)))].filter(key => items.some(item => ['string', 'number', 'boolean'].includes(typeof item[key]))).slice(0, 8);
+  const allKeys = [...new Set(items.flatMap(item => Object.keys(item)))].filter(key => items.some(item => ['string', 'number', 'boolean'].includes(typeof item[key])));
+  const rank = (key: string) => /^(name|.*Name|domainName|DomainName)$/.test(key) ? 0 : /^(id|.*Id|arn|.*Arn|ARN)$/.test(key) ? 1 : /status|state/i.test(key) ? 2 : 3;
+  const keys = allKeys.sort((a, b) => rank(a) - rank(b)).slice(0, 8);
   const filtered = items.filter(item => JSON.stringify(item).toLowerCase().includes(filter.toLowerCase()));
   return <Container header={<Header variant="h2" description="Inspect resources before choosing an operation." actions={<Button onClick={() => setRefresh(refresh + 1)} iconName="refresh" loading={loading}>Refresh resources</Button>}>Resource inventory</Header>}>
     <SpaceBetween size="m">
       {error && <Alert type="error">{error}</Alert>}
       <Select ariaLabel="Resource type" selectedOption={kind ? { label: label(kind), value: kind } : null} placeholder="Resource type" options={Object.keys(collections).map(key => ({ value: key, label: `${label(key)} (${collections[key].length})` }))} onChange={({ detail }) => { setKind(detail.selectedOption.value!); selectResources([]); setFilter(''); }} />
       <TextFilter filteringText={filter} filteringPlaceholder="Find resources" onChange={({ detail }) => { setFilter(detail.filteringText); selectResources([]); }} />
-      <Table loading={loading} loadingText="Loading resources" selectionType="single" selectedItems={selected} onSelectionChange={({ detail }) => selectResources([...detail.selectedItems])} columnDefinitions={keys.length ? keys.map(key => ({ id: key, header: label(key), sortingField: key, cell: (item: any) => typeof item[key] === 'object' ? 'View details' : String(item[key] ?? '—') })) : [{ id: 'resource', header: 'Resource', cell: (item: any) => JSON.stringify(item) }]} items={filtered} empty={<Box textAlign="center">{filter ? 'No resources match your filter.' : 'No resources reported by this endpoint.'}</Box>} />
-      {selected[0] && <><Header variant="h3">Resource details</Header><CodeSnippet language="json" code={JSON.stringify(selected[0], null, 2)} /></>}
+      <Table loading={loading} loadingText="Loading resources" selectionType="single" selectedItems={selected} onSelectionChange={({ detail }) => selectResources([...detail.selectedItems])} columnDefinitions={keys.length ? keys.map(key => ({ id: key, header: label(key), sortingField: key, minWidth: key === keys[0] ? 160 : 140, cell: (item: any) => key === keys[0] ? <Button variant="inline-link" onClick={() => selectResources([item])}>{String(item[key] ?? 'Not reported')}</Button> : <div style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item[key] == null ? 'Not reported' : String(item[key])}>{/status|state/i.test(key) || typeof item[key] === 'boolean' ? <ResourceValue name={key} value={item[key]} /> : String(item[key] ?? 'Not reported')}</div> })) : [{ id: 'resource', header: 'Resource', cell: (item: any) => JSON.stringify(item) }]} items={filtered} empty={<Box textAlign="center">{filter ? 'No resources match your filter.' : 'No resources reported by this endpoint.'}</Box>} />
+      {selected[0] && <ResourceDetails resource={selected[0]} />}
     </SpaceBetween>
   </Container>;
 }

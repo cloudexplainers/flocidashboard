@@ -1,3 +1,4 @@
+import Alert from '@cloudscape-design/components/alert';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -105,6 +106,7 @@ export const ConsoleHome: React.FC<ConsoleHomeProps> = ({
         </div>
       </Container>
 
+      {health && !health.ok && <Alert type="error" header="Local cloud connection needs attention" action={<Button onClick={() => onSelectService('settings')}>Review connection settings</Button>}>{health.error || 'The configured endpoint could not be reached. Check the endpoint and credentials, then retry.'}</Alert>}
       <Container header={<Header variant="h2">{featured.length ? 'Recently visited services' : 'Recommended services'}</Header>}>
         <Cards
           cardDefinition={{

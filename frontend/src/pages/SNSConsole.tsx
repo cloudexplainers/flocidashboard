@@ -1,3 +1,4 @@
+import { PolicySummary } from '../components/PolicySummary';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -53,12 +54,17 @@ const PROTOCOL_OPTIONS = [
   { label: 'HTTP / HTTPS Webhook', value: 'https', description: 'Deliver HTTP POST payload to a URL' },
 ];
 
-export const SNSConsole: React.FC = () => {
+export const SNSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: string) => void }> = ({ resourcePath, onNavigate }) => {
+  const requested = new URLSearchParams((resourcePath || '').split('?')[1] || '').get('topic');
+  const resourceTab = (resourcePath || '').split('?')[0].split('/')[1] || 'subscriptions';
+  const navigateResource = (item: TopicItem, tab = activeTabId) => {
+    if (onNavigate) onNavigate(`sns/${tab}?${new URLSearchParams({ topic: item.TopicArn })}`);
+  };
   const [topics, setTopics] = useState<TopicItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState<TopicItem[]>([]);
   const [filterText, setFilterText] = useState('');
-  const [activeTabId, setActiveTabId] = useState('subscriptions');
+  const [activeTabId, setActiveTabId] = useState(resourceTab);
 
   // Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -91,6 +97,11 @@ export const SNSConsole: React.FC = () => {
 
   const activeTopic = selectedItems[0] || null;
 
+  useEffect(() => { setActiveTabId(resourceTab); }, [resourceTab]);
+  useEffect(() => {
+    if (requested) setSelectedItems(topics.filter(item => item.TopicArn === requested || item.TopicName === requested));
+  }, [requested, topics]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -104,12 +115,14 @@ export const SNSConsole: React.FC = () => {
         return {
           TopicArn: arn,
           TopicName: name,
-          SubscriptionsPending: Number(attrs.SubscriptionsPending || t.SubscriptionsPending || 0),
-          SubscriptionsConfirmed: Number(attrs.SubscriptionsConfirmed || t.SubscriptionsConfirmed || (t.subscriptions ? t.subscriptions.length : 0)),
+          SubscriptionsPending: Number(attrs.SubscriptionsPending ?? t.SubscriptionsPending ?? (Array.isArray(t.subscriptions) ? t.subscriptions.filter((sub: any) => sub.SubscriptionArn === 'PendingConfirmation').length : 0)),
+          SubscriptionsConfirmed: Number(attrs.SubscriptionsConfirmed ?? t.SubscriptionsConfirmed ?? (Array.isArray(t.subscriptions) ? t.subscriptions.filter((sub: any) => sub.SubscriptionArn?.startsWith('arn:')).length : 0)),
           Type: isFifoTopic ? 'FIFO' : 'Standard',
           DisplayName: attrs.DisplayName || name,
           Policy: attrs.Policy || '',
-          subscriptions: t.subscriptions || [],
+          subscriptions: (Array.isArray(t.subscriptions) ? t.subscriptions : []).map((sub: any) => ({
+            ...sub, attributes: sub.attributes || (data.subscriptions || []).find((detail: any) => (detail.arn || detail.SubscriptionArn) === sub.SubscriptionArn)?.attributes,
+          })),
           attributes: attrs,
         };
       });
@@ -118,7 +131,7 @@ export const SNSConsole: React.FC = () => {
         setSelectedItems([list[0]]);
       } else if (selectedItems.length > 0) {
         const refreshed = list.find((item) => item.TopicArn === selectedItems[0].TopicArn);
-        if (refreshed) setSelectedItems([refreshed]);
+        setSelectedItems(refreshed ? [refreshed] : []);
       }
     } catch (err: any) {
       console.error(err);
@@ -292,7 +305,7 @@ export const SNSConsole: React.FC = () => {
             id: 'name',
             header: 'Topic name',
             cell: (item) => (
-              <Button variant="inline-link" onClick={() => setSelectedItems([item])}>
+              <Button variant="inline-link" onClick={() => { setSelectedItems([item]); navigateResource(item); }}>
                 <strong>{item.TopicName}</strong>
               </Button>
             ),
@@ -317,7 +330,7 @@ export const SNSConsole: React.FC = () => {
             id: 'subscriptions',
             header: 'Subscriptions',
             cell: (item) => (
-              <Badge color="green">{item.SubscriptionsConfirmed ?? (item.subscriptions?.length || 0)} active</Badge>
+              <span>{item.SubscriptionsConfirmed ?? 0} confirmed · {item.SubscriptionsPending ?? 0} pending</span>
             ),
           },
         ]}
@@ -326,7 +339,7 @@ export const SNSConsole: React.FC = () => {
         loadingText="Loading SNS topics..."
         selectionType="single"
         selectedItems={selectedItems}
-        onSelectionChange={({ detail }) => setSelectedItems(detail.selectedItems)}
+        onSelectionChange={({ detail }) => { setSelectedItems(detail.selectedItems); if (detail.selectedItems[0]) navigateResource(detail.selectedItems[0]); }}
         filter={
           <TextFilter
             filteringText={filterText}
@@ -347,6 +360,7 @@ export const SNSConsole: React.FC = () => {
         }
       />
 
+      {requested && !loading && !activeTopic && <Alert type="warning">Requested topic was not found. Select an available resource.</Alert>}
       {activeTopic && (
         <Container
           header={
@@ -367,7 +381,7 @@ export const SNSConsole: React.FC = () => {
         >
           <Tabs
             activeTabId={activeTabId}
-            onChange={({ detail }) => setActiveTabId(detail.activeTabId)}
+            onChange={({ detail }) => { setActiveTabId(detail.activeTabId); navigateResource(activeTopic, detail.activeTabId); }}
             tabs={[
               {
                 id: 'subscriptions',
@@ -401,14 +415,14 @@ export const SNSConsole: React.FC = () => {
                         {
                           id: 'endpoint',
                           header: 'Endpoint',
-                          cell: (sub) => <strong>{sub.Endpoint}</strong>,
+                          cell: (sub) => sub.Protocol === 'sqs' && sub.Endpoint?.startsWith('arn:') ? <Button variant="inline-link" href={`/sqs/attributes?${new URLSearchParams({ queue: sub.Endpoint })}`} onClick={event => { if (onNavigate) { event.preventDefault(); onNavigate(`sqs/attributes?${new URLSearchParams({ queue: sub.Endpoint })}`); } }}>{sub.Endpoint}</Button> : <span style={{ overflowWrap: 'anywhere' }}>{sub.Endpoint || 'Not reported'}</span>,
                         },
                         {
                           id: 'arn',
                           header: 'Subscription ARN',
                           cell: (sub) => (
-                            <code style={{ fontSize: '11px' }}>
-                              {sub.SubscriptionArn || 'PendingConfirmation'}
+                            <code style={{ fontSize: '11px', whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
+                              {sub.SubscriptionArn || 'Not reported'}
                             </code>
                           ),
                         },
@@ -416,10 +430,15 @@ export const SNSConsole: React.FC = () => {
                           id: 'status',
                           header: 'Status',
                           cell: (sub) => (
-                            <StatusIndicator type={sub.SubscriptionArn === 'PendingConfirmation' ? 'pending' : 'success'}>
-                              {sub.SubscriptionArn === 'PendingConfirmation' ? 'Pending' : 'Confirmed'}
+                            <StatusIndicator type={sub.SubscriptionArn === 'PendingConfirmation' ? 'pending' : sub.SubscriptionArn?.startsWith('arn:') ? 'success' : 'info'}>
+                              {sub.SubscriptionArn === 'PendingConfirmation' ? 'Pending' : sub.SubscriptionArn?.startsWith('arn:') ? 'Confirmed' : 'Not reported'}
                             </StatusIndicator>
                           ),
+                        },
+                        {
+                          id: 'delivery',
+                          header: 'Delivery settings',
+                          cell: (sub) => <div style={{ overflowWrap: 'anywhere' }}>Raw delivery: {sub.attributes?.RawMessageDelivery ?? 'Not reported'}<br />Filter policy: {sub.attributes?.FilterPolicy || 'Not reported'}<br />Filter scope: {sub.attributes?.FilterPolicyScope || 'Not reported'}</div>,
                         },
                         {
                           id: 'actions',
@@ -427,7 +446,7 @@ export const SNSConsole: React.FC = () => {
                           cell: (sub) => (
                             <Button
                               iconName="remove"
-                              disabled={sub.SubscriptionArn === 'PendingConfirmation'}
+                              disabled={!sub.SubscriptionArn?.startsWith('arn:')}
                               onClick={() => handleDeleteSubscription(sub.SubscriptionArn)}
                               loading={deletingSubArn === sub.SubscriptionArn}
                             >
@@ -479,31 +498,16 @@ export const SNSConsole: React.FC = () => {
                     <Alert header="Attribute-Based Message Filtering">
                       SNS subscription filter policies evaluate message attributes and payload bodies, routing only relevant notifications to specific subscribers.
                     </Alert>
-                    <FormField label="Example Subscription Filter Policy (JSON)">
-                      <textarea
-                        readOnly
-                        rows={6}
-                        value={JSON.stringify(
-                          {
-                            store: ['example_corp'],
-                            event: ['order_cancelled', 'order_placed'],
-                            encrypted: [true],
-                          },
-                          null,
-                          2
-                        )}
-                        style={{
-                          width: '100%',
-                          fontFamily: 'monospace',
-                          fontSize: '12px',
-                          background: '#1b2a3a',
-                          color: '#4af',
-                          padding: '10px',
-                          borderRadius: '4px',
-                          border: '1px solid #23395b',
-                        }}
-                      />
-                    </FormField>
+                    <Table header={<Header variant="h3">Subscription delivery policies</Header>}
+                      items={activeTopic.subscriptions || []}
+                      columnDefinitions={[
+                        { id: 'endpoint', header: 'Endpoint', cell: sub => <span style={{ overflowWrap: 'anywhere' }}>{sub.Endpoint || 'Not reported'}</span> },
+                        { id: 'raw', header: 'Raw delivery', cell: sub => sub.attributes?.RawMessageDelivery ?? 'Not reported' },
+                        { id: 'scope', header: 'Filter scope', cell: sub => sub.attributes?.FilterPolicyScope || 'Not reported' },
+                        { id: 'filter', header: 'Filter policy', cell: sub => <code style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{sub.attributes?.FilterPolicy || 'Not reported'}</code> },
+                      ]}
+                      empty={<span>No subscription delivery policies reported.</span>}
+                    />
                   </SpaceBetween>
                 ),
               },
@@ -513,31 +517,16 @@ export const SNSConsole: React.FC = () => {
                 content: (
                   <SpaceBetween size="m">
                     <Header variant="h3">Topic Access Policy (JSON)</Header>
+                    <PolicySummary document={activeTopic.Policy || undefined} />
                     <textarea
                       readOnly
                       rows={8}
                       value={
-                        activeTopic.Policy ||
-                        JSON.stringify(
-                          {
-                            Version: '2012-10-17',
-                            Id: `${activeTopic.TopicName}/SNSDefaultPolicy`,
-                            Statement: [
-                              {
-                                Sid: 'TopicOwnerAccess',
-                                Effect: 'Allow',
-                                Principal: { AWS: 'arn:aws:iam::000000000000:root' },
-                                Action: 'SNS:*',
-                                Resource: activeTopic.TopicArn,
-                              },
-                            ],
-                          },
-                          null,
-                          2
-                        )
+                        activeTopic.Policy || 'No access policy reported for this topic.'
                       }
                       style={{
                         width: '100%',
+                        boxSizing: 'border-box',
                         fontFamily: 'monospace',
                         fontSize: '12px',
                         background: '#1b2a3a',

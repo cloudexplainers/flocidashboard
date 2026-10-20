@@ -1,3 +1,5 @@
+import { ECSResourcePage } from './ECSResourcePage';
+import { normalizeEcsInventory, parseEcsRoute, clusterPath, servicePath, taskPath } from './ecsResources';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import React, { useState, useEffect, useMemo } from 'react';
 import Table from '../components/ResourceTable';
@@ -18,7 +20,6 @@ import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import Tabs from '@cloudscape-design/components/tabs';
 import {
-  fetchInventory,
   createEcsCluster,
   deleteEcsCluster,
   registerEcsTaskDefinition,
@@ -33,10 +34,12 @@ import {
 
 interface ECSConsoleProps {
   activeTab?: string;
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   onTabChange?: (tabId: string) => void;
 }
 
-export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }) => {
+export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, resourcePath = 'ecs', onNavigate }) => {
   const [data, setData] = useState<any>({
     clusters: [],
     services: [],
@@ -44,6 +47,9 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
     tasks: [],
     container_instances: [],
   });
+  const route = parseEcsRoute(resourcePath);
+  const navigate = (path: string) => onNavigate?.(path);
+  const [loadError, setLoadError] = useState('');
   const [loading, setLoading] = useState(true);
   const [filterText, setFilterText] = useState('');
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -94,6 +100,8 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
   const [serviceTaskDef, setServiceTaskDef] = useState('');
   const [serviceDesiredCount, setServiceDesiredCount] = useState('1');
   const [serviceLaunchType, setServiceLaunchType] = useState({ label: 'FARGATE', value: 'FARGATE' });
+  const [serviceSubnets, setServiceSubnets] = useState('');
+  const [serviceSecurityGroups, setServiceSecurityGroups] = useState('');
   const [creatingService, setCreatingService] = useState(false);
 
   // Scale Service Modal
@@ -103,10 +111,14 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
   const [scalingService, setScalingService] = useState(false);
 
   const loadData = async () => {
-    setLoading(true);
+    setLoading(true); setLoadError('');
     try {
-      const res = await fetchInventory('ecs');
+      const response = await fetch('/api/ecs/');
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || 'Unable to load ECS inventory');
+      const res = normalizeEcsInventory(payload);
       setData(res || { clusters: [], services: [], task_definitions: [], tasks: [], container_instances: [] });
+      setSelectedClusters(previous => previous.length ? res.clusters.filter((cluster: any) => cluster.clusterName === previous[0].clusterName) : res.clusters.slice(0, 1));
       if (res?.clusters?.length > 0 && selectedClusters.length === 0) {
         setSelectedClusters([res.clusters[0]]);
         setRunTaskCluster(res.clusters[0].clusterName || res.clusters[0].cluster_name || '');
@@ -118,8 +130,8 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
         setRunTaskDefinition(firstDef.taskDefinitionArn || fam);
         setServiceTaskDef(firstDef.taskDefinitionArn || fam);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      setLoadError(err.message || 'Unable to load ECS inventory');
     } finally {
       setLoading(false);
     }
@@ -129,7 +141,11 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
     loadData();
   }, []);
 
-  const activeCluster = selectedClusters[0] || null;
+  const activeCluster = route.cluster ? data.clusters.find((item: any) => item.clusterName === route.cluster) : data.clusters.find((item: any) => item.clusterName === selectedClusters[0]?.clusterName);
+  useEffect(() => {
+    const name = activeCluster?.clusterName || '';
+    setRunTaskCluster(name); setServiceCluster(name); setScaleServiceOpen(false); setCreateServiceOpen(false); setRunTaskOpen(false);
+  }, [activeCluster?.clusterName, resourcePath]);
   const activeClusterName = activeCluster ? activeCluster.clusterName || activeCluster.cluster_name : '';
 
   // Filtered lists
@@ -146,7 +162,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
     if (!activeClusterName) return list;
     return list.filter((s: any) => {
       const cArn = s.clusterArn || s.cluster || '';
-      return cArn.includes(activeClusterName) || !cArn;
+      return cArn === activeClusterName || cArn.split('/').pop() === activeClusterName;
     });
   }, [data.services, activeClusterName]);
 
@@ -155,7 +171,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
     if (!activeClusterName) return list;
     return list.filter((t: any) => {
       const cArn = t.clusterArn || t.cluster || '';
-      return cArn.includes(activeClusterName) || !cArn;
+      return cArn === activeClusterName || cArn.split('/').pop() === activeClusterName;
     });
   }, [data.tasks, activeClusterName]);
 
@@ -181,6 +197,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
     try {
       await deleteEcsCluster(cName);
       setActionMessage({ type: 'success', text: `Cluster "${cName}" deleted.` });
+      navigate('ecs/clusters');
       await loadData();
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'Failed to delete cluster' });
@@ -265,7 +282,8 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
         cluster: serviceCluster,
         service_name: serviceName.trim(),
         task_definition: serviceTaskDef,
-        desired_count: parseInt(serviceDesiredCount, 10) || 1,
+        desired_count: Number(serviceDesiredCount),
+        network_configuration: serviceSubnets.trim() ? { awsvpcConfiguration: { subnets: serviceSubnets.split(',').map(value => value.trim()).filter(Boolean), securityGroups: serviceSecurityGroups.split(',').map(value => value.trim()).filter(Boolean), assignPublicIp: 'DISABLED' } } : undefined,
         launch_type: serviceLaunchType.value,
       });
       setActionMessage({ type: 'success', text: `Service "${serviceName.trim()}" created.` });
@@ -340,6 +358,9 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
         </Alert>
       )}
 
+      {!route.cluster && <><FormField label="Cluster context" description="Services and tasks are scoped to this cluster.">
+        <Select ariaLabel="Cluster context" selectedOption={activeClusterName ? { label: activeClusterName, value: activeClusterName } : null} placeholder="Select a cluster" options={(data.clusters || []).map((cluster: any) => ({ label: cluster.clusterName || cluster.cluster_name, value: cluster.clusterName || cluster.cluster_name }))} onChange={({ detail }) => setSelectedClusters((data.clusters || []).filter((cluster: any) => (cluster.clusterName || cluster.cluster_name) === detail.selectedOption.value))} />
+      </FormField>
       {/* Cluster Overview Metrics */}
       <Grid gridDefinition={[{ colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }]}>
         <Container>
@@ -360,7 +381,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
         </Container>
       </Grid>
 
-      {activeCluster && <Container data-testid="ecs-cluster-summary" header={<Header variant="h2">Cluster: {activeClusterName}</Header>}>
+      {activeCluster && <Container data-testid="ecs-cluster-summary" header={<Header variant="h2" actions={<SpaceBetween direction="horizontal" size="xs"><Button onClick={() => onTabChange?.('services')}>View services</Button><Button onClick={() => onTabChange?.('tasks')}>View tasks</Button></SpaceBetween>}>Cluster: {activeClusterName}</Header>}>
         <KeyValuePairs columns={3} items={[
           { label: 'Desired tasks', value: filteredServices.reduce((sum: number, service: any) => sum + Number(service.desiredCount ?? service.desired_count ?? 0), 0) },
           { label: 'Running tasks', value: filteredServices.reduce((sum: number, service: any) => sum + Number(service.runningCount ?? service.running_count ?? 0), 0) },
@@ -401,7 +422,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
                         id: 'name',
                         header: 'Cluster Name',
                         cell: (item: any) => (
-                          <Button variant="inline-link" onClick={() => setSelectedClusters([item])}>
+                          <Button variant="inline-link" onClick={() => { setSelectedClusters([item]); navigate(clusterPath(item.clusterName)); }}>
                             <strong>{item.clusterName || item.cluster_name}</strong>
                           </Button>
                         ),
@@ -473,7 +494,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
                     {
                       id: 'serviceName',
                       header: 'Service Name',
-                      cell: (item: any) => <strong>{item.serviceName || item.service_name}</strong>,
+                      cell: (item: any) => <Button variant="inline-link" onClick={() => navigate(servicePath(activeClusterName, item.serviceName || item.service_name))}>{item.serviceName || item.service_name}</Button>,
                     },
                     {
                       id: 'status',
@@ -553,7 +574,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
                     {
                       id: 'taskArn',
                       header: 'Task ARN',
-                      cell: (item: any) => <code>{item.taskArn || item.task_arn}</code>,
+                      cell: (item: any) => <Button variant="inline-link" onClick={() => navigate(taskPath(activeClusterName, item))}>{(item.taskArn || item.task_arn)?.split('/').pop()}</Button>,
                     },
                     {
                       id: 'status',
@@ -713,6 +734,13 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
         ]}
       />
 
+      </>}
+      {loadError && !route.cluster && <Alert type="error">{loadError}</Alert>}
+      {route.cluster && <ECSResourcePage key={resourcePath} path={resourcePath} data={data} loading={loading} error={loadError} navigate={navigate}
+        createService={() => setCreateServiceOpen(true)} runTask={() => setRunTaskOpen(true)}
+        scale={service => { setScaleTargetService(service); setScaleDesiredCount(String(service.desiredCount ?? 0)); setScaleServiceOpen(true); }}
+        deleteService={async service => { if (!confirm(`Delete ECS service "${service.serviceName}"?`)) return; try { await deleteEcsService(activeClusterName, service.serviceName); navigate(clusterPath(activeClusterName)); await loadData(); } catch (error: any) { setActionMessage({ type: 'error', text: error.message }); } }}
+        stopTask={task => handleStopTask(task.taskArn || task.task_arn)} deleteCluster={() => handleDeleteCluster(activeClusterName)} />}
       {/* Create Cluster Modal */}
       <Modal
         visible={createClusterOpen}
@@ -853,6 +881,8 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
           <FormField label="Cluster">
             <Input value={serviceCluster} onChange={({ detail }) => setServiceCluster(detail.value)} placeholder="cluster-name" />
           </FormField>
+          <FormField label="Subnet IDs" description="Comma-separated subnet IDs. Required for task definitions using awsvpc networking."><Input value={serviceSubnets} onChange={({ detail }) => setServiceSubnets(detail.value)} /></FormField>
+          <FormField label="Security group IDs" description="Optional comma-separated security group IDs."><Input value={serviceSecurityGroups} onChange={({ detail }) => setServiceSecurityGroups(detail.value)} /></FormField>
           <FormField label="Service Name">
             <Input value={serviceName} onChange={({ detail }) => setServiceName(detail.value)} placeholder="backend-svc" />
           </FormField>

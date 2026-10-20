@@ -1,3 +1,4 @@
+import { EventPatternTester } from '../components/EventPatternTester';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -19,7 +20,6 @@ import Tabs from '@cloudscape-design/components/tabs';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import {
-  fetchInventory,
   createEventBus,
   deleteEventBus,
   putEventRule,
@@ -60,7 +60,12 @@ interface BusItem {
   rules?: RuleItem[];
 }
 
-export const EventBridgeConsole: React.FC = () => {
+export const EventBridgeConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: string) => void }> = ({ resourcePath = 'eventbridge', onNavigate }) => {
+  const query = new URLSearchParams(resourcePath.split('?')[1] || '');
+  const pinnedRule = query.get('rule');
+  const pinnedBus = query.get('bus') || 'default';
+  const ruleUrl = (rule: RuleItem, tab = 'rules') => `eventbridge/${tab}?${new URLSearchParams({ bus: rule.EventBusName, rule: rule.Name })}`;
+  useEffect(() => { setTopTabId(resourcePath.split('?')[0].split('/')[1] || 'rules'); }, [resourcePath]);
   const [topTabId, setTopTabId] = useState('rules');
   const [buses, setBuses] = useState<BusItem[]>([]);
   const [rules, setRules] = useState<RuleItem[]>([]);
@@ -106,14 +111,16 @@ export const EventBridgeConsole: React.FC = () => {
   const [sendingEvent, setSendingEvent] = useState(false);
   const [sendResult, setSendResult] = useState<any | null>(null);
 
-  const activeRule = selectedRules[0] || null;
+  const activeRule = pinnedRule ? rules.find(rule => rule.Name === pinnedRule && rule.EventBusName === pinnedBus) || null : selectedRules[0] || null;
   const activeBus = selectedBuses[0] || null;
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetchInventory('eventbridge');
-      const rawBuses = res.event_buses || res.buses || [{ Name: 'default', rules: [] }];
+      const response = await fetch('/api/eventbridge/');
+      const res = await response.json();
+      if (!response.ok || res.error) throw new Error(res.error || 'Unable to load EventBridge inventory');
+      const rawBuses = res.event_buses || res.buses || [];
       const allRules: RuleItem[] = [];
       const busList: BusItem[] = rawBuses.map((b: any) => {
         const bName = b.name || b.Name || 'default';
@@ -121,12 +128,12 @@ export const EventBridgeConsole: React.FC = () => {
           const ruleObj: RuleItem = {
             Name: r.name || r.Name || 'rule-1',
             Arn: r.arn || r.Arn,
-            State: r.state || r.State || 'ENABLED',
+            State: r.state || r.State || 'Unknown',
             EventBusName: bName,
             EventPattern: r.event_pattern || r.EventPattern || '—',
             ScheduleExpression: r.schedule_expression || r.ScheduleExpression,
             Description: r.description || r.Description || '',
-            targets: r.targets || [],
+            targets: Array.isArray(r.targets) ? r.targets : [],
             target_count: r.target_count ?? (r.targets ? r.targets.length : 0),
           };
           allRules.push(ruleObj);
@@ -150,12 +157,12 @@ export const EventBridgeConsole: React.FC = () => {
           allRules.push({
             Name: r.Name || r.name,
             Arn: r.Arn || r.arn,
-            State: r.State || r.state || 'ENABLED',
+            State: r.State || r.state || 'Unknown',
             EventBusName: r.EventBusName || r.event_bus_name || 'default',
             EventPattern: r.EventPattern || r.event_pattern || '—',
             ScheduleExpression: r.ScheduleExpression || r.schedule_expression,
             Description: r.Description || r.description || '',
-            targets: r.targets || [],
+            targets: Array.isArray(r.targets) ? r.targets : [],
             target_count: r.target_count ?? (r.targets ? r.targets.length : 0),
           });
         });
@@ -168,10 +175,10 @@ export const EventBridgeConsole: React.FC = () => {
         setSelectedRules([allRules[0]]);
       } else if (selectedRules.length > 0) {
         const refreshed = allRules.find((r) => r.Name === selectedRules[0].Name && r.EventBusName === selectedRules[0].EventBusName);
-        if (refreshed) setSelectedRules([refreshed]);
+        setSelectedRules(refreshed ? [refreshed] : []);
       }
     } catch (err: any) {
-      console.error(err);
+      setBuses([]); setRules([]); setSelectedRules([]);
       setActionAlert({ type: 'error', message: err.message || 'Failed to load EventBridge resources.' });
     } finally {
       setLoading(false);
@@ -378,7 +385,7 @@ export const EventBridgeConsole: React.FC = () => {
           </Header>
         }
       >
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
+        <div className="console-summary">
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Event Rules</Box>
             <Box variant="h1" color="text-status-info">
@@ -394,17 +401,22 @@ export const EventBridgeConsole: React.FC = () => {
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Event Routing Engine</Box>
             <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">EventBridge Bus Active</StatusIndicator>
+              <span>{rules.filter(rule => rule.State === 'ENABLED').length} enabled rules reported</span>
             </Box>
           </Box>
-        </Grid>
+        </div>
       </Container>
 
+      {pinnedRule && !loading && !activeRule && <Alert type="warning" header="Rule not found">This rule is not reported on the selected event bus.</Alert>}
+      {activeRule && <Container header={<Header variant="h2" actions={<Button onClick={() => { setTopTabId('tester'); onNavigate?.(ruleUrl(activeRule, 'tester')); }}>Test rule pattern</Button>}>Event routing</Header>}><div className="resource-flow">
+        <section><Header variant="h3">Event bus</Header><p>{activeRule.EventBusName}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Rule</Header><p>{activeRule.Name}</p><p>{activeRule.State}</p>{activeRule.ScheduleExpression && <p>{activeRule.ScheduleExpression}</p>}</section><span aria-hidden="true">→</span><section><Header variant="h3">Targets</Header>{activeRule.targets?.length ? activeRule.targets.map(target => <p key={target.Id}>{target.Id}: {target.Arn}</p>) : <p>No targets reported.</p>}</section>
+      </div></Container>}
       {/* Top-Level Tabs */}
       <Tabs
         activeTabId={topTabId}
-        onChange={({ detail }) => setTopTabId(detail.activeTabId)}
+        onChange={({ detail }) => { setTopTabId(detail.activeTabId); onNavigate?.(activeRule ? ruleUrl(activeRule, detail.activeTabId) : `eventbridge/${detail.activeTabId}`); }}
         tabs={[
+          { id: 'tester', label: 'Pattern tester', content: pinnedRule && !activeRule ? <Alert type="info">Select an available rule before testing its pattern.</Alert> : <EventPatternTester key={`${activeRule?.EventBusName}/${activeRule?.Name}`} pattern={activeRule?.EventPattern} /> },
           {
             id: 'rules',
             label: `Rules & Routing (${rules.length})`,
@@ -449,7 +461,7 @@ export const EventBridgeConsole: React.FC = () => {
                       id: 'name',
                       header: 'Rule name',
                       cell: (item) => (
-                        <Button variant="inline-link" onClick={() => setSelectedRules([item])}>
+                        <Button variant="inline-link" onClick={() => { setSelectedRules([item]); onNavigate?.(ruleUrl(item)); }}>
                           <strong>{item.Name}</strong>
                         </Button>
                       ),
@@ -495,7 +507,7 @@ export const EventBridgeConsole: React.FC = () => {
                   loadingText="Loading EventBridge rules..."
                   selectionType="single"
                   selectedItems={selectedRules}
-                  onSelectionChange={({ detail }) => setSelectedRules(detail.selectedItems)}
+                  onSelectionChange={({ detail }) => { setSelectedRules(detail.selectedItems); onNavigate?.(detail.selectedItems[0] ? ruleUrl(detail.selectedItems[0]) : 'eventbridge/rules'); }}
                   filter={
                     <ColumnLayout columns={2}>
                       <TextFilter

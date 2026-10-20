@@ -349,3 +349,23 @@ def get_sample_events() -> dict[str, dict[str, Any]]:
             },
         },
     }
+
+
+def test_emulator_event_pattern(event_pattern: Any, event: Any) -> dict[str, Any]:
+    """Evaluate with the same emulator engine that routes published events."""
+    def object_json(value, label):
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f'{label} must be valid JSON') from exc
+        if not isinstance(value, dict):
+            raise ValueError(f'{label} must be a JSON object')
+        return json.dumps(value)
+
+    pattern_json = object_json(event_pattern, 'Event pattern')
+    event_json = object_json(event, 'Sample event')
+    response = _events_client().test_event_pattern(EventPattern=pattern_json, Event=event_json)
+    matched = response['Result']
+    return {'result': matched, 'engine': 'emulator',
+            'summary': 'Floci matched the sample event.' if matched else 'Floci did not match the sample event.'}

@@ -1,3 +1,5 @@
+import { DistributionBehaviors } from '../components/DistributionBehaviors';
+import { ResourceValue } from '../components/ResourceDetails';
 import React, { useState, useEffect, useMemo } from 'react';
 import Table from '../components/ResourceTable';
 import Box from '@cloudscape-design/components/box';
@@ -18,7 +20,6 @@ import TextFilter from '@cloudscape-design/components/text-filter';
 import Tabs from '@cloudscape-design/components/tabs';
 import Link from '@cloudscape-design/components/link';
 import {
-  fetchInventory,
   createCloudFrontDistribution,
   updateCloudFrontDistribution,
   deleteCloudFrontDistribution,
@@ -30,10 +31,20 @@ import {
 
 interface CloudFrontConsoleProps {
   activeTab?: string;
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   onTabChange?: (tabId: string) => void;
 }
 
-export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab, onTabChange }) => {
+export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab, onTabChange, resourcePath = 'cloudfront', onNavigate }) => {
+  const query = new URLSearchParams(resourcePath.split('?')[1] || '');
+  const pinned = query.get('distribution');
+  const [loadError, setLoadError] = useState('');
+  const showTab = (tab: string, values?: Record<string, string>) => {
+    const next = new URLSearchParams(resourcePath.split('?')[1] || '');
+    Object.entries(values || {}).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key));
+    if (onNavigate) onNavigate(`cloudfront/${tab}${next.size ? '?' + next : ''}`); else onTabChange?.(tab);
+  };
   const [data, setData] = useState<any>({
     distributions: [],
     invalidations: [],
@@ -78,9 +89,12 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
   const [creatingFunc, setCreatingFunc] = useState(false);
 
   const loadData = async () => {
-    setLoading(true);
+    setLoading(true); setLoadError('');
     try {
-      const res = await fetchInventory('cloudfront');
+      const response = await fetch('/api/cloudfront/');
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || 'Inventory unavailable');
+      const res = payload;
       setData(
         res || {
           distributions: [],
@@ -90,11 +104,10 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
           origin_access_identities: [],
         }
       );
-      if (res?.distributions?.length > 0 && selectedDists.length === 0) {
-        setSelectedDists([res.distributions[0]]);
-      }
-    } catch (err) {
-      console.error(err);
+      setSelectedDists(previous => previous.length ? (res?.distributions || []).filter((distribution: any) => (distribution.Id || distribution.id) === (previous[0].Id || previous[0].id)) : (res?.distributions || []).slice(0, 1));
+    } catch (err: any) {
+      setLoadError(err.message || 'Inventory unavailable');
+      setData({});
     } finally {
       setLoading(false);
     }
@@ -104,7 +117,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
     loadData();
   }, []);
 
-  const activeDist = selectedDists[0] || null;
+  const activeDist = (data.distributions || []).find((item: any) => (item.Id || item.id) === (pinned || selectedDists[0]?.Id || selectedDists[0]?.id)) || null;
   const activeDistId = activeDist ? activeDist.Id || activeDist.id : '';
 
   const filteredDists = useMemo(() => {
@@ -249,6 +262,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         </Alert>
       )}
 
+      {loadError && <Alert type="error">{loadError}</Alert>}
       {/* Metrics */}
       <Grid gridDefinition={[{ colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }]}>
         <Container>
@@ -269,9 +283,14 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         </Container>
       </Grid>
 
+      <FormField label="Distribution context"><Select ariaLabel="Distribution context" placeholder="Select a distribution" selectedOption={activeDistId ? { label: activeDistId, value: activeDistId } : null} options={(data.distributions || []).map((distribution: any) => ({ label: distribution.Id || distribution.id, value: distribution.Id || distribution.id, description: distribution.DomainName || distribution.domain_name }))} onChange={({ detail }) => showTab(activeTab || 'origins', { distribution: detail.selectedOption.value! })} /></FormField>
+      {pinned && !loading && !loadError && !activeDist && <Alert type="warning">Distribution not found in the active account and Region.</Alert>}
+      {activeDist && <Container header={<Header variant="h2" description={activeDist.DomainName || 'Domain not reported'} actions={<Button onClick={() => showTab('origins')}>View origins and behaviors</Button>}>Distribution: {activeDistId}</Header>}>
+        <div className="resource-flow"><section><Header variant="h3">Viewer</Header><p>{activeDist.DomainName || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Default behavior</Header><p>Target origin: {activeDist.DefaultCacheBehavior?.TargetOriginId || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Origins</Header>{(activeDist.Origins?.Items || []).map((origin: any) => <p key={origin.Id}>{origin.Id}: {origin.DomainName}</p>)}{!activeDist.Origins?.Items?.length && <p>Not reported</p>}</section></div>
+      </Container>}
       <Tabs
         activeTabId={activeTab || 'distributions'}
-        onChange={({ detail }) => onTabChange && onTabChange(detail.activeTabId)}
+        onChange={({ detail }) => showTab(detail.activeTabId)}
         tabs={[
           {
             label: `Distributions (${(data.distributions || []).length})`,
@@ -303,7 +322,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                         id: 'id',
                         header: 'Distribution ID',
                         cell: (item: any) => (
-                          <Button variant="inline-link" onClick={() => setSelectedDists([item])}>
+                          <Button variant="inline-link" onClick={() => { setSelectedDists([item]); showTab('origins', { distribution: item.Id || item.id }); }}>
                             <strong>{item.Id || item.id}</strong>
                           </Button>
                         ),
@@ -313,14 +332,14 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                         id: 'domain',
                         header: 'Domain Name',
                         cell: (item: any) => {
-                          const dom = item.DomainName || item.domain_name || `${item.Id || item.id}.cloudfront.net`;
-                          return <Link href={`https://${dom}`} external>{dom}</Link>;
+                          const dom = item.DomainName || item.domain_name;
+                          return dom ? <Link href={`https://${dom}`} external>{dom}</Link> : <span>Not reported</span>;
                         },
                       },
                       {
                         id: 'status',
                         header: 'Status',
-                        cell: (item: any) => <StatusIndicator type="success">{item.Status || 'Deployed'}</StatusIndicator>,
+                        cell: (item: any) => <ResourceValue name="status" value={item.Status} />,
                         width: 130,
                       },
                       {
@@ -328,7 +347,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                         header: 'State',
                         cell: (item: any) => (
                           <Badge color={item.Enabled !== false ? 'green' : 'grey'}>
-                            {item.Enabled !== false ? 'Enabled' : 'Disabled'}
+                            {item.Enabled == null ? 'Not reported' : item.Enabled ? 'Enabled' : 'Disabled'}
                           </Badge>
                         ),
                         width: 110,
@@ -336,7 +355,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                       {
                         id: 'origins',
                         header: 'Origins Count',
-                        cell: (item: any) => item.Origins?.Items?.length || 1,
+                        cell: (item: any) => item.Origins?.Quantity ?? item.Origins?.Items?.length ?? 'Not reported',
                         width: 130,
                       },
                       {
@@ -363,7 +382,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                     items={filteredDists}
                     selectionType="single"
                     selectedItems={selectedDists}
-                    onSelectionChange={({ detail }) => setSelectedDists(detail.selectedItems)}
+                    onSelectionChange={({ detail }) => { setSelectedDists(detail.selectedItems); showTab(activeTab || 'distributions', { distribution: detail.selectedItems[0]?.Id || detail.selectedItems[0]?.id || '' }); }}
                     empty={<Box textAlign="center">No CloudFront distributions found.</Box>}
                   />
                 </SpaceBetween>
@@ -425,27 +444,30 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
             label: 'Origins & Behaviors',
             id: 'origins',
             content: (
+              <SpaceBetween size="m">
+              {activeDist && <DistributionBehaviors key={activeDistId} distribution={activeDist} />}
               <Grid gridDefinition={[{ colspan: { default: 12, s: 6 } }, { colspan: { default: 12, s: 6 } }]}>
                 <Container header={<Header variant="h3">Origins</Header>}>
                   <Table
                     columnDefinitions={[
-                      { id: 'id', header: 'Origin ID', cell: (i: any) => <strong>{i.Id || 'default-origin'}</strong> },
-                      { id: 'domain', header: 'Domain Name', cell: (i: any) => <code>{i.DomainName || 's3.localhost:4566'}</code> },
+                      { id: 'id', header: 'Origin ID', cell: (i: any) => <strong>{i.Id || 'Not reported'}</strong> },
+                      { id: 'domain', header: 'Domain Name', cell: (i: any) => <code>{i.DomainName || 'Not reported'}</code> },
                       { id: 'path', header: 'Origin Path', cell: (i: any) => i.OriginPath || '/' },
                     ]}
-                    items={activeDist?.Origins?.Items || [{ Id: 's3-origin-1', DomainName: originDomain, OriginPath: '/' }]}
+                    items={activeDist?.Origins?.Items || []}
                   />
                 </Container>
 
                 <Container header={<Header variant="h3">Default Cache Behavior</Header>}>
                   <SpaceBetween size="s">
-                    <Box><strong>Viewer Protocol:</strong> {activeDist?.DefaultCacheBehavior?.ViewerProtocolPolicy || 'redirect-to-https'}</Box>
-                    <Box><strong>Allowed HTTP Methods:</strong> GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE</Box>
-                    <Box><strong>Cache Policy:</strong> Managed-CachingOptimized (Default TTL: 86400s)</Box>
-                    <Box><strong>Compress Objects Automatically:</strong> Enabled (Gzip/Brotli)</Box>
+                    <Box><strong>Viewer Protocol:</strong> {activeDist?.DefaultCacheBehavior?.ViewerProtocolPolicy || 'Not reported'}</Box>
+                    <Box><strong>Allowed HTTP Methods:</strong> {activeDist?.DefaultCacheBehavior?.AllowedMethods?.Items?.join(', ') || 'Not reported'}</Box>
+                    <Box><strong>Cache Policy:</strong> {activeDist?.DefaultCacheBehavior?.CachePolicyId || 'Not reported'}</Box>
+                    <Box><strong>Compress Objects Automatically:</strong> {activeDist?.DefaultCacheBehavior?.Compress == null ? 'Not reported' : activeDist.DefaultCacheBehavior.Compress ? 'Enabled' : 'Disabled'}</Box>
                   </SpaceBetween>
                 </Container>
               </Grid>
+              </SpaceBetween>
             ),
           },
           {

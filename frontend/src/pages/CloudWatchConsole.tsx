@@ -279,6 +279,9 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
         </div>
       </Container>
 
+      <Container header={<Header variant="h2" description="Alarm states returned by the active environment.">Alarm health</Header>}>
+        <SpaceBetween direction="horizontal" size="l">{['ALARM', 'OK', 'INSUFFICIENT_DATA'].map(state => <Box key={state}><StatusIndicator type={state === 'ALARM' ? 'error' : state === 'OK' ? 'success' : 'info'}>{state}: {alarmsList.filter((alarm: any) => alarm.StateValue === state).length}</StatusIndicator></Box>)}</SpaceBetween>
+      </Container>
       {/* Main Tabs */}
       <Tabs
         activeTabId={selectedTabId}

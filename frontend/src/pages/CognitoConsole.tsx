@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { normalizeCognitoPool } from './cognitoResources';
+import { CognitoPoolOverview } from '../components/CognitoPoolOverview';
+import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -7,6 +9,7 @@ import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import Tabs from '@cloudscape-design/components/tabs';
 import Modal from '@cloudscape-design/components/modal';
+import Checkbox from '@cloudscape-design/components/checkbox';
 import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Textarea from '@cloudscape-design/components/textarea';
@@ -16,27 +19,41 @@ import Box from '@cloudscape-design/components/box';
 import Badge from '@cloudscape-design/components/badge';
 import Alert from '@cloudscape-design/components/alert';
 import {
-  fetchServiceInventory,
+  fetchConsoleInventory,
   createCognitoUserPool,
   createCognitoUser,
   createCognitoAppClient,
   initiateCognitoAuth,
   deleteCognitoUser,
-  fetchCognitoUserGroups,
   createCognitoUserGroup,
   adminSetCognitoUserPassword,
   adminConfirmCognitoSignUp,
   adminToggleCognitoUserState,
-  fetchCognitoIdentityPools,
   createCognitoIdentityPool,
 } from '../api/client';
 
 interface CognitoConsoleProps {
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
 }
 
-export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTabChange }) => {
+export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTabChange, resourcePath = 'cognito', onNavigate }) => {
+  const requestGeneration = useRef(0);
+  const authGeneration = useRef(0);
+  const [inventoryError, setInventoryError] = useState('');
+  const query = new URLSearchParams(resourcePath.split('?')[1] || '');
+  const requestedPool = query.get('pool');
+  const panel = query.get('panel') || 'overview';
+  const requestedClient = query.get('client');
+  const navigatePool = (id: string, nextPanel = 'overview', client = '', tab = 'users') => {
+    const params = new URLSearchParams({ pool: id, panel: nextPanel });
+    if (client) params.set('client', client);
+    onNavigate?.(`cognito/${tab}?${params}`);
+    setSelectedTabId(tab);
+    if (!onNavigate) onTabChange?.(tab);
+  };
   const [data, setData] = useState<any>({ user_pools: [] });
   const [loading, setLoading] = useState(true);
   const [selectedPools, setSelectedPools] = useState<any[]>([]);
@@ -76,6 +93,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
   const [creatingGroup, setCreatingGroup] = useState(false);
 
   // Identity Pools State
+  const [identityError, setIdentityError] = useState('');
   const [identityPools, setIdentityPools] = useState<any[]>([]);
   const [createIdentityPoolOpen, setCreateIdentityPoolOpen] = useState(false);
   const [identityPoolName, setIdentityPoolName] = useState('');
@@ -83,6 +101,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
 
   // Create App Client Modal
   const [createClientOpen, setCreateClientOpen] = useState(false);
+  const [enablePasswordAuth, setEnablePasswordAuth] = useState(true);
   const [clientName, setClientName] = useState('');
   const [creatingClient, setCreatingClient] = useState(false);
 
@@ -99,53 +118,37 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
   const [decodedPayload, setDecodedPayload] = useState<any | null>(null);
 
   const loadData = async () => {
-    setLoading(true);
+    const generation = ++requestGeneration.current;
+    setLoading(true); setInventoryError('');
     try {
-      const [res, idpRes]: any[] = await Promise.all([
-        fetchServiceInventory('cognito'),
-        fetchCognitoIdentityPools(),
-      ]);
-      setData(res || { user_pools: [] });
-      setIdentityPools(idpRes?.IdentityPools || idpRes?.identity_pools || []);
-      if (res?.user_pools?.length > 0 && selectedPools.length === 0) {
-        setSelectedPools([res.user_pools[0]]);
-      }
+      const res = await fetchConsoleInventory('cognito');
+      if (generation !== requestGeneration.current) return;
+      setData(res);
+      setSelectedPools(previous => {
+        const id = previous[0]?.Id || previous[0]?.id;
+        return (res.user_pools || []).filter((pool: any) => (pool.Id || pool.id) === id).map(normalizeCognitoPool);
+      });
+      setIdentityPools(Array.isArray(res.identity_pools) ? res.identity_pools : []);
+      setIdentityError(Array.isArray(res.identity_pools) ? '' : 'Identity pool management is unavailable through this dashboard endpoint.');
     } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      if (generation === requestGeneration.current) { setInventoryError(err instanceof Error ? err.message : 'Unable to load user pools'); setData({ user_pools: [] }); setSelectedPools([]); }
+    } finally { if (generation === requestGeneration.current) setLoading(false); }
   };
-
+  useEffect(() => { loadData(); return () => { requestGeneration.current += 1; authGeneration.current += 1; }; }, []);
+  const poolsList = (data.user_pools || []).map(normalizeCognitoPool);
+  const activePool = requestedPool ? poolsList.find((pool: any) => pool.Id === requestedPool) : onNavigate ? null : selectedPools[0];
+  const activePoolId = activePool?.Id || '';
+  const activeClient = activePool?.clients.find((client: any) => client.ClientId === requestedClient);
   useEffect(() => {
-    loadData();
-  }, []);
-
-  const activePool = selectedPools[0] || null;
-  const activePoolId = activePool ? activePool.Id || activePool.id : '';
-
-  const loadPoolGroups = async (pId: string) => {
-    if (!pId) return;
-    try {
-      const gRes: any = await fetchCognitoUserGroups(pId);
-      setUserGroups(gRes?.Groups || gRes?.groups || []);
-    } catch (err) {
-      console.error(err);
-      setUserGroups([]);
-    }
-  };
-
+    setUserGroups(Array.isArray(activePool?.groups) ? activePool.groups : []);
+  }, [activePoolId, data]);
   useEffect(() => {
-    if (activePoolId) {
-      loadPoolGroups(activePoolId);
-      if (activePool?.clients?.length > 0) {
-        setAuthClientId(activePool.clients[0].ClientId || activePool.clients[0].id || '');
-      } else if (activePool?.id) {
-        setAuthClientId(`client-${activePool.id.substring(0, 8)}`);
-      }
-      setAuthResult(null);
-    }
-  }, [activePoolId]);
+    authGeneration.current += 1;
+    setAuthClientId(activeClient?.ClientId || '');
+    setAuthResult(null); setDecodedHeader(null); setDecodedPayload(null); setJwtInput(''); setAuthenticating(false);
+    setCreateUserOpen(false); setResetPwdOpen(false); setCreateClientOpen(false); setCreateGroupOpen(false);
+    setActionMessage(null);
+  }, [activePoolId, requestedClient]);
 
   const handleCreatePool = async () => {
     if (!poolName.trim()) return;
@@ -199,6 +202,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
       await adminSetCognitoUserPassword(activePoolId, targetUser, newPassword, true);
       setActionMessage({ type: 'success', text: `Password for "${targetUser}" updated.` });
       setResetPwdOpen(false);
+      await loadData();
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'Failed to set password' });
     } finally {
@@ -237,7 +241,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
       setCreateGroupOpen(false);
       setNewGroupName('');
       setGroupDesc('');
-      await loadPoolGroups(activePoolId);
+      await loadData();
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'Failed to create group' });
     } finally {
@@ -249,7 +253,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
     if (!activePoolId || !clientName.trim()) return;
     setCreatingClient(true);
     try {
-      await createCognitoAppClient(activePoolId, clientName.trim());
+      await createCognitoAppClient(activePoolId, clientName.trim(), enablePasswordAuth);
       setActionMessage({ type: 'success', text: `App Client "${clientName.trim()}" created.` });
       setCreateClientOpen(false);
       setClientName('');
@@ -280,42 +284,38 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
   const handleTestAuth = async () => {
     if (!authClientId || !authUsername) return;
     setAuthenticating(true);
+    setAuthResult(null); setDecodedHeader(null); setDecodedPayload(null);
     setActionMessage(null);
+    const generation = ++authGeneration.current;
     try {
       const res = await initiateCognitoAuth(authClientId, authUsername, authPassword);
+      if (generation !== authGeneration.current) return;
       setAuthResult(res);
       const idTok = res.AuthenticationResult?.IdToken || res.AuthenticationResult?.AccessToken || '';
       if (idTok) {
         decodeJwt(idTok);
       }
-      setActionMessage({ type: 'success', text: 'Authentication successful! JWT tokens issued.' });
+      setActionMessage({ type: 'success', text: res.AuthenticationResult ? 'Authentication succeeded. Tokens returned by the endpoint.' : `Authentication challenge: ${res.ChallengeName || 'Additional steps required'}.` });
     } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Authentication failed' });
+      if (generation === authGeneration.current) setActionMessage({ type: 'error', text: err.message || 'Authentication failed' });
     } finally {
-      setAuthenticating(false);
+      if (generation === authGeneration.current) setAuthenticating(false);
     }
   };
 
   const decodeJwt = (tok: string) => {
+    setDecodedHeader(null); setDecodedPayload(null);
     try {
       const parts = tok.split('.');
-      if (parts.length === 3) {
-        const header = JSON.parse(atob(parts[0]));
-        const payload = JSON.parse(atob(parts[1]));
-        setDecodedHeader(header);
-        setDecodedPayload(payload);
-      }
-    } catch (e) {
-      console.error(e);
-    }
+      if (parts.length !== 3) return;
+      const decode = (part: string) => {
+        const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
+        const bytes = Uint8Array.from(atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')), char => char.charCodeAt(0));
+        return JSON.parse(new TextDecoder().decode(bytes));
+      };
+      setDecodedHeader(decode(parts[0])); setDecodedPayload(decode(parts[1]));
+    } catch { /* Invalid input clears the previous decoded token. */ }
   };
-
-  const poolsList = (data.user_pools || []).map((p: any) => ({
-    ...p,
-    Name: p.Name || p.name,
-    Id: p.Id || p.id,
-    CreationDate: p.CreationDate || p.created || new Date().toISOString().split('T')[0],
-  }));
 
   const filteredPools = poolsList.filter((p: any) =>
     (p.Name || '').toLowerCase().includes(filterText.toLowerCase()) ||
@@ -353,34 +353,22 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">User Pools</Box>
-            <Box variant="h1" color="text-status-info">
-              {poolsList.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Identity Pools</Box>
-            <Box variant="h1" color="text-status-info">
-              {identityPools.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Auth Engine</Box>
-            <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">OIDC / JWT Ready</StatusIndicator>
-            </Box>
-          </Box>
-        </Grid>
+        <div className="console-summary">
+          <Box padding="m"><Box variant="awsui-key-label">User pools</Box><Box variant="h2">{poolsList.length}</Box></Box>
+          <Box padding="m"><Box variant="awsui-key-label">App clients reported</Box><Box variant="h2">{poolsList.reduce((count: number, pool: any) => count + pool.clients.length, 0)}</Box></Box>
+          <Box padding="m"><Box variant="awsui-key-label">Inventory</Box><StatusIndicator type={loading ? 'loading' : inventoryError ? 'error' : 'info'}>{loading ? 'Loading pools' : inventoryError ? 'Unavailable' : 'Retrieved from local endpoint'}</StatusIndicator></Box>
+        </div>
+        {inventoryError && <Alert type="error">{inventoryError}</Alert>}
       </Container>
 
+      {requestedPool && !loading && !inventoryError && !activePool && <Alert type="warning">Requested user pool was not found. Select an available pool.</Alert>}
+      {activePool && selectedTabId !== 'users' && <Container header={<Header variant="h2">Selected pool: {activePool.Name}</Header>}><Button onClick={() => navigatePool(activePoolId, panel, requestedClient || '')}>View pool details</Button></Container>}
       {/* Main Tabs */}
       <Tabs
         activeTabId={selectedTabId}
         onChange={({ detail }) => {
           setSelectedTabId(detail.activeTabId);
-          onTabChange?.(detail.activeTabId);
+          if (activePoolId) navigatePool(activePoolId, panel, requestedClient || '', detail.activeTabId); else if (onNavigate) onNavigate(`cognito/${detail.activeTabId}`); else onTabChange?.(detail.activeTabId);
         }}
         tabs={[
           {
@@ -402,7 +390,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                           id: 'name',
                           header: 'Pool Name',
                           cell: (item: any) => (
-                            <Button variant="inline-link" onClick={() => setSelectedPools([item])}>
+                            <Button variant="inline-link" onClick={() => { setSelectedPools([item]); navigatePool(item.Id); }}>
                               <strong>{item.Name}</strong>
                             </Button>
                           ),
@@ -427,8 +415,9 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                       ]}
                       items={filteredPools}
                       selectionType="single"
-                      selectedItems={selectedPools}
-                      onSelectionChange={({ detail }) => setSelectedPools(detail.selectedItems)}
+                      loading={loading}
+                      selectedItems={activePool ? [activePool] : []}
+                      onSelectionChange={({ detail }) => { setSelectedPools(detail.selectedItems); navigatePool(detail.selectedItems[0]?.Id || ''); }}
                       empty={<Box textAlign="center">No Cognito user pools found.</Box>}
                     />
                   </SpaceBetween>
@@ -436,8 +425,9 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
 
                 {activePool && (
                   <Container header={<Header variant="h2">Pool: {activePool.Name || activePool.name}</Header>}>
-                    <Tabs
+                    <Tabs activeTabId={panel} onChange={({ detail }) => navigatePool(activePoolId, detail.activeTabId, requestedClient || '')}
                       tabs={[
+                        { id: 'overview', label: 'Overview', content: <CognitoPoolOverview pool={activePool} client={activeClient} onClients={() => navigatePool(activePoolId, 'pool-clients', requestedClient || '')} onTest={() => navigatePool(activePoolId, panel, requestedClient || '', 'auth')} /> },
                         {
                           label: `Users (${activePool.users?.length ?? 0})`,
                           id: 'pool-users',
@@ -455,13 +445,13 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                                   {
                                     id: 'status',
                                     header: 'Status',
-                                    cell: (i: any) => <StatusIndicator type="success">{i.UserStatus || i.status || 'CONFIRMED'}</StatusIndicator>,
+                                    cell: (i: any) => <StatusIndicator type={i.UserStatus === 'CONFIRMED' ? 'success' : i.UserStatus === 'UNCONFIRMED' || i.UserStatus === 'FORCE_CHANGE_PASSWORD' ? 'warning' : 'info'}>{i.UserStatus || 'Not reported'}</StatusIndicator>,
                                     width: 140,
                                   },
                                   {
                                     id: 'enabled',
                                     header: 'Enabled',
-                                    cell: (i: any) => <Badge color={i.Enabled !== false ? 'green' : 'grey'}>{i.Enabled !== false ? 'True' : 'False'}</Badge>,
+                                    cell: (i: any) => <Badge color={i.Enabled === true ? 'green' : 'grey'}>{i.Enabled == null ? 'Not reported' : i.Enabled ? 'True' : 'False'}</Badge>,
                                     width: 100,
                                   },
                                   {
@@ -527,13 +517,17 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                               </Box>
 
                               <Table
+                                selectionType="single" selectedItems={activeClient ? [activeClient] : []}
+                                onSelectionChange={({ detail }) => navigatePool(activePoolId, 'pool-clients', detail.selectedItems[0]?.ClientId || '')}
                                 columnDefinitions={[
-                                  { id: 'name', header: 'Client Name', cell: (i: any) => <strong>{i.ClientName || i.name}</strong> },
+                                  { id: 'name', header: 'Client Name', cell: (i: any) => <Button variant="inline-link" onClick={() => navigatePool(activePoolId, 'pool-clients', i.ClientId)}>{i.ClientName}</Button> },
                                   { id: 'id', header: 'App Client ID', cell: (i: any) => <code>{i.ClientId || i.id}</code> },
                                 ]}
                                 items={activePool.clients || []}
                                 empty={<Box textAlign="center">No app clients configured.</Box>}
                               />
+                              {requestedClient && !activeClient && <Alert type="warning">Requested app client was not found in this pool.</Alert>}
+                              {activeClient && <CognitoPoolOverview detailsOnly pool={activePool} client={activeClient} onClients={() => navigatePool(activePoolId, 'pool-clients', requestedClient || '')} onTest={() => navigatePool(activePoolId, 'pool-clients', requestedClient || '', 'auth')} />}
                             </SpaceBetween>
                           ),
                         },
@@ -545,7 +539,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
             ),
           },
           {
-            label: `Identity Pools (${identityPools.length})`,
+            label: identityError ? 'Identity Pools' : `Identity Pools (${identityPools.length})`,
             id: 'identities',
             content: (
               <Container
@@ -553,7 +547,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                   <Header
                     variant="h2"
                     actions={
-                      <Button variant="primary" iconName="add-plus" onClick={() => setCreateIdentityPoolOpen(true)}>
+                      <Button variant="primary" iconName="add-plus" disabled={Boolean(identityError)} onClick={() => setCreateIdentityPoolOpen(true)}>
                         Create Identity Pool
                       </Button>
                     }
@@ -574,7 +568,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                     },
                   ]}
                   items={identityPools}
-                  empty={<Box textAlign="center">No Identity Pools found.</Box>}
+                  empty={identityError ? <Alert type="info">{identityError}</Alert> : <Box textAlign="center">No Identity Pools found.</Box>}
                 />
               </Container>
             ),
@@ -598,7 +592,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                       </FormField>
                     </Grid>
 
-                    <Button variant="primary" loading={authenticating} onClick={handleTestAuth}>
+                    <Button variant="primary" disabled={!authClientId || !authUsername} loading={authenticating} onClick={handleTestAuth}>
                       Authenticate User
                     </Button>
 
@@ -612,6 +606,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
 
                 <Container header={<Header variant="h2">JWT Token Inspector</Header>}>
                   <SpaceBetween size="m">
+                    <Box variant="small">Decodes token contents only. Signature, issuer, and expiry are not validated.</Box>
                     <FormField label="Paste Raw JWT Token">
                       <Textarea
                         rows={3}
@@ -766,9 +761,13 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
           </Box>
         }
       >
-        <FormField label="App Client Name">
-          <Input value={clientName} onChange={({ detail }) => setClientName(detail.value)} placeholder="WebAppClient" />
-        </FormField>
+        <SpaceBetween size="m">
+          <FormField label="App Client Name" description="Creates a public app client without a client secret.">
+            <Input value={clientName} onChange={({ detail }) => setClientName(detail.value)} placeholder="WebAppClient" />
+          </FormField>
+          <Checkbox checked={enablePasswordAuth} onChange={({ detail }) => setEnablePasswordAuth(detail.checked)}>Enable password sign-in for local testing</Checkbox>
+          <Box variant="small">Enables USER_PASSWORD_AUTH and refresh-token authentication. Leave unchecked to use the service defaults.</Box>
+        </SpaceBetween>
       </Modal>
 
       {/* Create Identity Pool Modal */}

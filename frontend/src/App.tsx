@@ -1,3 +1,5 @@
+import { parseEksRoute, eksClusterPath } from './pages/eksResources';
+import { parseEcsRoute, clusterPath, servicePath } from './pages/ecsResources';
 import { useSession } from './components/SessionContext';
 import React, { useState, useEffect } from 'react';
 import { TopNav } from './components/TopNav';
@@ -171,6 +173,33 @@ export const App: React.FC = () => {
         { text: 'Activity & Audit Log', href: 'activity' },
       ];
     }
+    if (currentView === 'eks') {
+      const route = parseEksRoute(activeSubView);
+      if (route.cluster) return [
+        { text: 'AWS Management Console', href: 'home' }, { text: 'Amazon EKS', href: 'eks/clusters' },
+        { text: route.cluster, href: eksClusterPath(route.cluster) },
+        ...(route.nodegroup ? [{ text: route.nodegroup, href: activeSubView }] : []),
+      ];
+    }
+    if (currentView === 'ecs') {
+      const route = parseEcsRoute(activeSubView);
+      if (route.cluster) return [
+        { text: 'AWS Management Console', href: 'home' }, { text: 'Amazon ECS', href: 'ecs/clusters' },
+        { text: route.cluster, href: clusterPath(route.cluster) },
+        ...(route.service ? [{ text: route.service, href: servicePath(route.cluster, route.service) }] : []),
+        ...(route.task ? [{ text: route.task, href: activeSubView }] : []),
+      ];
+    }
+    if (currentView === 'route53' || currentView === 'cognito') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      const id = query.get(currentView === 'route53' ? 'zone' : 'pool');
+      if (id) return [
+        { text: 'AWS Management Console', href: 'home' },
+        { text: currentView === 'route53' ? 'Amazon Route 53' : 'Amazon Cognito', href: currentView },
+        { text: id, href: activeSubView },
+        ...(query.get('client') ? [{ text: query.get('client')!, href: activeSubView }] : []),
+      ];
+    }
     const svc = services.find((s) => s.key === currentView);
     const sub = activeSubView.split('/')[1]?.split('?')[0];
     return [
@@ -279,6 +308,8 @@ export const App: React.FC = () => {
               { type: 'link' as const, text: 'Security Groups', href: 'ec2/security_groups' },
               { type: 'link' as const, text: 'Virtual Private Clouds (VPC)', href: 'ec2/vpcs' },
               { type: 'link' as const, text: 'Subnets', href: 'ec2/subnets' },
+              { type: 'link' as const, text: 'Route tables', href: 'ec2/routes' },
+              { type: 'link' as const, text: 'Gateways and endpoints', href: 'ec2/gateways' },
             ],
           },
           { type: 'divider' as const },
@@ -311,7 +342,7 @@ export const App: React.FC = () => {
         return [
           { type: 'link' as const, text: 'Explore Items (CRUD)', href: 'dynamodb/items', icon: <AwsServiceIcon service="dynamodb" size={18} /> },
           { type: 'link' as const, text: 'PartiQL SQL Query Editor', href: 'dynamodb/partiql' },
-          { type: 'link' as const, text: 'Tables & Schema', href: 'dynamodb/schema' },
+          { type: 'link' as const, text: 'Tables & Schema', href: 'dynamodb/overview' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -369,7 +400,9 @@ export const App: React.FC = () => {
         ];
       case 'eventbridge':
         return [
-          { type: 'link' as const, text: 'Rules, Event Buses & Sandbox', href: 'eventbridge', icon: <AwsServiceIcon service="eventbridge" size={18} /> },
+          { type: 'link' as const, text: 'Rules and routing', href: 'eventbridge/rules', icon: <AwsServiceIcon service="eventbridge" size={18} /> },
+          { type: 'link' as const, text: 'Event buses', href: 'eventbridge/buses' },
+          { type: 'link' as const, text: 'Pattern tester', href: 'eventbridge/tester' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -390,9 +423,9 @@ export const App: React.FC = () => {
         ];
       case 'cognito':
         return [
-          { type: 'link' as const, text: 'User Pools & Groups', href: 'cognito/users', icon: <AwsServiceIcon service="cognito" size={18} /> },
-          { type: 'link' as const, text: 'Identity Pools (Federated)', href: 'cognito/identities' },
-          { type: 'link' as const, text: 'Auth & JWT Decoder Sandbox', href: 'cognito/auth' },
+          { type: 'link' as const, text: 'User Pools & Groups', href: `cognito/users${activeSubView.includes('?') ? '?' + activeSubView.split('?')[1] : ''}`, icon: <AwsServiceIcon service="cognito" size={18} /> },
+          { type: 'link' as const, text: 'Identity Pools (Federated)', href: `cognito/identities${activeSubView.includes('?') ? '?' + activeSubView.split('?')[1] : ''}` },
+          { type: 'link' as const, text: 'Auth & JWT Decoder Sandbox', href: `cognito/auth${activeSubView.includes('?') ? '?' + activeSubView.split('?')[1] : ''}` },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -549,6 +582,8 @@ export const App: React.FC = () => {
       case 's3':
         return (
           <S3Console
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['s3']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, s3: tab }));
@@ -579,6 +614,8 @@ export const App: React.FC = () => {
       case 'dynamodb':
         return (
           <DynamoDBConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['dynamodb']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, dynamodb: tab }));
@@ -589,6 +626,8 @@ export const App: React.FC = () => {
       case 'lambda':
         return (
           <LambdaConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['lambda']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, lambda: tab }));
@@ -597,9 +636,9 @@ export const App: React.FC = () => {
           />
         );
       case 'sqs':
-        return <SQSConsole />;
+        return <SQSConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'sns':
-        return <SNSConsole />;
+        return <SNSConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'rds':
         return <RDSConsole />;
       case 'kms':
@@ -617,9 +656,9 @@ export const App: React.FC = () => {
       case 'cloudformation':
         return <CloudFormationConsole />;
       case 'route53':
-        return <Route53Console />;
+        return <Route53Console resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'eventbridge':
-        return <EventBridgeConsole />;
+        return <EventBridgeConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'cloudwatch':
         return (
           <CloudWatchConsole
@@ -633,6 +672,8 @@ export const App: React.FC = () => {
       case 'stepfunctions':
         return (
           <StepFunctionsConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['stepfunctions']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, stepfunctions: tab }));
@@ -643,6 +684,8 @@ export const App: React.FC = () => {
       case 'cognito':
         return (
           <CognitoConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['cognito']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, cognito: tab }));
@@ -653,6 +696,8 @@ export const App: React.FC = () => {
       case 'apigateway':
         return (
           <ApiGatewayConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['apigateway']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, apigateway: tab }));
@@ -673,6 +718,8 @@ export const App: React.FC = () => {
       case 'ecs':
         return (
           <ECSConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['ecs']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, ecs: tab }));
@@ -683,6 +730,8 @@ export const App: React.FC = () => {
       case 'eks':
         return (
           <EKSConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['eks']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, eks: tab }));
@@ -703,6 +752,8 @@ export const App: React.FC = () => {
       case 'cloudfront':
         return (
           <CloudFrontConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['cloudfront']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, cloudfront: tab }));
@@ -715,6 +766,8 @@ export const App: React.FC = () => {
       case 'elb':
         return (
           <ELBv2Console
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['elasticloadbalancing'] || activeTabOverride['elbv2']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, elasticloadbalancing: tab, elbv2: tab }));

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -12,19 +12,35 @@ import Modal from '@cloudscape-design/components/modal';
 import Box from '@cloudscape-design/components/box';
 import Badge from '@cloudscape-design/components/badge';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
-import Grid from '@cloudscape-design/components/grid';
+import Tabs from '@cloudscape-design/components/tabs';
+import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
-import { fetchInventory, executeServiceAction } from '../api/client';
+import { fetchConsoleInventory, postConsoleAction } from '../api/client';
 
-export const Route53Console: React.FC = () => {
+interface Route53ConsoleProps { resourcePath?: string; onNavigate?: (path: string) => void; }
+const zoneId = (zone: any) => String(zone.Id || zone.id || '').replace('/hostedzone/', '');
+const routingPolicy = (record: any) => record.Failover ? `Failover · ${record.Failover}` : record.Weight != null ? `Weighted · ${record.Weight}` : record.Region ? `Latency · ${record.Region}` : record.GeoLocation ? 'Geolocation' : record.GeoProximityLocation ? 'Geoproximity' : record.CidrRoutingConfig ? 'IP-based' : record.MultiValueAnswer ? 'Multivalue answer' : 'Simple';
+export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = 'route53', onNavigate }) => {
   const [data, setData] = useState<any>({ hosted_zones: [] });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [filterText, setFilterText] = useState('');
-  const [selectedZones, setSelectedZones] = useState<any[]>([]);
-  const [records, setRecords] = useState<any[]>([]);
-  const [loadingRecords, setLoadingRecords] = useState(false);
+  const [recordFilter, setRecordFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [localZone, setLocalZone] = useState('');
+  const [localTab, setLocalTab] = useState('records');
+  const generation = useRef(0);
+  const route = new URLSearchParams(resourcePath.split('?')[1] || '');
+  const selectedId = onNavigate ? route.get('zone') || '' : localZone;
+  const tab = onNavigate ? route.get('tab') || 'records' : localTab;
+  const selectZone = (id: string, panel = 'records') => {
+    setLocalZone(id); setLocalTab(panel);
+    onNavigate?.(`route53?${new URLSearchParams({ zone: id, tab: panel })}`);
+  };
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [recordFormError, setRecordFormError] = useState('');
+  const [editingRecord, setEditingRecord] = useState<any>(null);
 
   // Create Zone Modal
   const [createZoneOpen, setCreateZoneOpen] = useState(false);
@@ -41,59 +57,26 @@ export const Route53Console: React.FC = () => {
   const [creatingRecord, setCreatingRecord] = useState(false);
 
   const loadData = async () => {
-    setLoading(true);
+    const request = ++generation.current;
+    setLoading(true); setLoadError('');
     try {
-      const res = await fetchInventory('route53');
-      setData(res || { hosted_zones: [] });
-      if (res.hosted_zones?.length > 0 && selectedZones.length === 0) {
-        setSelectedZones([res.hosted_zones[0]]);
-      }
+      const res = await fetchConsoleInventory('route53');
+      if (request === generation.current) setData(res);
     } catch (err) {
-      console.error(err);
+      if (request === generation.current) { setLoadError(err instanceof Error ? err.message : 'Unable to load hosted zones'); setData({ hosted_zones: [] }); }
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadRecords = async (zone: any) => {
-    if (!zone) return;
-    setLoadingRecords(true);
-    try {
-      const cleanId = (zone.Id || zone.id || '').replace('/hostedzone/', '');
-      const res = await executeServiceAction('route53', 'list_resource_record_sets', {
-        hosted_zone_id: cleanId,
-      });
-      setRecords(res.ResourceRecordSets || res.records || []);
-    } catch (err) {
-      console.error(err);
-      // Fallback sample records for display
-      setRecords([
-        { Name: `${zone.Name || zone.name}.`, Type: 'SOA', TTL: 900, ResourceRecords: [{ Value: 'ns-1.awsdns.org' }] },
-        { Name: `${zone.Name || zone.name}.`, Type: 'NS', TTL: 172800, ResourceRecords: [{ Value: 'ns-1.awsdns.org' }, { Value: 'ns-2.awsdns.co.uk' }] },
-      ]);
-    } finally {
-      setLoadingRecords(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedZones.length > 0) {
-      loadRecords(selectedZones[0]);
-    } else {
-      setRecords([]);
-    }
-  }, [selectedZones]);
+  useEffect(() => { loadData(); return () => { generation.current += 1; }; }, []);
+  useEffect(() => { setRecordFilter(''); setTypeFilter('all'); setCreateRecordOpen(false); setEditingRecord(null); }, [selectedId]);
 
   const handleCreateZone = async () => {
     if (!zoneName.trim()) return;
     setCreatingZone(true);
     setActionMessage(null);
     try {
-      await executeServiceAction('route53', 'create_hosted_zone', {
+      const result = await postConsoleAction('/api/route53/hosted-zones/', {
         name: zoneName.trim(),
         caller_reference: `floci-${Date.now()}`,
         comment: zoneComment,
@@ -103,6 +86,7 @@ export const Route53Console: React.FC = () => {
       setZoneName('');
       setZoneComment('');
       await loadData();
+      if (result.hosted_zone) selectZone(zoneId(result.hosted_zone));
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'Failed to create hosted zone' });
     } finally {
@@ -111,33 +95,29 @@ export const Route53Console: React.FC = () => {
   };
 
   const handleCreateRecord = async () => {
-    if (!selectedZones.length || !recordName.trim()) return;
+    if (!activeZone || !recordName.trim()) return;
+    const ttl = Number(recordTtl);
+    const values = recordValue.split('\n').map(value => value.trim()).filter(Boolean);
+    if (!editingRecord?.AliasTarget && (!Number.isInteger(ttl) || ttl < 0 || recordTtl.trim() === '' || !values.length)) {
+      setRecordFormError('Enter a non-negative integer TTL and at least one record value.'); return;
+    }
+    const root = activeZone.Name.replace(/\.$/, '');
+    const entered = recordName.trim();
+    const name = entered === '@' ? root : entered.endsWith('.') || entered === root || entered.endsWith(`.${root}`) ? entered : `${entered}.${root}`;
+    const fullName = name.endsWith('.') ? name : `${name}.`;
     setCreatingRecord(true);
-    const activeZone = selectedZones[0];
-    const cleanId = (activeZone.Id || activeZone.id || '').replace('/hostedzone/', '');
-    const fullName = recordName.includes('.') ? recordName.trim() : `${recordName.trim()}.${activeZone.Name || activeZone.name}`;
-
     try {
-      await executeServiceAction('route53', 'change_resource_record_sets', {
-        hosted_zone_id: cleanId,
-        change_batch: {
-          Changes: [
-            {
-              Action: 'UPSERT',
-              ResourceRecordSet: {
-                Name: fullName.endsWith('.') ? fullName : `${fullName}.`,
-                Type: recordType.value,
-                TTL: Number(recordTtl) || 300,
-                ResourceRecords: recordValue.split('\n').map((v) => ({ Value: v.trim() })).filter((v) => v.Value),
-              },
-            },
-          ],
-        },
+      const record = editingRecord?.AliasTarget ? editingRecord : {
+        ...(editingRecord || {}), Name: fullName, Type: recordType.value, TTL: ttl,
+        ResourceRecords: values.map(Value => ({ Value })),
+      };
+      const result = await postConsoleAction(`/api/route53/hosted-zones/${encodeURIComponent(activeZone.Id)}/record-sets/`, {
+        action: editingRecord ? 'UPSERT' : 'CREATE', record_set: record,
       });
-      setActionMessage({ type: 'success', text: `Record "${fullName}" created successfully.` });
+      setActionMessage({ type: 'success', text: `Record "${fullName}" ${editingRecord ? 'updated' : 'created'}. Change status: ${result.change_info?.Status || 'Not reported'}.` });
       setCreateRecordOpen(false);
       setRecordName('');
-      await loadRecords(activeZone);
+      await loadData();
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'Failed to create record' });
     } finally {
@@ -146,20 +126,23 @@ export const Route53Console: React.FC = () => {
   };
 
   const zonesList = (data.hosted_zones || []).map((z: any) => ({
-    ...z,
-    Id: (z.Id || z.id || '').replace('/hostedzone/', ''),
-    Name: z.Name || z.name,
-    PrivateZone: z.Config?.PrivateZone === true,
-    RecordCount: z.ResourceRecordSetCount || z.record_count || 2,
+    ...z, Id: zoneId(z), Name: z.Name || z.name,
+    PrivateZone: z.Config?.PrivateZone ?? z.private_zone,
+    RecordCount: z.ResourceRecordSetCount ?? z.resource_record_set_count ?? z.record_count,
     Comment: z.Config?.Comment || z.comment || '—',
   }));
-
-  const filteredZones = zonesList.filter((z: any) => {
-    const text = `${z.Name} ${z.Id} ${z.Comment}`.toLowerCase();
-    return text.includes(filterText.toLowerCase());
-  });
-
-  const activeZone = selectedZones.length > 0 ? selectedZones[0] : null;
+  const filteredZones = zonesList.filter((z: any) => `${z.Name} ${z.Id} ${z.Comment}`.toLowerCase().includes(filterText.toLowerCase()));
+  const activeZone = zonesList.find((zone: any) => zone.Id === selectedId);
+  const records: any[] = activeZone?.records || [];
+  const filteredRecords = records.filter(record => (typeFilter === 'all' || record.Type === typeFilter) && `${routingPolicy(record)} ${JSON.stringify(record)}`.toLowerCase().includes(recordFilter.toLowerCase()));
+  const openRecord = (record?: any) => {
+    setRecordFormError('');
+    setEditingRecord(record || null); setRecordName(record?.Name || '');
+    setRecordType({ label: record?.Type || 'A', value: record?.Type || 'A' });
+    setRecordTtl(String(record?.TTL ?? 300));
+    setRecordValue((record?.ResourceRecords || []).map((value: any) => value.Value).join('\n'));
+    setCreateRecordOpen(true);
+  };
 
   return (
     <SpaceBetween size="l">
@@ -192,26 +175,12 @@ export const Route53Console: React.FC = () => {
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Hosted Zones</Box>
-            <Box variant="h1" color="text-status-info">
-              {zonesList.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">DNS Routing</Box>
-            <Box variant="h2" color="text-status-info">
-              <Badge color="blue">Local Recursive Resolver</Badge>
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Health</Box>
-            <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">DNS Service Ready</StatusIndicator>
-            </Box>
-          </Box>
-        </Grid>
+        <div className="console-summary">
+          <Box padding="m"><Box variant="awsui-key-label">Hosted zones</Box><Box variant="h2">{zonesList.length}</Box></Box>
+          <Box padding="m"><Box variant="awsui-key-label">Scope</Box><Box variant="h2">Global · local endpoint</Box></Box>
+          <Box padding="m"><Box variant="awsui-key-label">Inventory</Box><StatusIndicator type={loading ? 'loading' : loadError ? 'error' : 'info'}>{loading ? 'Loading zones' : loadError ? 'Unavailable' : 'Retrieved from local endpoint'}</StatusIndicator></Box>
+        </div>
+        {loadError && <Alert type="error">{loadError}</Alert>}
       </Container>
 
       {/* Hosted Zones Table */}
@@ -237,7 +206,7 @@ export const Route53Console: React.FC = () => {
               {
                 id: 'name',
                 header: 'Domain Name',
-                cell: (item) => <strong>{item.Name}</strong>,
+                cell: (item) => <Button variant="inline-link" onClick={() => selectZone(item.Id)}>{item.Name}</Button>,
               },
               {
                 id: 'id',
@@ -248,13 +217,13 @@ export const Route53Console: React.FC = () => {
               {
                 id: 'type',
                 header: 'Type',
-                cell: (item) => <Badge color={item.PrivateZone ? 'blue' : 'green'}>{item.PrivateZone ? 'Private' : 'Public'}</Badge>,
+                cell: (item) => <Badge color={item.PrivateZone === true ? 'blue' : 'grey'}>{item.PrivateZone === true ? 'Private' : item.PrivateZone === false ? 'Public' : 'Not reported'}</Badge>,
                 width: 120,
               },
               {
                 id: 'records',
                 header: 'Record Count',
-                cell: (item) => item.RecordCount,
+                cell: (item) => item.RecordCount ?? 'Not reported',
                 width: 140,
               },
               {
@@ -265,8 +234,9 @@ export const Route53Console: React.FC = () => {
             ]}
             items={filteredZones}
             selectionType="single"
-            selectedItems={selectedZones}
-            onSelectionChange={({ detail }) => setSelectedZones(detail.selectedItems)}
+            loading={loading}
+            selectedItems={activeZone ? [activeZone] : []}
+            onSelectionChange={({ detail }) => selectZone(detail.selectedItems[0]?.Id || '')}
             empty={
               <Box textAlign="center" color="inherit">
                 <b>No hosted zones found</b>
@@ -277,60 +247,39 @@ export const Route53Console: React.FC = () => {
         </SpaceBetween>
       </Container>
 
-      {/* Record Sets for Selected Zone */}
-      {activeZone && (
-        <Container
-          header={
-            <Header
-              variant="h2"
-              description={`DNS record sets for zone: ${activeZone.Name}`}
-              actions={
-                <Button variant="primary" iconName="add-plus" onClick={() => setCreateRecordOpen(true)}>
-                  Create Record
-                </Button>
-              }
-            >
-              Resource Record Sets: {activeZone.Name}
-            </Header>
-          }
-        >
-          <Table
-            columnDefinitions={[
-              {
-                id: 'name',
-                header: 'Record Name',
-                cell: (item) => <strong>{item.Name || item.name}</strong>,
-              },
-              {
-                id: 'type',
-                header: 'Type',
-                cell: (item) => <Badge color="blue">{item.Type || item.type}</Badge>,
-                width: 100,
-              },
-              {
-                id: 'ttl',
-                header: 'TTL (Seconds)',
-                cell: (item) => item.TTL ?? 300,
-                width: 140,
-              },
-              {
-                id: 'value',
-                header: 'Value / Route Traffic To',
-                cell: (item) => (
-                  <div>
-                    {(item.ResourceRecords || item.records || []).map((r: any, idx: number) => (
-                      <div key={idx}><code>{r.Value || r.value || r}</code></div>
-                    ))}
-                  </div>
-                ),
-              },
-            ]}
-            items={records}
-            loading={loadingRecords}
-            empty={<Box textAlign="center">No resource records found for this hosted zone.</Box>}
-          />
-        </Container>
-      )}
+      {selectedId && !loading && !loadError && !activeZone && <Alert type="warning">Requested hosted zone was not found. Select an available zone.</Alert>}
+      {activeZone && <Container header={<Header variant="h2" description={`Hosted zone · ${activeZone.Id}`} actions={<Button onClick={() => selectZone('')}>Close zone</Button>}>{activeZone.Name}</Header>}>
+        <SpaceBetween size="l">
+          <KeyValuePairs columns={3} items={[
+            { label: 'Zone type', value: activeZone.PrivateZone === true ? 'Private' : activeZone.PrivateZone === false ? 'Public' : 'Not reported' },
+            { label: 'Record count', value: activeZone.RecordCount ?? 'Not reported' },
+            { label: 'Description', value: activeZone.Comment },
+          ]} />
+          <Tabs activeTabId={tab} onChange={({ detail }) => selectZone(activeZone.Id, detail.activeTabId)} tabs={[
+            { id: 'records', label: `Records (${records.length})`, content: <SpaceBetween size="m">
+              <Header variant="h3" actions={<Button variant="primary" onClick={() => openRecord()}>Create Record</Button>}>DNS records</Header>
+              <TextFilter filteringText={recordFilter} filteringPlaceholder="Find records by name, value, or routing policy…" onChange={({ detail }) => setRecordFilter(detail.filteringText)} />
+              <Select ariaLabel="Filter record type" selectedOption={{ value: typeFilter, label: typeFilter === 'all' ? 'All record types' : typeFilter }} options={[{ value: 'all', label: 'All record types' }, ...[...new Set(records.map(record => record.Type))].map(value => ({ value, label: value }))]} onChange={({ detail }) => setTypeFilter(detail.selectedOption.value!)} />
+              <Table items={filteredRecords} columnDefinitions={[
+                { id: 'Name', header: 'Record name', cell: (record: any) => <strong>{record.Name}</strong> },
+                { id: 'Type', header: 'Type', cell: (record: any) => record.Type },
+                { id: 'alias', header: 'Alias', cell: (record: any) => record.AliasTarget ? 'Yes' : 'No' },
+                { id: 'TTL', header: 'TTL (seconds)', cell: (record: any) => record.AliasTarget ? 'Managed by target' : record.TTL ?? 'Not reported' },
+                { id: 'routing', header: 'Routing policy', cell: routingPolicy },
+                { id: 'value', header: 'Value / route traffic to', cell: (record: any) => <div style={{ overflowWrap: 'anywhere' }}>{record.AliasTarget?.DNSName || (record.ResourceRecords || []).map((value: any) => value.Value).join('\n') || 'Not reported'}</div> },
+                { id: 'edit', header: 'Actions', cell: (record: any) => <Button disabled={Boolean(record.AliasTarget)} onClick={() => openRecord(record)}>Edit</Button> },
+              ]} empty={<Box textAlign="center">{recordFilter || typeFilter !== 'all' ? 'No records match your filters.' : 'No records reported for this hosted zone.'}</Box>} />
+              <Box variant="small">Alias targets and routing policies are shown as returned by the endpoint. Editing alias records is unavailable here.</Box>
+            </SpaceBetween> },
+            { id: 'details', label: 'Zone details', content: <KeyValuePairs columns={2} items={[
+              { label: 'Hosted zone ID', value: activeZone.Id },
+              { label: 'Caller reference', value: activeZone.caller_reference || 'Not reported' },
+              { label: 'Name servers', value: activeZone.delegation_set?.NameServers?.join(' · ') || 'Not reported' },
+              { label: 'Associated VPCs', value: activeZone.vpcs?.map((vpc: any) => `${vpc.VPCId} (${vpc.VPCRegion})`).join(' · ') || 'None reported' },
+            ]} /> },
+          ]} />
+        </SpaceBetween>
+      </Container>}
 
       {/* Create Hosted Zone Modal */}
       <Modal
@@ -343,7 +292,7 @@ export const Route53Console: React.FC = () => {
               <Button variant="link" onClick={() => setCreateZoneOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" loading={creatingZone} onClick={handleCreateZone}>
+              <Button variant="primary" disabled={!zoneName.trim()} loading={creatingZone} onClick={handleCreateZone}>
                 Create Zone
               </Button>
             </SpaceBetween>
@@ -373,7 +322,7 @@ export const Route53Console: React.FC = () => {
       <Modal
         visible={createRecordOpen}
         onDismiss={() => setCreateRecordOpen(false)}
-        header={`Create Record in ${activeZone?.Name}`}
+        header={`${editingRecord ? 'Edit' : 'Create'} Record in ${activeZone?.Name}`}
         size="large"
         footer={
           <Box float="right">
@@ -381,16 +330,18 @@ export const Route53Console: React.FC = () => {
               <Button variant="link" onClick={() => setCreateRecordOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" loading={creatingRecord} onClick={handleCreateRecord}>
-                Create Record
+              <Button variant="primary" disabled={!recordName.trim()} loading={creatingRecord} onClick={handleCreateRecord}>
+                {editingRecord ? 'Save Record' : 'Create Record'}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="m">
-          <FormField label="Record Name" description={`Subdomain or root. Will resolve as [name].${activeZone?.Name}`}>
+          {recordFormError && <Alert type="error">{recordFormError}</Alert>}
+          <FormField label="Record Name" description={`Use @ for the zone apex, a relative name, or a fully qualified name ending in a dot.`}>
             <Input
+              disabled={Boolean(editingRecord)}
               value={recordName}
               onChange={({ detail }) => setRecordName(detail.value)}
               placeholder="api or www"
@@ -399,6 +350,7 @@ export const Route53Console: React.FC = () => {
 
           <FormField label="Record Type">
             <Select
+              disabled={Boolean(editingRecord)}
               selectedOption={recordType}
               onChange={({ detail }) => setRecordType(detail.selectedOption as any)}
               options={[

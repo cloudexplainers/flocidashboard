@@ -8,6 +8,7 @@ from django.views.decorators.http import require_http_methods
 from .actions import handle_action_error, parse_json_body
 from .cognito_api import (
     add_user_to_group,
+    change_user_state,
     admin_create_user,
     admin_delete_user,
     admin_set_user_password,
@@ -53,6 +54,7 @@ def cognito_user_pool_clients_create(request, user_pool_id: str):
             body.get('name', ''),
             generate_secret=body.get('generate_secret') is not False,
             allowed_oauth_scopes=body.get('allowed_oauth_scopes'),
+            explicit_auth_flows=body.get('explicit_auth_flows'),
         ))
     except Exception as exc:
         return handle_action_error(exc, service='cognito', operation='create_user_pool_client')
@@ -202,3 +204,12 @@ def cognito_revoke_token(request):
         ))
     except Exception as exc:
         return handle_action_error(exc, service='cognito', operation='revoke_token')
+
+
+@require_http_methods(['POST'])
+def cognito_user_state(request, user_pool_id: str, username: str):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(change_user_state(user_pool_id, username, body.get('action', '')))
+    except Exception as exc:
+        return handle_action_error(exc, service='cognito', operation='change_user_state')

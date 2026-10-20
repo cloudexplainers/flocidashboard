@@ -571,9 +571,9 @@ export const RDSConsole: React.FC = () => {
                                   { label: 'DB Instance Identifier', value: activeInstance.name },
                                   { label: 'Engine & Version', value: `${activeInstance.engine} ${activeInstance.engine_version || ''}` },
                                   { label: 'DB Instance Class', value: activeInstance.class },
-                                  { label: 'Allocated Storage', value: `${activeInstance.allocated_storage || 20} GiB` },
-                                  { label: 'Storage Type', value: activeInstance.storage_type || 'General Purpose SSD (gp2)' },
-                                  { label: 'IAM Database Authentication', value: activeInstance.iam_authentication ? 'Enabled' : 'Disabled' },
+                                  { label: 'Allocated Storage', value: activeInstance.allocated_storage == null ? 'Not reported' : `${activeInstance.allocated_storage} GiB` },
+                                  { label: 'Storage Type', value: activeInstance.storage_type || 'Not reported' },
+                                  { label: 'IAM Database Authentication', value: activeInstance.iam_authentication == null ? 'Not reported' : activeInstance.iam_authentication ? 'Enabled' : 'Disabled' },
                                   { label: 'Cluster Identifier', value: activeInstance.cluster_identifier || 'Single-Instance' },
                                   { label: 'Created Time', value: activeInstance.created || 'N/A' },
                                 ]}

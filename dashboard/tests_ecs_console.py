@@ -243,6 +243,21 @@ class ECSActionsApiTests(SimpleTestCase):
             tags=tags,
         )
 
+    @patch('dashboard.ecs_views.create_service')
+    def test_create_service_preserves_zero_desired_count_and_network(self, create_mock):
+        create_mock.return_value = {'service_name': 'web', 'desired_count': 0}
+        network = {'awsvpcConfiguration': {'subnets': ['subnet-test']}}
+        response = self.client.post(
+            reverse('dashboard:ecs-services'),
+            data=json.dumps({'cluster': 'local', 'service_name': 'web',
+                             'task_definition': 'web:1', 'desired_count': 0,
+                             'network_configuration': network}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(create_mock.call_args.kwargs['desired_count'], 0)
+        self.assertEqual(create_mock.call_args.kwargs['network_configuration'], network)
+
     @patch('dashboard.ecs_views.update_service')
     def test_update_service_success(self, update_mock):
         update_mock.return_value = {'service_name': 'web', 'desired_count': 2}

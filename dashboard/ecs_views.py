@@ -157,7 +157,7 @@ def ecs_services_create(request):
             cluster=body.get('cluster') or '',
             service_name=body.get('service_name') or '',
             task_definition=body.get('task_definition') or '',
-            desired_count=body.get('desired_count') or 1,
+            desired_count=body.get('desired_count', 1),
             launch_type=body.get('launch_type') or 'FARGATE',
             network_configuration=body.get('network_configuration') or {},
             tags=body.get('tags') or [],

@@ -218,6 +218,7 @@ urlpatterns = [
     path('api/cognito/user-pools/<str:user_pool_id>/resource-servers/<path:identifier>/', cognito_views.cognito_resource_server_delete, name='cognito-resource-server-detail'),
     path('api/cognito/user-pools/<str:user_pool_id>/users/', cognito_views.cognito_users_create, name='cognito-users'),
     path('api/cognito/user-pools/<str:user_pool_id>/users/<str:username>/', cognito_views.cognito_user_delete, name='cognito-user-detail'),
+    path('api/cognito/user-pools/<str:user_pool_id>/users/<str:username>/state/', cognito_views.cognito_user_state, name='cognito-user-state'),
     path('api/cognito/user-pools/<str:user_pool_id>/users/<str:username>/password/', cognito_views.cognito_user_password_set, name='cognito-user-password'),
     path('api/cognito/user-pools/<str:user_pool_id>/groups/', cognito_views.cognito_groups_create, name='cognito-groups'),
     path('api/cognito/user-pools/<str:user_pool_id>/groups/<str:group_name>/', cognito_views.cognito_group_delete, name='cognito-group-detail'),

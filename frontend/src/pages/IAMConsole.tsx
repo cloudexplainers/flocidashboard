@@ -1,3 +1,4 @@
+import { PolicySummary } from '../components/PolicySummary';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -956,6 +957,7 @@ export const IAMConsole: React.FC<IAMConsoleProps> = ({ activeTab, onTabChange }
                           id: 'role-trust',
                           content: (
                             <Container header={<Header variant="h3">Assume Role Policy Document (Trust Policy)</Header>}>
+                              <PolicySummary document={activeRole.AssumeRolePolicyDocument} />
                               <Textarea
                                 rows={10}
                                 value={typeof activeRole.AssumeRolePolicyDocument === 'string' ? activeRole.AssumeRolePolicyDocument : JSON.stringify(activeRole.AssumeRolePolicyDocument, null, 2)}
@@ -1046,6 +1048,7 @@ export const IAMConsole: React.FC<IAMConsoleProps> = ({ activeTab, onTabChange }
                         ]}
                       />
                       <Container header={<Header variant="h3">Policy Document (JSON)</Header>}>
+                        <PolicySummary document={activePolicy.Document} />
                         <Textarea
                           rows={12}
                           value={typeof activePolicy.Document === 'string' ? activePolicy.Document : JSON.stringify(activePolicy.Document, null, 2)}

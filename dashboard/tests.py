@@ -1990,6 +1990,7 @@ class CognitoActionTests(SimpleTestCase):
             'my-client',
             generate_secret=True,
             allowed_oauth_scopes=['notes/read'],
+            explicit_auth_flows=None,
         )
 
     @patch('dashboard.cognito_views.create_resource_server')

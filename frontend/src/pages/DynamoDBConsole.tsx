@@ -1,5 +1,8 @@
+import { normalizeDynamoTable } from './dynamoResources';
+import { DynamoTableSchema } from '../components/DynamoTableSchema';
+import { useSession } from '../components/SessionContext';
 import { CodeSnippet } from '../components/CodeSnippet';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -31,6 +34,9 @@ import {
 } from '../api/client';
 
 interface TableItem {
+  KeySchema?: any[];
+  AttributeDefinitions?: any[];
+  ProvisionedThroughput?: any;
   TableName: string;
   TableArn?: string;
   TableStatus: string;
@@ -49,21 +55,32 @@ interface TableItem {
 }
 
 interface DynamoDBConsoleProps {
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
 }
 
-export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onTabChange }) => {
+export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onTabChange, resourcePath, onNavigate }) => {
+  const { identity } = useSession();
+  const generation = useRef(0);
+  const [inventoryError, setInventoryError] = useState('');
+  const [itemsError, setItemsError] = useState('');
+  const requested = new URLSearchParams((resourcePath || '').split('?')[1] || '').get('table');
+  const navigateTable = (name: string, tab = selectedTabId) => {
+    if (onNavigate) onNavigate(`dynamodb/${tab}?${new URLSearchParams({ table: name })}`);
+    else onTabChange?.(tab);
+  };
   const [tables, setTables] = useState<TableItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTables, setSelectedTables] = useState<TableItem[]>([]);
   const [tableFilter, setTableFilter] = useState('');
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedTabId, setSelectedTabId] = useState(activeTab || 'items');
+  const [selectedTabId, setSelectedTabId] = useState(activeTab === 'schema' ? 'overview' : activeTab || 'items');
 
   useEffect(() => {
     if (activeTab) {
-      setSelectedTabId(activeTab);
+      setSelectedTabId(activeTab === 'schema' ? 'overview' : activeTab);
     }
   }, [activeTab]);
 
@@ -79,6 +96,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
   // Items Explorer for Active Table
   const [tableItems, setTableItems] = useState<any[]>([]);
   const [selectedItemRows, setSelectedItemRows] = useState<any[]>([]);
+  const [scanCursor, setScanCursor] = useState<any>(null);
   const [loadingItems, setLoadingItems] = useState(false);
 
   // Create / Edit Item Modal
@@ -108,30 +126,16 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
 
   const loadTables = async () => {
     setLoading(true);
+    setInventoryError('');
     try {
       const data = await fetchServiceInventory('dynamodb');
-      const list = (data.tables || data.TableNames || []).map((t: any) => ({
-        TableName: typeof t === 'string' ? t : t.TableName || t.name,
-        TableArn: t.TableArn || t.arn,
-        TableStatus: t.TableStatus || 'ACTIVE',
-        ItemCount: t.ItemCount ?? 0,
-        TableSizeBytes: t.TableSizeBytes ?? 0,
-        CreationDateTime: t.CreationDateTime || new Date().toISOString().split('T')[0],
-        PartitionKey: t.PartitionKey || t.KeySchema?.find((k: any) => k.KeyType === 'HASH')?.AttributeName || 'id',
-        SortKey: t.SortKey || t.KeySchema?.find((k: any) => k.KeyType === 'RANGE')?.AttributeName || undefined,
-        BillingMode: t.BillingModeSummary?.BillingMode || t.BillingMode || 'PAY_PER_REQUEST',
-        GlobalSecondaryIndexes: t.GlobalSecondaryIndexes || [],
-        LocalSecondaryIndexes: t.LocalSecondaryIndexes || [],
-        StreamSpecification: t.StreamSpecification,
-        LatestStreamArn: t.LatestStreamArn,
-        PointInTimeRecovery: t.ContinuousBackupsDescription?.PointInTimeRecoveryDescription?.PointInTimeRecoveryStatus === 'ENABLED',
-        TimeToLive: t.TimeToLiveDescription || { Status: 'DISABLED', AttributeName: 'expiresAt' },
-      }));
+      const list = (data.tables || data.TableNames || []).map(normalizeDynamoTable);
       setTables(list);
       if (list.length > 0 && selectedTables.length === 0) {
         setSelectedTables([list[0]]);
       }
     } catch (err) {
+      setInventoryError(err instanceof Error ? err.message : 'Unable to load tables');
       console.error(err);
     } finally {
       setLoading(false);
@@ -142,24 +146,36 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
     loadTables();
   }, []);
 
+  useEffect(() => {
+    if (requested) setSelectedTables(tables.filter(table => table.TableName === requested || table.TableArn === requested));
+  }, [requested, tables]);
+
   const activeTable = selectedTables[0] || null;
 
-  const loadTableItems = async (tbl: TableItem) => {
+  const loadTableItems = async (tbl: TableItem, append = false) => {
+    const requestGeneration = ++generation.current;
+    if (!append) { setTableItems([]); setScanCursor(null); }
+    setItemsError('');
     setLoadingItems(true);
     try {
-      const res = await fetchDynamoDbTableScan(tbl.TableName);
-      setTableItems(res.items || []);
+      const res = await fetchDynamoDbTableScan(tbl.TableName, 50, append ? scanCursor : undefined);
+      if (requestGeneration !== generation.current) return;
+      setTableItems(previous => append ? [...previous, ...(res.items || [])] : res.items || []);
+      setScanCursor(res.last_evaluated_key || null);
     } catch (err) {
-      console.error(err);
+      if (requestGeneration !== generation.current) return;
+      setItemsError(err instanceof Error ? err.message : 'Unable to scan table');
     } finally {
-      setLoadingItems(false);
+      if (requestGeneration === generation.current) setLoadingItems(false);
     }
   };
 
   useEffect(() => {
     if (activeTable) {
       loadTableItems(activeTable);
-      setSelectedItemRows([]);
+      setSelectedItemRows([]); setItemModalOpen(false);
+      setReadUnits(String(activeTable.ProvisionedThroughput?.ReadCapacityUnits ?? 5));
+      setWriteUnits(String(activeTable.ProvisionedThroughput?.WriteCapacityUnits ?? 5));
       setPartiqlQuery(`SELECT * FROM "${activeTable.TableName}"`);
       setPartiqlResults([]);
       setBillingMode((activeTable.BillingMode as any) || 'PAY_PER_REQUEST');
@@ -169,6 +185,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
     } else {
       setTableItems([]);
     }
+    return () => { generation.current += 1; };
   }, [activeTable?.TableName]);
 
   const handleCreateTable = async () => {
@@ -348,7 +365,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
+        <div className="console-summary">
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Total Tables</Box>
             <Box variant="h1" color="text-status-info">
@@ -358,16 +375,16 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Active Region</Box>
             <Box variant="h2" color="text-status-info">
-              us-east-1
+              {identity?.region || 'Not reported'}
             </Box>
           </Box>
           <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">DynamoDB Engine</Box>
+            <Box variant="awsui-key-label">Inventory status</Box>
             <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">Storage Engine Ready</StatusIndicator>
+              <StatusIndicator type={inventoryError ? 'error' : loading ? 'loading' : 'success'}>{inventoryError || (loading ? 'Loading tables' : 'Inventory loaded')}</StatusIndicator>
             </Box>
           </Box>
-        </Grid>
+        </div>
       </Container>
 
       {/* Tables Table */}
@@ -391,7 +408,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                 id: 'name',
                 header: 'Table name',
                 cell: (item) => (
-                  <Button variant="inline-link" onClick={() => setSelectedTables([item])}>
+                  <Button variant="inline-link" onClick={() => { setSelectedTables([item]); navigateTable(item.TableName); }}>
                     <strong>{item.TableName}</strong>
                   </Button>
                 ),
@@ -400,7 +417,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                 id: 'status',
                 header: 'Status',
                 cell: (item) => (
-                  <StatusIndicator type={item.TableStatus === 'ACTIVE' ? 'success' : 'in-progress'}>
+                  <StatusIndicator type={item.TableStatus === 'ACTIVE' ? 'success' : item.TableStatus === 'Not reported' ? 'info' : item.TableStatus.includes('FAILED') ? 'error' : 'in-progress'}>
                     {item.TableStatus}
                   </StatusIndicator>
                 ),
@@ -409,7 +426,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
               {
                 id: 'partitionKey',
                 header: 'Partition key',
-                cell: (item) => <code>{item.PartitionKey} (HASH)</code>,
+                cell: (item) => <code>{item.PartitionKey || 'Not reported'}{item.PartitionKey ? ' (HASH)' : ''}</code>,
                 width: 180,
               },
               {
@@ -428,7 +445,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
             items={filteredTables}
             selectionType="single"
             selectedItems={selectedTables}
-            onSelectionChange={({ detail }) => setSelectedTables(detail.selectedItems)}
+            onSelectionChange={({ detail }) => { setSelectedTables(detail.selectedItems); if (detail.selectedItems[0]) navigateTable(detail.selectedItems[0].TableName); }}
             empty={
               <Box textAlign="center" color="inherit">
                 <b>No DynamoDB tables found</b>
@@ -440,6 +457,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
       </Container>
 
       {/* Active Table Details Inspector */}
+      {requested && !loading && !activeTable && <Alert type="warning">Requested table was not found. Select an available table.</Alert>}
       {activeTable && (
         <Container
           header={
@@ -448,11 +466,13 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
             </Header>
           }
         >
+          <DynamoTableSchema table={activeTable} />
+          {itemsError && <Alert type="error">{itemsError}</Alert>}
           <Tabs
             activeTabId={selectedTabId}
             onChange={({ detail }) => {
               setSelectedTabId(detail.activeTabId);
-              onTabChange?.(detail.activeTabId);
+              if (activeTable) navigateTable(activeTable.TableName, detail.activeTabId); else onTabChange?.(detail.activeTabId);
             }}
             tabs={[
               {
@@ -529,6 +549,8 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                       onSelectionChange={({ detail }) => setSelectedItemRows(detail.selectedItems)}
                       empty={<Box textAlign="center">No items returned from scan.</Box>}
                     />
+                    {scanCursor && <Button loading={loadingItems} onClick={() => loadTableItems(activeTable, true)}>Load more items</Button>}
+                    <Box variant="small">Showing {tableItems.length} scanned items{scanCursor ? '; more items are available.' : '.'} Table item counts are approximate.</Box>
                     {selectedItemRows[0] && <Container header={<Header variant="h3">Selected item document</Header>}><CodeSnippet language="json" code={JSON.stringify(selectedItemRows[0], null, 2)} /></Container>}
                   </SpaceBetween>
                 ),
@@ -578,9 +600,9 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                       <Table
                         columnDefinitions={[
                           { id: 'name', header: 'Index Name', cell: (i) => <strong>{i.IndexName}</strong> },
-                          { id: 'status', header: 'Status', cell: (i) => <StatusIndicator type="success">{i.IndexStatus || 'ACTIVE'}</StatusIndicator> },
+                          { id: 'status', header: 'Status', cell: (i) => <StatusIndicator type={i.IndexStatus === 'ACTIVE' ? 'success' : i.IndexStatus ? 'in-progress' : 'info'}>{i.IndexStatus || 'Not reported'}</StatusIndicator> },
                           { id: 'keys', header: 'Key Schema', cell: (i) => i.KeySchema?.map((k: any) => `${k.AttributeName} (${k.KeyType})`).join(', ') || '—' },
-                          { id: 'proj', header: 'Projection', cell: (i) => i.Projection?.ProjectionType || 'ALL' },
+                          { id: 'proj', header: 'Projection', cell: (i) => i.Projection?.ProjectionType || 'Not reported' },
                         ]}
                         items={activeTable.GlobalSecondaryIndexes || []}
                         empty={<Box textAlign="center">No Global Secondary Indexes configured on this table.</Box>}
@@ -592,7 +614,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                         columnDefinitions={[
                           { id: 'name', header: 'Index Name', cell: (i) => <strong>{i.IndexName}</strong> },
                           { id: 'keys', header: 'Key Schema', cell: (i) => i.KeySchema?.map((k: any) => `${k.AttributeName} (${k.KeyType})`).join(', ') || '—' },
-                          { id: 'proj', header: 'Projection', cell: (i) => i.Projection?.ProjectionType || 'ALL' },
+                          { id: 'proj', header: 'Projection', cell: (i) => i.Projection?.ProjectionType || 'Not reported' },
                         ]}
                         items={activeTable.LocalSecondaryIndexes || []}
                         empty={<Box textAlign="center">No Local Secondary Indexes configured on this table.</Box>}

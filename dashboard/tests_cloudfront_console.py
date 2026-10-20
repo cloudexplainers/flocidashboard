@@ -162,3 +162,21 @@ class CloudFrontApiTests(SimpleTestCase):
             'arn:aws:cloudfront::000000000000:distribution/E123',
             {'env': 'local'},
         )
+
+
+class CloudFrontConfigurationInventoryTests(SimpleTestCase):
+    @patch('dashboard.aws._nested_operation_items')
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_inventory_reads_behavior_configuration_not_just_distribution_summaries(self, factory_mock, nested_mock):
+        from .aws import cloudfront_inventory
+        client = factory_mock.return_value.client.return_value
+        client.meta.service_model.operation_names = ['ListDistributions', 'GetDistributionConfig']
+        nested_mock.return_value = [{'Id': 'DIST', 'DomainName': 'cdn.local'}]
+        client.get_distribution_config.return_value = {'ETag': 'version-1', 'DistributionConfig': {
+            'DefaultCacheBehavior': {'TargetOriginId': 'assets'},
+            'CacheBehaviors': {'Items': [{'PathPattern': '/api/*', 'TargetOriginId': 'api'}]},
+        }}
+        distribution = cloudfront_inventory()['distributions'][0]
+        self.assertEqual(distribution['DefaultCacheBehavior']['TargetOriginId'], 'assets')
+        self.assertEqual(distribution['CacheBehaviors']['Items'][0]['TargetOriginId'], 'api')
+        client.get_distribution_config.assert_called_once_with(Id='DIST')

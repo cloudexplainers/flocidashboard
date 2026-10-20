@@ -218,7 +218,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 {onNavigateLabs && (
-                  <Button variant="primary" iconName="folder-open" onClick={onNavigateLabs}>
+                  <Button variant="normal" iconName="folder-open" onClick={onNavigateLabs}>
                     Launch Guided Labs
                   </Button>
                 )}
@@ -253,6 +253,19 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
         }])));
       }} />
 
+      <Container header={<Header variant="h2" description={selectedResource ? 'Actions apply to the selected resource. Review the form before executing.' : 'Create a resource or select one in the inventory to manage it.'}>Resource actions</Header>}>
+        <SpaceBetween direction="horizontal" size="xs">
+          {['create', 'update', 'delete'].map(kind => {
+            const available = actions.filter(action => action.kind === kind);
+            if (!available.length) return null;
+            return <Button key={kind} variant={kind === 'create' ? 'primary' : 'normal'} disabled={kind !== 'create' && !selectedResource} onClick={() => {
+              setSelectedKind(kind); setFilterText(''); setSelectedAction(available.length === 1 ? available[0].name : '');
+              document.getElementById('resource-operations')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}>{kind === 'create' ? 'Create resource' : kind === 'update' ? 'Edit resource' : 'Delete resource'}</Button>;
+          })}
+        </SpaceBetween>
+      </Container>
+      <div id="resource-operations" />
       {/* Operations Directory */}
       <Container
         header={

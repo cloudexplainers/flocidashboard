@@ -302,13 +302,36 @@ class EKSInventoryCapabilityTests(SimpleTestCase):
         client = MagicMock()
         factory_mock.return_value.client.return_value = client
         paginate_mock.side_effect = lambda _client, operation, _key, **_kwargs: ['local'] if operation == 'list_clusters' else []
-        client.describe_cluster.return_value = {'cluster': {'name': 'local', 'status': 'ACTIVE'}}
+        client.describe_cluster.return_value = {'cluster': {'name': 'local', 'status': 'ACTIVE', 'health': {'issues': [{'code': 'AccessDenied', 'message': 'Cannot access cluster resources'}]}}}
 
         inventory = eks_inventory()
 
         self.assertEqual(inventory['summary'], {'clusters': 1, 'nodegroups': 0, 'fargate_profiles': 0})
+        self.assertEqual(inventory['clusters'][0]['health']['issues'][0]['code'], 'AccessDenied')
         client.list_addons.assert_not_called()
         client.list_identity_provider_configs.assert_not_called()
         client.list_access_entries.assert_not_called()
         self.assertNotIn('addons', inventory)
         self.assertNotIn('access_entries', inventory)
+
+
+class EKSClientTimeoutTests(SimpleTestCase):
+    @patch('dashboard.eks_api.FlociClientFactory')
+    def test_cluster_mutations_allow_runtime_startup_without_retries(self, factory_mock):
+        from botocore.config import Config
+        from .eks_api import _client
+        factory = factory_mock.return_value
+        factory.config = Config(connect_timeout=2, read_timeout=5, retries={'max_attempts': 2})
+        _client(long_running=True)
+        self.assertEqual(factory.config.read_timeout, 120)
+        self.assertEqual(factory.config.retries['max_attempts'], 0)
+        factory.client.assert_called_once_with('eks')
+
+    @patch('dashboard.eks_api.FlociClientFactory')
+    def test_regular_eks_calls_retain_short_timeouts(self, factory_mock):
+        from botocore.config import Config
+        from .eks_api import _client
+        factory = factory_mock.return_value
+        factory.config = Config(read_timeout=5)
+        _client()
+        self.assertEqual(factory.config.read_timeout, 5)

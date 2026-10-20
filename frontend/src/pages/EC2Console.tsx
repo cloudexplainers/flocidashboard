@@ -55,12 +55,12 @@ interface EC2ConsoleProps {
 export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }) => {
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedTabId, setSelectedTabId] = useState(activeTab === 'subnets' ? 'vpcs' : activeTab || 'instances');
+  const [selectedTabId, setSelectedTabId] = useState(['vpcs', 'subnets', 'routes', 'gateways'].includes(activeTab || '') ? 'vpcs' : activeTab || 'instances');
 
   useEffect(() => {
     if (activeTab) {
-      setSelectedTabId(activeTab === 'subnets' ? 'vpcs' : activeTab);
-      if (activeTab === 'subnets') setNetworkView('subnets');
+      setSelectedTabId(['vpcs', 'subnets', 'routes', 'gateways'].includes(activeTab) ? 'vpcs' : activeTab);
+      if (['vpcs', 'subnets', 'routes', 'gateways'].includes(activeTab)) setNetworkView(activeTab);
     }
   }, [activeTab]);
 
@@ -69,7 +69,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
   const [selectedInstances, setSelectedInstances] = useState<InstanceItem[]>([]);
   const [instanceFilter, setInstanceFilter] = useState('');
   const [instanceDetailTab, setInstanceDetailTab] = useState('details');
-  const [networkView, setNetworkView] = useState(activeTab === 'subnets' ? 'subnets' : 'vpcs');
+  const [networkView, setNetworkView] = useState(['subnets', 'routes', 'gateways'].includes(activeTab || '') ? activeTab! : 'vpcs');
   const [launchModalOpen, setLaunchModalOpen] = useState(false);
   const [instanceType, setInstanceType] = useState({ label: 't3.micro (2 vCPU, 1 GiB RAM)', value: 't3.micro' });
   const [instanceName, setInstanceName] = useState('web-server-01');
@@ -524,7 +524,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
               <SpaceBetween size="l">
                 <Select ariaLabel="Network resource type" selectedOption={{ value: networkView, label: ({ vpcs: 'VPCs', subnets: 'Subnets', routes: 'Route tables', gateways: 'Gateways and endpoints' } as Record<string, string>)[networkView] }}
                   options={[{ value: 'vpcs', label: 'VPCs' }, { value: 'subnets', label: 'Subnets' }, { value: 'routes', label: 'Route tables' }, { value: 'gateways', label: 'Gateways and endpoints' }]}
-                  onChange={({ detail }) => setNetworkView(detail.selectedOption.value!)} />
+                  onChange={({ detail }) => { setNetworkView(detail.selectedOption.value!); onTabChange?.(detail.selectedOption.value!); }} />
                 {networkView === 'vpcs' && <>
                 {/* VPCs */}
                 <Container

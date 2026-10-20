@@ -1,0 +1,27 @@
+import Container from '@cloudscape-design/components/container';
+import Header from '@cloudscape-design/components/header';
+import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
+import ExpandableSection from '@cloudscape-design/components/expandable-section';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import SpaceBetween from '@cloudscape-design/components/space-between';
+import { CodeSnippet } from './CodeSnippet';
+
+export const attributeLabel = (value: string) => value.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
+export function ResourceValue({ value, name = '' }: { value: unknown; name?: string }) {
+  if (value == null || value === '') return <>Not reported</>;
+  if (typeof value === 'boolean') return <>{value ? 'Enabled' : 'Disabled'}</>;
+  if (/status$|state$/i.test(name) && typeof value === 'string') {
+    const state = value.toUpperCase();
+    const type = /FAILED|ERROR|UNHEALTHY|ALARM|DENIED/.test(state) ? 'error' : /^(ACTIVE|AVAILABLE|RUNNING|ISSUED|ENABLED|HEALTHY|SUCCEEDED|DEPLOYED|OK)$/.test(state) ? 'success' : /PENDING|CREATING|UPDATING|PROGRESS|DELETING/.test(state) ? 'in-progress' : 'info';
+    return <StatusIndicator type={type}>{value}</StatusIndicator>;
+  }
+  return <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}</span>;
+}
+export function ResourceDetails({ resource, title = 'Resource details' }: { resource: Record<string, unknown>; title?: string }) {
+  const entries = Object.entries(resource);
+  return <Container header={<Header variant="h2">{title}</Header>}><SpaceBetween size="m">
+    <KeyValuePairs columns={2} items={entries.filter(([, value]) => value == null || typeof value !== 'object').map(([key, value]) => ({ label: attributeLabel(key), value: <ResourceValue name={key} value={value} /> }))} />
+    {entries.filter(([, value]) => value !== null && typeof value === 'object').map(([key, value]) => <ExpandableSection key={key} headerText={attributeLabel(key)}><CodeSnippet language="json" code={JSON.stringify(value, null, 2)} /></ExpandableSection>)}
+    <ExpandableSection headerText="Raw resource JSON"><CodeSnippet language="json" code={JSON.stringify(resource, null, 2)} /></ExpandableSection>
+  </SpaceBetween></Container>;
+}

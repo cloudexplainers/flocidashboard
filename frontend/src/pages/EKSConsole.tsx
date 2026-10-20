@@ -1,3 +1,6 @@
+import { EKSHealth, EKSNetworking, EKSNodegroupDetails } from './EKSResourceDetails';
+import { eksClusterPath, eksNodegroupPath, normalizeEksClusters, parseEksRoute } from './eksResources';
+import { ResourceValue } from '../components/ResourceDetails';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -13,12 +16,10 @@ import Select from '@cloudscape-design/components/select';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import Box from '@cloudscape-design/components/box';
-import Badge from '@cloudscape-design/components/badge';
 import Alert from '@cloudscape-design/components/alert';
 import Grid from '@cloudscape-design/components/grid';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import {
-  fetchInventory,
   createEksCluster,
   deleteEksCluster,
   createEksNodegroup,
@@ -30,6 +31,7 @@ import {
 import { CodeSnippet } from '../components/CodeSnippet';
 
 interface ClusterItem {
+  [key: string]: any;
   platformVersion?: string;
   name: string;
   arn?: string;
@@ -49,6 +51,8 @@ interface ClusterItem {
 
 interface EKSConsoleProps {
   activeTab?: string;
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
   onTabChange?: (tabId: string) => void;
 }
 
@@ -59,19 +63,22 @@ const K8S_VERSIONS = [
   { label: '1.27', value: '1.27' },
 ];
 
-export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }) => {
+export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange, resourcePath = 'eks', onNavigate }) => {
+  const route = parseEksRoute(resourcePath);
+  const navigate = (path: string) => onNavigate?.(path);
+  const [loadError, setLoadError] = useState('');
+  const [kubeconfigError, setKubeconfigError] = useState('');
   const [clusters, setClusters] = useState<ClusterItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedClusters, setSelectedClusters] = useState<ClusterItem[]>([]);
   const [filterText, setFilterText] = useState('');
-  const [selectedTabId, setSelectedTabId] = useState(activeTab || 'clusters');
+  const [selectedTabId, setSelectedTabId] = useState(activeTab === 'clusters' ? 'overview' : activeTab || 'overview');
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   useEffect(() => {
-    if (activeTab) {
-      setSelectedTabId(activeTab);
-    }
-  }, [activeTab]);
+    const tab = new URLSearchParams(resourcePath.split('?')[1] || '').get('tab');
+    setSelectedTabId(route.cluster ? tab || 'overview' : activeTab === 'clusters' ? 'overview' : activeTab || 'overview');
+  }, [activeTab, resourcePath]);
 
   // Create Cluster Modal
   const [createClusterOpen, setCreateClusterOpen] = useState(false);
@@ -108,32 +115,26 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
   // Kubeconfig Modal / Inspector State
   const [kubeconfigData, setKubeconfigData] = useState<any | null>(null);
 
-  const activeCluster = selectedClusters[0] || clusters[0] || null;
+  const activeCluster = clusters.find(cluster => cluster.name === (route.cluster || selectedClusters[0]?.name)) || null;
+
+  useEffect(() => {
+    setCreateNodegroupOpen(false); setDeleteClusterOpen(false); setCreateFargateOpen(false);
+    setNgSubnets(activeCluster?.resourcesVpcConfig?.subnetIds?.join(', ') || '');
+    setFargateSubnets(activeCluster?.resourcesVpcConfig?.subnetIds?.join(', ') || '');
+  }, [activeCluster?.name, resourcePath]);
 
   const loadData = async () => {
-    setLoading(true);
+    setLoading(true); setLoadError('');
     try {
-      const res = await fetchInventory('eks');
-      const rawClusters = res.clusters || [];
-      const list: ClusterItem[] = rawClusters.map((c: any) => ({
-        name: c.name || c.Name || (typeof c === 'string' ? c : 'eks-cluster'),
-        arn: c.arn || c.Arn || `arn:aws:eks:us-east-1:000000000000:cluster/${c.name || c.Name || c}`,
-        status: c.status || c.Status || 'Unknown',
-        version: c.version || c.Version || '1.30',
-        endpoint: c.endpoint || c.Endpoint || 'Unavailable',
-        roleArn: c.roleArn || c.RoleArn || 'Unavailable',
-        createdAt: c.createdAt || c.CreatedAt || 'Unavailable',
-        resourcesVpcConfig: c.resourcesVpcConfig || {},
-        platformVersion: c.platformVersion,
-        nodegroups: c.nodegroups || [],
-        fargate_profiles: c.fargate_profiles || [],
-      }));
+      const response = await fetch('/api/eks/');
+      const payload = await response.json();
+      if (!response.ok || payload.error) throw new Error(payload.error || 'Unable to load EKS inventory');
+      const list: ClusterItem[] = normalizeEksClusters(payload);
       setClusters(list);
-      if (list.length > 0 && selectedClusters.length === 0) {
-        setSelectedClusters([list[0]]);
-      }
+      setSelectedClusters(previous => previous.length ? list.filter(cluster => cluster.name === previous[0].name) : list.slice(0, 1));
     } catch (err: any) {
-      console.error('Failed to load EKS inventory:', err);
+      setLoadError(err.message || 'Unable to load EKS inventory');
+      setClusters([]);
     } finally {
       setLoading(false);
     }
@@ -143,21 +144,15 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
     loadData();
   }, []);
 
-  const loadKubeconfig = async (name: string) => {
-    if (!name) return;
-    try {
-      const data = await fetchEksKubeconfig(name);
-      setKubeconfigData(data);
-    } catch (err: any) {
-      console.error('Failed to fetch kubeconfig:', err);
-    }
-  };
-
   useEffect(() => {
-    if (activeCluster?.name) {
-      loadKubeconfig(activeCluster.name);
+    let alive = true;
+    setKubeconfigData(null); setKubeconfigError('');
+    if (activeCluster?.name && selectedTabId === 'kubeconfig') {
+      fetchEksKubeconfig(activeCluster.name).then(data => { if (alive) setKubeconfigData(data); })
+        .catch(error => { if (alive) setKubeconfigError(error.message || 'Unable to load kubeconfig'); });
     }
-  }, [activeCluster?.name]);
+    return () => { alive = false; };
+  }, [activeCluster?.name, selectedTabId]);
 
   const handleCreateCluster = async () => {
     if (!clusterName.trim()) return;
@@ -194,6 +189,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
       setActionMessage({ type: 'info', text: `EKS Cluster "${activeCluster.name}" scheduled for deletion.` });
       setDeleteClusterOpen(false);
       setSelectedClusters([]);
+      if (route.cluster) navigate('eks/clusters');
       await loadData();
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'Failed to delete cluster' });
@@ -214,9 +210,9 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
         nodeRoleArn.trim(),
         subnets,
         {
-          minSize: parseInt(minSize, 10) || 1,
-          maxSize: parseInt(maxSize, 10) || 4,
-          desiredSize: parseInt(desiredSize, 10) || 2,
+          minSize: Number(minSize),
+          maxSize: Number(maxSize),
+          desiredSize: Number(desiredSize),
         },
         [instanceType],
         'AL2_x86_64',
@@ -240,6 +236,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
     setActionMessage(null);
     try {
       await deleteEksNodegroup(activeCluster.name, ngName);
+      if (route.nodegroup) navigate(`${eksClusterPath(activeCluster.name)}?tab=nodegroups`);
       setActionMessage({ type: 'info', text: `Node Group "${ngName}" deleted.` });
       await loadData();
     } catch (err: any) {
@@ -302,7 +299,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
         </Alert>
       )}
 
-      <Table
+      {!route.cluster && !route.invalid && <Table
         header={
           <Header
             variant="h1"
@@ -334,22 +331,20 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
           {
             id: 'name',
             header: 'Cluster name',
-            cell: (c) => <strong>{c.name}</strong>,
+            cell: (c) => <Button variant="inline-link" onClick={() => { setSelectedClusters([c]); navigate(eksClusterPath(c.name)); }}>{c.name}</Button>,
             sortingField: 'name',
           },
           {
             id: 'status',
             header: 'Status',
             cell: (c) => (
-              <StatusIndicator type={c.status === 'ACTIVE' ? 'success' : 'in-progress'}>
-                {c.status}
-              </StatusIndicator>
+              <ResourceValue name="status" value={c.status} />
             ),
           },
           {
             id: 'version',
             header: 'Kubernetes version',
-            cell: (c) => <Badge color="blue">v{c.version}</Badge>,
+            cell: (c) => <span>{c.version || 'Not reported'}</span>,
           },
           {
             id: 'endpoint',
@@ -384,14 +379,20 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
             <Button onClick={() => setCreateClusterOpen(true)}>Create cluster</Button>
           </Box>
         }
-      />
+      />}
 
-      {activeCluster && (
+      {(route.cluster || route.invalid) && <Header variant="h1" actions={<Button iconName="refresh" loading={loading} onClick={loadData}>Refresh</Button>}>Amazon EKS</Header>}
+      {loadError && <Alert type="error" header="Unable to load EKS resources">{loadError}</Alert>}
+      {(route.cluster || route.invalid) && loading && <StatusIndicator type="loading">Loading EKS resource</StatusIndicator>}
+      {(route.cluster || route.invalid) && !loading && !loadError && (route.invalid || !activeCluster || (route.nodegroup && !activeCluster.nodegroups?.some(ng => ng.name === route.nodegroup))) && <Alert type="warning" header="EKS resource not found" action={<Button onClick={() => navigate('eks/clusters')}>View clusters</Button>}>This resource is not reported in the current account and Region. Check the URL or refresh the inventory.</Alert>}
+      {route.nodegroup && activeCluster && !loading && !loadError && activeCluster.nodegroups?.find(ng => ng.name === route.nodegroup) && <EKSNodegroupDetails cluster={activeCluster} nodegroup={activeCluster.nodegroups.find(ng => ng.name === route.nodegroup)} navigate={navigate} onDelete={() => { if (confirm(`Delete node group "${route.nodegroup}"?`)) handleDeleteNodegroup(route.nodegroup!); }} />}
+      {activeCluster && !route.nodegroup && !route.invalid && !loadError && (!route.cluster || !loading) && (
         <Container
           header={
             <Header
               variant="h2"
-              description={`Cluster ARN: ${activeCluster.arn}`}
+              description={`Cluster ARN: ${activeCluster.arn || 'Not reported'}`}
+              actions={<SpaceBetween direction="horizontal" size="xs"><Button onClick={() => setCreateNodegroupOpen(true)}>Add node group</Button><Button onClick={() => setDeleteClusterOpen(true)}>Delete cluster</Button></SpaceBetween>}
             >
               Cluster: {activeCluster.name}
             </Header>
@@ -401,7 +402,8 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
             activeTabId={selectedTabId}
             onChange={({ detail }) => {
               setSelectedTabId(detail.activeTabId);
-              if (onTabChange) onTabChange(detail.activeTabId);
+              if (route.cluster) navigate(`${eksClusterPath(route.cluster)}?tab=${detail.activeTabId}`);
+              else onTabChange?.(detail.activeTabId);
             }}
             tabs={[
               {
@@ -414,7 +416,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                         items={[
                           { label: 'Cluster Name', value: activeCluster.name },
                           { label: 'Status', value: <StatusIndicator type={activeCluster.status === 'ACTIVE' ? 'success' : activeCluster.status === 'FAILED' ? 'error' : 'in-progress'}>{activeCluster.status}</StatusIndicator> },
-                          { label: 'Kubernetes Version', value: `v${activeCluster.version}` },
+                          { label: 'Kubernetes Version', value: activeCluster.version || 'Not reported' },
                         ]}
                       />
                       <KeyValuePairs
@@ -427,11 +429,14 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                       <KeyValuePairs
                         items={[
                           { label: 'API Endpoint', value: <code>{activeCluster.endpoint}</code> },
-                          { label: 'Subnets', value: activeCluster.resourcesVpcConfig?.subnetIds?.join(', ') || 'Default' },
-                          { label: 'Security Groups', value: activeCluster.resourcesVpcConfig?.securityGroupIds?.join(', ') || 'Default' },
+                          { label: 'Subnets', value: activeCluster.resourcesVpcConfig?.subnetIds?.join(', ') || 'Not reported' },
+                          { label: 'Security Groups', value: activeCluster.resourcesVpcConfig?.securityGroupIds?.join(', ') || 'Not reported' },
                         ]}
                       />
                     </ColumnLayout>
+                    {activeCluster.details?.error && <Alert type="warning">{activeCluster.details.error}</Alert>}
+                    <EKSHealth health={activeCluster.health} />
+                    <EKSNetworking config={activeCluster.resourcesVpcConfig} navigate={navigate} />
                   </SpaceBetween>
                 ),
               },
@@ -462,19 +467,19 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                         {
                           id: 'name',
                           header: 'Node Group Name',
-                          cell: (ng: any) => <strong>{ng.nodegroupName || ng.name || ng}</strong>,
+                          cell: (ng: any) => <Button variant="inline-link" onClick={() => navigate(eksNodegroupPath(activeCluster.name, ng.name))}>{ng.name}</Button>,
                         },
                         {
                           id: 'status',
                           header: 'Status',
                           cell: (ng: any) => (
-                            <StatusIndicator type="success">{ng.status || 'ACTIVE'}</StatusIndicator>
+                            <ResourceValue name="status" value={ng.status} />
                           ),
                         },
                         {
                           id: 'instances',
                           header: 'Instance Type',
-                          cell: (ng: any) => ng.instanceTypes?.join(', ') || 't3.medium',
+                          cell: (ng: any) => ng.instanceTypes?.join(', ') || 'Not reported',
                         },
                         {
                           id: 'scaling',
@@ -482,7 +487,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                           cell: (ng: any) =>
                             ng.scalingConfig
                               ? `${ng.scalingConfig.minSize} / ${ng.scalingConfig.desiredSize} / ${ng.scalingConfig.maxSize}`
-                              : '1 / 2 / 4',
+                              : 'Not reported',
                         },
                         {
                           id: 'action',
@@ -544,13 +549,13 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                           id: 'status',
                           header: 'Status',
                           cell: (fp: any) => (
-                            <StatusIndicator type="success">{fp.status || 'ACTIVE'}</StatusIndicator>
+                            <ResourceValue name="status" value={fp.status} />
                           ),
                         },
                         {
                           id: 'role',
                           header: 'Pod Execution Role',
-                          cell: (fp: any) => <code style={{ fontSize: '0.85em' }}>{fp.podExecutionRoleArn || 'eks-fargate-pod-role'}</code>,
+                          cell: (fp: any) => <code style={{ fontSize: '0.85em' }}>{fp.podExecutionRoleArn || 'Not reported'}</code>,
                         },
                         {
                           id: 'selectors',
@@ -594,6 +599,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                       Run the AWS CLI command below or copy the kubeconfig YAML into <code>~/.kube/config</code> to interact with this cluster via <code>kubectl</code>.
                     </Alert>
 
+                    {kubeconfigError && <Alert type="error">{kubeconfigError}</Alert>}
                     {kubeconfigData && (
                       <SpaceBetween size="m">
                         <FormField label="AWS CLI Update Command">
