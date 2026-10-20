@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
-import Pagination from '@cloudscape-design/components/pagination';
 import Tabs from '@cloudscape-design/components/tabs';
 import Modal from '@cloudscape-design/components/modal';
 import FormField from '@cloudscape-design/components/form-field';
@@ -32,6 +31,7 @@ import {
 interface QueueItem {
   QueueName: string;
   QueueUrl: string;
+  QueueArn?: string;
   ApproximateNumberOfMessages?: number;
   ApproximateNumberOfMessagesNotVisible?: number;
   ApproximateNumberOfMessagesDelayed?: number;
@@ -117,6 +117,7 @@ export const SQSConsole: React.FC = () => {
         return {
           QueueName: name,
           QueueUrl: q.QueueUrl || q.url || '',
+          QueueArn: attrs.QueueArn || q.QueueArn || q.arn,
           ApproximateNumberOfMessages: Number(attrs.ApproximateNumberOfMessages || q.ApproximateNumberOfMessages || 0),
           ApproximateNumberOfMessagesNotVisible: Number(attrs.ApproximateNumberOfMessagesNotVisible || 0),
           ApproximateNumberOfMessagesDelayed: Number(attrs.ApproximateNumberOfMessagesDelayed || 0),
@@ -377,7 +378,6 @@ export const SQSConsole: React.FC = () => {
             onChange={({ detail }) => setFilterText(detail.filteringText)}
           />
         }
-        pagination={<Pagination currentPageIndex={1} pagesCount={1} />}
         empty={
           <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
             <SpaceBetween size="m">
@@ -562,9 +562,9 @@ export const SQSConsole: React.FC = () => {
                       columns={3}
                       items={[
                         { label: 'Queue URL', value: activeQueue.QueueUrl },
-                        { label: 'Queue ARN', value: `arn:aws:sqs:us-east-1:000000000000:${activeQueue.QueueName}` },
+                        { label: 'Queue ARN', value: activeQueue.QueueArn || 'Not reported' },
                         { label: 'Queue Type', value: activeQueue.Type || 'Standard' },
-                        { label: 'Visibility timeout', value: `${activeQueue.VisibilityTimeout || 30} seconds` },
+                        { label: 'Visibility timeout', value: `${activeQueue.VisibilityTimeout ?? 30} seconds` },
                         { label: 'Message retention period', value: `${Number(activeQueue.MessageRetentionPeriod || 345600) / 86400} days (${activeQueue.MessageRetentionPeriod || 345600}s)` },
                         { label: 'Maximum message size', value: `${Number(activeQueue.MaximumMessageSize || 262144) / 1024} KB` },
                         { label: 'Delivery delay', value: `${activeQueue.DelaySeconds || 0} seconds` },
@@ -615,24 +615,7 @@ export const SQSConsole: React.FC = () => {
                       readOnly
                       rows={8}
                       value={
-                        activeQueue.Policy ||
-                        JSON.stringify(
-                          {
-                            Version: '2012-10-17',
-                            Id: `${activeQueue.QueueName}/SQSDefaultPolicy`,
-                            Statement: [
-                              {
-                                Sid: 'QueueOwnerAccess',
-                                Effect: 'Allow',
-                                Principal: { AWS: 'arn:aws:iam::000000000000:root' },
-                                Action: 'SQS:*',
-                                Resource: `arn:aws:sqs:us-east-1:000000000000:${activeQueue.QueueName}`,
-                              },
-                            ],
-                          },
-                          null,
-                          2
-                        )
+                        activeQueue.Policy || 'No access policy reported for this queue.'
                       }
                       style={{
                         width: '100%',

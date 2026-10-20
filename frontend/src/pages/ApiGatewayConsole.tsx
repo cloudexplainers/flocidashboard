@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
@@ -11,718 +11,174 @@ import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Textarea from '@cloudscape-design/components/textarea';
 import Select from '@cloudscape-design/components/select';
-import StatusIndicator from '@cloudscape-design/components/status-indicator';
-import Grid from '@cloudscape-design/components/grid';
 import Box from '@cloudscape-design/components/box';
-import Badge from '@cloudscape-design/components/badge';
 import Alert from '@cloudscape-design/components/alert';
-import {
-  fetchServiceInventory,
-  createApiGatewayApi,
-  deleteApiGatewayApi,
-  testApiGatewayRequest,
-  fetchApiGatewayResources,
-  createApiGatewayResource,
-  createApiGatewayMethod,
-  deleteApiGatewayResource,
-  fetchApiGatewayStages,
-  createApiGatewayStage,
-  createApiGatewayDeployment,
-  fetchApiGatewayAuthorizers,
-  createApiGatewayAuthorizer,
-} from '../api/client';
+import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
+import { createApiGatewayApi, deleteApiGatewayApi, testApiGatewayRequest } from '../api/client';
+import { CodeSnippet } from '../components/CodeSnippet';
 
-interface ApiGatewayConsoleProps {
-  activeTab?: string;
-  onTabChange?: (tabId: string) => void;
-}
+type Api = Record<string, any> & { id: string; name: string; api_type: string };
+const rows = (value: unknown): any[] => Array.isArray(value) ? value : [];
 
-export const ApiGatewayConsole: React.FC<ApiGatewayConsoleProps> = ({ activeTab, onTabChange }) => {
-  const [data, setData] = useState<any>({ apis: [] });
-  const [loading, setLoading] = useState(true);
-  const [selectedApis, setSelectedApis] = useState<any[]>([]);
-  const [filterText, setFilterText] = useState('');
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedTabId, setSelectedTabId] = useState(activeTab || 'resources');
+export const ApiGatewayConsole: React.FC<{ activeTab?: string; onTabChange?: (tabId: string) => void }> = ({ activeTab, onTabChange }) => {
+  const [apis, setApis] = useState<Api[]>([]);
+  const [selectedId, setSelectedId] = useState('');
+  const [filter, setFilter] = useState('');
+  const [tab, setTab] = useState(activeTab || 'resources');
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [apiType, setApiType] = useState('HTTP');
+  const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState('');
+  const [method, setMethod] = useState('GET');
+  const [path, setPath] = useState('/');
+  const [headers, setHeaders] = useState('{}');
+  const [body, setBody] = useState('');
+  const [result, setResult] = useState<any>(null);
+  const api = apis.find(item => item.id === selectedId);
+  const stages = rows(api?.stages);
+  const stageName = (item: any) => item.StageName || item.stageName || item.name;
+  const selectedStage = stages.some(item => stageName(item) === stage) ? stage : (stages.length ? stageName(stages[0]) : '');
+  const http = api?.api_type === 'http';
+  const currentApiId = useRef(selectedId);
+  currentApiId.current = selectedId;
 
-  useEffect(() => {
-    if (activeTab) {
-      setSelectedTabId(activeTab);
-    }
-  }, [activeTab]);
-
-  // Create API Modal
-  const [createApiOpen, setCreateApiOpen] = useState(false);
-  const [apiName, setApiName] = useState('');
-  const [protocolType, setProtocolType] = useState({ label: 'HTTP API (Fast, low-latency)', value: 'HTTP' });
-  const [apiDescription, setApiDescription] = useState('Production Microservice Gateway');
-  const [creatingApi, setCreatingApi] = useState(false);
-
-  // Resources State
-  const [resources, setResources] = useState<any[]>([]);
-  const [createResourceOpen, setCreateResourceOpen] = useState(false);
-  const [resourcePathPart, setResourcePathPart] = useState('');
-  const [parentResourceId, setParentResourceId] = useState('');
-  const [creatingResource, setCreatingResource] = useState(false);
-
-  // Method Modal State
-  const [createMethodOpen, setCreateMethodOpen] = useState(false);
-  const [methodHttpMethod, setMethodHttpMethod] = useState({ label: 'GET', value: 'GET' });
-  const [methodAuthType, setMethodAuthType] = useState({ label: 'NONE', value: 'NONE' });
-  const [targetResourceId, setTargetResourceId] = useState('');
-  const [creatingMethod, setCreatingMethod] = useState(false);
-
-  // Stages & Deployments State
-  const [stages, setStages] = useState<any[]>([]);
-  const [createStageOpen, setCreateStageOpen] = useState(false);
-  const [stageName, setStageName] = useState('');
-  const [deploymentDesc, setDeploymentDesc] = useState('Initial production deployment');
-  const [creatingStage, setCreatingStage] = useState(false);
-
-  // Authorizers State
-  const [authorizers, setAuthorizers] = useState<any[]>([]);
-  const [createAuthOpen, setCreateAuthOpen] = useState(false);
-  const [authName, setAuthName] = useState('');
-  const [authType, setAuthType] = useState({ label: 'COGNITO_USER_POOLS', value: 'COGNITO_USER_POOLS' });
-  const [authUri, setAuthUri] = useState('');
-  const [creatingAuth, setCreatingAuth] = useState(false);
-
-  // Test Request Runner State
-  const [testPath, setTestPath] = useState('/items');
-  const [testMethod, setTestMethod] = useState({ label: 'GET', value: 'GET' });
-  const [testHeaders, setTestHeaders] = useState('{\n  "Content-Type": "application/json"\n}');
-  const [testBody, setTestBody] = useState('{\n  "name": "Widget"\n}');
-  const [testResponse, setTestResponse] = useState<any | null>(null);
-  const [testingRequest, setTestingRequest] = useState(false);
-  const [testLatency, setTestLatency] = useState<number | null>(null);
-
-  const loadData = async () => {
+  useEffect(() => { if (activeTab) setTab(activeTab); }, [activeTab]);
+  const load = async () => {
     setLoading(true);
     try {
-      const res = await fetchServiceInventory('apigateway');
-      const items = res.apis || res.items || [];
-      setData({ apis: items });
-      if (items.length > 0 && selectedApis.length === 0) {
-        setSelectedApis([items[0]]);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      const response = await fetch('/api/apigateway/');
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Unable to load APIs');
+      const normalize = (item: any, type?: string): Api => ({ ...item,
+        id: item.id || item.ApiId || item.Id,
+        name: item.name || item.Name,
+        api_type: type || String(item.protocol_type || item.ProtocolType || 'HTTP').toLowerCase(),
+      });
+      const next: Api[] = [...rows(data.rest_apis).map(item => normalize(item, 'rest')), ...rows(data.http_apis).map(item => normalize(item, 'http')),
+        ...rows(data.apis || data.items).map(item => normalize(item))];
+      setApis(next);
+      setSelectedId(previous => previous ? (next.some(item => item.id === previous) ? previous : '') : next[0]?.id || '');
+    } catch (error: any) {
+      setNotice({ type: 'error', text: error.message }); setApis([]); setSelectedId('');
+    } finally { setLoading(false); }
   };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const activeApi = selectedApis[0] || null;
-  const activeApiId = activeApi ? activeApi.ApiId || activeApi.id : '';
-
-  const loadApiSubresources = async (apiId: string) => {
-    if (!apiId) return;
-    try {
-      const [resList, stageList, authList]: any[] = await Promise.all([
-        fetchApiGatewayResources(apiId),
-        fetchApiGatewayStages(apiId),
-        fetchApiGatewayAuthorizers(apiId),
-      ]);
-      const rItems = resList?.items || resList?.resources || [];
-      setResources(rItems);
-      if (rItems.length > 0 && !parentResourceId) {
-        setParentResourceId(rItems[0].id || '');
-      }
-      setStages(stageList?.item || stageList?.stages || []);
-      setAuthorizers(authList?.items || authList?.authorizers || []);
-    } catch (err) {
-      console.error(err);
-    }
+  useEffect(() => { load(); }, []);
+  useEffect(() => { setStage(''); setResult(null); setPath('/'); setDeleteOpen(false); }, [selectedId]);
+  const run = async (task: () => Promise<void>) => {
+    setBusy(true); setNotice(null);
+    try { await task(); } catch (error: any) { setNotice({ type: 'error', text: error.message }); }
+    finally { setBusy(false); }
   };
-
-  useEffect(() => {
-    if (activeApiId) {
-      loadApiSubresources(activeApiId);
-    }
-  }, [activeApiId]);
-
-  const handleCreateApi = async () => {
-    if (!apiName.trim()) return;
-    setCreatingApi(true);
-    setActionMessage(null);
-    try {
-      await createApiGatewayApi(apiName.trim(), protocolType.value, apiDescription.trim());
-      setActionMessage({ type: 'success', text: `API "${apiName.trim()}" created successfully.` });
-      setCreateApiOpen(false);
-      setApiName('');
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create API' });
-    } finally {
-      setCreatingApi(false);
-    }
+  const showTab = (id: string) => { setTab(id); onTabChange?.(id); };
+  const configured = (value: unknown, label: string) => {
+    const error = typeof value === 'string' ? value : value && typeof value === 'object' && 'error' in value ? String(value.error) : '';
+    return error ? <Alert type="warning">{label} could not be retrieved: {error}</Alert> : null;
   };
+  const empty = (text: string) => <Box textAlign="center" padding="m">{text}</Box>;
 
-  const handleDeleteApi = async () => {
-    if (!activeApiId) return;
-    try {
-      await deleteApiGatewayApi(activeApiId);
-      setActionMessage({ type: 'success', text: `API "${activeApi.Name || activeApi.name}" deleted.` });
-      setSelectedApis([]);
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete API' });
-    }
-  };
-
-  const handleCreateResource = async () => {
-    if (!activeApiId || !resourcePathPart.trim()) return;
-    setCreatingResource(true);
-    try {
-      const pId = parentResourceId || (resources[0]?.id ?? '');
-      await createApiGatewayResource(activeApiId, pId, resourcePathPart.trim());
-      setActionMessage({ type: 'success', text: `Resource "/${resourcePathPart.trim()}" created.` });
-      setCreateResourceOpen(false);
-      setResourcePathPart('');
-      await loadApiSubresources(activeApiId);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create resource' });
-    } finally {
-      setCreatingResource(false);
-    }
-  };
-
-  const handleCreateMethod = async () => {
-    if (!activeApiId || !targetResourceId) return;
-    setCreatingMethod(true);
-    try {
-      await createApiGatewayMethod(activeApiId, targetResourceId, methodHttpMethod.value, methodAuthType.value);
-      setActionMessage({ type: 'success', text: `Method ${methodHttpMethod.value} added to resource.` });
-      setCreateMethodOpen(false);
-      await loadApiSubresources(activeApiId);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create method' });
-    } finally {
-      setCreatingMethod(false);
-    }
-  };
-
-  const handleDeleteResource = async (resId: string) => {
-    if (!activeApiId || !resId) return;
-    try {
-      await deleteApiGatewayResource(activeApiId, resId);
-      setActionMessage({ type: 'success', text: 'Resource deleted.' });
-      await loadApiSubresources(activeApiId);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete resource' });
-    }
-  };
-
-  const handleCreateStage = async () => {
-    if (!activeApiId || !stageName.trim()) return;
-    setCreatingStage(true);
-    try {
-      const dep = await createApiGatewayDeployment(activeApiId, stageName.trim(), deploymentDesc.trim());
-      const depId = dep.id || dep.deploymentId || 'd-default';
-      await createApiGatewayStage(activeApiId, stageName.trim(), depId, deploymentDesc.trim());
-      setActionMessage({ type: 'success', text: `Stage "${stageName.trim()}" created and deployed.` });
-      setCreateStageOpen(false);
-      setStageName('');
-      await loadApiSubresources(activeApiId);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create stage' });
-    } finally {
-      setCreatingStage(false);
-    }
-  };
-
-  const handleCreateAuthorizer = async () => {
-    if (!activeApiId || !authName.trim()) return;
-    setCreatingAuth(true);
-    try {
-      const isCognito = authType.value === 'COGNITO_USER_POOLS';
-      await createApiGatewayAuthorizer(
-        activeApiId,
-        authName.trim(),
-        authType.value as any,
-        isCognito && authUri.trim() ? [authUri.trim()] : undefined,
-        !isCognito && authUri.trim() ? authUri.trim() : undefined
-      );
-      setActionMessage({ type: 'success', text: `Authorizer "${authName.trim()}" created.` });
-      setCreateAuthOpen(false);
-      setAuthName('');
-      setAuthUri('');
-      await loadApiSubresources(activeApiId);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create authorizer' });
-    } finally {
-      setCreatingAuth(false);
-    }
-  };
-
-  const handleSendTestRequest = async () => {
-    if (!activeApiId) return;
-    setTestingRequest(true);
-    setTestResponse(null);
-    const start = performance.now();
-    try {
-      let parsedHeaders = {};
-      try {
-        parsedHeaders = JSON.parse(testHeaders);
-      } catch (e) {}
-
-      let parsedBody = null;
-      if (testMethod.value !== 'GET' && testBody.trim()) {
-        try {
-          parsedBody = JSON.parse(testBody);
-        } catch (e) {
-          parsedBody = testBody;
-        }
-      }
-
-      const res = await testApiGatewayRequest(activeApiId, testPath, testMethod.value, parsedHeaders, parsedBody);
-      setTestLatency(Math.round(performance.now() - start));
-      setTestResponse(res);
-      setActionMessage({ type: 'success', text: 'API Gateway request dispatched and response received.' });
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Test request failed' });
-    } finally {
-      setTestingRequest(false);
-    }
-  };
-
-  const apisList = (data.apis || []).map((a: any) => ({
-    ...a,
-    Id: a.ApiId || a.id,
-    Name: a.Name || a.name,
-    ProtocolType: a.ProtocolType || a.protocolType || 'HTTP',
-    ApiEndpoint: a.ApiEndpoint || a.apiEndpoint || `http://localhost:4566/restapis/${a.ApiId || a.id}/`,
-  }));
-
-  const filteredApis = apisList.filter((a: any) =>
-    (a.Name || '').toLowerCase().includes(filterText.toLowerCase()) ||
-    (a.Id || '').toLowerCase().includes(filterText.toLowerCase())
-  );
-
-  return (
-    <SpaceBetween size="l">
-      {/* Header Container */}
-      <Container
-        header={
-          <Header
-            variant="h1"
-            description="Create, publish, maintain, monitor, and secure REST and HTTP APIs at any scale."
-            actions={
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button iconName="refresh" onClick={loadData} loading={loading}>Refresh</Button>
-                <Button disabled={!activeApi} onClick={handleDeleteApi}>Delete API</Button>
-                <Button variant="primary" iconName="add-plus" onClick={() => setCreateApiOpen(true)}>Create API</Button>
-              </SpaceBetween>
-            }
-          >
-            Amazon API Gateway
-          </Header>
-        }
-      >
-        {actionMessage && (
-          <Box margin={{ bottom: 'm' }}>
-            <Alert type={actionMessage.type} dismissible onDismiss={() => setActionMessage(null)}>
-              {actionMessage.text}
-            </Alert>
-          </Box>
-        )}
-
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Active APIs</Box>
-            <Box variant="h1" color="text-status-info">
-              {apisList.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Total Stages</Box>
-            <Box variant="h1" color="text-status-info">
-              {stages.length || 1}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Gateway Engine</Box>
-            <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">HTTP / REST Ready</StatusIndicator>
-            </Box>
-          </Box>
-        </Grid>
-      </Container>
-
-      {/* APIs Table */}
-      <Container
-        header={
-          <Header variant="h2" description="API Gateway definitions running in Floci.">
-            APIs ({apisList.length})
-          </Header>
-        }
-      >
-        <SpaceBetween size="m">
-          <TextFilter
-            filteringText={filterText}
-            filteringPlaceholder="Find API by name or ID..."
-            onChange={({ detail }) => setFilterText(detail.filteringText)}
-          />
-
-          <Table
-            columnDefinitions={[
-              {
-                id: 'name',
-                header: 'API Name',
-                cell: (item) => (
-                  <Button variant="inline-link" onClick={() => setSelectedApis([item])}>
-                    <strong>{item.Name}</strong>
-                  </Button>
-                ),
-              },
-              {
-                id: 'id',
-                header: 'API ID',
-                cell: (item) => <code>{item.Id}</code>,
-                width: 220,
-              },
-              {
-                id: 'protocol',
-                header: 'Protocol',
-                cell: (item) => <Badge color={item.ProtocolType === 'HTTP' ? 'blue' : 'green'}>{item.ProtocolType}</Badge>,
-                width: 120,
-              },
-            ]}
-            items={filteredApis}
-            selectionType="single"
-            selectedItems={selectedApis}
-            onSelectionChange={({ detail }) => setSelectedApis(detail.selectedItems)}
-            empty={<Box textAlign="center">No APIs found.</Box>}
-          />
-        </SpaceBetween>
-      </Container>
-
-      {/* Active API Details */}
-      {activeApi && (
-        <Container header={<Header variant="h2">API: {activeApi.Name || activeApi.name}</Header>}>
-          <Tabs
-            activeTabId={selectedTabId}
-            onChange={({ detail }) => {
-              setSelectedTabId(detail.activeTabId);
-              onTabChange?.(detail.activeTabId);
-            }}
-            tabs={[
-              {
-                label: `Resources & Methods (${resources.length})`,
-                id: 'resources',
-                content: (
-                  <SpaceBetween size="m">
-                    <Box float="right">
-                      <Button variant="primary" iconName="add-plus" onClick={() => setCreateResourceOpen(true)}>
-                        Create Resource
-                      </Button>
-                    </Box>
-
-                    <Table
-                      columnDefinitions={[
-                        { id: 'path', header: 'Resource Path', cell: (r: any) => <strong>{r.path || `/${r.pathPart || ''}`}</strong> },
-                        { id: 'id', header: 'Resource ID', cell: (r: any) => <code>{r.id}</code> },
-                        {
-                          id: 'methods',
-                          header: 'HTTP Methods',
-                          cell: (r: any) => {
-                            const mKeys = Object.keys(r.resourceMethods || {});
-                            return mKeys.length > 0 ? (
-                              <SpaceBetween direction="horizontal" size="xs">
-                                {mKeys.map((m) => (
-                                  <Badge key={m} color="blue">{m}</Badge>
-                                ))}
-                              </SpaceBetween>
-                            ) : (
-                              <span style={{ color: '#879596' }}>None</span>
-                            );
-                          },
-                        },
-                        {
-                          id: 'act',
-                          header: 'Actions',
-                          cell: (r: any) => (
-                            <SpaceBetween direction="horizontal" size="xs">
-                              <Button
-                                onClick={() => {
-                                  setTargetResourceId(r.id);
-                                  setCreateMethodOpen(true);
-                                }}
-                              >
-                                Add Method
-                              </Button>
-                              <Button iconName="remove" onClick={() => handleDeleteResource(r.id)}>Delete</Button>
-                            </SpaceBetween>
-                          ),
-                          width: 230,
-                        },
-                      ]}
-                      items={resources}
-                      empty={<Box textAlign="center">No resources configured.</Box>}
-                    />
-                  </SpaceBetween>
-                ),
-              },
-              {
-                label: `Stages (${stages.length})`,
-                id: 'stages',
-                content: (
-                  <SpaceBetween size="m">
-                    <Box float="right">
-                      <Button variant="primary" iconName="add-plus" onClick={() => setCreateStageOpen(true)}>
-                        Create & Deploy Stage
-                      </Button>
-                    </Box>
-
-                    <Table
-                      columnDefinitions={[
-                        { id: 'name', header: 'Stage Name', cell: (s: any) => <strong>{s.stageName || s.name || 'prod'}</strong> },
-                        { id: 'dep', header: 'Deployment ID', cell: (s: any) => <code>{s.deploymentId || 'd-12345'}</code> },
-                        { id: 'desc', header: 'Description', cell: (s: any) => s.description || '—' },
-                      ]}
-                      items={stages.length > 0 ? stages : [{ stageName: 'prod', deploymentId: 'd-live', description: 'Default deployed stage' }]}
-                    />
-                  </SpaceBetween>
-                ),
-              },
-              {
-                label: `Authorizers (${authorizers.length})`,
-                id: 'authorizers',
-                content: (
-                  <SpaceBetween size="m">
-                    <Box float="right">
-                      <Button variant="primary" iconName="add-plus" onClick={() => setCreateAuthOpen(true)}>
-                        Create Authorizer
-                      </Button>
-                    </Box>
-
-                    <Table
-                      columnDefinitions={[
-                        { id: 'name', header: 'Authorizer Name', cell: (a: any) => <strong>{a.name || a.Name}</strong> },
-                        { id: 'type', header: 'Type', cell: (a: any) => <Badge color="blue">{a.type || a.Type || 'COGNITO_USER_POOLS'}</Badge> },
-                        { id: 'id', header: 'Authorizer ID', cell: (a: any) => <code>{a.id || a.Id}</code> },
-                      ]}
-                      items={authorizers}
-                      empty={<Box textAlign="center">No authorizers attached to this API.</Box>}
-                    />
-                  </SpaceBetween>
-                ),
-              },
-              {
-                label: 'Test Request Runner',
-                id: 'test',
-                content: (
-                  <SpaceBetween size="m">
-                    <Grid gridDefinition={[{ colspan: { default: 12, m: 3 } }, { colspan: { default: 12, m: 9 } }]}>
-                      <FormField label="Method">
-                        <Select
-                          selectedOption={testMethod}
-                          onChange={({ detail }) => setTestMethod(detail.selectedOption as any)}
-                          options={[
-                            { label: 'GET', value: 'GET' },
-                            { label: 'POST', value: 'POST' },
-                            { label: 'PUT', value: 'PUT' },
-                            { label: 'DELETE', value: 'DELETE' },
-                            { label: 'PATCH', value: 'PATCH' },
-                          ]}
-                        />
-                      </FormField>
-
-                      <FormField label="Route Path">
-                        <Input value={testPath} onChange={({ detail }) => setTestPath(detail.value)} placeholder="/items" />
-                      </FormField>
-                    </Grid>
-
-                    <FormField label="Request Headers (JSON)">
-                      <Textarea rows={3} value={testHeaders} onChange={({ detail }) => setTestHeaders(detail.value)} />
-                    </FormField>
-
-                    {testMethod.value !== 'GET' && (
-                      <FormField label="Request Payload (JSON)">
-                        <Textarea rows={4} value={testBody} onChange={({ detail }) => setTestBody(detail.value)} />
-                      </FormField>
-                    )}
-
-                    <Button variant="primary" iconName="caret-right-filled" loading={testingRequest} onClick={handleSendTestRequest}>
-                      Send API Request
-                    </Button>
-
-                    {testLatency !== null && <Badge color="green">Latency: {testLatency}ms</Badge>}
-
-                    {testResponse && (
-                      <Container header={<Header variant="h3">Response</Header>}>
-                        <Textarea rows={8} value={JSON.stringify(testResponse, null, 2)} readOnly />
-                      </Container>
-                    )}
-                  </SpaceBetween>
-                ),
-              },
-            ]}
-          />
-        </Container>
-      )}
-
-      {/* Create API Modal */}
-      <Modal
-        visible={createApiOpen}
-        onDismiss={() => setCreateApiOpen(false)}
-        header="Create API"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateApiOpen(false)}>Cancel</Button>
-              <Button variant="primary" loading={creatingApi} onClick={handleCreateApi}>Create API</Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="m">
-          <FormField label="API Name">
-            <Input value={apiName} onChange={({ detail }) => setApiName(detail.value)} placeholder="OrderProcessingApi" />
-          </FormField>
-
-          <FormField label="Protocol Type">
-            <Select
-              selectedOption={protocolType}
-              onChange={({ detail }) => setProtocolType(detail.selectedOption as any)}
-              options={[
-                { label: 'HTTP API (Fast, low-latency)', value: 'HTTP' },
-                { label: 'REST API (Full-featured REST gateway)', value: 'REST' },
-              ]}
-            />
-          </FormField>
-
-          <FormField label="Description">
-            <Input value={apiDescription} onChange={({ detail }) => setApiDescription(detail.value)} placeholder="Production Microservice Gateway" />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      {/* Create Resource Modal */}
-      <Modal
-        visible={createResourceOpen}
-        onDismiss={() => setCreateResourceOpen(false)}
-        header="Create Resource"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateResourceOpen(false)}>Cancel</Button>
-              <Button variant="primary" loading={creatingResource} onClick={handleCreateResource}>Create Resource</Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="m">
-          <FormField label="Resource Path Part" description="e.g. items or {id}">
-            <Input value={resourcePathPart} onChange={({ detail }) => setResourcePathPart(detail.value)} placeholder="items" />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      {/* Create Method Modal */}
-      <Modal
-        visible={createMethodOpen}
-        onDismiss={() => setCreateMethodOpen(false)}
-        header="Create HTTP Method"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateMethodOpen(false)}>Cancel</Button>
-              <Button variant="primary" loading={creatingMethod} onClick={handleCreateMethod}>Create Method</Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="m">
-          <FormField label="HTTP Method">
-            <Select
-              selectedOption={methodHttpMethod}
-              onChange={({ detail }) => setMethodHttpMethod(detail.selectedOption as any)}
-              options={[
-                { label: 'GET', value: 'GET' },
-                { label: 'POST', value: 'POST' },
-                { label: 'PUT', value: 'PUT' },
-                { label: 'DELETE', value: 'DELETE' },
-                { label: 'ANY', value: 'ANY' },
-              ]}
-            />
-          </FormField>
-          <FormField label="Authorization">
-            <Select
-              selectedOption={methodAuthType}
-              onChange={({ detail }) => setMethodAuthType(detail.selectedOption as any)}
-              options={[
-                { label: 'NONE (Public)', value: 'NONE' },
-                { label: 'AWS_IAM', value: 'AWS_IAM' },
-                { label: 'COGNITO_USER_POOLS', value: 'COGNITO_USER_POOLS' },
-              ]}
-            />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      {/* Create Stage Modal */}
-      <Modal
-        visible={createStageOpen}
-        onDismiss={() => setCreateStageOpen(false)}
-        header="Create & Deploy Stage"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateStageOpen(false)}>Cancel</Button>
-              <Button variant="primary" loading={creatingStage} onClick={handleCreateStage}>Deploy Stage</Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="m">
-          <FormField label="Stage Name">
-            <Input value={stageName} onChange={({ detail }) => setStageName(detail.value)} placeholder="v1 or staging" />
-          </FormField>
-          <FormField label="Deployment Description">
-            <Input value={deploymentDesc} onChange={({ detail }) => setDeploymentDesc(detail.value)} placeholder="Release notes..." />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      {/* Create Authorizer Modal */}
-      <Modal
-        visible={createAuthOpen}
-        onDismiss={() => setCreateAuthOpen(false)}
-        header="Create Authorizer"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateAuthOpen(false)}>Cancel</Button>
-              <Button variant="primary" loading={creatingAuth} onClick={handleCreateAuthorizer}>Create Authorizer</Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="m">
-          <FormField label="Authorizer Name">
-            <Input value={authName} onChange={({ detail }) => setAuthName(detail.value)} placeholder="CognitoAuth" />
-          </FormField>
-          <FormField label="Type">
-            <Select
-              selectedOption={authType}
-              onChange={({ detail }) => setAuthType(detail.selectedOption as any)}
-              options={[
-                { label: 'COGNITO_USER_POOLS', value: 'COGNITO_USER_POOLS' },
-                { label: 'TOKEN (Lambda Authorizer)', value: 'TOKEN' },
-                { label: 'REQUEST (Lambda Request Authorizer)', value: 'REQUEST' },
-              ]}
-            />
-          </FormField>
-          <FormField label="Provider ARN / Lambda URI">
-            <Input value={authUri} onChange={({ detail }) => setAuthUri(detail.value)} placeholder="arn:aws:cognito-idp:..." />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-    </SpaceBetween>
-  );
+  return <SpaceBetween size="l">
+    {notice && <Alert type={notice.type} dismissible onDismiss={() => setNotice(null)}>{notice.text}</Alert>}
+    <Table header={<Header variant="h1" counter={`(${apis.length})`} description="REST and HTTP APIs in the active account and Region."
+      actions={<SpaceBetween direction="horizontal" size="xs">
+        <Button iconName="refresh" loading={loading} onClick={load}>Refresh</Button>
+        <Button disabled={!api} onClick={() => setDeleteOpen(true)}>Delete API</Button>
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>Create API</Button>
+      </SpaceBetween>}>Amazon API Gateway</Header>}
+      filter={<TextFilter filteringText={filter} filteringPlaceholder="Find APIs by name, ID, or protocol" onChange={({ detail }) => { setFilter(detail.filteringText); setSelectedId(''); }} />}
+      items={apis.filter(item => `${item.name} ${item.id} ${item.api_type}`.toLowerCase().includes(filter.toLowerCase()))}
+      loading={loading} loadingText="Loading APIs" selectionType="single" trackBy="id" selectedItems={api ? [api] : []}
+      onSelectionChange={({ detail }) => setSelectedId(detail.selectedItems[0]?.id || '')}
+      columnDefinitions={[
+        { id: 'name', header: 'API name', cell: item => <Button variant="inline-link" onClick={() => setSelectedId(item.id)}>{item.name}</Button> },
+        { id: 'id', header: 'API ID', cell: item => item.id },
+        { id: 'api_type', header: 'Protocol', cell: item => item.api_type.toUpperCase() },
+        { id: 'stage_count', header: 'Stages', cell: item => Array.isArray(item.stages) ? item.stages.length : 'Unavailable' },
+      ]} empty={empty(filter ? 'No APIs match your filter.' : 'No APIs found. Create an API to get started.')} />
+    {api && <Container header={<Header variant="h2" description={`${api.api_type.toUpperCase()} API · ${api.id}`}>{api.name}</Header>}>
+      <SpaceBetween size="m">
+        <KeyValuePairs columns={3} items={[
+          { label: 'API ID', value: api.id }, { label: 'Protocol', value: api.api_type.toUpperCase() },
+          { label: 'Endpoint', value: api.api_endpoint || api.ApiEndpoint || api.execute_url_pattern || 'Not reported' },
+        ]} />
+        <Tabs activeTabId={tab} onChange={({ detail }) => showTab(detail.activeTabId)} tabs={[
+          { id: 'resources', label: http ? 'Routes' : 'Resources and methods', content: <SpaceBetween size="m">
+            {configured(http ? api.routes : api.resources, http ? 'Routes' : 'Resources')}
+            <Table items={rows(http ? api.routes : api.resources)} columnDefinitions={http ? [
+              { id: 'RouteKey', header: 'Route', cell: (item: any) => <Button variant="inline-link" onClick={() => {
+                const [verb, ...parts] = (item.RouteKey || '').split(' '); setMethod(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(verb) ? verb : 'GET'); setPath(parts.join(' ') || '/'); showTab('test');
+              }}>{item.RouteKey}</Button> },
+              { id: 'RouteId', header: 'Route ID', cell: (item: any) => item.RouteId },
+              { id: 'Target', header: 'Integration target', cell: (item: any) => item.Target || 'Not configured' },
+              { id: 'AuthorizationType', header: 'Authorization', cell: (item: any) => item.AuthorizationType || 'Not reported' },
+            ] : [
+              { id: 'path', header: 'Resource path', cell: (item: any) => item.path || '/' },
+              { id: 'id', header: 'Resource ID', cell: (item: any) => item.id },
+              { id: 'methods', header: 'HTTP methods', cell: (item: any) => Object.keys(item.resourceMethods || {}).join(', ') || 'None' },
+            ]} empty={empty(http ? 'No routes configured.' : 'No resources configured.')} />
+          </SpaceBetween> },
+          { id: 'integrations', label: 'Integrations', content: <SpaceBetween size="m">
+            {configured(api.integrations, 'Integrations')}
+            <Table items={http ? rows(api.integrations) : rows(api.resources).flatMap(resource => Object.entries(resource.resourceMethods || {}).flatMap(([verb, method]: [string, any]) => method.methodIntegration ? [{ ...method.methodIntegration, resource: `${verb} ${resource.path}` }] : []))}
+              columnDefinitions={[
+                { id: 'id', header: http ? 'Integration ID' : 'Resource method', cell: (item: any) => item.IntegrationId || item.resource },
+                { id: 'type', header: 'Type', cell: (item: any) => item.IntegrationType || item.type || 'Not reported' },
+                { id: 'uri', header: 'URI', cell: (item: any) => item.IntegrationUri || item.uri || 'Not reported' },
+              ]} empty={empty('No integrations reported.')} />
+          </SpaceBetween> },
+          { id: 'stages', label: `Stages (${stages.length})`, content: <SpaceBetween size="m">
+            {configured(api.stages, 'Stages')}
+            <Table items={stages} columnDefinitions={[
+              { id: 'name', header: 'Stage name', cell: (item: any) => stageName(item) },
+              { id: 'deployment', header: 'Deployment ID', cell: (item: any) => item.DeploymentId || item.deploymentId || 'Not reported' },
+              { id: 'auto', header: 'Automatic deployment', cell: (item: any) => item.AutoDeploy === undefined ? 'Not reported' : item.AutoDeploy ? 'Enabled' : 'Disabled' },
+            ]} empty={empty('No stages deployed.')} />
+          </SpaceBetween> },
+          { id: 'authorizers', label: 'Authorizers', content: <SpaceBetween size="m">
+            {configured(api.authorizers, 'Authorizers')}
+            <Table items={rows(api.authorizers)} columnDefinitions={[
+              { id: 'name', header: 'Name', cell: (item: any) => item.Name || item.name },
+              { id: 'id', header: 'Authorizer ID', cell: (item: any) => item.AuthorizerId || item.id },
+              { id: 'type', header: 'Type', cell: (item: any) => item.AuthorizerType || item.type },
+            ]} empty={empty('No authorizers configured.')} />
+          </SpaceBetween> },
+          { id: 'test', label: 'Test request', content: <SpaceBetween size="m">
+            <FormField label="Stage"><Select ariaLabel="Request stage" selectedOption={selectedStage ? { value: selectedStage, label: selectedStage } : null} placeholder="Select a deployed stage"
+              options={stages.map(item => ({ value: stageName(item), label: stageName(item) }))} onChange={({ detail }) => setStage(detail.selectedOption.value!)} /></FormField>
+            <FormField label="Method"><Select ariaLabel="Request method" selectedOption={{ value: method, label: method }} options={['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].map(value => ({ value, label: value }))} onChange={({ detail }) => setMethod(detail.selectedOption.value!)} /></FormField>
+            <FormField label="Request path"><Input value={path} onChange={({ detail }) => setPath(detail.value)} /></FormField>
+            <FormField label="Request headers (JSON)"><Textarea value={headers} onChange={({ detail }) => setHeaders(detail.value)} rows={3} /></FormField>
+            <FormField label="Request body"><Textarea value={body} onChange={({ detail }) => setBody(detail.value)} rows={4} /></FormField>
+            {!selectedStage && <Alert type="info">Deploy a stage before sending a test request.</Alert>}
+            <Button variant="primary" disabled={!selectedStage || !path.trim()} loading={busy} onClick={() => { setResult(null); run(async () => {
+              const parsedHeaders = JSON.parse(headers);
+              if (!parsedHeaders || Array.isArray(parsedHeaders) || typeof parsedHeaders !== 'object') throw new Error('Request headers must be a JSON object');
+              const response = await testApiGatewayRequest(api.id, path, method, parsedHeaders, body || null, api.api_type, selectedStage);
+              if (currentApiId.current === api.id) setResult(response);
+            }); }}>Send request</Button>
+            {result && <Container header={<Header variant="h3">Response · HTTP {result.status_code}</Header>}><CodeSnippet language="json" code={JSON.stringify(result, null, 2)} /></Container>}
+          </SpaceBetween> },
+        ]} />
+      </SpaceBetween>
+    </Container>}
+    <Modal visible={createOpen} onDismiss={() => setCreateOpen(false)} header="Create API" footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+      <Button onClick={() => setCreateOpen(false)}>Cancel</Button><Button variant="primary" disabled={!name.trim()} loading={busy} onClick={() => run(async () => {
+        await createApiGatewayApi(name.trim(), apiType, description); setCreateOpen(false); setName(''); setDescription(''); await load(); setNotice({ type: 'success', text: `API "${name.trim()}" created.` });
+      })}>Create API</Button></SpaceBetween></Box>}>
+      <SpaceBetween size="m">
+        {notice?.type === 'error' && <Alert type="error">{notice.text}</Alert>}
+        <FormField label="API name"><Input value={name} onChange={({ detail }) => setName(detail.value)} /></FormField>
+        <FormField label="API type"><Select ariaLabel="API type" selectedOption={{ value: apiType, label: `${apiType} API` }} options={['HTTP', 'REST'].map(value => ({ value, label: `${value} API` }))} onChange={({ detail }) => setApiType(detail.selectedOption.value!)} /></FormField>
+        <FormField label="Description"><Input value={description} onChange={({ detail }) => setDescription(detail.value)} /></FormField>
+      </SpaceBetween>
+    </Modal>
+    <Modal visible={deleteOpen} onDismiss={() => setDeleteOpen(false)} header={`Delete API ${api?.name || ''}`} footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
+      <Button onClick={() => setDeleteOpen(false)}>Cancel</Button><Button variant="primary" loading={busy} disabled={!api} onClick={() => run(async () => {
+        if (!api) return; await deleteApiGatewayApi(api.id, api.api_type); setDeleteOpen(false); await load(); setNotice({ type: 'success', text: `API "${api.name}" deleted.` });
+      })}>Delete</Button></SpaceBetween></Box>}>Delete {api?.name} ({api?.id}) and its routes, integrations, stages, and deployments?</Modal>
+  </SpaceBetween>;
 };

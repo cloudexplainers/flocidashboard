@@ -176,8 +176,10 @@ export const FavoritesBar: React.FC<FavoritesBarProps> = ({
               key.toUpperCase();
 
             return (
-              <div
+              <button
                 key={key}
+                aria-label={`Open ${shortName}`}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => onSelectService(key)}
                 style={{
                   display: 'flex',
@@ -209,7 +211,7 @@ export const FavoritesBar: React.FC<FavoritesBarProps> = ({
               >
                 <AwsServiceIcon service={key} size={15} />
                 <span>{shortName}</span>
-              </div>
+              </button>
             );
           })}
         </div>

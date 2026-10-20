@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Header from '@cloudscape-design/components/header';
@@ -95,19 +95,20 @@ export const AthenaConsole: React.FC<AthenaConsoleProps> = ({ activeTab, onTabCh
 
       // Fetch details & results
       const [detailRes, resultsRes]: any[] = await Promise.all([
-        fetchAthenaQueryDetail(qId).catch(() => null),
-        fetchAthenaQueryResults(qId).catch(() => null),
+        fetchAthenaQueryDetail(qId),
+        fetchAthenaQueryResults(qId),
       ]);
 
+      const execution = detailRes.query_execution || detailRes.QueryExecution || detailRes;
       const elapsed = Date.now() - startTime;
       setQueryStats({
         timeMs: elapsed,
-        dataScanned: detailRes?.Statistics?.DataScannedInBytes ? `${(detailRes.Statistics.DataScannedInBytes / 1024).toFixed(1)} KB` : '1.2 KB',
+        dataScanned: execution.Statistics?.DataScannedInBytes != null ? `${(execution.Statistics.DataScannedInBytes / 1024).toFixed(1)} KB` : 'Unavailable',
       });
-      setQueryStatus(detailRes?.Status?.State || 'SUCCEEDED');
+      setQueryStatus(execution.Status?.State || 'UNKNOWN');
 
       // Parse columns and rows from ResultSet
-      const resultSet = resultsRes?.ResultSet;
+      const resultSet = resultsRes?.result_set || resultsRes?.ResultSet;
       if (resultSet?.Rows?.length > 0) {
         const headerRow = resultSet.Rows[0];
         const cols = (headerRow.Data || []).map((d: any) => d.VarCharValue || 'col');
@@ -122,13 +123,8 @@ export const AthenaConsole: React.FC<AthenaConsoleProps> = ({ activeTab, onTabCh
         });
         setResultsRows(rows);
       } else {
-        // Mock fallback results if engine returns empty
-        setResultsColumns(['id', 'event_name', 'status', 'timestamp']);
-        setResultsRows([
-          { _rowId: 1, id: '101', event_name: 'UserSignUp', status: 'COMPLETED', timestamp: new Date().toISOString() },
-          { _rowId: 2, id: '102', event_name: 'OrderPlaced', status: 'PROCESSED', timestamp: new Date().toISOString() },
-          { _rowId: 3, id: '103', event_name: 'PaymentReceived', status: 'SETTLED', timestamp: new Date().toISOString() },
-        ]);
+        setResultsColumns([]);
+        setResultsRows([]);
       }
 
       await loadData();
@@ -302,7 +298,7 @@ export const AthenaConsole: React.FC<AthenaConsoleProps> = ({ activeTab, onTabCh
                     />
                   ) : (
                     <Box textAlign="center" padding="l" color="text-status-inactive">
-                      Run a SQL query above to view tabular results.
+                      {queryStatus ? 'No data returned by query.' : 'Run a SQL query above to view tabular results.'}
                     </Box>
                   )}
                 </Container>

@@ -9,6 +9,17 @@ function getCsrfToken(): string {
   return match ? match[1] : '';
 }
 
+export async function fetchCloudWatchLogs(path: 'log-streams' | 'log-events', payload: Record<string, unknown>): Promise<any> {
+  const response = await fetch(`/api/cloudwatch/${path}/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || 'Unable to load CloudWatch logs');
+  return data;
+}
+
 export async function fetchServices(): Promise<ServiceDefinition[]> {
   try {
     const res = await fetch('/api/services/');
@@ -26,23 +37,17 @@ export async function fetchIdentity(): Promise<IdentityInfo> {
     const res = await fetch('/api/session-identity/');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    const caller = data.caller_identity || {};
     return {
-      account_id: data.account_id || '000000000000',
-      user_id: data.user_id || 'floci-root',
-      arn: data.arn || 'arn:aws:iam::000000000000:root',
-      role: data.role || 'Administrator',
-      region: data.region || 'us-east-1',
-      endpoint: data.endpoint || 'http://localhost:4566',
+      account_id: caller.Account || data.account_id || 'Unknown',
+      user_id: caller.UserId || data.user_id || 'Unknown',
+      arn: caller.Arn || data.arn || 'Unavailable',
+      role: data.session_identity?.label || data.role || 'Current session',
+      region: data.region || 'Unknown',
+      endpoint: data.endpoint_url || data.endpoint || 'Unavailable',
     };
-  } catch (err) {
-    return {
-      account_id: '000000000000',
-      user_id: 'floci-root',
-      arn: 'arn:aws:iam::000000000000:root',
-      role: 'Administrator',
-      region: 'us-east-1',
-      endpoint: 'http://localhost:4566',
-    };
+  } catch {
+    return { account_id: 'Unknown', user_id: 'Unavailable', arn: 'Unavailable', role: 'Unavailable', region: 'Unknown', endpoint: 'Unavailable' };
   }
 }
 
@@ -52,6 +57,7 @@ export async function fetchServiceInventory(serviceKey: string): Promise<any> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
+    window.dispatchEvent(new CustomEvent('floci_load_error', { detail: `Unable to load ${serviceKey} resources. Refresh to retry. ${err instanceof Error ? err.message : ''}` }));
     console.error(`Failed to fetch inventory for ${serviceKey}:`, err);
     return {};
   }
@@ -148,6 +154,7 @@ export async function fetchSesMessages(): Promise<{ mailbox_url: string; message
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
+    window.dispatchEvent(new CustomEvent('floci_load_error', { detail: 'Unable to load SES messages. Refresh to retry.' }));
     console.error('Failed to fetch SES messages:', err);
     return { mailbox_url: '', messages: [], raw: {} };
   }
@@ -168,6 +175,7 @@ export async function fetchInspectorSqsQueues(): Promise<{ queues: Array<{ name:
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
+    window.dispatchEvent(new CustomEvent('floci_load_error', { detail: 'Unable to load SQS queues. Refresh to retry.' }));
     console.error('Failed to fetch SQS queues:', err);
     return { queues: [] };
   }
@@ -179,6 +187,7 @@ export async function fetchInspectorSqsMessages(queueUrl: string, maxNumber: num
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
+    window.dispatchEvent(new CustomEvent('floci_load_error', { detail: 'Unable to load SQS messages. Refresh to retry.' }));
     console.error('Failed to fetch SQS messages:', err);
     return { queue_url: queueUrl, queue_name: '', messages: [] };
   }
@@ -190,6 +199,7 @@ export async function fetchInspectorLogGroups(): Promise<{ log_groups: Array<{ l
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
+    window.dispatchEvent(new CustomEvent('floci_load_error', { detail: 'Unable to load Lambda log groups. Refresh to retry.' }));
     console.error('Failed to fetch Lambda log groups:', err);
     return { log_groups: [] };
   }
@@ -201,6 +211,7 @@ export async function fetchInspectorLogEvents(logGroupName: string, limit: numbe
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (err) {
+    window.dispatchEvent(new CustomEvent('floci_load_error', { detail: 'Unable to load Lambda log events. Refresh to retry.' }));
     console.error('Failed to fetch Lambda log events:', err);
     return { log_group_name: logGroupName, streams: [], events: [] };
   }
@@ -225,6 +236,7 @@ export async function saveEndpoint(endpointUrl: string): Promise<any> {
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to save endpoint');
+  window.dispatchEvent(new Event('floci_session_changed'));
   return data;
 }
 
@@ -234,7 +246,9 @@ export async function resetEndpoint(): Promise<any> {
     headers: { 'X-CSRFToken': getCsrfToken() },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const result = await res.json();
+  window.dispatchEvent(new Event('floci_session_changed'));
+  return result;
 }
 
 export async function testConnection(endpointUrl?: string): Promise<any> {
@@ -275,7 +289,9 @@ export async function useAdminIdentity(): Promise<any> {
     headers: { 'X-CSRFToken': getCsrfToken() },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const result = await res.json();
+  window.dispatchEvent(new Event('floci_session_changed'));
+  return result;
 }
 
 export async function useUserIdentity(userName: string, rotateAccessKeys: boolean = false): Promise<any> {
@@ -286,6 +302,7 @@ export async function useUserIdentity(userName: string, rotateAccessKeys: boolea
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to switch user identity');
+  window.dispatchEvent(new Event('floci_session_changed'));
   return data;
 }
 
@@ -297,6 +314,7 @@ export async function assumeRoleIdentity(roleName: string, sessionName?: string,
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to assume role');
+  window.dispatchEvent(new Event('floci_session_changed'));
   return data;
 }
 
@@ -306,7 +324,9 @@ export async function clearSessionIdentity(): Promise<any> {
     headers: { 'X-CSRFToken': getCsrfToken() },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const result = await res.json();
+  window.dispatchEvent(new Event('floci_session_changed'));
+  return result;
 }
 
 export async function runCliCommand(command: string, confirmed: boolean = false): Promise<any> {
@@ -765,30 +785,35 @@ export async function createApiGatewayApi(name: string, protocolType: string = '
   const res = await fetch('/api/apigateway/apis/create/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, protocol_type: protocolType, description }),
+    body: JSON.stringify({ name, api_type: protocolType.toLowerCase(), description }),
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to create API');
   return data;
 }
 
-export async function deleteApiGatewayApi(apiId: string): Promise<any> {
+export async function deleteApiGatewayApi(apiId: string, apiType: string = 'http'): Promise<any> {
   const res = await fetch('/api/apigateway/apis/delete/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ api_id: apiId }),
+    body: JSON.stringify({ api_id: apiId, api_type: apiType.toLowerCase() }),
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete API');
+  return data;
 }
 
-export async function testApiGatewayRequest(apiId: string, path: string, method: string = 'GET', headers: any = {}, body: any = null): Promise<any> {
+export async function testApiGatewayRequest(apiId: string, path: string, method: string = 'GET', headers: any = {}, body: any = null, apiType = 'http', stage = '', endpoint = ''): Promise<any> {
   const res = await fetch('/api/apigateway/requests/test/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({
       api_id: apiId,
       path: path.startsWith('/') ? path : `/${path}`,
-      http_method: method,
+      method,
+      api_type: apiType.toLowerCase(),
+      stage,
+      endpoint,
       headers,
       body,
     }),
@@ -3056,3 +3081,14 @@ export async function untagEksResource(resourceArn: string, tagKeys: string[]): 
 }
 
 
+
+export async function runAppSyncGraphQL(apiId: string, query: string, variables: Record<string, unknown>, apiKey?: string): Promise<any> {
+  const response = await fetch('/api/appsync/graphql/run/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify({ api_id: apiId, query, variables, api_key: apiKey }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.error) throw new Error(result.error || 'GraphQL execution failed');
+  return result;
+}

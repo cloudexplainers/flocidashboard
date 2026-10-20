@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -124,3 +125,38 @@ class CloudWatchLogsApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['status'], 'Complete')
         results_mock.assert_called_once_with('query-1')
+
+
+class CloudWatchMetricStatisticsTests(SimpleTestCase):
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_statistics_preserves_dimensions_and_sorts_datapoints(self, factory):
+        from datetime import datetime, timezone
+        first = datetime(2026, 10, 20, 10, tzinfo=timezone.utc)
+        second = datetime(2026, 10, 20, 11, tzinfo=timezone.utc)
+        client = factory.return_value.client.return_value
+        client.get_metric_statistics.return_value = {
+            'Datapoints': [{'Timestamp': second, 'Average': 2}, {'Timestamp': first, 'Average': 1}],
+        }
+        response = self.client.get(reverse('dashboard:cloudwatch-metric-statistics'), {
+            'namespace': 'Test/App', 'metric_name': 'Latency', 'hours': 3,
+            'dimensions': json.dumps([{'Name': 'Service', 'Value': 'worker'}]),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([point['Average'] for point in response.json()['datapoints']], [1, 2])
+        arguments = client.get_metric_statistics.call_args.kwargs
+        self.assertEqual(arguments['Dimensions'], [{'Name': 'Service', 'Value': 'worker'}])
+        self.assertEqual(arguments['Statistics'], ['Average'])
+        self.assertEqual(arguments['EndTime'] - arguments['StartTime'], timedelta(hours=3))
+
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_invalid_requests_do_not_call_aws(self, factory):
+        for params in [
+            {},
+            {'namespace': 'Test/App', 'metric_name': 'Latency', 'hours': 168},
+            {'namespace': 'Test/App', 'metric_name': 'Latency', 'dimensions': '{}'},
+            {'namespace': 'Test/App', 'metric_name': 'Latency', 'dimensions': '[{"Name": "Service"}]'},
+        ]:
+            with self.subTest(params=params):
+                response = self.client.get(reverse('dashboard:cloudwatch-metric-statistics'), params)
+                self.assertEqual(response.status_code, 400)
+        factory.assert_not_called()

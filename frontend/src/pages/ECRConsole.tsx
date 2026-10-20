@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Header from '@cloudscape-design/components/header';

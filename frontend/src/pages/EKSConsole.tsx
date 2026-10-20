@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
@@ -30,6 +30,7 @@ import {
 import { CodeSnippet } from '../components/CodeSnippet';
 
 interface ClusterItem {
+  platformVersion?: string;
   name: string;
   arn?: string;
   status: string;
@@ -52,7 +53,7 @@ interface EKSConsoleProps {
 }
 
 const K8S_VERSIONS = [
-  { label: '1.30 (Latest)', value: '1.30' },
+  { label: '1.30 (Local runtime)', value: '1.30' },
   { label: '1.29', value: '1.29' },
   { label: '1.28', value: '1.28' },
   { label: '1.27', value: '1.27' },
@@ -117,16 +118,13 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
       const list: ClusterItem[] = rawClusters.map((c: any) => ({
         name: c.name || c.Name || (typeof c === 'string' ? c : 'eks-cluster'),
         arn: c.arn || c.Arn || `arn:aws:eks:us-east-1:000000000000:cluster/${c.name || c.Name || c}`,
-        status: c.status || c.Status || 'ACTIVE',
+        status: c.status || c.Status || 'Unknown',
         version: c.version || c.Version || '1.30',
-        endpoint: c.endpoint || c.Endpoint || `https://000000000000.gr7.us-east-1.eks.localhost:4566`,
-        roleArn: c.roleArn || c.RoleArn || 'arn:aws:iam::000000000000:role/eks-cluster-role',
-        createdAt: c.createdAt || c.CreatedAt || new Date().toISOString(),
-        resourcesVpcConfig: c.resourcesVpcConfig || {
-          subnetIds: ['subnet-01234567', 'subnet-89abcdef'],
-          securityGroupIds: ['sg-01234567'],
-          vpcId: 'vpc-01234567',
-        },
+        endpoint: c.endpoint || c.Endpoint || 'Unavailable',
+        roleArn: c.roleArn || c.RoleArn || 'Unavailable',
+        createdAt: c.createdAt || c.CreatedAt || 'Unavailable',
+        resourcesVpcConfig: c.resourcesVpcConfig || {},
+        platformVersion: c.platformVersion,
         nodegroups: c.nodegroups || [],
         fargate_profiles: c.fargate_profiles || [],
       }));
@@ -415,7 +413,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                       <KeyValuePairs
                         items={[
                           { label: 'Cluster Name', value: activeCluster.name },
-                          { label: 'Status', value: <StatusIndicator type="success">{activeCluster.status}</StatusIndicator> },
+                          { label: 'Status', value: <StatusIndicator type={activeCluster.status === 'ACTIVE' ? 'success' : activeCluster.status === 'FAILED' ? 'error' : 'in-progress'}>{activeCluster.status}</StatusIndicator> },
                           { label: 'Kubernetes Version', value: `v${activeCluster.version}` },
                         ]}
                       />
@@ -423,7 +421,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange }
                         items={[
                           { label: 'Role ARN', value: <code>{activeCluster.roleArn}</code> },
                           { label: 'Created At', value: activeCluster.createdAt },
-                          { label: 'Platform Version', value: 'eks.1' },
+                          { label: 'Platform Version', value: activeCluster.platformVersion || 'Unavailable locally' },
                         ]}
                       />
                       <KeyValuePairs

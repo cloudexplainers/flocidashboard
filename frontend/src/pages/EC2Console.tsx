@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
@@ -44,6 +44,7 @@ interface InstanceItem {
   VpcId?: string;
   SubnetId?: string;
   SecurityGroups?: Array<{ GroupId: string; GroupName: string }>;
+  Tags?: Array<{ Key: string; Value: string }>;
 }
 
 interface EC2ConsoleProps {
@@ -54,11 +55,12 @@ interface EC2ConsoleProps {
 export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }) => {
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedTabId, setSelectedTabId] = useState(activeTab || 'instances');
+  const [selectedTabId, setSelectedTabId] = useState(activeTab === 'subnets' ? 'vpcs' : activeTab || 'instances');
 
   useEffect(() => {
     if (activeTab) {
-      setSelectedTabId(activeTab);
+      setSelectedTabId(activeTab === 'subnets' ? 'vpcs' : activeTab);
+      if (activeTab === 'subnets') setNetworkView('subnets');
     }
   }, [activeTab]);
 
@@ -66,6 +68,8 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
   const [instances, setInstances] = useState<InstanceItem[]>([]);
   const [selectedInstances, setSelectedInstances] = useState<InstanceItem[]>([]);
   const [instanceFilter, setInstanceFilter] = useState('');
+  const [instanceDetailTab, setInstanceDetailTab] = useState('details');
+  const [networkView, setNetworkView] = useState(activeTab === 'subnets' ? 'subnets' : 'vpcs');
   const [launchModalOpen, setLaunchModalOpen] = useState(false);
   const [instanceType, setInstanceType] = useState({ label: 't3.micro (2 vCPU, 1 GiB RAM)', value: 't3.micro' });
   const [instanceName, setInstanceName] = useState('web-server-01');
@@ -122,36 +126,33 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
 
       // Map instances
       const instList = (ec2Data.instances || ec2Data.Reservations?.flatMap((r: any) => r.Instances) || []).map((inst: any) => ({
-        InstanceId: inst.InstanceId || inst.id || 'i-0123456789abcdef0',
-        Name: inst.Tags?.find((t: any) => t.Key === 'Name')?.Value || inst.Name || 'web-server',
-        State: typeof inst.State === 'object' ? inst.State : { Name: inst.State || 'running', Code: 16 },
-        InstanceType: inst.InstanceType || 't3.micro',
-        PublicIpAddress: inst.PublicIpAddress || '54.210.12.34',
-        PrivateIpAddress: inst.PrivateIpAddress || '172.31.10.20',
-        KeyName: inst.KeyName || 'floci-dev-key',
-        LaunchTime: inst.LaunchTime || new Date().toISOString(),
-        VpcId: inst.VpcId || 'vpc-default01',
-        SubnetId: inst.SubnetId || 'subnet-default01',
-        SecurityGroups: inst.SecurityGroups || [{ GroupId: 'sg-0123456', GroupName: 'default-web' }],
+        InstanceId: inst.InstanceId || inst.id,
+        Name: (inst.Tags || inst.tags)?.find((t: any) => t.Key === 'Name')?.Value || inst.Name || '—',
+        State: typeof inst.State === 'object' ? inst.State : { Name: inst.State || inst.state || 'unknown', Code: inst.state_code },
+        InstanceType: inst.InstanceType || inst.instance_type || 'Unavailable',
+        PublicIpAddress: inst.PublicIpAddress || inst.public_ip,
+        PrivateIpAddress: inst.PrivateIpAddress || inst.private_ip,
+        KeyName: inst.KeyName || inst.key_name,
+        LaunchTime: inst.LaunchTime || inst.launch_time,
+        VpcId: inst.VpcId || inst.vpc_id,
+        SubnetId: inst.SubnetId || inst.subnet_id,
+        SecurityGroups: inst.SecurityGroups || inst.security_groups || [],
+        Tags: inst.Tags || inst.tags || [],
       }));
       setInstances(instList);
-      if (instList.length > 0 && selectedInstances.length === 0) {
-        setSelectedInstances([instList[0]]);
-      }
+      setSelectedInstances(previous => previous.length
+        ? instList.filter((item: InstanceItem) => item.InstanceId === previous[0].InstanceId)
+        : instList.slice(0, 1));
 
       // Map VPCs and Subnets
-      const vpcList = ec2Data.vpcs || ec2Data.Vpcs || [
-        { VpcId: 'vpc-0a1b2c3d4e5f', CidrBlock: '10.0.0.0/16', State: 'available', IsDefault: true, Name: 'default-vpc' },
-      ];
+      const vpcList = ec2Data.vpcs || ec2Data.Vpcs || [];
       setVpcs(vpcList);
       if (vpcList.length > 0) {
         setSubnetVpcId(vpcList[0].VpcId || vpcList[0].id);
         setSgVpcId(vpcList[0].VpcId || vpcList[0].id);
       }
 
-      const subnetList = ec2Data.subnets || ec2Data.Subnets || [
-        { SubnetId: 'subnet-0a1b2c3d', VpcId: 'vpc-0a1b2c3d4e5f', CidrBlock: '10.0.1.0/24', AvailabilityZone: 'us-east-1a', State: 'available' },
-      ];
+      const subnetList = ec2Data.subnets || ec2Data.Subnets || [];
       setSubnets(subnetList);
 
       setRouteTables(ec2Data.route_tables || ec2Data.RouteTables || []);
@@ -159,26 +160,11 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
       setVpcEndpoints(ec2Data.vpc_endpoints || ec2Data.VpcEndpoints || []);
 
       // Map Security Groups
-      const sgList = ec2Data.security_groups || ec2Data.SecurityGroups || [
-        {
-          GroupId: 'sg-0123456789abcdef0',
-          GroupName: 'default-web-sg',
-          Description: 'Default HTTP/HTTPS Web traffic security group',
-          VpcId: 'vpc-0a1b2c3d4e5f',
-          IpPermissions: [
-            { IpProtocol: 'tcp', FromPort: 80, ToPort: 80, IpRanges: [{ CidrIp: '0.0.0.0/0' }] },
-            { IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '0.0.0.0/0' }] },
-            { IpProtocol: 'tcp', FromPort: 22, ToPort: 22, IpRanges: [{ CidrIp: '192.168.1.0/24' }] },
-          ],
-          IpPermissionsEgress: [
-            { IpProtocol: '-1', IpRanges: [{ CidrIp: '0.0.0.0/0' }] },
-          ],
-        },
-      ];
+      const sgList = ec2Data.security_groups || ec2Data.SecurityGroups || [];
       setSecurityGroups(sgList);
-      if (sgList.length > 0 && selectedSgs.length === 0) {
-        setSelectedSgs([sgList[0]]);
-      }
+      setSelectedSgs(previous => previous.length
+        ? sgList.filter((item: any) => (item.GroupId || item.id) === (previous[0].GroupId || previous[0].id))
+        : sgList.slice(0, 1));
     } catch (err) {
       console.error(err);
     } finally {
@@ -380,34 +366,16 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }]}>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Instances</Box>
-            <Box variant="h1" color="text-status-info">
-              {instances.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">VPCs</Box>
-            <Box variant="h1" color="text-status-info">
-              {vpcs.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Subnets</Box>
-            <Box variant="h1" color="text-status-info">
-              {subnets.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Security Groups</Box>
-            <Box variant="h1" color="text-status-info">
-              {securityGroups.length}
-            </Box>
-          </Box>
-        </Grid>
       </Container>
 
+      <Container header={<Header variant="h2">Resource summary</Header>}>
+        <KeyValuePairs columns={4} items={[
+          { label: 'Instances', value: instances.length },
+          { label: 'Running instances', value: instances.filter(instance => instance.State.Name === 'running').length },
+          { label: 'VPCs', value: vpcs.length },
+          { label: 'Security groups', value: securityGroups.length },
+        ]} />
+      </Container>
       {/* Main Tabs */}
       <Tabs
         activeTabId={selectedTabId}
@@ -424,7 +392,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                 <TextFilter
                   filteringText={instanceFilter}
                   filteringPlaceholder="Find instances by ID, name..."
-                  onChange={({ detail }) => setInstanceFilter(detail.filteringText)}
+                  onChange={({ detail }) => { setInstanceFilter(detail.filteringText); setSelectedInstances([]); }}
                 />
 
                 <Table
@@ -437,7 +405,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                     {
                       id: 'id',
                       header: 'Instance ID',
-                      cell: (item) => <code>{item.InstanceId}</code>,
+                      cell: (item) => <Button variant="inline-link" onClick={() => setSelectedInstances([item])}>{item.InstanceId}</Button>,
                       width: 200,
                     },
                     {
@@ -473,7 +441,9 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                   selectionType="single"
                   selectedItems={selectedInstances}
                   onSelectionChange={({ detail }) => setSelectedInstances(detail.selectedItems)}
-                  empty={<Box textAlign="center">No EC2 instances running.</Box>}
+                  loading={loading}
+                  loadingText="Loading instances"
+                  empty={<Box textAlign="center">{instanceFilter ? 'No instances match your filter.' : 'No instances found.'}</Box>}
                 />
 
                 {activeInstance && (
@@ -504,6 +474,8 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                       </Header>
                     }
                   >
+                    <Tabs activeTabId={instanceDetailTab} onChange={({ detail }) => setInstanceDetailTab(detail.activeTabId)} tabs={[
+                      { id: 'details', label: 'Details', content: (
                     <KeyValuePairs
                       columns={3}
                       items={[
@@ -512,11 +484,34 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                         { label: 'State', value: activeInstance.State.Name },
                         { label: 'Public IP', value: activeInstance.PublicIpAddress || 'None' },
                         { label: 'Private IP', value: activeInstance.PrivateIpAddress || 'None' },
-                        { label: 'VPC ID', value: activeInstance.VpcId || 'vpc-default' },
-                        { label: 'Subnet ID', value: activeInstance.SubnetId || 'subnet-default' },
+                        { label: 'VPC ID', value: activeInstance.VpcId || 'Unavailable' },
+                        { label: 'Subnet ID', value: activeInstance.SubnetId || 'Unavailable' },
                         { label: 'Key Pair Name', value: activeInstance.KeyName || 'None' },
                       ]}
                     />
+                      ) },
+                      { id: 'security', label: 'Security', content: <SpaceBetween size="m">
+                        <Header variant="h3">Attached security groups</Header>
+                        <Table items={activeInstance.SecurityGroups || []} columnDefinitions={[
+                          { id: 'id', header: 'Security group ID', cell: group => <Button variant="inline-link" onClick={() => {
+                            const match = securityGroups.find(item => (item.GroupId || item.id) === group.GroupId);
+                            setSelectedSgs(match ? [match] : []); setSelectedTabId('security_groups'); onTabChange?.('security_groups');
+                          }}>{group.GroupId}</Button> },
+                          { id: 'name', header: 'Name', cell: group => group.GroupName || '—' },
+                        ]} empty="No security groups reported for this instance." />
+                      </SpaceBetween> },
+                      { id: 'networking', label: 'Networking', content: (
+                    <div className="resource-flow" aria-label="Instance network path">
+                      <section><strong>VPC</strong><p>{activeInstance.VpcId || 'Unavailable'}</p></section><span aria-hidden="true">→</span>
+                      <section><strong>Subnet</strong><p>{activeInstance.SubnetId || 'Unavailable'}</p></section><span aria-hidden="true">→</span>
+                      <section><strong>Instance</strong><p>{activeInstance.InstanceId}</p><p>{activeInstance.SecurityGroups?.map(group => group.GroupId).join(', ') || 'No security groups reported'}</p></section>
+                    </div>
+                      ) },
+                      { id: 'tags', label: 'Tags', content: <Table items={activeInstance.Tags || []} columnDefinitions={[
+                        { id: 'Key', header: 'Key', cell: tag => tag.Key },
+                        { id: 'Value', header: 'Value', cell: tag => tag.Value },
+                      ]} empty="No tags reported for this instance." /> },
+                    ]} />
                   </Container>
                 )}
               </SpaceBetween>
@@ -527,6 +522,10 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
             id: 'vpcs',
             content: (
               <SpaceBetween size="l">
+                <Select ariaLabel="Network resource type" selectedOption={{ value: networkView, label: ({ vpcs: 'VPCs', subnets: 'Subnets', routes: 'Route tables', gateways: 'Gateways and endpoints' } as Record<string, string>)[networkView] }}
+                  options={[{ value: 'vpcs', label: 'VPCs' }, { value: 'subnets', label: 'Subnets' }, { value: 'routes', label: 'Route tables' }, { value: 'gateways', label: 'Gateways and endpoints' }]}
+                  onChange={({ detail }) => setNetworkView(detail.selectedOption.value!)} />
+                {networkView === 'vpcs' && <>
                 {/* VPCs */}
                 <Container
                   header={
@@ -560,6 +559,8 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                   />
                 </Container>
 
+                </>}
+                {networkView === 'subnets' && <>
                 {/* Subnets */}
                 <Container
                   header={
@@ -580,7 +581,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                       { id: 'id', header: 'Subnet ID', cell: (s: any) => <strong>{s.SubnetId || s.id}</strong> },
                       { id: 'vpc', header: 'VPC ID', cell: (s: any) => <code>{s.VpcId || s.vpc_id}</code> },
                       { id: 'cidr', header: 'IPv4 CIDR Block', cell: (s: any) => <code>{s.CidrBlock || s.cidr_block}</code> },
-                      { id: 'az', header: 'Availability Zone', cell: (s: any) => s.AvailabilityZone || 'us-east-1a' },
+                      { id: 'az', header: 'Availability Zone', cell: (s: any) => s.AvailabilityZone || s.availability_zone || 'Unavailable' },
                       {
                         id: 'action',
                         header: 'Action',
@@ -593,6 +594,8 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                   />
                 </Container>
 
+                </>}
+                {networkView === 'routes' && <>
                 {/* Route Tables */}
                 <Container
                   header={
@@ -613,6 +616,8 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                   />
                 </Container>
 
+                </>}
+                {networkView === 'gateways' && <>
                 {/* Internet Gateways & Endpoints Grid */}
                 <Grid gridDefinition={[{ colspan: 6 }, { colspan: 6 }]}>
                   <Container header={<Header variant="h3">Internet Gateways ({internetGateways.length})</Header>}>
@@ -639,6 +644,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                     />
                   </Container>
                 </Grid>
+                </>}
               </SpaceBetween>
             ),
           },

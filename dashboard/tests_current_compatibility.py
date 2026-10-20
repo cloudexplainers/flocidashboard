@@ -41,3 +41,18 @@ class CurrentCompatibilityTests(SimpleTestCase):
             'DescribeScalingProcessTypes',
         ))
         self.assertIn('AccessDenied', _autoscaling_optional(loader, set())['error'])
+
+
+class ConsoleDeepLinkTests(SimpleTestCase):
+    def test_every_registered_service_and_subpage_mounts_the_spa(self):
+        from .services import SERVICE_REGISTRY
+        for key in SERVICE_REGISTRY:
+            for suffix in ('', '/', '/overview'):
+                with self.subTest(service=key, suffix=suffix):
+                    response = self.client.get(f'/{key}{suffix}')
+                    self.assertEqual(response.status_code, 200)
+                    self.assertContains(response, 'id="root"')
+
+    def test_unregistered_paths_are_not_swallowed_by_spa(self):
+        self.assertEqual(self.client.get('/not-a-service/').status_code, 404)
+        self.assertEqual(self.client.get('/api/not-a-service/').status_code, 404)

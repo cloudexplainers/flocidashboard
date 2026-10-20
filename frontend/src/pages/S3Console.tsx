@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
@@ -800,9 +800,9 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange }) 
                         { label: 'Bucket ARN', value: `arn:aws:s3:::${activeBucket.Name}` },
                         { label: 'AWS Region', value: activeBucket.Region || 'us-east-1' },
                         { label: 'Creation Date', value: activeBucket.CreationDate },
-                        { label: 'Default Encryption', value: 'Server-Side Encryption with Amazon S3 Managed Keys (SSE-S3)' },
+                        { label: 'Default Encryption', value: 'Unavailable locally' },
                         { label: 'Bucket Versioning', value: versioningStatus },
-                        { label: 'Object Lock', value: 'Disabled' },
+                        { label: 'Object Lock', value: 'Unavailable locally' },
                       ]}
                     />
 

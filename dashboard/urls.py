@@ -1,4 +1,7 @@
-from django.urls import path
+import re
+
+from django.urls import path, re_path
+from .services import SERVICE_REGISTRY
 
 from . import acm_views, apigateway_views, appconfig_views, appsync_views, athena_views, autoscaling_views, backup_views, bedrockruntime_views, cloudformation_views, cloudfront_views, cloudmap_views, cloudtrail_views, cloudwatch_logs_views, codebuild_views, codedeploy_views, codepipeline_views, cognito_views, config_views, console_views, dynamodb_views, ec2_views, ecr_views, ecs_views, eks_views, elasticache_views, elasticbeanstalk_views, elasticloadbalancing_views, eventbridge_views, firehose_views, glue_views, iam_views, identity_views, inspector_views, iot_views, kafka_views, kinesis_views, kms_views, lambda_views, neptune_views, opensearch_views, pipes_views, rds_views, rdsdata_views, resource_graph_views, resourcegroupstagging_views, route53_views, s3_views, scheduler_views, secretsmanager_views, ses_views, settings_views, sns_views, sqs_views, ssm_views, stepfunctions_views, textract_views, transcribe_views, transfer_views, views
 
@@ -225,6 +228,7 @@ urlpatterns = [
     path('api/cognito/auth/revoke/', cognito_views.cognito_revoke_token, name='cognito-revoke-token'),
     path('api/costexplorer/', views.costexplorer, name='costexplorer'),
     path('api/cur/', views.cur, name='cur'),
+    path('api/cloudwatch/metric-statistics/', cloudwatch_logs_views.cloudwatch_metric_statistics, name='cloudwatch-metric-statistics'),
     path('api/cloudwatch/', views.cloudwatch, name='cloudwatch'),
     path('api/cloudwatch/log-streams/', cloudwatch_logs_views.cloudwatch_log_streams, name='cloudwatch-log-streams'),
     path('api/cloudwatch/log-events/', cloudwatch_logs_views.cloudwatch_log_events, name='cloudwatch-log-events'),
@@ -640,3 +644,7 @@ urlpatterns = [
     path('api/wafv2/', views.wafv2, name='wafv2'),
     path('api/resources/', views.resources, name='resources'),
 ]
+
+# Resolve service and utility deep links to the SPA without swallowing API/legacy routes.
+_spa_views = [*SERVICE_REGISTRY, 'home', 'topology', 'labs', 'inspector', 'settings', 'environment', 'activity', 'console', 'elbv2', 'elb']
+urlpatterns += [re_path(r'^(?:' + '|'.join(re.escape(key) for key in _spa_views) + r')(?:/.*)?$', views.cloudscape_app, name='console-deep-link')]

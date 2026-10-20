@@ -1,4 +1,6 @@
+import { ResourceInventory } from '../components/ResourceInventory';
 import React, { useState } from 'react';
+import ExpandableSection from '@cloudscape-design/components/expandable-section';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Button from '@cloudscape-design/components/button';
@@ -15,6 +17,7 @@ import Grid from '@cloudscape-design/components/grid';
 import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import SegmentedControl from '@cloudscape-design/components/segmented-control';
+import Select from '@cloudscape-design/components/select';
 import { ServiceAction, ServiceDefinition, ActionField } from '../types';
 import { executeServiceAction } from '../api/client';
 import { CodeSnippet } from '../components/CodeSnippet';
@@ -28,8 +31,11 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
   service,
   onNavigateLabs,
 }) => {
+  const [inventoryRevision, setInventoryRevision] = useState(0);
   const [filterText, setFilterText] = useState('');
   const [selectedKind, setSelectedKind] = useState<string>('all');
+  const [selectedAction, setSelectedAction] = useState('');
+  const [selectedResource, setSelectedResource] = useState<Record<string, any> | null>(null);
   const [formValues, setFormValues] = useState<Record<string, Record<string, any>>>({});
   const [fileValues, setFileValues] = useState<Record<string, Record<string, File>>>({});
   const [actionOutputs, setActionOutputs] = useState<Record<string, { status: 'success' | 'error'; data: any; elapsed: number }>>({});
@@ -38,7 +44,15 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
   // Destructive confirmation modal state
   const [pendingAction, setPendingAction] = useState<ServiceAction | null>(null);
 
-  const actions = service.actions || [];
+  const actions = (service.actions || []).map(action => ({
+    ...action,
+    fields: [
+      ...(action.path.match(/\{([^}]+)\}/g) || []).map(parameter => parameter.slice(1, -1))
+        .filter(name => !(action.fields || []).some(field => field.name === name))
+        .map(name => ({ name, label: name.replace(/_/g, ' '), required: true, field_type: 'string', help_text: 'Resource identifier for this operation' })),
+      ...(action.fields || []),
+    ],
+  }));
 
   const handleFieldChange = (actionName: string, fieldName: string, value: any) => {
     setFormValues((prev) => ({
@@ -103,6 +117,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
         },
       }));
       logActivity(action, actionForm, data);
+      setInventoryRevision(value => value + 1);
     } catch (err: any) {
       const elapsed = Math.round(performance.now() - start);
       setActionOutputs((prev) => ({
@@ -218,32 +233,25 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <Badge color="blue">{service.key.toUpperCase()}</Badge>
               <span>{service.title}</span>
-              <StatusIndicator type="success">Active (Mock Local)</StatusIndicator>
+              <StatusIndicator type="info">Local AWS workbench</StatusIndicator>
             </div>
           </Header>
         }
       >
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Available Operations</Box>
-            <Box variant="h1" color="text-status-info">
-              {actions.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Category</Box>
-            <Box variant="h2" color="text-status-info">
-              <Badge color="blue">{service.category || 'AWS Service'}</Badge>
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Console Maturity</Box>
-            <Box variant="h2" color="text-status-info">
-              <Badge color="green">{service.maturity.replace('_', ' ').toUpperCase()}</Badge>
-            </Box>
-          </Box>
-        </Grid>
+        <SpaceBetween direction="horizontal" size="s">
+          <Badge color="blue">{service.category || 'AWS Service'}</Badge>
+          <Box color="text-body-secondary">{actions.length} available operations</Box>
+        </SpaceBetween>
       </Container>
+
+      <ResourceInventory key={service.key} service={service} revision={inventoryRevision} onSelectResource={resource => {
+        setSelectedResource(resource || null);
+        setFormValues(previous => Object.fromEntries(actions.map(action => [action.name, {
+          ...(previous[action.name] || {}),
+          ...Object.fromEntries(action.fields.filter(field => selectedResource?.[field.name] != null).map(field => [field.name, ''])),
+          ...Object.fromEntries(action.fields.filter(field => resource?.[field.name] != null).map(field => [field.name, resource[field.name]])),
+        }])));
+      }} />
 
       {/* Operations Directory */}
       <Container
@@ -257,17 +265,18 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
         }
       >
         <SpaceBetween size="m">
+          {selectedResource && <StatusIndicator type="info">Selected resource: {String(selectedResource.name || selectedResource.Name || selectedResource.id || selectedResource.arn || selectedResource.ARN || 'Resource selected')}. Matching resource fields are filled in below.</StatusIndicator>}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ flex: 1, minWidth: '260px' }}>
               <TextFilter
                 filteringText={filterText}
                 filteringPlaceholder="Filter operations by name, path, description..."
-                onChange={({ detail }) => setFilterText(detail.filteringText)}
+                onChange={({ detail }) => { setFilterText(detail.filteringText); setSelectedAction(''); }}
               />
             </div>
             <SegmentedControl
               selectedId={selectedKind}
-              onChange={({ detail }) => setSelectedKind(detail.selectedId)}
+              onChange={({ detail }) => { setSelectedKind(detail.selectedId); setSelectedAction(''); }}
               options={[
                 { text: 'All Operations', id: 'all' },
                 { text: 'Create', id: 'create' },
@@ -278,6 +287,11 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
               ]}
             />
           </div>
+          <FormField label="Operation" description="Choose a task to open its form.">
+            <Select ariaLabel="Operation" selectedOption={selectedAction ? { value: selectedAction, label: actions.find(action => action.name === selectedAction)?.label } : null}
+              placeholder="Choose an operation" options={filteredActions.map(action => ({ value: action.name, label: action.label, description: action.description }))}
+              onChange={({ detail }) => setSelectedAction(detail.selectedOption.value!)} />
+          </FormField>
 
           {filteredActions.length === 0 ? (
             <Box textAlign="center" color="inherit" padding="l">
@@ -286,9 +300,10 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
             </Box>
           ) : (
             <SpaceBetween size="l">
-              {filteredActions.map((action) => {
+              {filteredActions.filter(action => action.name === selectedAction).map((action) => {
                 const output = actionOutputs[action.name];
                 const isRunning = runningActionName === action.name;
+                const missingRequired = action.fields.some(field => field.required && !String((formValues[action.name] || {})[field.name] ?? '').trim());
 
                 return (
                   <Container
@@ -313,20 +328,12 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
                     }
                   >
                     <SpaceBetween size="m">
-                      <div style={{ color: '#879596', fontSize: '12px' }}>
-                        <strong>API Route: </strong> <code>{action.path}</code>
-                      </div>
+                      <ExpandableSection headerText="API details"><code>{action.method} {action.path}</code></ExpandableSection>
 
                       {/* Fields Form */}
                       {action.fields && action.fields.length > 0 ? (
                         <Grid
-                          gridDefinition={
-                            action.fields.length === 1
-                              ? [{ colspan: 12 }]
-                              : action.fields.length === 2
-                              ? [{ colspan: 6 }, { colspan: 6 }]
-                              : [{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]
-                          }
+                          gridDefinition={action.fields.map(() => ({ colspan: { default: 12, s: action.fields.length === 1 ? 12 : 6 } }))}
                         >
                           {action.fields.map((f) => (
                             <FormField
@@ -350,6 +357,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
                           variant={action.safety === 'destructive' ? 'normal' : 'primary'}
                           iconName={action.safety === 'destructive' ? 'delete-marker' : 'caret-right-filled'}
                           loading={isRunning}
+                          disabled={missingRequired || Boolean(runningActionName && !isRunning)}
                           onClick={() => executeAction(action)}
                         >
                           Execute {action.label}
@@ -387,7 +395,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
                             </Header>
                           }
                         >
-                          <CodeSnippet language="json" code={JSON.stringify(output.data, null, 2)} />
+                          <ExpandableSection defaultExpanded={output.status === 'error'} headerText="Response details"><CodeSnippet language="json" code={JSON.stringify(output.data, null, 2)} /></ExpandableSection>
                         </Container>
                       )}
                     </SpaceBetween>

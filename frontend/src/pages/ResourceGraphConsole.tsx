@@ -9,7 +9,7 @@ import Grid from '@cloudscape-design/components/grid';
 import Box from '@cloudscape-design/components/box';
 import Badge from '@cloudscape-design/components/badge';
 import Tabs from '@cloudscape-design/components/tabs';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import { fetchResourceGraph } from '../api/client';
 
 interface GraphNode {
@@ -118,7 +118,7 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
         header={
           <Header
             variant="h1"
-            description="Interactive relationship topology discovered dynamically across your AWS environment."
+            description="Resource relationships for the EventBridge application-spine capstone. This view covers that scenario."
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button iconName="refresh" onClick={loadGraph} loading={loading}>
@@ -172,9 +172,9 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
       >
         <div
           style={{
-            background: '#0a101d',
+            background: '#f2f3f3',
             borderRadius: '8px',
-            border: '1px solid #232f3e',
+            border: '1px solid #b6bec9',
             padding: '24px',
             overflowX: 'auto',
             minHeight: '380px',
@@ -198,10 +198,10 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
                     display: 'flex',
                     flexDirection: 'column',
                     gap: '12px',
-                    background: 'rgba(35, 47, 62, 0.4)',
+                    background: '#ffffff',
                     padding: '12px',
                     borderRadius: '6px',
-                    border: '1px dashed #344258',
+                    border: '1px dashed #b6bec9',
                   }}
                 >
                   <div
@@ -213,7 +213,7 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
                       letterSpacing: '1px',
                       textAlign: 'center',
                       paddingBottom: '6px',
-                      borderBottom: '1px solid #232f3e',
+                      borderBottom: '1px solid #b6bec9',
                     }}
                   >
                     {layer}
@@ -222,18 +222,21 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
                   {layerNodes.map((node) => {
                     const isSelected = selectedNode?.id === node.id;
                     return (
-                      <div
+                      <button
+                        type="button"
+                        aria-pressed={isSelected}
                         key={node.id}
                         onClick={() => {
                           setSelectedNode(node);
                         }}
                         style={{
-                          background: isSelected ? '#162338' : '#0f1724',
+                          background: isSelected ? '#f1faff' : '#ffffff',
                           border: `2px solid ${isSelected ? '#0972d3' : getStatusColor(node.status)}`,
                           borderRadius: '6px',
                           padding: '10px',
                           cursor: 'pointer',
-                          boxShadow: isSelected ? '0 0 10px rgba(9, 114, 211, 0.4)' : 'none',
+                          textAlign: 'left',
+                          width: '100%',
                           transition: 'all 0.15s ease',
                         }}
                       >
@@ -244,7 +247,7 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
                               textTransform: 'uppercase',
                               fontWeight: 'bold',
                               color: getServiceColor(node.service),
-                              background: 'rgba(255,255,255,0.06)',
+                              background: '#f2f3f3',
                               padding: '2px 6px',
                               borderRadius: '3px',
                             }}
@@ -260,13 +263,13 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
                             }}
                           />
                         </div>
-                        <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#fbfbfb', wordBreak: 'break-word' }}>
+                        <div style={{ fontWeight: 'bold', fontSize: '12px', color: '#16191f', wordBreak: 'break-word' }}>
                           {node.name}
                         </div>
                         <div style={{ fontSize: '11px', color: '#879596', marginTop: '4px' }}>
                           {node.kind}
                         </div>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

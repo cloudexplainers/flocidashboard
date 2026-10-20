@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
-import Pagination from '@cloudscape-design/components/pagination';
 import Tabs from '@cloudscape-design/components/tabs';
 import Modal from '@cloudscape-design/components/modal';
 import FormField from '@cloudscape-design/components/form-field';
@@ -335,7 +334,6 @@ export const SNSConsole: React.FC = () => {
             onChange={({ detail }) => setFilterText(detail.filteringText)}
           />
         }
-        pagination={<Pagination currentPageIndex={1} pagesCount={1} />}
         empty={
           <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
             <SpaceBetween size="m">
@@ -466,8 +464,8 @@ export const SNSConsole: React.FC = () => {
                         { label: 'Display Name', value: activeTopic.DisplayName || activeTopic.TopicName },
                         { label: 'Subscriptions Confirmed', value: String(activeTopic.SubscriptionsConfirmed ?? 0) },
                         { label: 'Subscriptions Pending', value: String(activeTopic.SubscriptionsPending ?? 0) },
-                        { label: 'Encryption', value: 'Server-Side Encryption enabled (AWS KMS / Default)' },
-                        { label: 'Delivery Retry Policy', value: 'Default 3 retries with exponential backoff' },
+                        { label: 'Encryption', value: activeTopic.attributes?.KmsMasterKeyId || 'Unavailable locally' },
+                        { label: 'Delivery Retry Policy', value: 'Unavailable locally' },
                       ]}
                     />
                   </SpaceBetween>

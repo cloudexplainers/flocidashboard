@@ -1,7 +1,8 @@
+import { WorkflowGraph } from '../components/WorkflowGraph';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import FormField from '@cloudscape-design/components/form-field';
@@ -12,7 +13,6 @@ import Modal from '@cloudscape-design/components/modal';
 import Box from '@cloudscape-design/components/box';
 import Badge from '@cloudscape-design/components/badge';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
-import Grid from '@cloudscape-design/components/grid';
 import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import Tabs from '@cloudscape-design/components/tabs';
@@ -126,7 +126,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
 
   useEffect(() => {
     if (activeMachine) {
-      const def = activeMachine.definition || activeMachine.Definition || SAMPLE_ASL;
+      const def = activeMachine.definition || activeMachine.Definition || '';
       setEditDefDoc(typeof def === 'object' ? JSON.stringify(def, null, 2) : String(def));
     }
   }, [activeMachine?.Name || activeMachine?.name]);
@@ -203,6 +203,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
 
   const handleViewExecutionHistory = async (execArn: string) => {
     setSelectedExecArn(execArn);
+    setSelectedExecHistory([]);
     setLoadingHistory(true);
     setHistoryModalOpen(true);
     try {
@@ -267,7 +268,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
     Arn: m.stateMachineArn || m.arn || `arn:aws:states:us-east-1:000000000000:stateMachine:${m.name || m.Name}`,
     Type: m.type || m.Type || 'STANDARD',
     CreationDate: m.creationDate || m.CreationDate,
-    Definition: m.definition || SAMPLE_ASL,
+    Definition: m.definition || m.Definition || '',
   }));
 
   const filteredMachines = machinesList.filter((m: any) => {
@@ -275,11 +276,6 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
     return text.includes(filterText.toLowerCase());
   });
 
-  let parsedStates: string[] = [];
-  try {
-    const defObj = typeof activeMachine?.Definition === 'string' ? JSON.parse(activeMachine.Definition) : activeMachine?.Definition;
-    parsedStates = Object.keys(defObj?.States || {});
-  } catch (e) {}
 
   return (
     <SpaceBetween size="l">
@@ -311,7 +307,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
+        <div className="console-summary">
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">State Machines</Box>
             <Box variant="h1" color="text-status-info">
@@ -327,10 +323,10 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Workflow Engine</Box>
             <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">ASL Orchestrator Ready</StatusIndicator>
+              <span>{(data.executions || []).filter((execution: any) => execution.status === 'RUNNING').length} running executions</span>
             </Box>
           </Box>
-        </Grid>
+        </div>
       </Container>
 
       <Tabs
@@ -420,22 +416,8 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
                           label: 'Visual State Map',
                           id: 'visual',
                           content: (
-                            <Container header={<Header variant="h3">Workflow States Sequence</Header>}>
-                              <SpaceBetween direction="horizontal" size="s">
-                                {parsedStates.map((st, idx) => (
-                                  <React.Fragment key={st}>
-                                    <div style={{ padding: '12px', textAlign: 'center', border: '1px solid #414d5c', borderRadius: '8px', minWidth: '130px', background: '#0f1b2a' }}>
-                                      <Box variant="awsui-key-label">{`Step ${idx + 1}`}</Box>
-                                      <strong>{st}</strong>
-                                    </div>
-                                    {idx < parsedStates.length - 1 && (
-                                      <Box padding={{ top: 'm' }}>
-                                        <StatusIndicator type="in-progress">→</StatusIndicator>
-                                      </Box>
-                                    )}
-                                  </React.Fragment>
-                                ))}
-                              </SpaceBetween>
+                            <Container header={<Header variant="h3">Workflow transitions</Header>}>
+                              <WorkflowGraph key={activeMachineArn} definition={editDefDoc} />
                             </Container>
                           ),
                         },
@@ -641,6 +623,7 @@ export const StepFunctionsConsole: React.FC<StepFunctionsConsoleProps> = ({ acti
         header={`Execution History: ${selectedExecArn}`}
         size="large"
       >
+        <WorkflowGraph definition={editDefDoc} events={selectedExecHistory} />
         <Table
           columnDefinitions={[
             { id: 'id', header: 'Step ID', cell: (h: any) => h.id || h.Id, width: 80 },

@@ -1,7 +1,10 @@
+import { LogStreamExplorer } from '../components/LogStreamExplorer';
+import ExpandableSection from '@cloudscape-design/components/expandable-section';
+import { MetricExplorer } from '../components/MetricExplorer';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import FormField from '@cloudscape-design/components/form-field';
@@ -19,7 +22,6 @@ import {
   fetchInventory,
   executeServiceAction,
   fetchInspectorLogGroups,
-  fetchInspectorLogEvents,
   putCloudWatchMetricData,
   setCloudWatchAlarmState,
   deleteCloudWatchAlarms,
@@ -61,19 +63,13 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
   const [ingestValue, setIngestValue] = useState('42.5');
   const [ingestUnit, setIngestUnit] = useState({ label: 'Milliseconds', value: 'Milliseconds' });
   const [publishingMetric, setPublishingMetric] = useState(false);
-  const [metricsList, setMetricsList] = useState<any[]>([
-    { Namespace: 'AWS/EC2', MetricName: 'CPUUtilization' },
-    { Namespace: 'AWS/Lambda', MetricName: 'Invocations' },
-    { Namespace: 'AWS/Lambda', MetricName: 'Duration' },
-    { Namespace: 'AWS/SQS', MetricName: 'ApproximateNumberOfMessagesVisible' },
-  ]);
+  const [metricsList, setMetricsList] = useState<any[]>([]);
 
   // CloudWatch Logs
   const [logGroups, setLogGroups] = useState<any[]>([]);
   const [selectedLogGroup, setSelectedLogGroup] = useState<any>(null);
-  const [logEvents, setLogEvents] = useState<any[]>([]);
-  const [logFilter, setLogFilter] = useState('');
-  const [loadingLogs, setLoadingLogs] = useState(false);
+  const [logRevision, setLogRevision] = useState(0);
+  const [focusedMetric, setFocusedMetric] = useState<any>(null);
 
   // Retention Modal
   const [retentionModalOpen, setRetentionModalOpen] = useState(false);
@@ -90,6 +86,7 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
     try {
       const res = await fetchInventory('cloudwatch');
       setData(res || { metric_alarms: [] });
+      setMetricsList(res.metrics || []);
       const logsRes = await fetchInspectorLogGroups();
       setLogGroups(logsRes.log_groups || []);
       if (logsRes.log_groups?.length > 0 && !selectedLogGroup) {
@@ -105,25 +102,6 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
   useEffect(() => {
     loadData();
   }, []);
-
-  const loadLogs = async (groupName: string) => {
-    if (!groupName) return;
-    setLoadingLogs(true);
-    try {
-      const res = await fetchInspectorLogEvents(groupName);
-      setLogEvents(res.events || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingLogs(false);
-    }
-  };
-
-  useEffect(() => {
-    if (selectedLogGroup?.value) {
-      loadLogs(selectedLogGroup.value);
-    }
-  }, [selectedLogGroup]);
 
   const handleCreateAlarm = async () => {
     if (!alarmName.trim()) return;
@@ -225,7 +203,7 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
       setActionMessage({ type: 'success', text: `Log stream "${newStreamName.trim()}" created.` });
       setCreateStreamOpen(false);
       setNewStreamName('');
-      await loadLogs(selectedLogGroup.value);
+      setLogRevision(value => value + 1);
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'Failed to create log stream' });
     } finally {
@@ -233,23 +211,20 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
     }
   };
 
-  const alarmsList = (data.metric_alarms || []).map((a: any) => ({
+  const alarmsList = (data.metric_alarms || data.alarms || []).map((a: any) => ({
     ...a,
     AlarmName: a.AlarmName || a.alarm_name,
-    MetricName: a.MetricName || a.metric_name || 'CPUUtilization',
-    Namespace: a.Namespace || a.namespace || 'AWS/EC2',
-    StateValue: a.StateValue || a.state_value || 'OK',
-    Threshold: a.Threshold ?? a.threshold ?? 80,
+    MetricName: a.MetricName || a.metric_name || 'Unavailable',
+    Namespace: a.Namespace || a.namespace || 'Unavailable',
+    Dimensions: a.Dimensions || a.dimensions || [],
+    StateValue: a.StateValue || a.state_value || 'INSUFFICIENT_DATA',
+    Threshold: a.Threshold ?? a.threshold ?? 'Unavailable',
   }));
 
   const filteredAlarms = alarmsList.filter((a: any) => {
     const text = `${a.AlarmName} ${a.MetricName} ${a.Namespace}`.toLowerCase();
     return text.includes(filterText.toLowerCase());
   });
-
-  const filteredEvents = logEvents.filter((e: any) =>
-    (e.message || '').toLowerCase().includes(logFilter.toLowerCase())
-  );
 
   return (
     <SpaceBetween size="l">
@@ -282,7 +257,7 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
+        <div className="console-summary">
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Metric Alarms</Box>
             <Box variant="h1" color="text-status-info">
@@ -298,10 +273,10 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Metrics Engine</Box>
             <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">Telemetry Ready</StatusIndicator>
+              <span>{metricsList.length} metrics reported</span>
             </Box>
           </Box>
-        </Grid>
+        </div>
       </Container>
 
       {/* Main Tabs */}
@@ -350,7 +325,10 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
                       {
                         id: 'name',
                         header: 'Alarm Name',
-                        cell: (item) => <strong>{item.AlarmName}</strong>,
+                        cell: (item) => <Button variant="inline-link" onClick={() => {
+                          setFocusedMetric({ Namespace: item.Namespace, MetricName: item.MetricName, Dimensions: item.Dimensions || [] });
+                          setSelectedTabId('metrics'); onTabChange?.('metrics');
+                        }}>{item.AlarmName}</Button>,
                       },
                       {
                         id: 'state',
@@ -392,11 +370,12 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
             ),
           },
           {
-            label: 'Metrics Explorer & Ingestion',
+            label: 'Metrics',
             id: 'metrics',
             content: (
               <SpaceBetween size="l">
-                <Container header={<Header variant="h2">Publish Custom Metric Data</Header>}>
+                <MetricExplorer metrics={focusedMetric && !metricsList.some(metric => metric.Namespace === focusedMetric.Namespace && metric.MetricName === focusedMetric.MetricName && JSON.stringify(metric.Dimensions || []) === JSON.stringify(focusedMetric.Dimensions || [])) ? [...metricsList, focusedMetric] : metricsList} preferredMetric={focusedMetric} />
+                <ExpandableSection headerText="Publish Custom Metric Data">
                   <SpaceBetween size="m">
                     <Grid gridDefinition={[{ colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }]}>
                       <FormField label="Namespace">
@@ -425,17 +404,9 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
                       Publish Metric Data
                     </Button>
                   </SpaceBetween>
-                </Container>
+                </ExpandableSection>
 
-                <Container header={<Header variant="h2">Known Metrics Inventory</Header>}>
-                  <Table
-                    columnDefinitions={[
-                      { id: 'ns', header: 'Namespace', cell: (m) => <Badge color="blue">{m.Namespace}</Badge> },
-                      { id: 'metric', header: 'Metric Name', cell: (m) => <strong>{m.MetricName}</strong> },
-                    ]}
-                    items={metricsList}
-                  />
-                </Container>
+
               </SpaceBetween>
             ),
           },
@@ -450,8 +421,8 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
                     description="Real-time log events captured from Lambda functions and API requests."
                     actions={
                       <SpaceBetween direction="horizontal" size="xs">
-                        <Button onClick={() => setRetentionModalOpen(true)}>Retention Settings</Button>
-                        <Button variant="primary" iconName="add-plus" onClick={() => setCreateStreamOpen(true)}>
+                        <Button disabled={!selectedLogGroup?.value} onClick={() => setRetentionModalOpen(true)}>Retention Settings</Button>
+                        <Button disabled={!selectedLogGroup?.value} variant="primary" iconName="add-plus" onClick={() => setCreateStreamOpen(true)}>
                           Create Log Stream
                         </Button>
                       </SpaceBetween>
@@ -470,38 +441,7 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = ({ activeTab,
                     />
                   </FormField>
 
-                  <TextFilter
-                    filteringText={logFilter}
-                    filteringPlaceholder="Filter log messages..."
-                    onChange={({ detail }) => setLogFilter(detail.filteringText)}
-                  />
-
-                  <Table
-                    columnDefinitions={[
-                      {
-                        id: 'time',
-                        header: 'Timestamp',
-                        cell: (item) => (
-                          <span style={{ color: '#879596', fontSize: '11px', whiteSpace: 'nowrap' }}>
-                            {new Date(item.timestamp).toLocaleTimeString()}
-                          </span>
-                        ),
-                        width: 120,
-                      },
-                      {
-                        id: 'message',
-                        header: 'Log Message',
-                        cell: (item) => (
-                          <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#00e676' }}>
-                            {item.message}
-                          </div>
-                        ),
-                      },
-                    ]}
-                    items={filteredEvents}
-                    loading={loadingLogs}
-                    empty={<Box textAlign="center">No log events recorded for this group.</Box>}
-                  />
+                  {selectedLogGroup?.value && <LogStreamExplorer key={selectedLogGroup.value} groupName={selectedLogGroup.value} revision={logRevision} />}
                 </SpaceBetween>
               </Container>
             ),

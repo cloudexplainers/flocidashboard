@@ -1,7 +1,8 @@
+import { FunctionOverview, FunctionLogs } from '../components/FunctionOverview';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
@@ -119,16 +120,16 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
       const data = await fetchServiceInventory('lambda');
       const list = (data.functions || data.Functions || []).map((f: any) => ({
         FunctionName: f.FunctionName || f.name || 'my-function',
-        FunctionArn: f.FunctionArn || `arn:aws:lambda:us-east-1:000000000000:function:${f.FunctionName || 'my-function'}`,
-        Runtime: f.Runtime || 'python3.12',
-        Handler: f.Handler || 'index.handler',
-        CodeSize: f.CodeSize ?? 512,
-        Description: f.Description || 'Serverless compute function',
-        Timeout: f.Timeout ?? 30,
-        MemorySize: f.MemorySize ?? 128,
-        LastModified: f.LastModified || new Date().toISOString().split('T')[0],
-        Environment: f.Environment,
-        Layers: f.Layers || [],
+        FunctionArn: f.FunctionArn || f.arn || 'Unavailable',
+        Runtime: f.Runtime || f.runtime || 'python3.12',
+        Handler: f.Handler || f.handler || 'index.handler',
+        CodeSize: f.CodeSize ?? f.configuration?.CodeSize,
+        Description: f.Description || f.description || 'Serverless compute function',
+        Timeout: f.Timeout ?? f.timeout ?? 30,
+        MemorySize: f.MemorySize ?? f.memory_size ?? 128,
+        LastModified: f.LastModified || f.last_modified || 'Unavailable',
+        Environment: f.Environment || f.environment,
+        Layers: f.Layers || f.layers || [],
       }));
       setFunctions(list);
       if (list.length > 0 && selectedFunctions.length === 0) {
@@ -409,7 +410,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
           </Box>
         )}
 
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
+        <div className="console-summary">
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Total Functions</Box>
             <Box variant="h1" color="text-status-info">
@@ -428,7 +429,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
               <StatusIndicator type="success">Serverless Ready</StatusIndicator>
             </Box>
           </Box>
-        </Grid>
+        </div>
       </Container>
 
       <Container
@@ -497,6 +498,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
             </Header>
           }
         >
+          <FunctionOverview name={activeFunction.FunctionName} runtime={activeFunction.Runtime} triggers={triggers} onShowTriggers={() => { setSelectedTabId('triggers'); onTabChange?.('triggers'); }} />
           <Tabs
             activeTabId={selectedTabId}
             onChange={({ detail }) => {
@@ -522,7 +524,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
                           { label: 'Function ARN', value: activeFunction.FunctionArn },
                           { label: 'Runtime', value: activeFunction.Runtime },
                           { label: 'Handler', value: activeFunction.Handler },
-                          { label: 'Code Size', value: `${activeFunction.CodeSize || 512} Bytes` },
+                          { label: 'Code Size', value: activeFunction.CodeSize == null ? 'Unavailable' : `${activeFunction.CodeSize} Bytes` },
                         ]}
                       />
                     </Container>
@@ -535,6 +537,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
                   </SpaceBetween>
                 ),
               },
+              { label: 'Monitor', id: 'monitor', content: <FunctionLogs name={activeFunction.FunctionName} /> },
               {
                 label: `Environment Variables (${envVars.length})`,
                 id: 'env',

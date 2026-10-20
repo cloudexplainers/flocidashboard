@@ -1,3 +1,4 @@
+import { useSession } from './components/SessionContext';
 import React, { useState, useEffect } from 'react';
 import { TopNav } from './components/TopNav';
 import { ConsoleLayout } from './components/ConsoleLayout';
@@ -38,16 +39,16 @@ import { ResourceGraphConsole } from './pages/ResourceGraphConsole';
 import { GenericServiceWorkbench } from './pages/GenericServiceWorkbench';
 import { AwsServiceIcon } from './components/AwsServiceIcons';
 import { FavoritesBar } from './components/FavoritesBar';
-import { fetchIdentity, fetchServices } from './api/client';
+import { fetchServices } from './api/client';
 import { LAB_CURRICULUM } from './labCurriculum';
-import { IdentityInfo, ServiceDefinition } from './types';
+import { ServiceDefinition } from './types';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Button from '@cloudscape-design/components/button';
 
 function parseUrlPath(): { mainView: string; subTab?: string; fullView: string } {
-  const path = window.location.pathname.replace(/^\/app\/?/, '').replace(/^\//, '').replace(/\/$/, '');
+  const path = window.location.pathname.replace(/^\/app(?:\/|$)/, '').replace(/^\//, '').replace(/\/$/, '');
   const search = window.location.search;
   const fullView = path ? (search ? `${path}${search}` : path) : (search ? `home${search}` : 'home');
   if (!path || path === 'app' || path === 'home') return { mainView: 'home', fullView };
@@ -58,10 +59,10 @@ function parseUrlPath(): { mainView: string; subTab?: string; fullView: string }
 
 export const App: React.FC = () => {
   const initial = parseUrlPath();
-  const [identity, setIdentity] = useState<IdentityInfo | null>(null);
+  const { identity } = useSession();
   const [services, setServices] = useState<ServiceDefinition[]>([]);
   const [currentView, setCurrentView] = useState<string>(initial.mainView);
-  const [activeSubView, setActiveSubView] = useState<string>(window.location.pathname.replace(/^\//, '') || 'home');
+  const [activeSubView, setActiveSubView] = useState<string>(initial.fullView);
   const [activeTabOverride, setActiveTabOverride] = useState<Record<string, string>>(() => {
     if (initial.subTab) {
       return { [initial.mainView]: initial.subTab };
@@ -70,7 +71,6 @@ export const App: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchIdentity().then(setIdentity);
     fetchServices().then(setServices);
 
     const handlePopState = () => {
@@ -85,6 +85,13 @@ export const App: React.FC = () => {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  useEffect(() => {
+    if (activeSubView.split('/')[0] === currentView && activeSubView.includes('/')) {
+      const target = `/${activeSubView}`;
+      if (window.location.pathname + window.location.search !== target) window.history.pushState(null, '', target);
+    }
+  }, [activeSubView, currentView]);
 
   const navigateTo = (view: string) => {
     if (view === 'home' || !view) {
@@ -104,6 +111,12 @@ export const App: React.FC = () => {
     const main = parts[0] || 'home';
     const sub = parts[1];
 
+    try {
+      if (services.some(service => service.key === main)) {
+        const previous: string[] = JSON.parse(localStorage.getItem('floci_recent_services') || '[]');
+        localStorage.setItem('floci_recent_services', JSON.stringify([main, ...previous.filter(key => key !== main)].slice(0, 8)));
+      }
+    } catch { /* Storage may be unavailable. */ }
     setCurrentView(main);
     setActiveSubView(view);
     if (sub) {
@@ -159,9 +172,11 @@ export const App: React.FC = () => {
       ];
     }
     const svc = services.find((s) => s.key === currentView);
+    const sub = activeSubView.split('/')[1]?.split('?')[0];
     return [
       { text: 'AWS Management Console', href: 'home' },
       { text: svc ? svc.title : currentView.toUpperCase(), href: currentView },
+      ...(sub ? [{ text: sub.replace(/-/g, ' '), href: activeSubView }] : []),
     ];
   };
 
@@ -756,6 +771,7 @@ export const App: React.FC = () => {
         if (svc) {
           return (
             <GenericServiceWorkbench
+              key={svc.key}
               service={svc}
               onNavigateLabs={() => navigateTo('labs')}
             />

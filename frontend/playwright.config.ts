@@ -16,8 +16,8 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', testMatch: 'labs.spec.ts', use: { ...devices['Desktop Chrome'] } },
-    { name: 'live', testMatch: 'labs.live.spec.ts', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', testMatch: ['labs.spec.ts', 'dashboards.spec.ts'], use: { ...devices['Desktop Chrome'] } },
+    { name: 'live', testMatch: ['labs.live.spec.ts', 'dashboards.live.spec.ts'], use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
     command: `${python} ../manage.py migrate --noinput && ${python} ../manage.py runserver 127.0.0.1:18000 --noreload`,

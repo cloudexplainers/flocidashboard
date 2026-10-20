@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import FormField from '@cloudscape-design/components/form-field';
@@ -16,7 +16,6 @@ import Grid from '@cloudscape-design/components/grid';
 import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import Tabs from '@cloudscape-design/components/tabs';
-import Pagination from '@cloudscape-design/components/pagination';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import {
@@ -511,7 +510,6 @@ export const EventBridgeConsole: React.FC = () => {
                       />
                     </ColumnLayout>
                   }
-                  pagination={<Pagination currentPageIndex={1} pagesCount={1} />}
                   empty={
                     <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
                       <SpaceBetween size="m">

@@ -1,7 +1,8 @@
+import { CodeSnippet } from '../components/CodeSnippet';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
@@ -31,6 +32,7 @@ import {
 
 interface TableItem {
   TableName: string;
+  TableArn?: string;
   TableStatus: string;
   ItemCount?: number;
   TableSizeBytes?: number;
@@ -110,6 +112,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
       const data = await fetchServiceInventory('dynamodb');
       const list = (data.tables || data.TableNames || []).map((t: any) => ({
         TableName: typeof t === 'string' ? t : t.TableName || t.name,
+        TableArn: t.TableArn || t.arn,
         TableStatus: t.TableStatus || 'ACTIVE',
         ItemCount: t.ItemCount ?? 0,
         TableSizeBytes: t.TableSizeBytes ?? 0,
@@ -500,6 +503,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                       columnDefinitions={[
                         {
                           id: 'pk',
+                          sortingField: activeTable.PartitionKey || 'id',
                           header: `Partition Key (${activeTable.PartitionKey})`,
                           cell: (row) => <strong>{String(row[activeTable.PartitionKey || 'id'] ?? '—')}</strong>,
                         },
@@ -507,20 +511,16 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                           ? [
                               {
                                 id: 'sk',
+                                sortingField: activeTable.SortKey,
                                 header: `Sort Key (${activeTable.SortKey})`,
                                 cell: (row: any) => String(row[activeTable.SortKey!] ?? '—'),
                               },
                             ]
                           : []),
-                        {
-                          id: 'attributes',
-                          header: 'Attributes / Document Payload',
-                          cell: (row) => (
-                            <div style={{ fontFamily: 'monospace', fontSize: '11px', maxHeight: '60px', overflow: 'hidden' }}>
-                              {JSON.stringify(row)}
-                            </div>
-                          ),
-                        },
+                        ...[...new Set(tableItems.flatMap(row => Object.keys(row)))].filter(key => key !== activeTable.PartitionKey && key !== activeTable.SortKey).map(key => ({
+                          id: key, header: key,
+                          cell: (row: any) => <span style={{ overflowWrap: 'anywhere' }}>{row[key] == null ? '—' : typeof row[key] === 'object' ? JSON.stringify(row[key]) : String(row[key])}</span>,
+                        })),
                       ]}
                       items={tableItems}
                       loading={loadingItems}
@@ -529,6 +529,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                       onSelectionChange={({ detail }) => setSelectedItemRows(detail.selectedItems)}
                       empty={<Box textAlign="center">No items returned from scan.</Box>}
                     />
+                    {selectedItemRows[0] && <Container header={<Header variant="h3">Selected item document</Header>}><CodeSnippet language="json" code={JSON.stringify(selectedItemRows[0], null, 2)} /></Container>}
                   </SpaceBetween>
                 ),
               },
@@ -727,7 +728,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                   <KeyValuePairs
                     columns={3}
                     items={[
-                      { label: 'Table ARN', value: `arn:aws:dynamodb:us-east-1:000000000000:table/${activeTable.TableName}` },
+                      { label: 'Table ARN', value: activeTable.TableArn || 'Not reported' },
                       { label: 'Table Status', value: activeTable.TableStatus },
                       { label: 'Creation Date', value: activeTable.CreationDateTime },
                       { label: 'Partition Key', value: `${activeTable.PartitionKey} (HASH)` },

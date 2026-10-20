@@ -1,5 +1,6 @@
+import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import React, { useState, useEffect, useMemo } from 'react';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Header from '@cloudscape-design/components/header';
@@ -351,7 +352,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
         </Container>
         <Container>
           <Box variant="awsui-key-label">Running Tasks</Box>
-          <Box variant="awsui-value-large">{(data.tasks || []).length}</Box>
+          <Box variant="awsui-value-large">{(data.tasks || []).filter((task: any) => (task.lastStatus || task.last_status) === 'RUNNING').length}</Box>
         </Container>
         <Container>
           <Box variant="awsui-key-label">Task Definitions</Box>
@@ -359,6 +360,13 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange }
         </Container>
       </Grid>
 
+      {activeCluster && <Container data-testid="ecs-cluster-summary" header={<Header variant="h2">Cluster: {activeClusterName}</Header>}>
+        <KeyValuePairs columns={3} items={[
+          { label: 'Desired tasks', value: filteredServices.reduce((sum: number, service: any) => sum + Number(service.desiredCount ?? service.desired_count ?? 0), 0) },
+          { label: 'Running tasks', value: filteredServices.reduce((sum: number, service: any) => sum + Number(service.runningCount ?? service.running_count ?? 0), 0) },
+          { label: 'Pending tasks', value: filteredServices.reduce((sum: number, service: any) => sum + Number(service.pendingCount ?? service.pending_count ?? 0), 0) },
+        ]} />
+      </Container>}
       <Tabs
         activeTabId={activeTab || 'clusters'}
         onChange={({ detail }) => onTabChange && onTabChange(detail.activeTabId)}

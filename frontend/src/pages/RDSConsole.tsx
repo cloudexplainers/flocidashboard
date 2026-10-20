@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Button from '@cloudscape-design/components/button';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import TextFilter from '@cloudscape-design/components/text-filter';
-import Pagination from '@cloudscape-design/components/pagination';
 import Tabs from '@cloudscape-design/components/tabs';
 import Modal from '@cloudscape-design/components/modal';
 import FormField from '@cloudscape-design/components/form-field';
@@ -31,6 +30,7 @@ import {
 } from '../api/client';
 
 interface DBInstanceItem {
+  vpc_security_groups?: { VpcSecurityGroupId: string }[];
   name: string;
   arn?: string;
   engine: string;
@@ -477,7 +477,6 @@ export const RDSConsole: React.FC = () => {
                       onChange={({ detail }) => setFilterText(detail.filteringText)}
                     />
                   }
-                  pagination={<Pagination currentPageIndex={1} pagesCount={1} />}
                   empty={
                     <Box textAlign="center" color="inherit" padding={{ vertical: 'l' }}>
                       <SpaceBetween size="m">
@@ -526,8 +525,8 @@ export const RDSConsole: React.FC = () => {
                                   { label: 'Port', value: String(activeInstance.connect_port || 5432) },
                                   { label: 'Database Name', value: activeInstance.db_name || 'postgres' },
                                   { label: 'Master Username', value: activeInstance.master_username || 'postgres' },
-                                  { label: 'VPC Security Groups', value: 'default-rds-sg (active)' },
-                                  { label: 'Publicly Accessible', value: 'Yes (Localhost bound)' },
+                                  { label: 'VPC Security Groups', value: activeInstance.vpc_security_groups?.map((group: any) => group.VpcSecurityGroupId).join(', ') || 'Unavailable locally' },
+                                  { label: 'Publicly Accessible', value: 'Local endpoint; AWS public accessibility unavailable' },
                                 ]}
                               />
 

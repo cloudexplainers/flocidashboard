@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import Table from '@cloudscape-design/components/table';
+import Table from '../components/ResourceTable';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
 import Header from '@cloudscape-design/components/header';
@@ -19,6 +19,7 @@ import Link from '@cloudscape-design/components/link';
 import {
   fetchInventory,
   createAppSyncGraphQLApi,
+  runAppSyncGraphQL,
   deleteAppSyncGraphQLApi,
   createAppSyncSchema,
   createAppSyncApiKey,
@@ -268,20 +269,14 @@ type Post {
   };
 
   const handleRunGraphQLQuery = async () => {
-    if (!gqlQuery.trim()) return;
+    if (!gqlQuery.trim() || !activeApiId) return;
     setRunningGql(true);
     setGqlResponse(null);
     try {
-      // Simulate GraphQL Execution
-      const mockResult = {
-        data: {
-          listPosts: [
-            { id: 'post-001', title: 'Getting started with Floci Workbench', createdAt: new Date().toISOString() },
-            { id: 'post-002', title: 'Serverless GraphQL APIs with AppSync', createdAt: new Date().toISOString() },
-          ],
-        },
-      };
-      setGqlResponse(JSON.stringify(mockResult, null, 2));
+      const variables = JSON.parse(gqlVariables || '{}');
+      if (!variables || Array.isArray(variables) || typeof variables !== 'object') throw new Error('Query variables must be a JSON object');
+      const result = await runAppSyncGraphQL(activeApiId, gqlQuery, variables, activeApi?.api_keys?.[0]?.id);
+      setGqlResponse(JSON.stringify(result, null, 2));
     } catch (err: any) {
       setGqlResponse(JSON.stringify({ errors: [{ message: err.message || 'GraphQL Query execution failed' }] }, null, 2));
     } finally {
@@ -555,7 +550,8 @@ type Post {
                       width: 110,
                     },
                   ]}
-                  items={data.api_keys?.length > 0 ? data.api_keys : [{ id: 'da2-sample1234567890', description: 'Primary API Key', expires: '30 days' }]}
+                  items={activeApi?.api_keys || []}
+                  empty={<Box textAlign="center">No API keys reported for this API.</Box>}
                 />
               </Container>
             ),
@@ -570,7 +566,7 @@ type Post {
                     <Header
                       variant="h2"
                       actions={
-                        <Button variant="primary" loading={runningGql} iconName="play" onClick={handleRunGraphQLQuery}>
+                        <Button variant="primary" disabled={!activeApiId || !gqlQuery.trim()} loading={runningGql} iconName="play" onClick={handleRunGraphQLQuery}>
                           Execute Query
                         </Button>
                       }
