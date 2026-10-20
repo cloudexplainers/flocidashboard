@@ -1,5 +1,5 @@
 import { ECSResourcePage } from './ECSResourcePage';
-import { normalizeEcsInventory, parseEcsRoute, clusterPath, servicePath, taskPath } from './ecsResources';
+import { normalizeEcsInventory, parseEcsRoute, clusterPath, servicePath, taskPath, taskArn } from './ecsResources';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import React, { useState, useEffect, useMemo } from 'react';
 import Table from '../components/ResourceTable';
@@ -263,10 +263,11 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
     }
   };
 
-  const handleStopTask = async (taskArn: string) => {
-    if (!activeClusterName || !taskArn) return;
+  const handleStopTask = async (taskArn: string, cluster = activeClusterName) => {
+    const targetCluster = cluster || activeClusterName;
+    if (!targetCluster || !taskArn) return;
     try {
-      await stopEcsTask(activeClusterName, taskArn);
+      await stopEcsTask(targetCluster, taskArn);
       setActionMessage({ type: 'success', text: 'Task stop requested.' });
       await loadData();
     } catch (err: any) {
@@ -740,7 +741,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
         createService={() => setCreateServiceOpen(true)} runTask={() => setRunTaskOpen(true)}
         scale={service => { setScaleTargetService(service); setScaleDesiredCount(String(service.desiredCount ?? 0)); setScaleServiceOpen(true); }}
         deleteService={async service => { if (!confirm(`Delete ECS service "${service.serviceName}"?`)) return; try { await deleteEcsService(activeClusterName, service.serviceName); navigate(clusterPath(activeClusterName)); await loadData(); } catch (error: any) { setActionMessage({ type: 'error', text: error.message }); } }}
-        stopTask={task => handleStopTask(task.taskArn || task.task_arn)} deleteCluster={() => handleDeleteCluster(activeClusterName)} />}
+        stopTask={task => handleStopTask(taskArn(task), route.cluster || activeClusterName)} deleteCluster={() => handleDeleteCluster(route.cluster || activeClusterName)} />}
       {/* Create Cluster Modal */}
       <Modal
         visible={createClusterOpen}

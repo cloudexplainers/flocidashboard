@@ -1,6 +1,6 @@
 export const clusterName = (item: any): string => item.clusterName || item.cluster_name || item.name || '';
 export const serviceName = (item: any): string => item.serviceName || item.service_name || '';
-export const taskArn = (item: any): string => item.taskArn || item.task_arn || '';
+export const taskArn = (item: any): string => item.taskArn || item.task_arn || item.arn || '';
 export const taskId = (item: any): string => taskArn(item).split('/').pop() || '';
 export const clusterPath = (name: string) => `ecs/clusters/${encodeURIComponent(name)}`;
 export const servicePath = (cluster: string, service: string) => `${clusterPath(cluster)}/services/${encodeURIComponent(service)}`;
