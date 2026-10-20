@@ -1,9 +1,10 @@
 /// <reference types="node" />
+import { existsSync } from 'fs';
 import { execFileSync } from 'child_process';
 import { test, expect } from '@playwright/test';
 
-const python = process.env.E2E_PYTHON || '../.venv/bin/python';
-const flociEndpoint = process.env.E2E_FLOCI_ENDPOINT || 'http://localhost:4566';
+const python = process.env.E2E_PYTHON || (existsSync('../.venv/bin/python') ? '../.venv/bin/python' : 'python3');
+const flociEndpoint = process.env.E2E_FLOCI_ENDPOINT || process.env.FLOCI_AWS_ENDPOINT_URL || 'http://localhost:4566';
 
 // Run explicitly against a local Floci instance:
 // E2E_FLOCI_ENDPOINT=http://localhost:4566 npx playwright test dashboards.live.spec.ts --project=live
@@ -79,6 +80,7 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
   const serviceUrl = `${clusterUrl}/services/web`;
   try {
     await page.goto('/ecs/clusters');
+    page.on('dialog', dialog => dialog.accept());
     csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content') || '';
     await page.getByRole('button', { name: 'Create Cluster', exact: true }).first().click();
     await page.getByRole('dialog').getByLabel('Cluster Name', { exact: true }).fill(name);
@@ -146,19 +148,26 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
     await expect(page.getByRole('heading', { name: 'Service: web', exact: true })).toBeVisible();
     await page.goBack();
     await expect(page.getByRole('heading', { name: `Task: ${taskId}`, exact: true })).toBeVisible();
-    // Scale down first so the service does not replace stopped tasks.
-    await post('/api/ecs/services/update/', { cluster: name, service: 'web', desired_count: 0 });
     await page.getByRole('button', { name: 'Stop task', exact: true }).click();
     await expect(page.getByText('Task stop requested.', { exact: true })).toBeVisible();
+    // Scale down service so it does not replace stopped tasks.
+    await post('/api/ecs/services/update/', { cluster: name, service: 'web', desired_count: 0 });
     await page.reload();
     await expect(page.getByRole('heading', { name: `Task: ${taskId}`, exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Stop task', exact: true })).toBeDisabled();
     await page.goto(serviceUrl);
-    page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'Delete service', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${clusterUrl}$`));
     serviceCreated = false;
-    page.once('dialog', dialog => dialog.accept());
+    await expect.poll(async () => {
+      const inventory = await (await page.request.get('/api/ecs/')).json();
+      const cluster = inventory.clusters.find((item: any) => item.name === name);
+      const tasks = cluster?.tasks || [];
+      const runningTasks = tasks.filter((t: any) => t.lastStatus === 'RUNNING');
+      const services = cluster?.services || [];
+      const activeServices = services.filter((s: any) => s.status === 'ACTIVE');
+      return runningTasks.length === 0 && activeServices.length === 0;
+    }, { timeout: 30_000, intervals: [500, 1000] }).toBe(true);
     await page.getByRole('button', { name: 'Delete cluster', exact: true }).click();
     await expect(page).toHaveURL(/\/ecs\/clusters$/);
     clusterCreated = false;
@@ -523,7 +532,7 @@ test('Route 53 live zone and record creation, editing, reload, and cleanup', asy
     await expect(dialog).not.toBeVisible();
     await page.getByPlaceholder('Find records by name, value, or routing policy…').fill('app.dev');
     await expect(page.getByText(`app.dev.${name}.`, { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.locator('tr', { hasText: 'app.dev' }).getByRole('button', { name: /Edit/ }).click();
     dialog = page.getByRole('dialog');
     await dialog.getByLabel('Value', { exact: true }).fill('192.0.2.11');
     await dialog.getByRole('button', { name: 'Save Record', exact: true }).click();
