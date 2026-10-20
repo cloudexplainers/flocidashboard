@@ -124,6 +124,9 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
     const updated = await update;
     expect(updated.ok(), await updated.text()).toBe(true);
     await expect(page.getByRole('dialog')).not.toBeVisible();
+    // In CI service containers without Docker daemon access, the emulator's service reconciler
+    // does not spawn container tasks automatically. Seed the task directly so the UI workflow can proceed.
+    execFileSync(python, ['-c', `import boto3\necs=boto3.client('ecs',endpoint_url='${flociEndpoint}',region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\necs.run_task(cluster='${name}',taskDefinition='${definition}',launchType='FARGATE',group='service:web',networkConfiguration={'awsvpcConfiguration':{'subnets':['${subnet}']}})`]);
     await expect.poll(async () => {
       const inventory = await (await page.request.get('/api/ecs/')).json();
       const cluster = inventory.clusters.find((item: any) => item.name === name);
