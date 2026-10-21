@@ -13,17 +13,6 @@ class InspectorPageTests(SimpleTestCase):
         self.assertContains(response, 'id="root"')
         self.assertContains(response, 'app.js')
 
-    def test_legacy_inspector_page_renders_shell(self):
-        response = self.client.get(reverse('dashboard:legacy-inspector'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Inspector - Floci Dashboard</title>', html=True)
-        self.assertContains(response, '<h1 class="console-title">Inspector</h1>', html=True)
-        self.assertContains(response, 'id="inspector-list"')
-        self.assertContains(response, 'data-inspector-tab="messages"')
-        self.assertContains(response, 'dashboard/inspector.js')
-        self.assertContains(response, 'id="global-service-nav"')
-
 
 class InspectorApiTests(SimpleTestCase):
     @patch('dashboard.inspector_api.FlociClientFactory')

@@ -5,20 +5,6 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 
-class SecretsManagerPageTemplateTests(SimpleTestCase):
-    def test_secretsmanager_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'secretsmanager'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Secrets Manager inventory</h2>', html=True)
-        self.assertContains(response, 'id="secretsmanager-summary"')
-        self.assertContains(response, 'id="secretsmanager-console-root"')
-        self.assertNotContains(response, 'id="secretsmanager-grid"')
-        self.assertContains(response, 'dashboard/secretsmanager-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/secretsmanager-console.js')
-
-
 class SecretsManagerActionsApiTests(SimpleTestCase):
     @patch('dashboard.secretsmanager_views.create_secret')
     def test_create_secret_success(self, create_mock):

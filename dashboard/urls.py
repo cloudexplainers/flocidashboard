@@ -40,16 +40,6 @@ urlpatterns = [
     path('console/', views.cloudscape_app, name='console'),
     path('console', views.cloudscape_app),
 
-    # Legacy SSR pages & templates
-    path('legacy/environment/', views.environment, name='legacy-environment'),
-    path('legacy/activity/', views.activity, name='legacy-activity'),
-    path('legacy/console/', console_views.console_page, name='legacy-console'),
-    path('legacy/settings/', views.settings_page, name='legacy-settings'),
-    path('legacy/inspector/', inspector_views.inspector_page, name='legacy-inspector'),
-    path('legacy/labs/', views.labs_directory, name='labs-directory'),
-    path('services/', views.service_matrix, name='service-matrix'),
-    path('service/<slug:service_key>/', views.service_page, name='service-page'),
-    path('service/<slug:service_key>/labs/', views.service_labs, name='service-labs'),
     path('api/resource-graph/', resource_graph_views.graph_detail, name='resource-graph-detail'),
     path('api/labs/<slug:service_key>/<slug:lab_key>/status/', views.api_lab_status, name='lab-status'),
     path('api/labs/<slug:service_key>/<slug:lab_key>/steps/<slug:step_key>/run/', views.lab_step_run, name='lab-step-run'),

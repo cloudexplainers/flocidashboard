@@ -8,13 +8,6 @@ from .services import get_service
 
 
 class TranscribePageTemplateTests(SimpleTestCase):
-    def test_transcribe_page_embeds_console_and_keeps_inventory(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'transcribe'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Transcribe inventory</h2>', html=True)
-        self.assertContains(response, 'id="transcribe-console-root"')
-        self.assertNotContains(response, 'id="transcribe-grid"')
-        self.assertContains(response, 'dashboard/transcribe-console.js')
 
     def test_transcribe_registry_marks_service_interactive(self):
         service = get_service('transcribe')

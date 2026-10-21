@@ -5,19 +5,9 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 from .services import get_service
-from .stepfunctions_api import create_state_machine, describe_execution, start_execution, stop_execution
 
 
 class StepFunctionsPageTemplateTests(SimpleTestCase):
-    def test_stepfunctions_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'stepfunctions'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="stepfunctions-summary"')
-        self.assertContains(response, 'id="stepfunctions-console-root"')
-        self.assertContains(response, 'dashboard/stepfunctions-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/stepfunctions-console.js')
 
     def test_stepfunctions_registry_exposes_management_lifecycle(self):
         actions = {action.name for action in get_service('stepfunctions').actions}
@@ -165,7 +155,6 @@ class StepFunctionsApiTests(SimpleTestCase):
 class StepFunctionsConsoleContractTests(SimpleTestCase):
     @patch('dashboard.stepfunctions_api._stepfunctions_client')
     def test_history_continuation_token_reaches_sdk(self, client_mock):
-        from .stepfunctions_api import get_execution_history
         client_mock.return_value.get_execution_history.return_value = {'events': [{'id': 101}], 'nextToken': 'later'}
         arn = 'arn:aws:states:us-east-1:000000000000:execution:workflow:run'
         response = self.client.get(reverse('dashboard:stepfunctions-execution-history', kwargs={'execution_arn': arn}), {'next_token': 'page-two'})

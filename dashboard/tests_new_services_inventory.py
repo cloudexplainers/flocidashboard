@@ -14,33 +14,6 @@ def service_model(*operations):
 
 
 class NewServiceInventoryPageTests(SimpleTestCase):
-    def test_new_service_pages_render_inventory_shells(self):
-        cases = [
-            ('batch', 'AWS Batch', 'Compute environments, job queues, definitions, and jobs', False),
-            ('amazonmq', 'Amazon MQ', 'RabbitMQ-backed brokers, endpoints, and users', True),
-            ('docdb', 'DocumentDB', 'MongoDB-compatible clusters, instances, and connection endpoints', True),
-            ('emr', 'EMR', 'Clusters, instance groups, and steps', False),
-            ('memorydb', 'MemoryDB', 'Redis-compatible clusters, users, ACLs, and endpoints', True),
-            ('codepipeline', 'CodePipeline', 'Pipelines, stages, executions, webhooks, and action types', True),
-            ('s3vectors', 'S3 Vectors', 'Vector buckets, embeddings, and similarity search indexes', True),
-            ('iot', 'IoT Core', 'Things, device certificates, policies, and MQTT message routing', True),
-            ('rdsdata', 'RDS Data API', 'Serverless SQL statement and transaction calls', True),
-            ('wafv2', 'WAF v2', 'Web ACLs, rule groups, IP sets, and regex pattern sets', True),
-        ]
-
-        for key, title, eyebrow, has_console_root in cases:
-            with self.subTest(service=key):
-                response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': key}))
-
-                self.assertEqual(response.status_code, 200)
-                self.assertContains(response, f'<title>{title} - Floci Dashboard</title>', html=True)
-                self.assertContains(response, eyebrow)
-                self.assertContains(response, f'id="{key}-loaded-at"')
-                self.assertContains(response, f'id="{key}-summary"')
-                if has_console_root:
-                    self.assertContains(response, f'id="{key}-console-root"')
-                else:
-                    self.assertContains(response, f'id="{key}-grid"')
 
     def test_new_services_are_registered_with_correct_maturity(self):
         cases = [

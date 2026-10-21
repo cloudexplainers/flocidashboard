@@ -10,23 +10,20 @@ Floci Dashboard is a Django web application that interfaces with a local [Floci]
 
 ### Key Components
 
-- **Service Registry (`dashboard/services.py`)**: Canonical registry of all supported services, maturity stages (`interactive_workbench`, `read_only_inspector`, `inventory_only`), optional custom CSS/JS assets, and action metadata.
+- **Service Registry (`dashboard/services.py`)**: Canonical registry of all supported services, maturity stages (`interactive_workbench`, `read_only_inspector`, `inventory_only`), and action metadata.
 - **Service Inventory (`dashboard/aws.py`)**: Read-only inventory loaders and release-aware service summaries. Always return graceful empty/error shapes when Floci has no resources provisioned.
 - **Interactive Action Endpoints (`dashboard/actions.py` & `dashboard/*_views.py`)**: REST/JSON endpoints for mutating service resources with strict error normalization.
 - **Workflow Labs (`dashboard/labs/`)**: Curated multi-step AWS workflows with live-state verification and multi-SDK (AWS CLI, Python `boto3`, Terraform) code generation.
-- **Shared UI Shell (`dashboard/templates/dashboard/base.html` & `dashboard/static/dashboard/service-console.js`)**: AWS Cloudscape Design System integration, semantic status indicators (`.status-indicator`), key-value grids (`.cloudscape-kv-grid`), and toast notifications.
+- **Console UI (`frontend/src/`)**: React + TypeScript single-page app built with Cloudscape. `App.tsx` routes each service to a page in `pages/` (falling back to `GenericServiceWorkbench`), and `api/client.ts` wraps the JSON endpoints. Vite builds it into `dashboard/static/dashboard/dist/`, which Django serves through `dashboard/templates/dashboard/console_spa.html`.
 
 ---
 
 ## Adding a New Service Workbench
 
-1. **Register the Service**: Add an entry to `dashboard/services.py` with title, category, maturity, docs URL, and optional CSS/JS assets.
+1. **Register the Service**: Add an entry to `dashboard/services.py` with title, category, maturity, docs URL, and action metadata.
 2. **Implement Inventory Loading**: Add the inventory loader function to `dashboard/aws.py`.
-3. **Add Interactive Console (Optional)**:
-   - Create `dashboard/static/dashboard/<service>-console.js` and `dashboard/static/dashboard/<service>-console.css`.
-   - Use `window.ServiceConsole` helpers (`el`, `button`, `kvGrid`, `statusIndicator`, `toast`) for UI consistency.
-4. **Preserve Educational Context**: Add an `About Floci <Service>` educational accordion to `dashboard/templates/dashboard/service.html`.
-5. **Add Automated Tests**: Add test cases in `dashboard/tests_new_services_inventory.py` or a dedicated test module.
+3. **Add a Dedicated Console (Optional)**: Services render in `GenericServiceWorkbench` by default. For a dedicated page, add `frontend/src/pages/<Service>Console.tsx`, route it in `frontend/src/App.tsx`, and add its API calls to `frontend/src/api/client.ts`. Rebuild with `npm run build` in `frontend/`.
+4. **Add Automated Tests**: Add Django tests in `dashboard/tests_new_services_inventory.py` or a dedicated test module, and Playwright coverage in `frontend/e2e/dashboards.spec.ts`.
 
 ---
 

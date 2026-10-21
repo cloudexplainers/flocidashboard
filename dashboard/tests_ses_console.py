@@ -9,24 +9,12 @@ from .services import get_service
 
 
 class SESPageTemplateTests(SimpleTestCase):
-    def test_ses_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'ses'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>SES inventory</h2>', html=True)
-        self.assertContains(response, 'id="ses-summary"')
-        self.assertContains(response, 'id="ses-console-root"')
-        self.assertNotContains(response, 'id="ses-grid"')
-        self.assertContains(response, 'dashboard/ses-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/ses-console.js')
 
     def test_ses_registry_marks_service_interactive(self):
         service = get_service('ses')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/ses-console.js')
         self.assertTrue(any(action.name == 'verify_email_identity' for action in service.actions))
         self.assertTrue(any(action.name == 'send_email' for action in service.actions))
         self.assertTrue(any(action.name == 'create_template' for action in service.actions))

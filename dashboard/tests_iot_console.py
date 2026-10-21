@@ -8,13 +8,6 @@ from .services import get_service
 
 
 class IoTConsoleTests(SimpleTestCase):
-    def test_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'iot'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="iot-summary"')
-        self.assertContains(response, 'id="iot-console-root"')
-        self.assertContains(response, 'dashboard/iot-console.css')
-        self.assertContains(response, 'dashboard/iot-console.js')
 
     def test_iot_registry_actions(self):
         service = get_service('iot')
@@ -184,7 +177,7 @@ class IoTConsoleTests(SimpleTestCase):
         del_mock.assert_called_once_with('temp_rule')
 
     @patch('dashboard.iot_views.delete_thing_shadow')
-    def test_delete_thing_shadow_endpoint(self, del_shadow_mock):
+    def test_delete_thing_shadow_endpoint_with_delete_method(self, del_shadow_mock):
         del_shadow_mock.return_value = {'thing_name': 'sensor-01', 'deleted': True, 'payload': None}
 
         response = self.client.delete(
@@ -194,4 +187,3 @@ class IoTConsoleTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['deleted'])
         del_shadow_mock.assert_called_once_with('sensor-01', shadow_name=None)
-

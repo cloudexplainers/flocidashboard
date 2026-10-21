@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from django.test import SimpleTestCase
 from django.urls import reverse
@@ -8,32 +7,7 @@ from .eventbridge_api import test_event_pattern
 
 
 class EventBridgeFirstClassConsoleTests(SimpleTestCase):
-    def test_service_page_loads_first_class_console_assets(self):
-        response = self.client.get(
-            reverse('dashboard:service-page', kwargs={'service_key': 'eventbridge'}),
-        )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="eventbridge-breadcrumbs"')
-        self.assertContains(response, 'id="eventbridge-console-root"')
-        self.assertContains(response, 'dashboard/eventbridge-console.css')
-        self.assertContains(response, 'dashboard/eventbridge-console.js')
-
-    def test_console_exposes_resource_tabs_and_tester(self):
-        source = (
-            Path(__file__).resolve().parent
-            / 'static'
-            / 'dashboard'
-            / 'eventbridge-console.js'
-        ).read_text(encoding='utf-8')
-
-        for label in ('Event buses', 'Rules', 'Targets', 'Send events', 'Pattern Tester'):
-            self.assertIn(label, source)
-        self.assertIn("params.get('view')", source)
-        self.assertIn("params.get('bus')", source)
-        self.assertIn("params.get('rule')", source)
-        self.assertIn("params.get('target')", source)
-        self.assertIn('window.history.replaceState', source)
 
     def test_pattern_matching_engine(self):
         # Exact matching

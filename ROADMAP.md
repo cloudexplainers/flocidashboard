@@ -28,14 +28,11 @@ Recent service workbenches established the shared pattern for future service pag
 Core architecture files:
 
 - `Dockerfile`, `docker-compose.yml`, `.dockerignore`, and `.env.example`: Docker-first local runtime. The default developer path launches Floci and Django together, points the dashboard container at `http://floci:4566`, and keeps exposed host ports configurable.
-- `dashboard/services.py`: canonical service registry, maturity labels, optional assets, and action metadata.
+- `dashboard/services.py`: canonical service registry, maturity labels, and action metadata.
 - `dashboard/actions.py`: shared action metadata, JSON parsing, and normalized action errors.
-- `dashboard/templates/dashboard/service.html`: common service page shell.
-- `dashboard/console_views.py`, `dashboard/templates/dashboard/console.html`, and `dashboard/static/dashboard/console.js`: AWS-only CLI Console for local Floci commands, with endpoint injection, JSON parsing, browser-local history, and destructive-command confirmation.
-- `dashboard/templates/dashboard/activity.html` and `dashboard/static/dashboard/activity.js`: browser-local recent activity and replay/prefill surface for developer-initiated workbench actions.
-- `dashboard/static/dashboard/service-console.js`: shared frontend helpers for API calls, summary cards, read-only cards, toolbars, modals, formatting, recent activity storage, and lower-right toasts.
-- `dashboard/static/dashboard/console-theme.css`: AWS-adjacent compatibility layer that keeps existing per-service consoles aligned with the shared theme while deeper CSS cleanup happens incrementally.
-- Service-specific modules such as `s3_api.py`, `s3_views.py`, `s3-console.js`, and `s3-console.css`, `iam_api.py`, `iam_views.py`, `iam-console.js`, and `iam-console.css`, `ec2_api.py`, `ec2_views.py`, `ec2-console.js`, and `ec2-console.css`, `stepfunctions_api.py`, `stepfunctions_views.py`, `stepfunctions-console.js`, and `stepfunctions-console.css`, `eventbridge_api.py`, `eventbridge_views.py`, `eventbridge-console.js`, and `eventbridge-console.css`, or the equivalent files for SQS, SNS, Lambda, DynamoDB, CloudWatch Logs, API Gateway, AppSync, Kinesis, Secrets Manager, SSM Parameter Store, CloudFormation, Cognito, RDS, Auto Scaling, ELB v2, CloudFront, Cloud Map, CloudTrail, Route 53, ACM, ECS, ECR, EKS, ElastiCache, OpenSearch, Athena, Backup, Firehose, Glue, Kafka, Neptune, SES, Transfer Family, Textract, Transcribe, CodeDeploy, CodeBuild, Bedrock Runtime, AppConfig, Resource Groups Tagging, and newer read-only service pages such as Amazon MQ.
+- `frontend/src/`: React + Cloudscape console. `App.tsx` routes services to pages in `pages/` (with `GenericServiceWorkbench` as the fallback), and `api/client.ts` wraps the JSON endpoints. Vite builds into `dashboard/static/dashboard/dist/`, served by `dashboard/templates/dashboard/console_spa.html`.
+- `dashboard/console_views.py`: AWS-only CLI Console API for local Floci commands, with endpoint injection, JSON parsing, and destructive-command confirmation.
+- Service-specific backend modules such as `s3_api.py` and `s3_views.py`, `iam_api.py` and `iam_views.py`, with matching React pages such as `frontend/src/pages/S3Console.tsx`.
 
 ## Guiding Principles
 

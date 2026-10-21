@@ -34,12 +34,3 @@ class Floci1532CompatibilityTests(SimpleTestCase):
         )
         self.assertEqual(response.status_code, 200)
         revoke.assert_called_once_with('client', 'refresh', client_secret='secret')
-
-    def test_stepfunctions_page_documents_jsonata_assign(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'stepfunctions'}))
-        self.assertContains(response, 'JSONata')
-        self.assertContains(response, '<code>Assign</code>', html=True)
-
-    def test_environment_exposes_s3_auth_mode(self):
-        response = self.client.get(reverse('dashboard:legacy-environment'))
-        self.assertContains(response, 'id="environment-s3-auth"')

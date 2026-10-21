@@ -1,38 +1,9 @@
 import json
-from pathlib import Path
 from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
 from django.urls import reverse
-
-
-class CloudWatchPageTemplateTests(SimpleTestCase):
-    def test_cloudwatch_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'cloudwatch'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>CloudWatch inventory</h2>', html=True)
-        self.assertContains(response, 'id="cloudwatch-summary"')
-        self.assertContains(response, 'id="cloudwatch-console-root"')
-        self.assertNotContains(response, 'id="cloudwatch-grid"')
-        self.assertContains(response, 'dashboard/cloudwatch-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/cloudwatch-console.js')
-
-
-class CloudWatchStaticConsoleTests(SimpleTestCase):
-    def test_log_groups_and_streams_use_shared_collection_helper(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'cloudwatch-console.js'
-        source = script.read_text()
-
-        self.assertIn('consoleUi.renderCollection({', source)
-        self.assertIn("filterPlaceholder: 'Find log groups'", source)
-        self.assertIn('state.groupFilterText = value', source)
-        self.assertIn("emptyFilteredTitle: 'No log groups match this filter.'", source)
-        self.assertIn("filterPlaceholder: 'Find streams'", source)
-        self.assertIn('state.streamFilterText = value', source)
-        self.assertIn("emptyFilteredTitle: 'No streams match this filter.'", source)
 
 
 class CloudWatchLogsApiTests(SimpleTestCase):

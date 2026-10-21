@@ -53,19 +53,17 @@ The experience should feel like:
 6. Continue one command at a time until the workflow is complete.
 7. Reset the lab when done.
 
-The first route is:
+Labs live in the console at:
 
 ```text
-/service/iam/labs/
+/labs/
 ```
 
-The next service route is:
+Open a specific lab with its service and key, for example:
 
 ```text
-/service/s3/labs/
+/labs?service=iam&lab=create-user-alice
 ```
-
-Each service page links to its labs beside the service eyebrow.
 
 ## Current Proofs
 

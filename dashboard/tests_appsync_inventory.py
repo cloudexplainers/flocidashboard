@@ -11,23 +11,11 @@ from .services import get_service
 
 
 class AppSyncPageTests(SimpleTestCase):
-    def test_page_renders_appsync_inventory(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'appsync'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>AppSync inventory</h2>', html=True)
-        self.assertContains(response, 'id="appsync-console-root"')
-        self.assertNotContains(response, 'id="appsync-grid"')
-        self.assertContains(response, 'dashboard/appsync-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/appsync-console.js')
-        self.assertContains(response, 'Phase 4 VTL engine')
 
     def test_registry_marks_appsync_as_interactive(self):
         service = get_service('appsync')
 
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/appsync-console.js')
         self.assertTrue(any(action.name == 'create_graphql_api' for action in service.actions))
         self.assertTrue(any(action.name == 'start_schema_creation' for action in service.actions))
         self.assertTrue(any(action.name == 'delete_graphql_api' for action in service.actions))

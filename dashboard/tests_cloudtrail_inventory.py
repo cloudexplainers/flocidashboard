@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -9,29 +8,7 @@ from .services import get_service
 
 
 class CloudTrailInventoryTests(SimpleTestCase):
-    def test_cloudtrail_buttons_pass_callable_handlers(self):
-        source = (Path(__file__).resolve().parent / 'static' / 'dashboard' / 'cloudtrail-console.js').read_text()
-        self.assertNotIn(", 'cloudtrail');", source)
-        self.assertIn("button('Create trail', null, createModal)", source)
 
-    def test_cloudtrail_about_panel_uses_first_class_panel_styling(self):
-        source = (Path(__file__).resolve().parent / 'static' / 'dashboard' / 'cloudtrail-console.css').read_text()
-        self.assertIn('.cloudtrail-about-floci summary', source)
-        self.assertIn('border:1px solid var(--panel-border)', source)
-        self.assertIn('box-shadow:var(--shadow)', source)
-
-    def test_cloudtrail_service_page_renders_workbench(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'cloudtrail'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>CloudTrail - Floci Dashboard</title>', html=True)
-        self.assertContains(response, 'Audit trail configuration and persisted logging state')
-        self.assertContains(response, 'id="cloudtrail-loaded-at"')
-        self.assertContains(response, 'id="cloudtrail-summary"')
-        self.assertContains(response, 'id="cloudtrail-console-root"')
-        self.assertNotContains(response, 'id="cloudtrail-grid"')
-        self.assertContains(response, 'dashboard/cloudtrail-console.css')
-        self.assertContains(response, 'dashboard/cloudtrail-console.js')
 
     def test_cloudtrail_registry_marks_service_interactive(self):
         service = get_service('cloudtrail')

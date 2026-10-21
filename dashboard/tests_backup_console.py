@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class BackupPageTemplateTests(SimpleTestCase):
-    def test_backup_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'backup'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Backup inventory</h2>', html=True)
-        self.assertContains(response, 'id="backup-summary"')
-        self.assertContains(response, 'id="backup-console-root"')
-        self.assertNotContains(response, 'id="backup-grid"')
-        self.assertContains(response, 'dashboard/backup-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/backup-console.js')
 
     def test_backup_registry_marks_service_interactive(self):
         service = get_service('backup')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/backup-console.js')
         self.assertTrue(any(action.name == 'create_backup_vault' for action in service.actions))
         self.assertTrue(any(action.name == 'create_backup_plan' for action in service.actions))
         self.assertTrue(any(action.name == 'start_backup_job' for action in service.actions))

@@ -5,20 +5,6 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 
-class Route53PageTemplateTests(SimpleTestCase):
-    def test_route53_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'route53'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Route 53 inventory</h2>', html=True)
-        self.assertContains(response, 'id="route53-summary"')
-        self.assertContains(response, 'id="route53-console-root"')
-        self.assertNotContains(response, 'id="route53-grid"')
-        self.assertContains(response, 'dashboard/route53-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/route53-console.js')
-
-
 class Route53ApiTests(SimpleTestCase):
     @patch('dashboard.route53_views.create_hosted_zone')
     def test_create_hosted_zone_success(self, create_mock):

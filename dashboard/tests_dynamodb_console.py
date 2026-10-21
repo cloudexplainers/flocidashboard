@@ -7,20 +7,6 @@ from django.urls import reverse
 from .dynamodb_api import execute_select_statement
 
 
-class DynamoDBPageTemplateTests(SimpleTestCase):
-    def test_dynamodb_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'dynamodb'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>DynamoDB inventory</h2>', html=True)
-        self.assertContains(response, 'id="dynamodb-summary"')
-        self.assertContains(response, 'id="dynamodb-console-root"')
-        self.assertNotContains(response, 'id="dynamodb-grid"')
-        self.assertContains(response, 'dashboard/dynamodb-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/dynamodb-console.js')
-
-
 class DynamoDBApiTests(SimpleTestCase):
     @patch('dashboard.dynamodb_views.scan_table')
     def test_scan_table_success(self, scan_mock):

@@ -9,24 +9,12 @@ from .services import get_service
 
 
 class ECRPageTemplateTests(SimpleTestCase):
-    def test_ecr_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'ecr'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>ECR inventory</h2>', html=True)
-        self.assertContains(response, 'id="ecr-summary"')
-        self.assertContains(response, 'id="ecr-console-root"')
-        self.assertNotContains(response, 'id="ecr-grid"')
-        self.assertContains(response, 'dashboard/ecr-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/ecr-console.js')
 
     def test_ecr_registry_marks_service_interactive(self):
         service = get_service('ecr')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/ecr-console.js')
         self.assertTrue(any(action.name == 'create_repository' for action in service.actions))
         self.assertTrue(any(action.name == 'garbage_collection' for action in service.actions))
 
@@ -264,4 +252,3 @@ class ECRApiHelperTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['image_tag'], 'v1.0.0')
         mock_img.assert_called_once_with('my-app', image_tag='v1.0.0', image_digest=None, image_manifest=None)
-

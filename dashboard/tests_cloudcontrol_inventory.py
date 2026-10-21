@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -31,16 +30,6 @@ class FakeCloudControlClient:
 
 
 class CloudControlInventoryTests(SimpleTestCase):
-    def test_cloudcontrol_service_page_renders_inventory_shell(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'cloudcontrol'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Cloud Control - Floci Dashboard</title>', html=True)
-        self.assertContains(response, 'Unified resource discovery through Cloud Control API type names')
-        self.assertContains(response, 'id="cloudcontrol-loaded-at"')
-        self.assertContains(response, 'id="cloudcontrol-summary"')
-        self.assertContains(response, 'id="cloudcontrol-grid"')
-        self.assertContains(response, 'dashboard/service-console.js')
 
     def test_cloudcontrol_registry_marks_service_read_only(self):
         service = get_service('cloudcontrol')
@@ -48,17 +37,7 @@ class CloudControlInventoryTests(SimpleTestCase):
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'read_only_inspector')
         self.assertEqual(service.category, 'Management')
-        self.assertTrue(service.shared_console)
 
-    def test_cloudcontrol_resources_use_shared_collection_helper(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn('function renderCloudControlResources(resources = [])', source)
-        self.assertIn('window.ServiceConsole.renderCollection({', source)
-        self.assertIn("filterPlaceholder: 'Find resources'", source)
-        self.assertIn('cloudControlResourceFilterText = value', source)
-        self.assertIn("emptyFilteredTitle: 'No resources match this filter.'", source)
 
     @patch('dashboard.views.cloudcontrol_inventory')
     def test_cloudcontrol_api_returns_inventory(self, inventory):

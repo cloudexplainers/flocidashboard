@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
@@ -10,30 +9,11 @@ from .services import get_service
 
 
 class LambdaPageTemplateTests(SimpleTestCase):
-    def test_lambda_console_surfaces_failure_destinations_and_code_download(self):
-        source = (Path(__file__).resolve().parent / 'static' / 'dashboard' / 'lambda-console.js').read_text()
-        self.assertIn('mapping.DestinationConfig?.OnFailure?.Destination', source)
-        self.assertIn("codeLink.textContent = 'Download function package'", source)
 
-    def test_lambda_service_page_embeds_management_console_without_legacy_inventory(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'lambda'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="lambda-summary"')
-        self.assertContains(response, 'id="lambda-console-root"')
-        self.assertNotContains(response, 'id="lambda-grid"')
-        self.assertContains(response, 'dashboard/lambda-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/lambda-console.js')
 
     def test_lambda_registry_exposes_management_lifecycle(self):
         actions = {action.name for action in get_service('lambda').actions}
         self.assertTrue({'create_function', 'update_function_configuration', 'update_function_code', 'delete_function', 'publish_version', 'create_alias', 'create_event_source_mapping', 'create_function_url_config', 'put_function_concurrency', 'add_permission', 'tag_resource'} <= actions)
-
-    def test_lambda_console_exposes_first_class_management_panels(self):
-        source = (Path(__file__).resolve().parent / 'static' / 'dashboard' / 'lambda-console.js').read_text()
-        for label in ('Create function', 'Configuration', 'Versions and aliases', 'Triggers', 'Access and runtime controls', 'Test and invoke'):
-            self.assertIn(label, source)
 
 
 class LambdaFunctionsApiTests(SimpleTestCase):

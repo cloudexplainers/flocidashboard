@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class NeptunePageTemplateTests(SimpleTestCase):
-    def test_neptune_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'neptune'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Neptune inventory</h2>', html=True)
-        self.assertContains(response, 'id="neptune-summary"')
-        self.assertContains(response, 'id="neptune-console-root"')
-        self.assertNotContains(response, 'id="neptune-grid"')
-        self.assertContains(response, 'dashboard/neptune-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/neptune-console.js')
 
     def test_neptune_registry_marks_service_interactive(self):
         service = get_service('neptune')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/neptune-console.js')
         self.assertTrue(any(action.name == 'create_db_cluster' for action in service.actions))
         self.assertTrue(any(action.name == 'create_db_instance' for action in service.actions))
         self.assertTrue(any(action.name == 'delete_db_cluster' for action in service.actions))

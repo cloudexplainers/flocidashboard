@@ -10,19 +10,6 @@ from .services import get_service
 
 
 class CloudMapInventoryTests(SimpleTestCase):
-    def test_cloudmap_service_page_renders_inventory_shell(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'cloudmap'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Cloud Map - Floci Dashboard</title>', html=True)
-        self.assertContains(response, 'Service discovery namespaces, services, and instances')
-        self.assertContains(response, 'id="cloudmap-console-root"')
-        self.assertContains(response, 'id="cloudmap-loaded-at"')
-        self.assertContains(response, 'id="cloudmap-summary"')
-        self.assertNotContains(response, 'id="cloudmap-grid"')
-        self.assertContains(response, 'dashboard/cloudmap-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/cloudmap-console.js')
 
     def test_cloudmap_registry_marks_service_interactive(self):
         service = get_service('cloudmap')
@@ -31,7 +18,6 @@ class CloudMapInventoryTests(SimpleTestCase):
         self.assertEqual(service.maturity, 'interactive_workbench')
         self.assertEqual(service.api_path, None)
         self.assertEqual(service.docs_url, 'https://floci.io/floci/services/cloudmap/')
-        self.assertEqual(service.console_js, 'dashboard/cloudmap-console.js')
         self.assertTrue(any(action.name == 'create_namespace' for action in service.actions))
         self.assertTrue(any(action.name == 'register_instance' for action in service.actions))
         self.assertTrue(any(action.name == 'discover_instances' for action in service.actions))

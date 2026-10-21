@@ -64,20 +64,20 @@ def eventbridge_application_graph() -> dict[str, Any]:
         )
 
     nodes = [
-        _node('api', app.API_NAME, 'apigateway', 'HTTP API', 'entrypoint', bool(api_resource), f'/service/apigateway/?api=http:{api_id or ""}'),
-        _node('producer', app.PRODUCER_FUNCTION, 'lambda', 'Function', 'compute', producer_exists, f'/service/lambda/?function={app.PRODUCER_FUNCTION}'),
-        _node('producer-role', app.PRODUCER_ROLE, 'iam', 'Role', 'compute', producer_role_exists, f'/service/iam/?type=role&name={app.PRODUCER_ROLE}'),
-        _node('bus', app.BUS, 'eventbridge', 'Event bus', 'routing', bus_exists, f'/service/eventbridge/?bus={app.BUS}'),
+        _node('api', app.API_NAME, 'apigateway', 'HTTP API', 'entrypoint', bool(api_resource), f'/apigateway?api=http:{api_id or ""}'),
+        _node('producer', app.PRODUCER_FUNCTION, 'lambda', 'Function', 'compute', producer_exists, f'/lambda?function={app.PRODUCER_FUNCTION}'),
+        _node('producer-role', app.PRODUCER_ROLE, 'iam', 'Role', 'compute', producer_role_exists, f'/iam?type=role&name={app.PRODUCER_ROLE}'),
+        _node('bus', app.BUS, 'eventbridge', 'Event bus', 'routing', bus_exists, f'/eventbridge?bus={app.BUS}'),
     ]
-    nodes.extend(_node(f'rule:{name}', name, 'eventbridge', 'Rule', 'routing', bool(rules[name]), f'/service/eventbridge/?bus={app.BUS}&rule={name}', (rules[name] or {}).get('State', '')) for name in (app.PROCESSING_RULE, app.AUDIT_RULE, app.NOTIFICATION_RULE))
+    nodes.extend(_node(f'rule:{name}', name, 'eventbridge', 'Rule', 'routing', bool(rules[name]), f'/eventbridge?bus={app.BUS}&rule={name}', (rules[name] or {}).get('State', '')) for name in (app.PROCESSING_RULE, app.AUDIT_RULE, app.NOTIFICATION_RULE))
     nodes.extend([
-        _node('processing-queue', app.PROCESSING_QUEUE, 'sqs', 'Queue', 'target', queue_exists[app.PROCESSING_QUEUE], f'/service/sqs/?queue={app.PROCESSING_QUEUE}'),
-        _node('audit-queue', app.AUDIT_QUEUE, 'sqs', 'Queue', 'target', queue_exists[app.AUDIT_QUEUE], f'/service/sqs/?queue={app.AUDIT_QUEUE}'),
-        _node('notifier', app.NOTIFIER_FUNCTION, 'lambda', 'Function', 'target', notifier_exists, f'/service/lambda/?function={app.NOTIFIER_FUNCTION}'),
-        _node('notifier-role', app.NOTIFIER_ROLE, 'iam', 'Role', 'target', notifier_role_exists, f'/service/iam/?type=role&name={app.NOTIFIER_ROLE}'),
-        _node('dlq', app.DLQ, 'sqs', 'Dead-letter queue', 'target', queue_exists[app.DLQ], f'/service/sqs/?queue={app.DLQ}'),
-        _node('producer-logs', f'/aws/lambda/{app.PRODUCER_FUNCTION}', 'cloudwatch', 'Log group', 'observability', log_exists[app.PRODUCER_FUNCTION], f'/service/cloudwatch/?log_group=/aws/lambda/{app.PRODUCER_FUNCTION}'),
-        _node('notifier-logs', f'/aws/lambda/{app.NOTIFIER_FUNCTION}', 'cloudwatch', 'Log group', 'observability', log_exists[app.NOTIFIER_FUNCTION], f'/service/cloudwatch/?log_group=/aws/lambda/{app.NOTIFIER_FUNCTION}'),
+        _node('processing-queue', app.PROCESSING_QUEUE, 'sqs', 'Queue', 'target', queue_exists[app.PROCESSING_QUEUE], f'/sqs?queue={app.PROCESSING_QUEUE}'),
+        _node('audit-queue', app.AUDIT_QUEUE, 'sqs', 'Queue', 'target', queue_exists[app.AUDIT_QUEUE], f'/sqs?queue={app.AUDIT_QUEUE}'),
+        _node('notifier', app.NOTIFIER_FUNCTION, 'lambda', 'Function', 'target', notifier_exists, f'/lambda?function={app.NOTIFIER_FUNCTION}'),
+        _node('notifier-role', app.NOTIFIER_ROLE, 'iam', 'Role', 'target', notifier_role_exists, f'/iam?type=role&name={app.NOTIFIER_ROLE}'),
+        _node('dlq', app.DLQ, 'sqs', 'Dead-letter queue', 'target', queue_exists[app.DLQ], f'/sqs?queue={app.DLQ}'),
+        _node('producer-logs', f'/aws/lambda/{app.PRODUCER_FUNCTION}', 'cloudwatch', 'Log group', 'observability', log_exists[app.PRODUCER_FUNCTION], f'/cloudwatch?log_group=/aws/lambda/{app.PRODUCER_FUNCTION}'),
+        _node('notifier-logs', f'/aws/lambda/{app.NOTIFIER_FUNCTION}', 'cloudwatch', 'Log group', 'observability', log_exists[app.NOTIFIER_FUNCTION], f'/cloudwatch?log_group=/aws/lambda/{app.NOTIFIER_FUNCTION}'),
     ])
     states = {node['id']: node['status'] for node in nodes}
     def health(*ids: str) -> str:

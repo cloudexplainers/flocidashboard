@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class ElastiCachePageTemplateTests(SimpleTestCase):
-    def test_elasticache_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'elasticache'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>ElastiCache inventory</h2>', html=True)
-        self.assertContains(response, 'id="elasticache-summary"')
-        self.assertContains(response, 'id="elasticache-console-root"')
-        self.assertNotContains(response, 'id="elasticache-grid"')
-        self.assertContains(response, 'dashboard/elasticache-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/elasticache-console.js')
 
     def test_elasticache_registry_marks_service_interactive(self):
         service = get_service('elasticache')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/elasticache-console.js')
         self.assertTrue(any(action.name == 'create_replication_group' for action in service.actions))
         self.assertTrue(any(action.name == 'delete_replication_group' for action in service.actions))
         self.assertTrue(any(action.name == 'validate_iam_auth_token' for action in service.actions))

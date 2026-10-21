@@ -10,24 +10,12 @@ from .services import get_service
 
 
 class EKSPageTemplateTests(SimpleTestCase):
-    def test_eks_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'eks'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>EKS inventory</h2>', html=True)
-        self.assertContains(response, 'id="eks-summary"')
-        self.assertContains(response, 'id="eks-console-root"')
-        self.assertNotContains(response, 'id="eks-grid"')
-        self.assertContains(response, 'dashboard/eks-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/eks-console.js')
 
     def test_eks_registry_marks_service_interactive(self):
         service = get_service('eks')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/eks-console.js')
         self.assertTrue(any(action.name == 'create_cluster' for action in service.actions))
         self.assertTrue(any(action.name == 'delete_cluster' for action in service.actions))
         self.assertTrue(any(action.name == 'create_nodegroup' for action in service.actions))
@@ -292,7 +280,6 @@ class EKSApiHelperTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('aws_cli_command', response.json())
         kube_mock.assert_called_once_with('local', region='us-east-1')
-
 
 
 class EKSInventoryCapabilityTests(SimpleTestCase):

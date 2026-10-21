@@ -10,7 +10,6 @@ import time
 from urllib.parse import urlparse
 
 from django.http import JsonResponse
-from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from .actions import parse_json_body
@@ -31,11 +30,6 @@ DESTRUCTIVE_PREFIXES = (
 )
 DESTRUCTIVE_COMMANDS = {'delete', 'remove', 'purge', 'terminate', 'rm', 'rb'}
 OUTPUT_LIMIT = 100_000
-
-
-def console_page(request):
-    return render(request, 'dashboard/console.html')
-
 
 def _is_local_endpoint(url: str) -> bool:
     parsed = urlparse(url)

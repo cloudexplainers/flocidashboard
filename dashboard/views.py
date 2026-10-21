@@ -1,13 +1,12 @@
 import contextvars
+import json
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from hashlib import sha256
-from pathlib import Path
 from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 from botocore.parsers import ResponseParserError
-from django.conf import settings
 from django.core.cache import cache
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
@@ -15,10 +14,10 @@ from django.urls import reverse
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_POST
 from .aws import FlociClientFactory, acm_inventory, amazonmq_inventory, apigateway_inventory, appconfig_inventory, appsync_inventory, athena_inventory, autoscaling_inventory, backup_inventory, batch_inventory, bcmdataexports_inventory, bedrockruntime_inventory, cloudcontrol_inventory, cloudformation_inventory, cloudfront_inventory, cloudmap_inventory, cloudtrail_inventory, cloudwatch_inventory, codebuild_inventory, codepipeline_inventory, codedeploy_inventory, config_inventory, cognito_inventory, costexplorer_inventory, cur_inventory, docdb_inventory, dynamodb_inventory, ec2_inventory, ecr_inventory, ecs_inventory, eks_inventory, elasticache_inventory, elasticbeanstalk_inventory, elasticloadbalancing_inventory, emr_inventory, eventbridge_inventory, firehose_inventory, glue_inventory, iam_inventory, iot_inventory, kafka_inventory, kinesis_inventory, kms_inventory, lambda_inventory, list_resources, memorydb_inventory, neptune_inventory, opensearch_inventory, pipes_inventory, pricing_inventory, rds_inventory, rdsdata_inventory, resourcegroupstagging_inventory, route53_inventory, s3_inventory, s3vectors_inventory, scheduler_inventory, secretsmanager_inventory, ses_inventory, sns_inventory, sqs_inventory, ssm_inventory, stepfunctions_inventory, textract_inventory, transcribe_inventory, transfer_inventory, wafv2_inventory
-from .labs import get_lab, lab_status, labs_for_service, next_lab_batch, reset_lab, run_lab_step
+from .labs import get_lab, lab_status, next_lab_batch, reset_lab, run_lab_step
 from .labs.registry import all_labs
 from .labs.snippets import get_step_snippets
-from .services import SERVICES, SERVICE_PAGES, get_service, services_payload
+from .services import get_service, services_payload
 
 
 SERVICE_ALIASES = {
@@ -31,70 +30,6 @@ SERVICE_ALIASES = {
     'states': 'stepfunctions',
 }
 
-HOME_SERVICE_ORDER = (
-    'iam',
-    's3',
-    'ec2',
-    'elasticloadbalancing',
-    'elasticbeanstalk',
-    'route53',
-    'cloudwatch',
-    'rds',
-    'docdb',
-    'memorydb',
-    'dynamodb',
-    'lambda',
-    'autoscaling',
-    'sqs',
-    'sns',
-    'cloudfront',
-    'cloudmap',
-    'cloudtrail',
-    'cloudcontrol',
-    'kms',
-    'cloudformation',
-    'apigateway',
-    'ssm',
-    'cognito',
-    'ecs',
-    'config',
-    'elasticache',
-    'secretsmanager',
-    'acm',
-    'athena',
-    'eventbridge',
-    'eks',
-    'costexplorer',
-    'backup',
-    'ecr',
-    'glue',
-    'kinesis',
-    'stepfunctions',
-    'codedeploy',
-    'codebuild',
-    'codepipeline',
-    'opensearch',
-    'cur',
-    'firehose',
-    'ses',
-    'transfer',
-    'textract',
-    'transcribe',
-    'bedrockruntime',
-    'kafka',
-    'resourcegroupstagging',
-    'appconfig',
-    'amazonmq',
-    'scheduler',
-    'pipes',
-    'neptune',
-    'pricing',
-    'bcmdataexports',
-    's3vectors',
-    'iot',
-)
-
-HOME_SERVICE_RANK = {key: index for index, key in enumerate(HOME_SERVICE_ORDER)}
 LABS_PROGRESS_CACHE_KEY = 'dashboard:labs-progress'
 LABS_PROGRESS_CACHE_SECONDS = 15
 LABS_PROGRESS_WORKERS = 8
@@ -113,23 +48,6 @@ def selected_service_keys(request) -> Optional[set[str]]:
                 keys.add(key)
     return keys
 
-
-def index(request):
-    return render(request, 'dashboard/index.html')
-
-
-def environment(request):
-    return render(request, 'dashboard/environment.html')
-
-
-def activity(request):
-    return render(request, 'dashboard/activity.html')
-
-
-def settings_page(request):
-    return render(request, 'dashboard/settings.html')
-
-
 def _next_batch_context(service_key, lab_key, complete):
     if not complete:
         return None
@@ -139,7 +57,7 @@ def _next_batch_context(service_key, lab_key, complete):
     if batch.get('service') and batch.get('lab'):
         batch = {
             **batch,
-            'href': f'{reverse("dashboard:service-labs", kwargs={"service_key": batch["service"]})}?lab={batch["lab"]}',
+            'href': f'{reverse("dashboard:labs")}?service={batch["service"]}&lab={batch["lab"]}',
         }
     return batch
 
@@ -233,52 +151,6 @@ def _labs_progress_cache_key() -> str:
     digest = sha256(context.encode('utf-8')).hexdigest()
     return f'{LABS_PROGRESS_CACHE_KEY}:{digest}'
 
-
-def labs_directory(request):
-    rows = []
-    total_labs = 0
-    total_steps = 0
-
-    for definition in sorted(
-        SERVICES,
-        key=lambda service_definition: (
-            HOME_SERVICE_RANK.get(service_definition.key, len(HOME_SERVICE_RANK)),
-            service_definition.title,
-        ),
-    ):
-        service_labs = labs_for_service(definition.key)
-        if not service_labs:
-            continue
-        lab_count = len(service_labs)
-        step_count = sum(len(lab.get('steps', [])) for lab in service_labs)
-        enriched_labs = [
-            {
-                **lab,
-                'step_count': len(lab.get('steps', [])),
-            }
-            for lab in service_labs
-        ]
-        total_labs += lab_count
-        total_steps += step_count
-        rows.append({
-            **definition.as_dict(),
-            'lab_count': lab_count,
-            'step_count': step_count,
-            'labs': enriched_labs,
-        })
-
-    return render(
-        request,
-        'dashboard/labs_directory.html',
-        {
-            'services': rows,
-            'service_count': len(rows),
-            'lab_count': total_labs,
-            'step_count': total_steps,
-        },
-    )
-
-
 def labs_progress(request):
     cache_key = _labs_progress_cache_key()
     snapshot = cache.get(cache_key)
@@ -353,140 +225,6 @@ def labs_catalog(request):
             for lab in labs
         ],
     })
-
-
-def service_matrix(request):
-    rows = []
-    maturity_counts: dict[str, int] = {}
-    interactive_count = 0
-
-    for definition in sorted(
-        SERVICES,
-        key=lambda service_definition: (
-            HOME_SERVICE_RANK.get(service_definition.key, len(HOME_SERVICE_RANK)),
-            service_definition.title,
-        ),
-    ):
-        service_data = definition.as_dict()
-        action_count = len(definition.actions)
-        maturity = service_data['maturity']
-        maturity_counts[maturity] = maturity_counts.get(maturity, 0) + 1
-        if definition.shared_console or action_count:
-            interactive_count += 1
-
-        rows.append({
-            **service_data,
-            'action_count': action_count,
-            'maturity_label': maturity.replace('_', ' ').title(),
-            'shared_console_label': 'Yes' if definition.shared_console else 'No',
-            'tutorial_label': 'Yes' if definition.tutorial_available else 'No',
-            'tags_label': ', '.join(service_data['tags']) or 'None',
-        })
-
-    context = {
-        'interactive_count': interactive_count,
-        'maturity_counts': [
-            {
-                'key': key,
-                'label': key.replace('_', ' ').title(),
-                'count': count,
-            }
-            for key, count in sorted(maturity_counts.items())
-        ],
-        'services': rows,
-        'service_count': len(rows),
-    }
-    return render(request, 'dashboard/service_matrix.html', context)
-
-
-def service_page(request, service_key: str):
-    service_definition = get_service(service_key)
-    if not service_definition:
-        raise Http404('Service page not found')
-
-    context = service_definition.page_context()
-    static_assets = [
-        asset
-        for asset in [context.get('console_css'), context.get('console_js'), 'dashboard/service-console.js']
-        if asset and (asset != 'dashboard/service-console.js' or context.get('shared_console'))
-    ]
-    asset_versions = []
-    for asset in static_assets:
-        asset_path = Path(settings.BASE_DIR) / 'dashboard' / 'static' / asset
-        try:
-            asset_versions.append(str(asset_path.stat().st_mtime_ns))
-        except OSError:
-            continue
-    context['asset_version'] = '-'.join(asset_versions) or 'dev'
-    context['has_labs'] = bool(labs_for_service(service_key))
-
-    return render(request, 'dashboard/service.html', {'service': context})
-
-
-def service_labs(request, service_key: str):
-    service_definition = get_service(service_key)
-    if not service_definition:
-        raise Http404('Service page not found')
-
-    labs = labs_for_service(service_key)
-    if not labs:
-        raise Http404('Labs not found')
-    requested_lab_key = request.GET.get('lab')
-    active_lab = next(
-        (lab for lab in labs if lab.get('key') == requested_lab_key),
-        labs[0],
-    )
-    lab_status_error = None
-    try:
-        status = lab_status(service_key, active_lab['key'])
-    except (BotoCoreError, ClientError, ValueError) as exc:
-        lab_status_error = str(exc)
-        status = {'complete': False, 'steps': {}}
-    next_batch = _next_batch_context(
-        service_key,
-        active_lab['key'],
-        status.get('complete'),
-    )
-    step_statuses = status.get('steps', {})
-    active_lab = {
-        **active_lab,
-        'steps': [
-            {
-                **step,
-                'status': step_statuses.get(step.get('key'), {}),
-                'snippets': get_step_snippets(step, service_key),
-            }
-            for step in active_lab.get('steps', [])
-        ],
-    }
-
-    enriched_labs = []
-    for lab in labs:
-        lab_data = {**lab}
-        if lab.get('key') == active_lab.get('key'):
-            lab_data['complete'] = bool(status.get('complete'))
-        else:
-            try:
-                other_status = lab_status(service_key, lab['key'])
-                lab_data['complete'] = bool(other_status.get('complete'))
-            except Exception:
-                lab_data['complete'] = False
-        enriched_labs.append(lab_data)
-
-    return render(
-        request,
-        'dashboard/labs.html',
-        {
-            'service': service_definition.as_dict(),
-            'labs': enriched_labs,
-            'active_lab': active_lab,
-            'lab_status': status,
-            'lab_status_error': lab_status_error,
-            'lab_complete': status.get('complete'),
-            'next_batch': next_batch,
-        },
-    )
-
 
 @require_POST
 def lab_step_run(request, service_key: str, lab_key: str, step_key: str):

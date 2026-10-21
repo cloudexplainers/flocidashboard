@@ -4,21 +4,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 from django.urls import reverse
 
-from .rdsdata_api import _format_field_value, _format_records, execute_statement
-
-
-class RDSDataPageTemplateTests(SimpleTestCase):
-    def test_rdsdata_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'rdsdata'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>RDS Data API inventory</h2>', html=True)
-        self.assertContains(response, 'id="rdsdata-summary"')
-        self.assertContains(response, 'id="rdsdata-console-root"')
-        self.assertNotContains(response, 'id="rdsdata-grid"')
-        self.assertContains(response, 'dashboard/rdsdata-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/rdsdata-console.js')
+from .rdsdata_api import _format_field_value, _format_records
 
 
 class RDSDataApiTests(SimpleTestCase):

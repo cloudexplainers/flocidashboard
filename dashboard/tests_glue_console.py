@@ -10,24 +10,12 @@ from .services import get_service
 
 
 class GluePageTemplateTests(SimpleTestCase):
-    def test_glue_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'glue'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Glue inventory</h2>', html=True)
-        self.assertContains(response, 'id="glue-summary"')
-        self.assertContains(response, 'id="glue-console-root"')
-        self.assertNotContains(response, 'id="glue-grid"')
-        self.assertContains(response, 'dashboard/glue-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/glue-console.js')
 
     def test_glue_registry_marks_service_interactive(self):
         service = get_service('glue')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/glue-console.js')
         self.assertTrue(any(action.name == 'create_database' for action in service.actions))
         self.assertTrue(any(action.name == 'update_database' for action in service.actions))
         self.assertTrue(any(action.name == 'create_table' for action in service.actions))

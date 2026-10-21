@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase
@@ -9,70 +8,14 @@ from .services import get_service
 
 
 class SchedulerPageTemplateTests(SimpleTestCase):
-    def test_scheduler_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'scheduler'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>EventBridge Scheduler inventory</h2>', html=True)
-        self.assertContains(response, 'id="scheduler-summary"')
-        self.assertContains(response, 'id="scheduler-console-root"')
-        self.assertNotContains(response, 'id="scheduler-grid"')
-        self.assertContains(response, 'dashboard/scheduler-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/scheduler-console.js')
 
     def test_scheduler_registry_marks_service_interactive(self):
         service = get_service('scheduler')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/scheduler-console.js')
         self.assertTrue(any(action.name == 'create_schedule' for action in service.actions))
         self.assertTrue(any(action.name == 'delete_schedule_group' for action in service.actions))
-
-    def test_scheduler_console_exposes_first_class_resource_views(self):
-        source = (
-            Path(__file__).resolve().parent
-            / 'static'
-            / 'dashboard'
-            / 'scheduler-console.js'
-        ).read_text(encoding='utf-8')
-
-        self.assertIn("['groups', 'Schedule groups']", source)
-        self.assertIn("['schedules', 'Schedules']", source)
-        self.assertIn("mode: 'table'", source)
-        self.assertIn('Find ${title.toLowerCase()}', source)
-        self.assertIn("params.get('view')", source)
-        self.assertIn("params.get('group')", source)
-        self.assertIn("params.get('schedule')", source)
-        self.assertIn('window.history.replaceState', source)
-
-    def test_scheduler_console_exposes_full_timing_and_target_context(self):
-        source = (
-            Path(__file__).resolve().parent
-            / 'static'
-            / 'dashboard'
-            / 'scheduler-console.js'
-        ).read_text(encoding='utf-8')
-
-        for field in ('Start date', 'End date', 'KMS key ARN', 'Flexible time window JSON', 'Target JSON'):
-            self.assertIn(field, source)
-        self.assertIn("service === 'sqs'", source)
-        self.assertIn("service === 'lambda'", source)
-        self.assertIn("service === 'ecs'", source)
-        self.assertIn('/service/scheduler/labs/?lab=sqs-delivery', source)
-        self.assertIn('Retry policy and dead-letter configuration are stored but are not currently enforced', source)
-
-    def test_default_group_delete_action_remains_hidden(self):
-        source = (
-            Path(__file__).resolve().parent
-            / 'static'
-            / 'dashboard'
-            / 'scheduler-console.js'
-        ).read_text(encoding='utf-8')
-
-        self.assertIn("groupName(group) !== 'default'", source)
-        self.assertIn('The default group cannot be deleted', source)
 
 
 class SchedulerActionsApiTests(SimpleTestCase):

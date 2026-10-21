@@ -1,9 +1,9 @@
 """Tests for new Top 15 AWS service workflow labs (RDS, ECS, EKS)."""
 
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from unittest.mock import MagicMock, patch
 
-from dashboard.labs.registry import all_labs, get_lab, labs_for_service
+from dashboard.labs.registry import all_labs, labs_for_service
 from dashboard.labs.monolith import lab_status, reset_lab, run_lab_step
 
 

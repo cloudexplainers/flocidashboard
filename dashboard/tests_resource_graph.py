@@ -57,7 +57,7 @@ class EventBridgeApplicationGraphTests(SimpleTestCase):
         self.assertEqual(dlq_edge['status'], 'unsupported')
         self.assertIn('does not persist or enforce', dlq_edge['detail'])
         producer = next(node for node in graph['nodes'] if node['id'] == 'producer')
-        self.assertEqual(producer['href'], f'/service/lambda/?function={app.PRODUCER_FUNCTION}')
+        self.assertEqual(producer['href'], f'/lambda?function={app.PRODUCER_FUNCTION}')
 
         target_by_rule[app.AUDIT_RULE][0]['Arn'] = app.QUEUE_ARNS[app.PROCESSING_QUEUE]
         lam.get_function.side_effect = lambda FunctionName: {
@@ -111,21 +111,3 @@ class EventBridgeInventoryRegressionTests(SimpleTestCase):
 
         self.assertEqual([bus['name'] for bus in inventory['event_buses']], [app.BUS, 'default'])
         events.get_paginator.assert_not_called()
-
-
-class ResourceGraphTemplateTests(SimpleTestCase):
-    @patch('dashboard.views.lab_status')
-    def test_eventbridge_capstone_embeds_shared_graph_renderer(self, lab_status):
-        lab_status.return_value = {'complete': False, 'steps': {}}
-        response = self.client.get(reverse('dashboard:service-labs', kwargs={'service_key': 'eventbridge'}), {'lab': 'application-spine'})
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-resource-graph')
-        self.assertContains(response, 'dashboard/resource-graph.js')
-        self.assertContains(response, 'dashboard/resource-graph.css')
-        self.assertContains(response, 'scenario=eventbridge-application-spine')
-
-    def test_eventbridge_console_supports_graph_bus_and_rule_deep_links(self):
-        source = open('dashboard/static/dashboard/eventbridge-console.js', encoding='utf-8').read()
-        self.assertIn("get('bus')", source)
-        self.assertIn("get('rule')", source)
-        self.assertIn('eventbridge-rule-requested', source)

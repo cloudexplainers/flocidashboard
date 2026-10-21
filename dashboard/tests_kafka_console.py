@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class KafkaPageTemplateTests(SimpleTestCase):
-    def test_kafka_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'kafka'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>MSK / Kafka inventory</h2>', html=True)
-        self.assertContains(response, 'id="kafka-summary"')
-        self.assertContains(response, 'id="kafka-console-root"')
-        self.assertNotContains(response, 'id="kafka-grid"')
-        self.assertContains(response, 'dashboard/kafka-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/kafka-console.js')
 
     def test_kafka_registry_marks_service_interactive(self):
         service = get_service('kafka')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/kafka-console.js')
         self.assertTrue(any(action.name == 'create_cluster' for action in service.actions))
         self.assertTrue(any(action.name == 'create_cluster_v2' for action in service.actions))
         self.assertTrue(any(action.name == 'get_bootstrap_brokers' for action in service.actions))

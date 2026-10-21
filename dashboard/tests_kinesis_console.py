@@ -5,20 +5,6 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 
-class KinesisPageTemplateTests(SimpleTestCase):
-    def test_kinesis_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'kinesis'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Kinesis inventory</h2>', html=True)
-        self.assertContains(response, 'id="kinesis-summary"')
-        self.assertContains(response, 'id="kinesis-console-root"')
-        self.assertNotContains(response, 'id="kinesis-grid"')
-        self.assertContains(response, 'dashboard/kinesis-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/kinesis-console.js')
-
-
 class KinesisActionsApiTests(SimpleTestCase):
     @patch('dashboard.kinesis_views.create_stream')
     def test_create_stream_success(self, create_mock):

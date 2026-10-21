@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from django.http import JsonResponse
-from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error
@@ -15,11 +14,6 @@ from .inspector_api import (
     read_ses_mailbox,
     receive_sqs_messages,
 )
-
-
-def inspector_page(request):
-    return render(request, 'dashboard/inspector.html')
-
 
 @require_http_methods(['GET'])
 def inspector_sqs_queues(request):

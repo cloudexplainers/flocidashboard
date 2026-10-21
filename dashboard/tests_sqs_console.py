@@ -7,20 +7,6 @@ from django.urls import reverse
 from .aws import sqs_inventory
 
 
-class SQSPageTemplateTests(SimpleTestCase):
-    def test_sqs_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'sqs'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>SQS inventory</h2>', html=True)
-        self.assertContains(response, 'id="sqs-summary"')
-        self.assertContains(response, 'id="sqs-console-root"')
-        self.assertNotContains(response, 'id="sqs-grid"')
-        self.assertContains(response, 'dashboard/sqs-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/sqs-console.js')
-
-
 class SQSQueuesApiTests(SimpleTestCase):
     def test_create_queue_rejects_invalid_name(self):
         response = self.client.post(

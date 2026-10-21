@@ -9,13 +9,6 @@ from .services import get_service
 
 
 class EC2ConsoleTests(SimpleTestCase):
-    def test_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'ec2'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="ec2-summary"')
-        self.assertContains(response, 'id="ec2-console-root"')
-        self.assertContains(response, 'dashboard/ec2-console.css')
-        self.assertContains(response, 'dashboard/ec2-console.js')
 
     def test_ec2_registry_actions(self):
         service = get_service('ec2')

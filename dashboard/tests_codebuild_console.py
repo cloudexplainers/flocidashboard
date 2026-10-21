@@ -8,18 +8,10 @@ from .services import get_service
 
 
 class CodeBuildPageTemplateTests(SimpleTestCase):
-    def test_codebuild_page_embeds_console_and_keeps_inventory(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'codebuild'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>CodeBuild inventory</h2>', html=True)
-        self.assertContains(response, 'id="codebuild-console-root"')
-        self.assertNotContains(response, 'id="codebuild-grid"')
-        self.assertContains(response, 'dashboard/codebuild-console.js')
 
     def test_codebuild_registry_marks_service_interactive(self):
         service = get_service('codebuild')
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/codebuild-console.js')
         self.assertTrue(any(action.name == 'create_project' for action in service.actions))
         self.assertTrue(any(action.name == 'start_build' for action in service.actions))
         self.assertTrue(any(action.name == 'retry_build' for action in service.actions))

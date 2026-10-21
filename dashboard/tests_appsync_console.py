@@ -8,13 +8,6 @@ from .services import get_service
 
 
 class AppSyncConsoleTests(SimpleTestCase):
-    def test_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'appsync'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="appsync-summary"')
-        self.assertContains(response, 'id="appsync-console-root"')
-        self.assertContains(response, 'dashboard/appsync-console.css')
-        self.assertContains(response, 'dashboard/appsync-console.js')
 
     def test_appsync_registry_actions(self):
         actions = {action.name for action in get_service('appsync').actions}

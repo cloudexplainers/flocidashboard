@@ -26,7 +26,6 @@ export interface ServiceDefinition {
   category: string;
   maturity: 'missing' | 'inventory_only' | 'read_only_inspector' | 'interactive_workbench' | 'tutorial_ready';
   api_path: string;
-  page_path: string;
   docs_url?: string;
   tags?: string[];
   actions?: ServiceAction[];

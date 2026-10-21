@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -23,305 +22,10 @@ from .aws import (
     reset_runtime_identity_override,
     set_runtime_identity_override,
 )
-from .services import SERVICE_PAGES, SERVICE_REGISTRY, SERVICES
+from .services import SERVICES
 
 
 ACTION_TEST_REFERENCE_GAP_BASELINE = frozenset()
-
-
-class StaticJavaScriptTests(SimpleTestCase):
-    def test_global_nav_brand_links_home(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn("homeLink.className = 'global-nav-home'", source)
-        self.assertIn("homeLink.href = '/'", source)
-        self.assertIn("homeLink.textContent = 'Floci'", source)
-
-    def test_collection_filter_preserves_typing_focus(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn('onFilterTextChange(filter.value', source)
-        self.assertIn('restoreCollectionFilterFocus(filter, restoreFocus', source)
-        self.assertIn('let homeServiceFilterText =', source)
-        self.assertIn('filterText: homeServiceFilterText', source)
-
-    def test_service_favorites_use_heart_button_near_status(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn("headingActions.className = 'service-card-heading-actions'", source)
-        self.assertIn("favorite.textContent = isFavoriteService(service.key) ? '♥' : '♡'", source)
-        self.assertIn('headingActions.append(favorite, status)', source)
-
-    def test_global_status_center_is_wired(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn('function classifyGlobalStatusCenter()', source)
-        self.assertIn('function renderGlobalStatusCenter()', source)
-        self.assertIn("button.id = 'global-status-trigger'", source)
-        self.assertIn('lastHealthCheckedAt = new Date()', source)
-
-    def test_global_nav_exposes_search_and_activity_actions(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn("search.textContent = 'Search'", source)
-        self.assertNotIn("global-nav-service-search", source)
-        self.assertIn("renderGlobalNavServiceGroups(globalServiceNav, serviceMetadata, '')", source)
-        self.assertIn("activity.href = '/activity/'", source)
-        self.assertIn("activity.textContent = 'Activity'", source)
-        self.assertIn("navActions.className = 'global-nav-actions'", source)
-        self.assertIn("['Console', '/console/']", source)
-
-    def test_service_console_exposes_resource_table_mode(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'service-console.js'
-        source = script.read_text()
-
-        self.assertIn("mode = 'cards'", source)
-        self.assertIn("mode === 'table'", source)
-        self.assertIn("selectAll.setAttribute('aria-label', 'Select all visible resources')", source)
-        self.assertIn("link.className = 'collection-primary-link'", source)
-        self.assertIn("collection-selected-bar", source)
-
-    def test_service_summaries_support_dense_inventory(self):
-        shared_script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'service-console.js'
-        shared_source = shared_script.read_text()
-
-        self.assertIn("entries.length > 8", shared_source)
-        self.assertIn("'summary-grid-dense'", shared_source)
-        self.assertIn("entries.forEach((entry) => container.append(renderCard(entry)))", shared_source)
-
-    def test_service_console_syntax_highlighting_utilities(self):
-        shared_script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'service-console.js'
-        shared_source = shared_script.read_text()
-
-        self.assertIn('function highlightPython(code)', shared_source)
-        self.assertIn('function highlightHCL(code)', shared_source)
-        self.assertIn('function highlightCLI(code)', shared_source)
-        self.assertIn('function highlightJSON(code)', shared_source)
-        self.assertIn('function highlightAll(root = document)', shared_source)
-        self.assertIn('syntax-keyword', shared_source)
-        self.assertIn('syntax-string', shared_source)
-        self.assertIn('syntax-property', shared_source)
-
-    def test_aws_cli_console_exposes_draggable_command_palette(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'console.js'
-        source = script.read_text()
-
-        self.assertIn('const COMMANDS = [', source)
-        self.assertIn("category: 'Identity'", source)
-        self.assertIn("command: 'aws sts get-caller-identity'", source)
-        self.assertIn("command: 'aws cloudformation list-stacks'", source)
-        self.assertIn('function renderCommandStrip()', source)
-        self.assertIn('function enableCommandSelection()', source)
-        self.assertIn("commandStrip.addEventListener('click'", source)
-        self.assertNotIn('stripDragged', source)
-        self.assertIn("commandStrip.addEventListener('pointerdown'", source)
-
-    def test_aws_cli_console_uses_one_primary_output_panel(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'console.js'
-        source = script.read_text()
-
-        self.assertIn("el('summary', null, 'View raw output')", source)
-        self.assertIn("renderPre('Output', JSON.stringify(data.json, null, 2))", source)
-        self.assertIn("renderRawOutput(data.stdout || '')", source)
-        self.assertIn("renderPre('Output', data.stdout || '')", source)
-        self.assertNotIn("renderPre('stdout'", source)
-
-    def test_s3_console_bootstraps_global_navigation(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn('function renderGlobalNavigationForCurrentPage', source)
-        self.assertIn('if (s3ConsoleRoot) {', source)
-        self.assertIn('loadServiceMetadata(),', source)
-        self.assertIn('renderGlobalNavigationForCurrentPage(serviceMetadata)', source)
-
-    def test_s3_console_prioritizes_the_interactive_inventory(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 's3-console.js'
-        source = script.read_text()
-
-        self.assertIn("card.href = '#s3-console-root'", source)
-        self.assertIn('value.textContent = formatBytes(summary.total_bytes || 0)', source)
-        self.assertNotIn("{ label: 'ARN', render: (r)", source)
-        self.assertNotIn("{ label: 'URL', render: (r)", source)
-        self.assertNotIn('function renderReadOnlyInventory()', source)
-
-    def test_iam_console_exposes_session_identity_actions(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'iam-console.js'
-        source = script.read_text()
-
-        self.assertIn("apiJson('/api/session-identity/use-user/'", source)
-        self.assertIn("apiJson('/api/session-identity/assume-role/'", source)
-        self.assertIn('function renderPrincipalActions(principal)', source)
-        self.assertIn("btn('Use this user'", source)
-        self.assertIn("btn('Assume in dashboard'", source)
-        self.assertIn("btn('Get temporary credentials'", source)
-        self.assertIn('function renderIdentityRecovery(error)', source)
-        self.assertIn("apiJson('/api/session-identity/use-admin/'", source)
-        self.assertIn("btn('Switch to floci-admin / root'", source)
-        self.assertIn('iam-identity-recovery', source)
-        self.assertIn('renderIdentityRecovery(error);', source)
-        self.assertIn('return null;', source)
-        self.assertIn('window.location.reload()', source)
-
-    def test_iam_console_exposes_permissions_boundary_actions(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'iam-console.js'
-        source = script.read_text()
-
-        self.assertIn('function showPermissionsBoundaryModal(principal)', source)
-        self.assertIn('function clearPermissionsBoundary(principal)', source)
-        self.assertIn('/permissions-boundary/', source)
-        self.assertIn("btn('Set boundary'", source)
-        self.assertIn("btn('Clear boundary'", source)
-
-    def test_iam_console_principal_explorer_uses_resource_table(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'iam-console.js'
-        source = script.read_text()
-
-        self.assertIn('function renderPrincipalTable(type, items)', source)
-        self.assertIn("selectAll.setAttribute('aria-label', 'Select all visible principals')", source)
-        self.assertIn("link.className = 'iam-principal-primary-link'", source)
-        self.assertIn("'iam-selected-action-bar'", source)
-        self.assertIn('Last refreshed ${refreshedAt}', source)
-        self.assertNotIn('container.append(renderResourceOverview(), workbench)', source)
-        self.assertIn("card.href = '#iam-console-root'", source)
-        self.assertIn("const summaryTypes = ['user', 'group', 'role', 'policy', 'profile']", source)
-        self.assertIn("['profile', 'Instance profiles', 'instance_profiles']", source)
-        self.assertIn('function showAddRoleToInstanceProfileModal(profile)', source)
-        self.assertIn("type === 'profile' ? 'Roles' : 'Policies'", source)
-        self.assertIn("consoleUi.addField(details, 'Roles'", source)
-        self.assertIn("if (state.selectedType !== 'profile')", source)
-
-    def test_dashboard_credential_label_names_session_identity(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn("data.credential_source === 'session_identity'", source)
-        self.assertIn("`${data.identity_label} (${data.identity_type || 'session identity'})`", source)
-
-    def test_static_pages_load_health_before_global_navigation(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn('if (!refreshButton && !environmentRefreshButton && !s3ConsoleRoot) {', source)
-        self.assertIn('loadStatusTiles()', source)
-        self.assertIn('.then(() => loadServiceMetadata())', source)
-
-    def test_health_and_identity_tiles_are_optional(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn('if (health) {', source)
-        self.assertIn('if (identity) {', source)
-        self.assertIn('if (endpoint) {', source)
-        self.assertIn('if (profile) {', source)
-
-    def test_service_console_exposes_shared_collection_helper(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'service-console.js'
-        source = script.read_text()
-
-        self.assertIn('function renderCollection(options = {})', source)
-        self.assertIn('emptyFilteredTitle', source)
-        self.assertIn('onFilterTextChange(filter.value', source)
-        self.assertIn('renderCollection,', source)
-
-    def test_inventory_sections_can_use_shared_collection_helper(self):
-        script = Path(__file__).resolve().parent / 'static' / 'dashboard' / 'dashboard.js'
-        source = script.read_text()
-
-        self.assertIn('function renderFilterableDetailList(title, items, fields = [], options = {})', source)
-        self.assertIn("filterPlaceholder: 'Find queues'", source)
-        self.assertIn("filterPlaceholder: 'Find secrets'", source)
-        self.assertIn("filterPlaceholder: 'Find tables'", source)
-        self.assertIn("filterPlaceholder: 'Find parameters'", source)
-        self.assertIn("filterPlaceholder: 'Find buckets'", source)
-        self.assertIn("filterPlaceholder: 'Find instances'", source)
-        self.assertIn("filterPlaceholder: 'Find VPCs'", source)
-        self.assertIn("filterPlaceholder: 'Find subnets'", source)
-        self.assertIn("filterPlaceholder: 'Find security groups'", source)
-        self.assertIn("filterPlaceholder: 'Find user pools'", source)
-        self.assertIn("filterPlaceholder: 'Find GraphQL APIs'", source)
-        self.assertIn("filterPlaceholder: 'Find REST APIs'", source)
-        self.assertIn("filterPlaceholder: 'Find HTTP APIs'", source)
-        self.assertIn("filterPlaceholder: 'Find data sources'", source)
-        self.assertIn("filterPlaceholder: 'Find resolvers'", source)
-        self.assertIn("filterPlaceholder: 'Find cache clusters'", source)
-        self.assertIn("filterPlaceholder: 'Find replication groups'", source)
-        self.assertIn("filterPlaceholder: 'Find serverless caches'", source)
-        self.assertIn("filterPlaceholder: 'Find documents'", source)
-        self.assertIn("filterPlaceholder: 'Find managed instances'", source)
-        self.assertIn("filterPlaceholder: 'Find commands'", source)
-        self.assertIn("filterPlaceholder: 'Find stacks'", source)
-        self.assertIn("filterPlaceholder: 'Find repositories'", source)
-        self.assertIn("filterPlaceholder: 'Find DB instances'", source)
-        self.assertIn("filterPlaceholder: 'Find DB clusters'", source)
-        self.assertIn("filterPlaceholder: 'Find backup vaults'", source)
-        self.assertIn("filterPlaceholder: 'Find backup jobs'", source)
-        self.assertIn("filterPlaceholder: 'Find protected resources'", source)
-        self.assertIn("filterPlaceholder: 'Find streams'", source)
-        self.assertIn("filterPlaceholder: 'Find shards'", source)
-        self.assertIn("filterPlaceholder: 'Find clusters'", source)
-        self.assertIn("filterPlaceholder: 'Find hosted zones'", source)
-        self.assertIn("filterPlaceholder: 'Find traffic policy instances'", source)
-        self.assertIn("filterPlaceholder: 'Find servers'", source)
-        self.assertIn("filterPlaceholder: 'Find workflows'", source)
-        self.assertIn("filterPlaceholder: 'Find connectors'", source)
-        self.assertIn("filterPlaceholder: 'Find web apps'", source)
-        self.assertIn("filterPlaceholder: 'Find projects'", source)
-        self.assertIn("filterPlaceholder: 'Find builds'", source)
-        self.assertIn("filterPlaceholder: 'Find report groups'", source)
-        self.assertIn("filterPlaceholder: 'Find deployment groups'", source)
-        self.assertIn("filterPlaceholder: 'Find deployments'", source)
-        self.assertIn("filterPlaceholder: 'Find pipelines'", source)
-        self.assertIn("filterPlaceholder: 'Find webhooks'", source)
-        self.assertIn("filterPlaceholder: 'Find users'", source)
-        self.assertIn("filterPlaceholder: 'Find roles'", source)
-        self.assertIn("filterPlaceholder: 'Find customer policies'", source)
-        self.assertIn("filterPlaceholder: 'Find topics'", source)
-        self.assertIn("filterPlaceholder: 'Find subscriptions'", source)
-        self.assertIn("filterPlaceholder: 'Find identities'", source)
-        self.assertIn("filterPlaceholder: 'Find email addresses'", source)
-        self.assertIn("filterPlaceholder: 'Find distributions'", source)
-        self.assertIn("filterPlaceholder: 'Find cache policies'", source)
-        self.assertIn("filterPlaceholder: 'Find workgroups'", source)
-        self.assertIn("filterPlaceholder: 'Find query executions'", source)
-        self.assertIn("filterPlaceholder: 'Find databases'", source)
-        self.assertIn("filterPlaceholder: 'Find user-defined functions'", source)
-        self.assertIn("filterPlaceholder: 'Find registries'", source)
-        self.assertIn("filterPlaceholder: 'Find security group rules'", source)
-        self.assertIn("filterPlaceholder: 'Find route tables'", source)
-        self.assertIn("filterPlaceholder: 'Find VPC endpoints'", source)
-        self.assertIn("filterPlaceholder: 'Find AMIs'", source)
-        self.assertIn("filterPlaceholder: 'Find ECS clusters'", source)
-        self.assertIn("filterPlaceholder: 'Find task definitions'", source)
-        self.assertIn("filterPlaceholder: 'Find EKS clusters'", source)
-        self.assertIn("filterPlaceholder: 'Find node groups'", source)
-        self.assertIn("filterPlaceholder: 'Find load balancers'", source)
-        self.assertIn("filterPlaceholder: 'Find target groups'", source)
-        self.assertIn("filterPlaceholder: 'Find delivery streams'", source)
-
-    def test_dashboard_javascript_files_are_valid(self):
-        node = shutil.which('node')
-        if not node:
-            self.skipTest('Node.js is required for JavaScript syntax checks.')
-
-        static_dir = Path(__file__).resolve().parent / 'static' / 'dashboard'
-        scripts = sorted(static_dir.glob('*.js'))
-        self.assertTrue(scripts)
-
-        for script in scripts:
-            with self.subTest(script=script.name):
-                result = subprocess.run(
-                    [node, '--check', str(script)],
-                    check=False,
-                    capture_output=True,
-                    text=True,
-                )
-                self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
 
 
 class ActionRegistryAuditTests(SimpleTestCase):
@@ -395,32 +99,6 @@ class DashboardTemplateTests(SimpleTestCase):
         self.assertContains(response, 'class="page-header-actions"')
         self.assertContains(response, '>Refresh</button>')
 
-    def test_home_page_renders_dashboard_shell(self):
-        response = self.client.get(reverse('dashboard:index'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="root"')
-        self.assertContains(response, 'app.js')
-        self.assertContains(response, 'main.css')
-
-    @patch('dashboard.views.lab_status')
-    def test_page_headers_are_compact_across_primary_pages(self, status_mock):
-        status_mock.return_value = {'complete': False, 'steps': {}}
-        urls = [
-            reverse('dashboard:legacy-environment'),
-            reverse('dashboard:labs-directory'),
-            reverse('dashboard:service-matrix'),
-            reverse('dashboard:service-page', kwargs={'service_key': 's3'}),
-            reverse('dashboard:service-labs', kwargs={'service_key': 'lambda'}),
-        ]
-
-        for url in urls:
-            with self.subTest(url=url):
-                response = self.client.get(url)
-                self.assertEqual(response.status_code, 200)
-                self.assertSharedShell(response)
-                self.assertCompactPageHeader(response)
-                self.assertNotContains(response, 'topbar-action-active')
 
     def test_environment_page_renders_diagnostics_shell(self):
         response = self.client.get(reverse('dashboard:environment'))
@@ -429,18 +107,6 @@ class DashboardTemplateTests(SimpleTestCase):
         self.assertContains(response, 'id="root"')
         self.assertContains(response, 'app.js')
 
-    def test_legacy_environment_page_renders_diagnostics_shell(self):
-        response = self.client.get(reverse('dashboard:legacy-environment'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Environment - Floci Dashboard</title>', html=True)
-        self.assertContains(response, '<h1 class="console-title">Environment</h1>', html=True)
-        self.assertContains(response, 'id="environment-refresh"')
-        self.assertContains(response, 'id="environment-state"')
-        self.assertContains(response, 'id="environment-endpoint"')
-        self.assertContains(response, 'id="environment-identity-arn"')
-        self.assertSharedShell(response)
-        self.assertContains(response, 'dashboard/dashboard.js')
 
     def test_settings_page_renders_runtime_configuration_shell(self):
         response = self.client.get(reverse('dashboard:settings'))
@@ -449,17 +115,6 @@ class DashboardTemplateTests(SimpleTestCase):
         self.assertContains(response, 'id="root"')
         self.assertContains(response, 'app.js')
 
-    def test_legacy_settings_page_renders_runtime_configuration_shell(self):
-        response = self.client.get(reverse('dashboard:legacy-settings'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Settings - Floci Dashboard</title>', html=True)
-        self.assertContains(response, '<h1 class="console-title">Settings</h1>', html=True)
-        self.assertContains(response, 'id="settings-endpoint-url"')
-        self.assertContains(response, 'id="settings-save"')
-        self.assertContains(response, 'id="settings-test"')
-        self.assertContains(response, 'dashboard/settings.js')
-        self.assertSharedShell(response)
 
     def test_activity_page_renders_recent_activity_shell(self):
         response = self.client.get(reverse('dashboard:activity'))
@@ -468,23 +123,6 @@ class DashboardTemplateTests(SimpleTestCase):
         self.assertContains(response, 'id="root"')
         self.assertContains(response, 'app.js')
 
-    def test_legacy_activity_page_renders_recent_activity_shell(self):
-        response = self.client.get(reverse('dashboard:legacy-activity'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Activity - Floci Dashboard</title>', html=True)
-        self.assertContains(response, '<h1 class="console-title">Activity</h1>', html=True)
-        self.assertContains(response, 'aria-label="Activity-enabled service workbenches"')
-        self.assertContains(response, 'href="/service/apigateway/"')
-        self.assertContains(response, 'href="/service/eventbridge/"')
-        self.assertContains(response, 'href="/service/lambda/"')
-        self.assertContains(response, 'href="/service/sqs/"')
-        self.assertContains(response, 'id="activity-filter"')
-        self.assertContains(response, 'id="activity-list"')
-        self.assertContains(response, 'id="activity-clear"')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/activity.js')
-        self.assertSharedShell(response)
 
     def test_console_page_renders_aws_cli_console_shell(self):
         response = self.client.get(reverse('dashboard:console'))
@@ -492,179 +130,6 @@ class DashboardTemplateTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="root"')
         self.assertContains(response, 'app.js')
-
-    def test_legacy_console_page_renders_aws_cli_console_shell(self):
-        response = self.client.get(reverse('dashboard:legacy-console'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>AWS CLI Console - Floci Dashboard</title>', html=True)
-        self.assertContains(response, '<h1 class="console-title">AWS CLI Console</h1>', html=True)
-        self.assertContains(response, 'id="aws-console-command"')
-        self.assertContains(response, 'id="aws-console-run"')
-        self.assertContains(response, 'id="aws-console-categories"')
-        self.assertContains(response, 'id="aws-console-command-strip"')
-        self.assertContains(response, 'id="aws-console-output"')
-        self.assertContains(response, 'id="aws-console-history"')
-        self.assertContains(response, 'dashboard/console.js')
-        self.assertSharedShell(response)
-
-    def test_service_matrix_renders_registry_coverage(self):
-        response = self.client.get(reverse('dashboard:service-matrix'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Service Matrix - Floci Dashboard</title>', html=True)
-        self.assertContains(response, 'Service Matrix')
-        self.assertContains(response, f'{len(SERVICES)} registered services')
-        self.assertContains(response, 'S3')
-        self.assertContains(response, '/api/s3/')
-        self.assertContains(response, 'href="/service/s3/"')
-        self.assertContains(response, 'Interactive Workbench')
-        self.assertContains(response, 'dashboard/s3-console.js', count=0)
-        self.assertSharedShell(response)
-        self.assertNotContains(response, '<th scope="col">Page</th>', html=True)
-        content = response.content.decode()
-        self.assertLess(content.index('href="/service/iam/"'), content.index('href="/service/s3/"'))
-
-    def test_labs_directory_lists_only_services_with_active_labs(self):
-        response = self.client.get(reverse('dashboard:labs-directory'))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<title>Labs - Floci Dashboard</title>', html=True)
-        self.assertContains(response, '<h1 class="console-title">Labs</h1>', html=True)
-        self.assertSharedShell(response)
-        self.assertContains(response, '20 services with labs')
-        self.assertNotContains(response, 'Learning paths')
-        self.assertNotContains(response, 'Recommended starting point')
-        self.assertContains(response, 'Create a local admin user')
-        self.assertContains(response, 'Complete a multipart upload')
-        self.assertContains(response, 'Configure SQS queue attributes and tags')
-        self.assertContains(response, 'Fan out an SNS message to SQS queues')
-        self.assertContains(
-            response,
-            'Schedule an EventBridge Scheduler message to SQS',
-        )
-        self.assertContains(
-            response,
-            'Provision S3 and SQS resources with CloudFormation',
-        )
-        self.assertContains(
-            response,
-            'Build a VPC with public and private subnets',
-        )
-        self.assertContains(
-            response,
-            'Create, invoke, and inspect a Lambda function',
-        )
-        self.assertContains(
-            response,
-            'Send an API Gateway request to Lambda',
-        )
-        self.assertContains(
-            response,
-            'Create a DynamoDB table and query items',
-        )
-        self.assertContains(
-            response,
-            'Protect local app data with KMS',
-        )
-        self.assertContains(
-            response,
-            'Read app configuration from SSM Parameter Store',
-        )
-        self.assertContains(
-            response,
-            'Create and update a Secrets Manager secret',
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'iam'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 's3'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'sqs'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'sns'}),
-        )
-        self.assertContains(
-            response,
-            reverse(
-                'dashboard:service-labs',
-                kwargs={'service_key': 'scheduler'},
-            ),
-        )
-        self.assertContains(
-            response,
-            reverse(
-                'dashboard:service-labs',
-                kwargs={'service_key': 'cloudformation'},
-            ),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'ec2'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'lambda'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'apigateway'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'dynamodb'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'kms'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'ssm'}),
-        )
-        self.assertContains(
-            response,
-            reverse('dashboard:service-labs', kwargs={'service_key': 'secretsmanager'}),
-        )
-        content = response.content.decode()
-        self.assertLess(content.index('href="/service/iam/"'), content.index('href="/service/s3/"'))
-        self.assertLess(content.index('href="/service/s3/"'), content.index('href="/service/sqs/"'))
-        self.assertLess(content.index('href="/service/sqs/"'), content.index('href="/service/sns/"'))
-
-    def test_all_service_pages_render(self):
-        for key, service in SERVICE_PAGES.items():
-            with self.subTest(service=key):
-                response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': key}))
-
-                self.assertEqual(response.status_code, 200)
-                self.assertContains(response, f'<title>{service["title"]} - Floci Dashboard</title>', html=True)
-                self.assertContains(response, f'<h1 class="console-title">{service["title"]}</h1>', html=True)
-                self.assertContains(response, service['eyebrow'])
-                self.assertSharedShell(response)
-                self.assertContains(response, 'dashboard/styles.css')
-                self.assertContains(response, 'dashboard/dashboard.js')
-                self.assertContains(response, f'id="{key}-loaded-at"')
-                self.assertContains(response, f'id="{key}-summary"')
-                definition = SERVICE_REGISTRY[key]
-                if definition.console_js:
-                    self.assertContains(response, f'id="{key}-console-root"')
-                    self.assertNotContains(response, f'id="{key}-grid"')
-                    self.assertContains(response, 'dashboard/service-console.js')
-                    self.assertContains(response, definition.console_js)
-                else:
-                    self.assertContains(response, f'id="{key}-grid"')
-
-    def test_unknown_service_page_404s(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'not-a-service'}))
-
-        self.assertEqual(response.status_code, 404)
 
 
 class ActionErrorTests(SimpleTestCase):
@@ -1206,8 +671,6 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(len(services), len(SERVICES))
         self.assertIn('interactive_workbench', payload['maturity_levels'])
         self.assertEqual(services['s3']['maturity'], 'interactive_workbench')
-        self.assertTrue(services['s3']['shared_console'])
-        self.assertEqual(services['s3']['console_js'], 'dashboard/s3-console.js')
         s3_actions = {action['name']: action for action in services['s3']['actions']}
         self.assertEqual(s3_actions['create_bucket']['method'], 'POST')
         self.assertEqual(s3_actions['delete_bucket']['safety'], 'destructive')
@@ -1215,24 +678,19 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(s3_actions['put_website']['path'], '/api/s3/buckets/{bucket}/website/')
         self.assertEqual(s3_actions['delete_website']['safety'], 'destructive')
         self.assertEqual(services['sqs']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['sqs']['console_js'], 'dashboard/sqs-console.js')
         sqs_actions = {action['name']: action for action in services['sqs']['actions']}
         self.assertEqual(sqs_actions['send_message']['method'], 'POST')
         self.assertEqual(sqs_actions['receive_messages']['safety'], 'safe')
         self.assertEqual(sqs_actions['purge_queue']['safety'], 'destructive')
         self.assertEqual(services['sns']['maturity'], 'interactive_workbench')
-        self.assertTrue(services['sns']['shared_console'])
-        self.assertEqual(services['sns']['console_js'], 'dashboard/sns-console.js')
         sns_actions = {action['name']: action for action in services['sns']['actions']}
         self.assertEqual(sns_actions['publish_message']['method'], 'POST')
         self.assertEqual(sns_actions['publish_message']['fields'][1]['field_type'], 'textarea')
         self.assertEqual(services['lambda']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['lambda']['console_js'], 'dashboard/lambda-console.js')
         lambda_actions = {action['name']: action for action in services['lambda']['actions']}
         self.assertEqual(lambda_actions['invoke_function']['method'], 'POST')
         self.assertEqual(lambda_actions['invoke_function']['kind'], 'execute')
         self.assertEqual(services['iam']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['iam']['console_js'], 'dashboard/iam-console.js')
         iam_actions = {action['name']: action for action in services['iam']['actions']}
         self.assertEqual(iam_actions['create_user']['kind'], 'create')
         self.assertEqual(iam_actions['create_user']['path'], '/api/iam/users/')
@@ -1246,32 +704,27 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(iam_actions['delete_permissions_boundary']['safety'], 'destructive')
         self.assertEqual(iam_actions['put_inline_policy']['fields'][1]['field_type'], 'textarea')
         self.assertEqual(services['dynamodb']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['dynamodb']['console_js'], 'dashboard/dynamodb-console.js')
         dynamodb_actions = {action['name']: action for action in services['dynamodb']['actions']}
         self.assertEqual(dynamodb_actions['scan_table']['safety'], 'safe')
         self.assertEqual(dynamodb_actions['execute_select_statement']['fields'][0]['field_type'], 'textarea')
         self.assertEqual(services['cloudwatch']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['cloudwatch']['console_js'], 'dashboard/cloudwatch-console.js')
         cloudwatch_actions = {action['name']: action for action in services['cloudwatch']['actions']}
         self.assertEqual(cloudwatch_actions['list_log_streams']['safety'], 'safe')
         self.assertEqual(cloudwatch_actions['get_log_events']['fields'][1]['name'], 'log_stream_name')
         self.assertEqual(cloudwatch_actions['start_logs_insights_query']['fields'][1]['field_type'], 'textarea')
         self.assertEqual(cloudwatch_actions['get_logs_insights_query_results']['fields'][0]['name'], 'query_id')
         self.assertEqual(services['stepfunctions']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['stepfunctions']['console_js'], 'dashboard/stepfunctions-console.js')
         stepfunctions_actions = {action['name']: action for action in services['stepfunctions']['actions']}
         self.assertEqual(stepfunctions_actions['start_execution']['kind'], 'execute')
         self.assertEqual(stepfunctions_actions['start_execution']['fields'][2]['field_type'], 'textarea')
         self.assertEqual(stepfunctions_actions['stop_execution']['safety'], 'destructive')
         self.assertEqual(services['cloudformation']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['cloudformation']['console_js'], 'dashboard/cloudformation-console.js')
         cloudformation_actions = {action['name']: action for action in services['cloudformation']['actions']}
         self.assertEqual(cloudformation_actions['validate_template']['safety'], 'safe')
         self.assertEqual(cloudformation_actions['create_stack']['fields'][1]['field_type'], 'textarea')
         self.assertEqual(cloudformation_actions['delete_stack']['safety'], 'destructive')
         self.assertEqual(cloudformation_actions['execute_change_set']['kind'], 'execute')
         self.assertEqual(services['cognito']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['cognito']['console_js'], 'dashboard/cognito-console.js')
         cognito_actions = {action['name']: action for action in services['cognito']['actions']}
         self.assertEqual(cognito_actions['create_user_pool']['kind'], 'create')
         self.assertEqual(cognito_actions['admin_create_user']['fields'][2]['field_type'], 'object')
@@ -1279,44 +732,37 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(cognito_actions['initiate_auth']['safety'], 'safe')
         self.assertEqual(cognito_actions['oauth_client_credentials']['kind'], 'execute')
         self.assertEqual(services['eventbridge']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['eventbridge']['console_js'], 'dashboard/eventbridge-console.js')
         eventbridge_actions = {action['name']: action for action in services['eventbridge']['actions']}
         self.assertEqual(eventbridge_actions['put_event']['method'], 'POST')
         self.assertEqual(eventbridge_actions['put_event']['kind'], 'execute')
         self.assertEqual(eventbridge_actions['put_event']['fields'][3]['field_type'], 'textarea')
         self.assertEqual(services['apigateway']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['apigateway']['console_js'], 'dashboard/apigateway-console.js')
         apigateway_actions = {action['name']: action for action in services['apigateway']['actions']}
         self.assertEqual(apigateway_actions['test_request']['method'], 'POST')
         self.assertEqual(apigateway_actions['test_request']['safety'], 'safe')
         self.assertEqual(apigateway_actions['test_request']['fields'][7]['field_type'], 'textarea')
         self.assertEqual(services['kinesis']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['kinesis']['console_js'], 'dashboard/kinesis-console.js')
         kinesis_actions = {action['name']: action for action in services['kinesis']['actions']}
         self.assertEqual(kinesis_actions['create_stream']['kind'], 'create')
         self.assertEqual(kinesis_actions['put_record']['fields'][1]['field_type'], 'textarea')
         self.assertEqual(kinesis_actions['get_records']['safety'], 'safe')
         self.assertEqual(services['secretsmanager']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['secretsmanager']['console_js'], 'dashboard/secretsmanager-console.js')
         secrets_actions = {action['name']: action for action in services['secretsmanager']['actions']}
         self.assertEqual(secrets_actions['create_secret']['fields'][1]['field_type'], 'textarea')
         self.assertEqual(secrets_actions['get_secret_value']['safety'], 'safe')
         self.assertEqual(secrets_actions['delete_secret']['safety'], 'destructive')
         self.assertEqual(services['ssm']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['ssm']['console_js'], 'dashboard/ssm-console.js')
         ssm_actions = {action['name']: action for action in services['ssm']['actions']}
         self.assertEqual(ssm_actions['put_parameter']['fields'][2]['field_type'], 'textarea')
         self.assertEqual(ssm_actions['get_parameter']['safety'], 'safe')
         self.assertEqual(ssm_actions['delete_parameter']['safety'], 'destructive')
         self.assertEqual(services['ec2']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['ec2']['console_js'], 'dashboard/ec2-console.js')
         ec2_actions = {action['name']: action for action in services['ec2']['actions']}
         self.assertEqual(ec2_actions['run_instances']['kind'], 'create')
         self.assertEqual(ec2_actions['run_instances']['fields'][5]['field_type'], 'textarea')
         self.assertEqual(ec2_actions['terminate_instance']['safety'], 'destructive')
         self.assertEqual(ec2_actions['import_key_pair']['fields'][1]['field_type'], 'textarea')
         self.assertEqual(services['rds']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['rds']['console_js'], 'dashboard/rds-console.js')
         rds_actions = {action['name']: action for action in services['rds']['actions']}
         self.assertEqual(rds_actions['create_db_instance']['kind'], 'create')
         self.assertEqual(rds_actions['create_db_instance']['fields'][4]['field_type'], 'number')
@@ -1324,7 +770,6 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(rds_actions['delete_db_instance']['safety'], 'destructive')
         self.assertEqual(rds_actions['create_db_parameter_group']['fields'][2]['name'], 'description')
         self.assertEqual(services['autoscaling']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['autoscaling']['console_js'], 'dashboard/autoscaling-console.js')
         autoscaling_actions = {action['name']: action for action in services['autoscaling']['actions']}
         self.assertEqual(autoscaling_actions['create_launch_configuration']['fields'][5]['field_type'], 'textarea')
         self.assertEqual(autoscaling_actions['create_auto_scaling_group']['fields'][2]['field_type'], 'number')
@@ -1332,7 +777,6 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(autoscaling_actions['detach_instances']['safety'], 'destructive')
         self.assertEqual(autoscaling_actions['terminate_instance']['safety'], 'destructive')
         self.assertEqual(services['elasticloadbalancing']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['elasticloadbalancing']['console_js'], 'dashboard/elasticloadbalancing-console.js')
         elbv2_actions = {action['name']: action for action in services['elasticloadbalancing']['actions']}
         self.assertEqual(elbv2_actions['create_load_balancer']['kind'], 'create')
         self.assertEqual(elbv2_actions['create_target_group']['fields'][2]['field_type'], 'number')
@@ -1340,13 +784,11 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(elbv2_actions['delete_load_balancer']['safety'], 'destructive')
         self.assertEqual(elbv2_actions['delete_rule']['safety'], 'destructive')
         self.assertEqual(services['eks']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['eks']['console_js'], 'dashboard/eks-console.js')
         eks_actions = {action['name']: action for action in services['eks']['actions']}
         self.assertEqual(eks_actions['create_cluster']['fields'][1]['name'], 'role_arn')
         self.assertEqual(eks_actions['delete_cluster']['safety'], 'destructive')
         self.assertEqual(eks_actions['list_tags_for_resource']['safety'], 'safe')
         self.assertEqual(services['elasticache']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['elasticache']['console_js'], 'dashboard/elasticache-console.js')
         elasticache_actions = {action['name']: action for action in services['elasticache']['actions']}
         self.assertEqual(elasticache_actions['create_replication_group']['kind'], 'create')
         self.assertEqual(elasticache_actions['delete_replication_group']['safety'], 'destructive')
@@ -1354,13 +796,11 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertIn('max-age=60', response.headers['Cache-Control'])
         self.assertIn('public', response.headers['Cache-Control'])
         self.assertEqual(services['opensearch']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['opensearch']['console_js'], 'dashboard/opensearch-console.js')
         opensearch_actions = {action['name']: action for action in services['opensearch']['actions']}
         self.assertEqual(opensearch_actions['create_domain']['kind'], 'create')
         self.assertEqual(opensearch_actions['delete_domain']['safety'], 'destructive')
         self.assertEqual(opensearch_actions['list_versions']['safety'], 'safe')
         self.assertEqual(services['athena']['maturity'], 'interactive_workbench')
-        self.assertEqual(services['athena']['console_js'], 'dashboard/athena-console.js')
         athena_actions = {action['name']: action for action in services['athena']['actions']}
         self.assertEqual(athena_actions['start_query_execution']['kind'], 'execute')
         self.assertEqual(athena_actions['get_query_results']['safety'], 'safe')
@@ -1368,7 +808,6 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertEqual(services['lambda']['api_path'], '/api/lambda/')
         self.assertEqual(services['cloudfront']['maturity'], 'interactive_workbench')
         self.assertEqual(services['cloudfront']['api_path'], '/api/cloudfront/')
-        self.assertEqual(services['cloudfront']['console_js'], 'dashboard/cloudfront-console.js')
         cloudfront_actions = {action['name']: action for action in services['cloudfront']['actions']}
         self.assertEqual(cloudfront_actions['create_distribution']['kind'], 'create')
         self.assertEqual(cloudfront_actions['create_invalidation']['kind'], 'execute')
@@ -1417,9 +856,6 @@ class ServiceRegistryApiTests(SimpleTestCase):
         self.assertFalse(payload['identity_resolved'])
         self.assertIn('Unable to locate credentials', payload['identity_error'])
 
-    def test_service_pages_are_derived_from_registry(self):
-        self.assertEqual(set(SERVICE_PAGES), set(SERVICE_REGISTRY))
-        self.assertEqual(SERVICE_PAGES['s3']['title'], SERVICE_REGISTRY['s3'].title)
 
     @patch('dashboard.views.cloudfront_inventory')
     def test_cloudfront_api_returns_inventory(self, cloudfront_inventory):
@@ -3767,11 +3203,6 @@ class IAMActionTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         delete_policy.assert_called_once_with(arn)
 
-    def test_iam_console_exposes_complete_lifecycle_controls(self):
-        source = (Path(__file__).resolve().parent / 'static' / 'dashboard' / 'iam-console.js').read_text()
-        for label in ('Update user', 'Create login', 'Update role', 'Delete policy', 'Delete profile', 'Edit tags', 'Last used'):
-            self.assertIn(label, source)
-
 
 class GuidedEC2LabTests(TestCase):
     def setUp(self):
@@ -3834,15 +3265,6 @@ class GuidedEC2LabTests(TestCase):
         self.assertIsNone(cache.get('floci-lab:ec2:guided:guided-ssm-command:launch-managed-instance'))
         ec2_client.assert_called_once_with()
 
-    def test_guided_lab_page_exposes_workflow(self):
-        response = self.client.get(
-            reverse('dashboard:service-labs', kwargs={'service_key': 'ec2'}),
-            {'lab': 'guided-imds'},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Launch an instance and inspect IMDS')
-        self.assertContains(response, 'data-step-key="launch-instance"')
 
     def test_imds_command_bounds_network_wait_and_bypasses_proxy(self):
         from dashboard.labs.ec2_guided import _imds_get_command
@@ -3907,4 +3329,3 @@ class GuidedEC2LabTests(TestCase):
         data = response.json()
         self.assertIn('services', data)
         self.assertGreaterEqual(len(data['services']), 65)
-

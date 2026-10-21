@@ -10,20 +10,10 @@ from .services import get_service
 
 
 class BedrockRuntimePageTemplateTests(SimpleTestCase):
-    def test_page_embeds_console_and_keeps_inventory(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'bedrockruntime'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Bedrock Runtime inventory</h2>', html=True)
-        self.assertContains(response, 'id="bedrockruntime-console-root"')
-        self.assertNotContains(response, 'id="bedrockruntime-grid"')
-        self.assertContains(response, 'dashboard/bedrockruntime-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/bedrockruntime-console.js')
 
     def test_registry_marks_service_interactive(self):
         service = get_service('bedrockruntime')
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/bedrockruntime-console.js')
         self.assertTrue(any(action.name == 'converse' for action in service.actions))
         self.assertTrue(any(action.name == 'invoke_model' for action in service.actions))
 

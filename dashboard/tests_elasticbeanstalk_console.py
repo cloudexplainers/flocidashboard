@@ -8,13 +8,6 @@ from .services import get_service
 
 
 class ElasticBeanstalkConsoleTests(SimpleTestCase):
-    def test_page_renders_first_class_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'elasticbeanstalk'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="elasticbeanstalk-console-root"')
-        self.assertNotContains(response, 'id="elasticbeanstalk-grid"')
-        self.assertContains(response, 'dashboard/elasticbeanstalk-console.js')
-        self.assertContains(response, 'About Floci Elastic Beanstalk')
 
     def test_registry_is_interactive(self):
         service = get_service('elasticbeanstalk')

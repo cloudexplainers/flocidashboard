@@ -5,20 +5,6 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 
-class CloudFrontPageTemplateTests(SimpleTestCase):
-    def test_cloudfront_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'cloudfront'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>CloudFront inventory</h2>', html=True)
-        self.assertContains(response, 'id="cloudfront-summary"')
-        self.assertContains(response, 'id="cloudfront-console-root"')
-        self.assertNotContains(response, 'id="cloudfront-grid"')
-        self.assertContains(response, 'dashboard/cloudfront-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/cloudfront-console.js')
-
-
 class CloudFrontApiTests(SimpleTestCase):
     @patch('dashboard.cloudfront_views.create_distribution')
     def test_create_distribution_success(self, create_mock):

@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class CodeDeployPageTemplateTests(SimpleTestCase):
-    def test_codedeploy_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'codedeploy'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>CodeDeploy inventory</h2>', html=True)
-        self.assertContains(response, 'id="codedeploy-summary"')
-        self.assertContains(response, 'id="codedeploy-console-root"')
-        self.assertNotContains(response, 'id="codedeploy-grid"')
-        self.assertContains(response, 'dashboard/codedeploy-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/codedeploy-console.js')
 
     def test_codedeploy_registry_marks_service_interactive(self):
         service = get_service('codedeploy')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/codedeploy-console.js')
         self.assertTrue(any(action.name == 'create_application' for action in service.actions))
         self.assertTrue(any(action.name == 'create_deployment_group' for action in service.actions))
         self.assertTrue(any(action.name == 'create_deployment' for action in service.actions))
@@ -233,4 +221,3 @@ class CodeDeployActionsApiTests(SimpleTestCase):
             lifecycle_event_name='BeforeInstall',
             status='Succeeded',
         )
-

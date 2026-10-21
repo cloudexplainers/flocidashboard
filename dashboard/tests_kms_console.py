@@ -10,24 +10,12 @@ from .services import get_service
 
 
 class KMSPageTemplateTests(SimpleTestCase):
-    def test_kms_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'kms'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>KMS inventory</h2>', html=True)
-        self.assertContains(response, 'id="kms-summary"')
-        self.assertContains(response, 'id="kms-console-root"')
-        self.assertNotContains(response, 'id="kms-grid"')
-        self.assertContains(response, 'dashboard/kms-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/kms-console.js')
 
     def test_kms_registry_marks_service_interactive(self):
         service = get_service('kms')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/kms-console.js')
         self.assertTrue(any(action.name == 'encrypt' for action in service.actions))
         self.assertTrue(any(action.name == 'generate_random' for action in service.actions))
         self.assertTrue(any(action.name == 'set_key_enabled' for action in service.actions))

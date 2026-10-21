@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class FirehosePageTemplateTests(SimpleTestCase):
-    def test_firehose_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'firehose'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Data Firehose inventory</h2>', html=True)
-        self.assertContains(response, 'id="firehose-summary"')
-        self.assertContains(response, 'id="firehose-console-root"')
-        self.assertNotContains(response, 'id="firehose-grid"')
-        self.assertContains(response, 'dashboard/firehose-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/firehose-console.js')
 
     def test_firehose_registry_marks_service_interactive(self):
         service = get_service('firehose')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/firehose-console.js')
         self.assertTrue(any(action.name == 'create_delivery_stream' for action in service.actions))
         self.assertTrue(any(action.name == 'put_record' for action in service.actions))
         self.assertTrue(any(action.name == 'put_record_batch' for action in service.actions))

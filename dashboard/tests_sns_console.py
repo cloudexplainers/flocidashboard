@@ -5,20 +5,6 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 
 
-class SNSPageTemplateTests(SimpleTestCase):
-    def test_sns_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'sns'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>SNS inventory</h2>', html=True)
-        self.assertContains(response, 'id="sns-summary"')
-        self.assertContains(response, 'id="sns-console-root"')
-        self.assertNotContains(response, 'id="sns-grid"')
-        self.assertContains(response, 'dashboard/sns-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/sns-console.js')
-
-
 class SNSMessagesApiTests(SimpleTestCase):
     def test_publish_message_rejects_missing_topic(self):
         response = self.client.post(
@@ -124,7 +110,6 @@ class SNSMessagesApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['unsubscribed'])
         unsub_mock.assert_called_once_with('arn:aws:sns:...:sub-101')
-
 
 
 class SNSDeliveryContractTests(SimpleTestCase):

@@ -9,24 +9,12 @@ from .services import get_service
 
 
 class ECSPageTemplateTests(SimpleTestCase):
-    def test_ecs_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'ecs'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>ECS inventory</h2>', html=True)
-        self.assertContains(response, 'id="ecs-summary"')
-        self.assertContains(response, 'id="ecs-console-root"')
-        self.assertNotContains(response, 'id="ecs-grid"')
-        self.assertContains(response, 'dashboard/ecs-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/ecs-console.js')
 
     def test_ecs_registry_marks_service_interactive(self):
         service = get_service('ecs')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/ecs-console.js')
         self.assertTrue(any(action.name == 'run_task' for action in service.actions))
         self.assertTrue(any(action.name == 'delete_service' for action in service.actions))
 
@@ -495,5 +483,3 @@ class ECSApiHelperTests(SimpleTestCase):
         self.assertEqual(result['added_containers'], ['sidecar'])
         self.assertEqual(len(result['modified_containers']), 1)
         self.assertEqual(result['modified_containers'][0]['name'], 'app')
-
-

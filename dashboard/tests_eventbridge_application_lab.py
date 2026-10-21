@@ -3,9 +3,8 @@ from unittest.mock import MagicMock, patch
 
 from django.core.cache import cache
 from django.test import SimpleTestCase
-from django.urls import reverse
 
-from dashboard.labs import lab_status, labs_for_service, run_lab_step
+from dashboard.labs import lab_status, labs_for_service
 from dashboard.labs import eventbridge_application as application
 
 
@@ -19,15 +18,6 @@ class EventBridgeApplicationLabTests(SimpleTestCase):
         step_keys = [step['key'] for step in labs[0]['steps']]
         self.assertEqual(step_keys[-3:], ['malformed-event', 'missing-permission', 'disabled-rule'])
 
-    def test_eventbridge_labs_page_renders_architecture_commands_and_artifacts(self):
-        response = self.client.get(reverse('dashboard:service-labs', kwargs={'service_key': 'eventbridge'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Build an event-driven order application')
-        self.assertContains(response, 'aws events create-event-bus')
-        self.assertContains(response, 'producer-policy.json')
-        self.assertContains(response, 'processing-target.json')
-        self.assertContains(response, 'InputTransformer')
-        self.assertContains(response, 'DeadLetterConfig')
 
     def test_runner_facade_dispatches_to_eventbridge_module(self):
         module = importlib.import_module(application.run_step.__module__)

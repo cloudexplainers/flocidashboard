@@ -8,13 +8,6 @@ from .services import get_service
 
 
 class CodePipelineConsoleTests(SimpleTestCase):
-    def test_service_page_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'codepipeline'}))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="codepipeline-summary"')
-        self.assertContains(response, 'id="codepipeline-console-root"')
-        self.assertContains(response, 'dashboard/codepipeline-console.css')
-        self.assertContains(response, 'dashboard/codepipeline-console.js')
 
     def test_codepipeline_registry_actions(self):
         service = get_service('codepipeline')

@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class OpenSearchPageTemplateTests(SimpleTestCase):
-    def test_opensearch_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'opensearch'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>OpenSearch inventory</h2>', html=True)
-        self.assertContains(response, 'id="opensearch-summary"')
-        self.assertContains(response, 'id="opensearch-console-root"')
-        self.assertNotContains(response, 'id="opensearch-grid"')
-        self.assertContains(response, 'dashboard/opensearch-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/opensearch-console.js')
 
     def test_opensearch_registry_marks_service_interactive(self):
         service = get_service('opensearch')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/opensearch-console.js')
         self.assertTrue(any(action.name == 'create_domain' for action in service.actions))
         self.assertTrue(any(action.name == 'delete_domain' for action in service.actions))
         self.assertTrue(any(action.name == 'list_versions' for action in service.actions))

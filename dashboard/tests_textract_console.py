@@ -8,24 +8,12 @@ from .services import get_service
 
 
 class TextractPageTemplateTests(SimpleTestCase):
-    def test_textract_service_page_keeps_readonly_inventory_and_embeds_console(self):
-        response = self.client.get(reverse('dashboard:service-page', kwargs={'service_key': 'textract'}))
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '<h2>Textract inventory</h2>', html=True)
-        self.assertContains(response, 'id="textract-summary"')
-        self.assertContains(response, 'id="textract-console-root"')
-        self.assertNotContains(response, 'id="textract-grid"')
-        self.assertContains(response, 'dashboard/textract-console.css')
-        self.assertContains(response, 'dashboard/service-console.js')
-        self.assertContains(response, 'dashboard/textract-console.js')
 
     def test_textract_registry_marks_service_interactive(self):
         service = get_service('textract')
 
         self.assertIsNotNone(service)
         self.assertEqual(service.maturity, 'interactive_workbench')
-        self.assertEqual(service.console_js, 'dashboard/textract-console.js')
         self.assertTrue(any(action.name == 'detect_document_text' for action in service.actions))
         self.assertTrue(any(action.name == 'analyze_document' for action in service.actions))
         self.assertTrue(any(action.name == 'start_document_text_detection' for action in service.actions))
