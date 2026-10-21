@@ -64,11 +64,16 @@ class LabsRegistryAuditTests(SimpleTestCase):
 
     def _expanded_branch_source(self, source: str, service_key: str, lab_key: str) -> str:
         branch = self._branch_source(source, service_key, lab_key)
-        delegated = re.search(r'from \.([a-z0-9_]+) import', branch)
-        if delegated:
-            module = importlib.import_module(f'dashboard.labs.{delegated.group(1)}')
-            return f'{branch}\n{inspect.getsource(module)}'
-        return branch
+        delegated = re.search(r'from \.([a-z0-9_]+) import (\w+)', branch)
+        if not delegated:
+            return branch
+        module = importlib.import_module(f'dashboard.labs.{delegated.group(1)}')
+        # Service modules keep per-lab branches in their run_step/status/reset,
+        # so follow the delegation into the matching branch there.
+        target_source = inspect.getsource(getattr(module, delegated.group(2), module))
+        if f"service_key == '{service_key}'" in target_source:
+            return f'{branch}\n{self._expanded_branch_source(target_source, service_key, lab_key)}'
+        return f'{branch}\n{inspect.getsource(module)}'
 
     def test_every_batch_service_has_labs(self):
         for batch in LAB_BATCH_ORDER:
@@ -5446,7 +5451,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(status['steps']['confirm-resources-deleted']['verified'])
         cache.clear()
 
-    @patch('dashboard.labs._verify_ec2_vpc')
+    @patch('dashboard.labs.ec2_labs._verify_ec2_vpc')
     @patch('dashboard.labs.FlociClientFactory')
     def test_ec2_network_lab_creates_tagged_vpc(
         self,
@@ -5479,7 +5484,7 @@ class LabsRunnerTests(SimpleTestCase):
         )
         cache.clear()
 
-    @patch('dashboard.labs._verify_ec2_routes')
+    @patch('dashboard.labs.ec2_labs._verify_ec2_routes')
     @patch('dashboard.labs.FlociClientFactory')
     def test_ec2_network_lab_creates_public_default_route(
         self,
@@ -5511,7 +5516,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         cache.clear()
 
-    @patch('dashboard.labs._verify_ec2_routes')
+    @patch('dashboard.labs.ec2_labs._verify_ec2_routes')
     @patch('dashboard.labs.FlociClientFactory')
     def test_ec2_network_lab_associates_private_route_table(
         self,
@@ -5551,19 +5556,19 @@ class LabsRunnerTests(SimpleTestCase):
         passed = {'status': 'passed', 'message': 'verified'}
         with ExitStack() as stack:
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_vpc',
+                'dashboard.labs.ec2_labs._verify_ec2_vpc',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_subnets',
+                'dashboard.labs.ec2_labs._verify_ec2_subnets',
                 return_value=(passed, passed),
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_igw',
+                'dashboard.labs.ec2_labs._verify_ec2_igw',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_routes',
+                'dashboard.labs.ec2_labs._verify_ec2_routes',
                 return_value=(passed, passed),
             ))
             from .labs import lab_status
@@ -5583,7 +5588,7 @@ class LabsRunnerTests(SimpleTestCase):
         ec2.authorize_security_group_ingress.return_value = {'Return': True}
         factory_mock.return_value.client.return_value = ec2
         with patch(
-            'dashboard.labs._verify_ec2_security_group_rules',
+            'dashboard.labs.ec2_labs._verify_ec2_security_group_rules',
             return_value=(
                 {'status': 'passed', 'message': 'web'},
                 {'status': 'failed', 'message': 'app'},
@@ -5618,7 +5623,7 @@ class LabsRunnerTests(SimpleTestCase):
         ec2.authorize_security_group_ingress.return_value = {'Return': True}
         factory_mock.return_value.client.return_value = ec2
         with patch(
-            'dashboard.labs._verify_ec2_security_group_rules',
+            'dashboard.labs.ec2_labs._verify_ec2_security_group_rules',
             return_value=(
                 {'status': 'passed', 'message': 'web'},
                 {'status': 'passed', 'message': 'app'},
@@ -5641,8 +5646,8 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         cache.clear()
 
-    @patch('dashboard.labs._verify_ec2_network_acl_association')
-    @patch('dashboard.labs._verify_ec2_network_acl_rules')
+    @patch('dashboard.labs.ec2_labs._verify_ec2_network_acl_association')
+    @patch('dashboard.labs.ec2_labs._verify_ec2_network_acl_rules')
     @patch('dashboard.labs.FlociClientFactory')
     def test_ec2_security_lab_inspects_network_acl_rules(
         self,
@@ -5681,31 +5686,31 @@ class LabsRunnerTests(SimpleTestCase):
         passed = {'status': 'passed', 'message': 'verified'}
         with ExitStack() as stack:
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_security_vpc',
+                'dashboard.labs.ec2_labs._verify_ec2_security_vpc',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_security_subnet',
+                'dashboard.labs.ec2_labs._verify_ec2_security_subnet',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_security_group_rules',
+                'dashboard.labs.ec2_labs._verify_ec2_security_group_rules',
                 return_value=(passed, passed),
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_network_acl_created',
+                'dashboard.labs.ec2_labs._verify_ec2_network_acl_created',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_network_acl_rule',
+                'dashboard.labs.ec2_labs._verify_ec2_network_acl_rule',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_network_acl_rules',
+                'dashboard.labs.ec2_labs._verify_ec2_network_acl_rules',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_ec2_network_acl_association',
+                'dashboard.labs.ec2_labs._verify_ec2_network_acl_association',
                 return_value=passed,
             ))
             from .labs import lab_status
@@ -5719,7 +5724,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(status['steps']['associate-network-acl']['verified'])
         self.assertTrue(status['steps']['inspect-network-acl-support']['verified'])
 
-    @patch('dashboard.labs._verify_ec2_s3_gateway_endpoint')
+    @patch('dashboard.labs.ec2_labs._verify_ec2_s3_gateway_endpoint')
     @patch('dashboard.labs.FlociClientFactory')
     def test_ec2_endpoint_lab_creates_bucket_scoped_s3_gateway_endpoint(
         self,
@@ -5771,7 +5776,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_ec2_endpoint_route_boundary',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.ec2_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
@@ -5784,7 +5789,7 @@ class LabsRunnerTests(SimpleTestCase):
         )
         self.assertTrue(status['steps']['inspect-private-s3-path']['verified'])
 
-    @patch('dashboard.labs._verify_ec2_sqs_interface_endpoint')
+    @patch('dashboard.labs.ec2_labs._verify_ec2_sqs_interface_endpoint')
     @patch('dashboard.labs.FlociClientFactory')
     def test_ec2_interface_lab_creates_private_dns_sqs_endpoint(
         self,
@@ -5838,7 +5843,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_ec2_interface_inspection',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.ec2_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
