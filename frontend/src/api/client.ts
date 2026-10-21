@@ -1,6 +1,5 @@
-import { normalizeSessionIdentity } from '../sessionIdentity';
 import { CliResponse } from '../pages/cliResources';
-import { IdentityInfo, LabDefinition, ServiceAction, ServiceDefinition } from '../types';
+import { LabDefinition, ServiceAction, ServiceDefinition } from '../types';
 
 function getCsrfToken(): string {
   const meta = document.querySelector('meta[name="csrf-token"]');
@@ -34,11 +33,6 @@ export async function fetchServices(): Promise<ServiceDefinition[]> {
   }
 }
 
-export async function fetchIdentity(): Promise<IdentityInfo> {
-  try { return normalizeSessionIdentity(await fetchIdentityDetail()); }
-  catch (error) { return normalizeSessionIdentity({ identity_resolved: false, identity_error: error instanceof Error ? error.message : 'Identity unavailable' }); }
-}
-
 export async function fetchServiceInventory(serviceKey: string): Promise<any> {
   try {
     const res = await fetch(`/api/${serviceKey}/`);
@@ -48,21 +42,6 @@ export async function fetchServiceInventory(serviceKey: string): Promise<any> {
     window.dispatchEvent(new CustomEvent('floci_load_error', { detail: `Unable to load ${serviceKey} resources. Refresh to retry. ${err instanceof Error ? err.message : ''}` }));
     console.error(`Failed to fetch inventory for ${serviceKey}:`, err);
     return {};
-  }
-}
-
-export const fetchInventory = fetchServiceInventory;
-
-export async function fetchLabs(serviceKey?: string): Promise<LabDefinition[]> {
-  try {
-    const url = serviceKey ? `/api/labs/catalog/?service=${serviceKey}` : '/api/labs/catalog/';
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    return data.labs || [];
-  } catch (err) {
-    console.error('Failed to fetch labs:', err);
-    return [];
   }
 }
 
@@ -804,34 +783,6 @@ export async function testApiGatewayRequest(apiId: string, path: string, method:
 }
 
 // SSM Parameter Store Deepening APIs
-export async function putSsmParameter(name: string, value: string, type: 'String' | 'StringList' | 'SecureString' = 'String', description: string = ''): Promise<any> {
-  const res = await fetch('/api/ssm/parameters/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
-      name,
-      value,
-      type,
-      description,
-      overwrite: true,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to put parameter');
-  return data;
-}
-
-export async function getSsmParameterValue(name: string, withDecryption: boolean = true): Promise<any> {
-  const cleanName = name.startsWith('/') ? name.substring(1) : name;
-  const res = await fetch(`/api/ssm/parameters/${encodeURIComponent(cleanName)}/value/?with_decryption=${withDecryption}`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
-}
-
-export async function deleteSsmParameter(name: string): Promise<any> {
-  return await executeServiceAction('ssm', 'delete_parameter', { name });
-}
-
 // EC2 Networking & Security Groups APIs
 export async function createEc2Vpc(cidrBlock: string, name?: string): Promise<any> {
   const res = await fetch('/api/ec2/vpcs/', {
@@ -1031,10 +982,6 @@ export async function publishSnsMessage(
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to publish message');
   return data;
-}
-
-export async function createSnsSubscription(topicArn: string, protocol: string, endpoint: string): Promise<any> {
-  return snsRequest('subscriptions/', 'POST', { topic_arn: topicArn, protocol, endpoint });
 }
 
 // RDS Operational APIs
@@ -1253,48 +1200,6 @@ export async function putS3BucketVersioning(bucketName: string, status: 'Enabled
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to update versioning');
-  return data;
-}
-
-export async function fetchS3BucketEncryption(bucketName: string): Promise<any> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/encryption/`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-export async function putS3BucketEncryption(bucketName: string, config: any): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/encryption/`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(config),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update encryption');
-  return data;
-}
-
-export async function fetchS3BucketLifecycle(bucketName: string): Promise<any> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/lifecycle/`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-export async function putS3BucketLifecycle(bucketName: string, rules: any): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/lifecycle/`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ rules }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update lifecycle');
   return data;
 }
 
@@ -1726,105 +1631,8 @@ export async function deleteLambdaAlias(functionName: string, name: string): Pro
 }
 
 // KMS Additional APIs
-export async function fetchKmsKeyPolicy(keyId: string, policyName: string = 'default'): Promise<string> {
-  try {
-    const res = await executeServiceAction('kms', 'get_key_policy', { key_id: keyId, policy_name: policyName });
-    return res.policy || res.Policy || '';
-  } catch {
-    return '';
-  }
-}
-
-export async function putKmsKeyPolicy(keyId: string, policy: string, policyName: string = 'default'): Promise<any> {
-  return await executeServiceAction('kms', 'put_key_policy', { key_id: keyId, policy_name: policyName, policy });
-}
-
-export async function fetchKmsKeyRotation(keyId: string): Promise<boolean> {
-  try {
-    const res = await executeServiceAction('kms', 'get_key_rotation_status', { key_id: keyId });
-    return res.key_rotation_enabled ?? res.KeyRotationEnabled ?? false;
-  } catch {
-    return false;
-  }
-}
-
-export async function updateKmsKeyRotation(keyId: string, enabled: boolean): Promise<any> {
-  const action = enabled ? 'enable_key_rotation' : 'disable_key_rotation';
-  return await executeServiceAction('kms', action, { key_id: keyId });
-}
-
-export async function updateKmsKeyState(keyId: string, state: 'enable' | 'disable' | 'schedule_deletion' | 'cancel_deletion', pendingDays: number = 7): Promise<any> {
-  if (state === 'enable') return await executeServiceAction('kms', 'enable_key', { key_id: keyId });
-  if (state === 'disable') return await executeServiceAction('kms', 'disable_key', { key_id: keyId });
-  if (state === 'schedule_deletion') return await executeServiceAction('kms', 'schedule_key_deletion', { key_id: keyId, pending_window_in_days: pendingDays });
-  return await executeServiceAction('kms', 'cancel_key_deletion', { key_id: keyId });
-}
-
-export async function fetchKmsGrants(keyId: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('kms', 'list_grants', { key_id: keyId });
-    return res.grants || res.Grants || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function createKmsGrant(keyId: string, granteePrincipal: string, operations: string[]): Promise<any> {
-  return await executeServiceAction('kms', 'create_grant', {
-    key_id: keyId,
-    grantee_principal: granteePrincipal,
-    operations,
-  });
-}
-
-export async function revokeKmsGrant(keyId: string, grantId: string): Promise<any> {
-  return await executeServiceAction('kms', 'revoke_grant', { key_id: keyId, grant_id: grantId });
-}
-
-export async function generateKmsDataKey(keyId: string, keySpec: 'AES_256' | 'AES_128' = 'AES_256'): Promise<any> {
-  return await executeServiceAction('kms', 'generate_data_key', { key_id: keyId, key_spec: keySpec });
-}
-
 // CloudWatch Additional APIs
-export async function putCloudWatchMetricData(namespace: string, metricData: any[]): Promise<any> {
-  return await executeServiceAction('cloudwatch', 'put_metric_data', { namespace, metric_data: metricData });
-}
-
-export async function setCloudWatchAlarmState(alarmName: string, stateValue: 'OK' | 'ALARM' | 'INSUFFICIENT_DATA', stateReason: string = 'Manual trigger from workbench'): Promise<any> {
-  return await executeServiceAction('cloudwatch', 'set_alarm_state', {
-    alarm_name: alarmName,
-    state_value: stateValue,
-    state_reason: stateReason,
-  });
-}
-
-export async function deleteCloudWatchAlarms(alarmNames: string[]): Promise<any> {
-  return await executeServiceAction('cloudwatch', 'delete_alarms', { alarm_names: alarmNames });
-}
-
-export async function createCloudWatchLogStream(logGroupName: string, logStreamName: string): Promise<any> {
-  return await executeServiceAction('logs', 'create_log_stream', { log_group_name: logGroupName, log_stream_name: logStreamName });
-}
-
-export async function deleteCloudWatchLogStream(logGroupName: string, logStreamName: string): Promise<any> {
-  return await executeServiceAction('logs', 'delete_log_stream', { log_group_name: logGroupName, log_stream_name: logStreamName });
-}
-
-export async function putCloudWatchLogRetention(logGroupName: string, retentionInDays: number): Promise<any> {
-  if (retentionInDays === 0) {
-    return await executeServiceAction('logs', 'delete_retention_policy', { log_group_name: logGroupName });
-  }
-  return await executeServiceAction('logs', 'put_retention_policy', { log_group_name: logGroupName, retention_in_days: retentionInDays });
-}
-
 // Step Functions Additional APIs
-export async function fetchStepFunctionExecutionHistory(executionArn: string): Promise<any[]> {
-  const response = await fetch(`/api/stepfunctions/executions/history/${encodeURIComponent(executionArn)}/`);
-  const data = await response.json();
-  if (!response.ok || data.error) throw new Error(data.error || 'Execution history unavailable');
-  return data.events || [];
-}
-
 export async function stepFunctionsRequest(path = '', method = 'GET', payload?: Record<string, unknown>): Promise<any> {
   const response = await fetch(`/api/stepfunctions/${path}`, { method,
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
@@ -1849,33 +1657,8 @@ export async function sendStepFunctionTaskSuccess(taskToken: string, output: str
 export async function sendStepFunctionTaskFailure(taskToken: string, error = 'ManualFailure', cause = 'Task failed from workbench') { return stepFunctionsRequest('tasks/callback/', 'POST', { task_token: taskToken, error, cause, success: false }); }
 
 // Cognito Additional APIs
-export async function fetchCognitoUserGroups(userPoolId: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('cognito-idp', 'list_groups', { user_pool_id: userPoolId });
-    return res.groups || res.Groups || [];
-  } catch {
-    return [];
-  }
-}
-
 export async function createCognitoUserGroup(userPoolId: string, groupName: string, description: string = ''): Promise<any> {
   return postConsoleAction(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/groups/`, { group_name: groupName, description });
-}
-
-export async function addUserToCognitoGroup(userPoolId: string, groupName: string, username: string): Promise<any> {
-  return await executeServiceAction('cognito-idp', 'admin_add_user_to_group', {
-    user_pool_id: userPoolId,
-    group_name: groupName,
-    username,
-  });
-}
-
-export async function removeUserFromCognitoGroup(userPoolId: string, groupName: string, username: string): Promise<any> {
-  return await executeServiceAction('cognito-idp', 'admin_remove_user_from_group', {
-    user_pool_id: userPoolId,
-    group_name: groupName,
-    username,
-  });
 }
 
 export async function adminSetCognitoUserPassword(userPoolId: string, username: string, password: string, permanent: boolean = true): Promise<any> {
@@ -1890,11 +1673,6 @@ export async function adminToggleCognitoUserState(userPoolId: string, username: 
   return postConsoleAction(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/state/`, { action: enabled ? 'enable' : 'disable' });
 }
 
-export async function fetchCognitoIdentityPools(): Promise<any[]> {
-  const res = await executeServiceAction('cognito-identity', 'list_identity_pools', { max_results: 50 });
-  return res.identity_pools || res.IdentityPools || [];
-}
-
 export async function createCognitoIdentityPool(identityPoolName: string, allowUnauthenticated: boolean = false): Promise<any> {
   return await executeServiceAction('cognito-identity', 'create_identity_pool', {
     identity_pool_name: identityPoolName,
@@ -1903,128 +1681,7 @@ export async function createCognitoIdentityPool(identityPoolName: string, allowU
 }
 
 // API Gateway Additional APIs
-export async function fetchApiGatewayResources(restApiId: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('apigateway', 'get_resources', { rest_api_id: restApiId });
-    return res.items || res.resources || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function createApiGatewayResource(restApiId: string, parentId: string, pathPart: string): Promise<any> {
-  return await executeServiceAction('apigateway', 'create_resource', {
-    rest_api_id: restApiId,
-    parent_id: parentId,
-    path_part: pathPart,
-  });
-}
-
-export async function createApiGatewayMethod(restApiId: string, resourceId: string, httpMethod: string, authorizationType: string = 'NONE'): Promise<any> {
-  return await executeServiceAction('apigateway', 'put_method', {
-    rest_api_id: restApiId,
-    resource_id: resourceId,
-    http_method: httpMethod,
-    authorization_type: authorizationType,
-  });
-}
-
-export async function deleteApiGatewayResource(restApiId: string, resourceId: string): Promise<any> {
-  return await executeServiceAction('apigateway', 'delete_resource', {
-    rest_api_id: restApiId,
-    resource_id: resourceId,
-  });
-}
-
-export async function fetchApiGatewayStages(restApiId: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('apigateway', 'get_stages', { rest_api_id: restApiId });
-    return res.item || res.stages || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function createApiGatewayStage(restApiId: string, stageName: string, deploymentId: string, description: string = ''): Promise<any> {
-  return await executeServiceAction('apigateway', 'create_stage', {
-    rest_api_id: restApiId,
-    stage_name: stageName,
-    deployment_id: deploymentId,
-    description,
-  });
-}
-
-export async function createApiGatewayDeployment(restApiId: string, stageName?: string, description: string = ''): Promise<any> {
-  return await executeServiceAction('apigateway', 'create_deployment', {
-    rest_api_id: restApiId,
-    stage_name: stageName,
-    description,
-  });
-}
-
-export async function fetchApiGatewayAuthorizers(restApiId: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('apigateway', 'get_authorizers', { rest_api_id: restApiId });
-    return res.items || res.authorizers || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function createApiGatewayAuthorizer(restApiId: string, name: string, type: 'TOKEN' | 'COGNITO_USER_POOLS' = 'TOKEN', providerArns?: string[], identitySource: string = 'method.request.header.Authorization'): Promise<any> {
-  return await executeServiceAction('apigateway', 'create_authorizer', {
-    rest_api_id: restApiId,
-    name,
-    type,
-    provider_arns: providerArns,
-    identity_source: identitySource,
-  });
-}
-
 // SSM Additional APIs
-export async function fetchSsmParameterHistory(name: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('ssm', 'get_parameter_history', { name });
-    return res.parameters || res.Parameters || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function fetchSsmParameterTags(resourceId: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('ssm', 'list_tags_for_resource', { resource_type: 'Parameter', resource_id: resourceId });
-    return res.tag_list || res.TagList || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function addSsmParameterTags(resourceId: string, tags: Array<{ Key: string; Value: string }>): Promise<any> {
-  return await executeServiceAction('ssm', 'add_tags_to_resource', { resource_type: 'Parameter', resource_id: resourceId, tags });
-}
-
-export async function removeSsmParameterTags(resourceId: string, tagKeys: string[]): Promise<any> {
-  return await executeServiceAction('ssm', 'remove_tags_from_resource', { resource_type: 'Parameter', resource_id: resourceId, tag_keys: tagKeys });
-}
-
-export async function fetchSsmDocuments(): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('ssm', 'list_documents', {});
-    return res.document_identifiers || res.DocumentIdentifiers || [];
-  } catch {
-    return [];
-  }
-}
-
-export async function createSsmDocument(name: string, content: string, documentType: 'Command' | 'Automation' = 'Command'): Promise<any> {
-  return await executeServiceAction('ssm', 'create_document', { name, content, document_type: documentType });
-}
-
-export async function deleteSsmDocument(name: string): Promise<any> {
-  return await executeServiceAction('ssm', 'delete_document', { name });
-}
-
 // ==========================================
 // Phase 3: ECS APIs
 // ==========================================
@@ -2214,19 +1871,6 @@ export async function deleteEcrRepository(repositoryName: string, force: boolean
   return await res.json();
 }
 
-export async function fetchEcrAuthToken(): Promise<any> {
-  const res = await fetch('/api/ecr/auth-token/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({}),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
-}
-
 export async function batchDeleteEcrImages(repositoryName: string, imageIds: Array<{ imageDigest?: string; imageTag?: string }>): Promise<any> {
   const res = await fetch('/api/ecr/images/delete/', {
     method: 'POST',
@@ -2365,19 +2009,6 @@ export async function createCloudFrontCachePolicy(params: { name: string; defaul
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
-}
-
-export async function createCloudFrontOriginAccessIdentity(comment?: string): Promise<any> {
-  const res = await fetch('/api/cloudfront/origin-access-identities/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ caller_reference: `oai-${Date.now()}`, comment: comment || 'OAI created from Floci Workbench' }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -2801,32 +2432,6 @@ export async function sendSesEmail(params: {
   return await res.json();
 }
 
-export async function sendSesRawEmail(source: string, destinations: string[], rawMessage: string): Promise<any> {
-  const res = await fetch('/api/ses/email/send-raw/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ source, destinations, raw_message: rawMessage }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
-}
-
-export async function sendSesTemplatedEmail(source: string, toAddresses: string[], templateName: string, templateData: string): Promise<any> {
-  const res = await fetch('/api/ses/email/send-templated/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ source, to_addresses: toAddresses, template_name: templateName, template_data: templateData }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
-}
-
 export async function createSesTemplate(name: string, subject: string, htmlPart?: string, textPart?: string): Promise<any> {
   const res = await fetch('/api/ses/templates/', {
     method: 'POST',
@@ -3027,39 +2632,6 @@ export async function fetchEksKubeconfig(clusterName: string): Promise<any> {
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to fetch EKS kubeconfig');
   return data;
 }
-
-export async function fetchEksTags(resourceArn: string): Promise<any> {
-  const res = await fetch('/api/eks/tags/list/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ resource_arn: resourceArn }),
-  });
-  return await res.json();
-}
-
-export async function tagEksResource(resourceArn: string, tags: Record<string, string>): Promise<any> {
-  const res = await fetch('/api/eks/tags/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ resource_arn: resourceArn, tags }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to tag EKS resource');
-  return data;
-}
-
-export async function untagEksResource(resourceArn: string, tagKeys: string[]): Promise<any> {
-  const res = await fetch('/api/eks/tags/', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ resource_arn: resourceArn, tag_keys: tagKeys }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to untag EKS resource');
-  return data;
-}
-
-
 
 export async function runAppSyncGraphQL(apiId: string, query: string, variables: Record<string, unknown>, apiKey?: string, operationName?: string): Promise<any> {
   const response = await fetch('/api/appsync/graphql/run/', {
