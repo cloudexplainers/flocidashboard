@@ -23,6 +23,7 @@ def sns_topics_create(request):
         body = parse_json_body(request)
         return JsonResponse(create_topic(
             body.get('name', ''),
+            **({'content_based_deduplication': body['content_based_deduplication']} if isinstance(body.get('content_based_deduplication'), bool) else {}),
             fifo=bool(body.get('fifo')),
             display_name=body.get('display_name') or None,
             kms_master_key_id=body.get('kms_master_key_id') or None,
@@ -49,7 +50,8 @@ def sns_subscriptions_create(request):
             body.get('topic_arn', ''),
             body.get('protocol', ''),
             body.get('endpoint', ''),
-            filter_policy=body.get('filter_policy') or None,
+            **({'filter_policy_scope': body['filter_policy_scope']} if body.get('filter_policy_scope') else {}),
+            filter_policy=body.get('filter_policy'),
             raw_message_delivery=bool(body.get('raw_message_delivery')),
         ))
     except Exception as exc:

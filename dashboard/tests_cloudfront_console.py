@@ -180,3 +180,54 @@ class CloudFrontConfigurationInventoryTests(SimpleTestCase):
         self.assertEqual(distribution['DefaultCacheBehavior']['TargetOriginId'], 'assets')
         self.assertEqual(distribution['CacheBehaviors']['Items'][0]['TargetOriginId'], 'api')
         client.get_distribution_config.assert_called_once_with(Id='DIST')
+
+
+class CloudFrontPolishContractTests(SimpleTestCase):
+    @patch('dashboard.cloudfront_api._client')
+    def test_zero_ttls_are_preserved(self, factory):
+        from .cloudfront_api import create_cache_policy
+        factory.return_value.create_cache_policy.return_value = {}
+        create_cache_policy('disabled', min_ttl=0, default_ttl=0, max_ttl=0)
+        config = factory.return_value.create_cache_policy.call_args.kwargs['CachePolicyConfig']
+        self.assertEqual([config['MinTTL'], config['DefaultTTL'], config['MaxTTL']], [0, 0, 0])
+        self.assertFalse(config['ParametersInCacheKeyAndForwardedToOrigin']['EnableAcceptEncodingGzip'])
+
+    def test_invalid_ttl_order_is_rejected(self):
+        from .cloudfront_api import create_cache_policy
+        with self.assertRaises(ValueError):
+            create_cache_policy('bad', min_ttl=100, default_ttl=0, max_ttl=200)
+
+    def test_custom_origin_has_custom_configuration(self):
+        from .cloudfront_api import _distribution_config
+        config = _distribution_config('unique', 'api', 'api.example.com', origin_type='custom')
+        origin = config['Origins']['Items'][0]
+        self.assertNotIn('S3OriginConfig', origin)
+        self.assertEqual(origin['CustomOriginConfig']['OriginProtocolPolicy'], 'https-only')
+        with self.assertRaises(ValueError):
+            _distribution_config('unique', 'api', 'https://api.example.com')
+
+    @patch('dashboard.cloudfront_api._client')
+    def test_invalidation_caller_references_are_unique_and_paths_validated(self, factory):
+        from .cloudfront_api import create_invalidation
+        factory.return_value.create_invalidation.return_value = {}
+        create_invalidation('DIST', ['/one'])
+        create_invalidation('DIST', ['/two'])
+        calls = factory.return_value.create_invalidation.call_args_list
+        self.assertNotEqual(calls[0].kwargs['InvalidationBatch']['CallerReference'], calls[1].kwargs['InvalidationBatch']['CallerReference'])
+        with self.assertRaises(ValueError):
+            create_invalidation('DIST', ['missing-slash'])
+
+    @patch('dashboard.cloudfront_views.list_invalidations')
+    def test_invalidation_list_is_scoped(self, mocked):
+        mocked.return_value = {'distribution_id': 'DIST', 'invalidations': [{'Id': 'I1', 'Status': 'InProgress'}]}
+        response = self.client.get('/api/cloudfront/distributions/DIST/invalidations/')
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with('DIST')
+        self.assertEqual(response.json()['invalidations'][0]['Status'], 'InProgress')
+
+    @patch('dashboard.cloudfront_views.get_invalidation')
+    def test_invalidation_detail_is_scoped(self, mocked):
+        mocked.return_value = {'invalidation': {'Id': 'I1'}}
+        response = self.client.get('/api/cloudfront/distributions/DIST/invalidations/I1/')
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with('DIST', 'I1')

@@ -21,6 +21,7 @@ from .appsync_api import (
     delete_type,
     execute_graphql,
     start_schema_creation,
+    get_schema,
     tag_resource,
     untag_resource,
 )
@@ -50,8 +51,13 @@ def appsync_api_delete(request, api_id: str):
         return handle_action_error(exc, service='appsync', operation='delete_graphql_api')
 
 
-@require_http_methods(['POST'])
+@require_http_methods(['GET', 'POST'])
 def appsync_schema_create(request, api_id: str):
+    if request.method == 'GET':
+        try:
+            return JsonResponse(get_schema(api_id))
+        except Exception as exc:
+            return handle_action_error(exc, service='appsync', operation='get_schema')
     return _action(request, 'start_schema_creation', lambda body: start_schema_creation(api_id, body.get('definition') or ''))
 
 
@@ -65,14 +71,14 @@ def appsync_api_keys(request, api_id: str):
 @require_http_methods(['POST', 'DELETE'])
 def appsync_data_sources(request, api_id: str):
     if request.method == 'POST':
-        return _action(request, 'create_data_source', lambda body: create_data_source(api_id, body.get('name') or '', source_type=body.get('source_type') or 'NONE', description=body.get('description') or ''))
+        return _action(request, 'create_data_source', lambda body: create_data_source(api_id, body.get('name') or '', source_type=body.get('source_type') or 'NONE', description=body.get('description') or '', **{key: body[key] for key in ('service_role_arn', 'config') if key in body}))
     return _action(request, 'delete_data_source', lambda body: delete_data_source(api_id, body.get('name') or ''))
 
 
 @require_http_methods(['POST', 'DELETE'])
 def appsync_resolvers(request, api_id: str):
     if request.method == 'POST':
-        return _action(request, 'create_resolver', lambda body: create_resolver(api_id, body.get('type_name') or '', body.get('field_name') or '', data_source_name=body.get('data_source_name') or ''))
+        return _action(request, 'create_resolver', lambda body: create_resolver(api_id, body.get('type_name') or '', body.get('field_name') or '', data_source_name=body.get('data_source_name') or '', **{key: body[key] for key in ('request_mapping_template', 'response_mapping_template') if key in body}))
     return _action(request, 'delete_resolver', lambda body: delete_resolver(api_id, body.get('type_name') or '', body.get('field_name') or ''))
 
 

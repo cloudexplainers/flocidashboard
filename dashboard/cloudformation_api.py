@@ -172,10 +172,20 @@ def create_change_set(
 
 
 def describe_change_set(stack_name: str, change_set_name: str) -> dict[str, Any]:
-    response = _client().describe_change_set(
-        StackName=_required(stack_name, 'Stack name'),
-        ChangeSetName=_required(change_set_name, 'Change set name'),
-    )
+    client = _client()
+    kwargs = {
+        'StackName': _required(stack_name, 'Stack name'),
+        'ChangeSetName': _required(change_set_name, 'Change set name'),
+    }
+    response = client.describe_change_set(**kwargs)
+    changes = list(response.get('Changes', []))
+    token = response.get('NextToken')
+    while token:
+        page = client.describe_change_set(**kwargs, NextToken=token)
+        changes.extend(page.get('Changes', []))
+        token = page.get('NextToken')
+    response['Changes'] = changes
+    response.pop('NextToken', None)
     return {'change_set': _clean_response(response)}
 
 

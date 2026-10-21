@@ -160,3 +160,53 @@ class StepFunctionsApiTests(SimpleTestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+
+
+class StepFunctionsConsoleContractTests(SimpleTestCase):
+    @patch('dashboard.stepfunctions_api._stepfunctions_client')
+    def test_history_continuation_token_reaches_sdk(self, client_mock):
+        from .stepfunctions_api import get_execution_history
+        client_mock.return_value.get_execution_history.return_value = {'events': [{'id': 101}], 'nextToken': 'later'}
+        arn = 'arn:aws:states:us-east-1:000000000000:execution:workflow:run'
+        response = self.client.get(reverse('dashboard:stepfunctions-execution-history', kwargs={'execution_arn': arn}), {'next_token': 'page-two'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['next_token'], 'later')
+        client_mock.return_value.get_execution_history.assert_called_once_with(executionArn=arn, maxResults=100, reverseOrder=False, nextToken='page-two')
+
+    @patch('dashboard.stepfunctions_api._stepfunctions_client')
+    def test_definition_update_preserves_role_unless_explicitly_changed(self, client_mock):
+        arn = 'arn:aws:states:us-east-1:000000000000:stateMachine:workflow'
+        client_mock.return_value.update_state_machine.return_value = {'revisionId': 'updated'}
+        definition = {'StartAt': 'Done', 'States': {'Done': {'Type': 'Succeed'}}}
+        response = self.client.patch(reverse('dashboard:stepfunctions-state-machine-detail', kwargs={'state_machine_arn': arn}), data=json.dumps({'definition': definition}), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        arguments = client_mock.return_value.update_state_machine.call_args.kwargs
+        self.assertNotIn('roleArn', arguments)
+        self.assertEqual(json.loads(arguments['definition']), definition)
+
+    @patch('dashboard.stepfunctions_api._stepfunctions_client')
+    def test_invalid_definition_never_updates_sdk(self, client_mock):
+        arn = 'arn:aws:states:us-east-1:000000000000:stateMachine:workflow'
+        response = self.client.patch(reverse('dashboard:stepfunctions-state-machine-detail', kwargs={'state_machine_arn': arn}), data=json.dumps({'definition': '{broken'}), content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        client_mock.assert_not_called()
+
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_activity_create_and_delete_use_distinct_sdk_operations(self, factory_mock):
+        client = factory_mock.return_value.client.return_value
+        client.create_activity.return_value = {'activityArn': 'arn:aws:states:us-east-1:000000000000:activity:worker'}
+        response = self.client.post('/api/stepfunctions/activities/', data=json.dumps({'name': 'worker'}), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        client.create_activity.assert_called_once_with(name='worker')
+        arn = response.json()['activityArn']
+        response = self.client.delete('/api/stepfunctions/activities/', data=json.dumps({'activity_arn': arn}), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        client.delete_activity.assert_called_once_with(activityArn=arn)
+
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_callback_validates_json_and_keeps_zero_output(self, factory_mock):
+        response = self.client.post('/api/stepfunctions/tasks/callback/', data=json.dumps({'task_token': 'token', 'success': True, 'output': '0'}), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        factory_mock.return_value.client.return_value.send_task_success.assert_called_once_with(taskToken='token', output='0')
+        response = self.client.post('/api/stepfunctions/tasks/callback/', data=json.dumps({'task_token': 'token', 'success': 'false'}), content_type='application/json')
+        self.assertEqual(response.status_code, 400)

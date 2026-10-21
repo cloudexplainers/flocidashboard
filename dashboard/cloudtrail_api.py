@@ -60,3 +60,31 @@ def delete_trail(name: str) -> dict[str, Any]:
     clean_name = _required(name, 'Trail name')
     _client().delete_trail(Name=clean_name)
     return {'name': clean_name, 'deleted': True}
+
+
+def event_selectors(name: str, selectors: Any = None) -> dict[str, Any]:
+    from .aws import _clean_response
+    client = _client()
+    clean_name = _required(name, 'Trail name')
+    if selectors is None:
+        response = client.get_event_selectors(TrailName=clean_name)
+    else:
+        if not isinstance(selectors, dict) or not set(selectors).issubset({'EventSelectors', 'AdvancedEventSelectors'}):
+            raise ValueError('Use EventSelectors or AdvancedEventSelectors')
+        if len(selectors) != 1 or not isinstance(next(iter(selectors.values())), list):
+            raise ValueError('Provide exactly one selector list')
+        response = client.put_event_selectors(TrailName=clean_name, **selectors)
+    return _clean_response({key: value for key, value in response.items() if key != 'ResponseMetadata'})
+
+
+def lookup_events(*, attribute: str = '', value: str = '', next_token: str = '') -> dict[str, Any]:
+    from .aws import _clean_response
+    kwargs: dict[str, Any] = {'MaxResults': 50}
+    if attribute or value:
+        if attribute not in {'EventId', 'EventName', 'ReadOnly', 'Username', 'ResourceType', 'ResourceName', 'EventSource', 'AccessKeyId'}:
+            raise ValueError('Invalid lookup attribute')
+        kwargs['LookupAttributes'] = [{'AttributeKey': attribute, 'AttributeValue': _required(value, 'Lookup value')}]
+    if next_token:
+        kwargs['NextToken'] = next_token
+    response = _client().lookup_events(**kwargs)
+    return {'events': _clean_response(response.get('Events', [])), 'next_token': response.get('NextToken')}

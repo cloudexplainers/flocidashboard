@@ -120,3 +120,34 @@ class ApiGatewayRequestsApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()['service'], 'apigateway')
         self.assertEqual(response.json()['operation'], 'test_request')
+
+
+class ApiGatewayResponsePresentationTests(SimpleTestCase):
+    @patch('dashboard.apigateway_api.monotonic', side_effect=[10.0, 10.0125])
+    @patch('dashboard.apigateway_api.urlopen')
+    def test_zero_json_body_raw_headers_and_duration_are_preserved(self, urlopen_mock, monotonic_mock):
+        from .apigateway_api import test_api_request
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b'0'
+        response.getcode.return_value = 200
+        response.headers.items.return_value = [('content-type', 'application/json')]
+        urlopen_mock.return_value = response
+        result = test_api_request('rest', 'review', 'GET', '/orders', stage='dev')
+        self.assertEqual(result['body'], '0')
+        self.assertEqual(result['json'], 0)
+        self.assertEqual(result['duration_ms'], 12.5)
+        self.assertEqual(result['headers']['content-type'], 'application/json')
+
+    @patch('dashboard.apigateway_api.urlopen')
+    def test_http_error_is_a_test_response_with_body_and_headers(self, urlopen_mock):
+        from io import BytesIO
+        from urllib.error import HTTPError
+        from .apigateway_api import test_api_request
+        urlopen_mock.side_effect = HTTPError('http://localhost/denied', 403, 'Forbidden', {'x-request-id': 'review'}, BytesIO(b'Denied'))
+        result = test_api_request('rest', 'review', 'GET', '/orders', stage='dev')
+        self.assertEqual(result['status_code'], 403)
+        self.assertEqual(result['body'], 'Denied')
+        self.assertEqual(result['headers']['x-request-id'], 'review')
+        self.assertIsNone(result['json'])
+        self.assertGreaterEqual(result['duration_ms'], 0)

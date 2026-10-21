@@ -28,7 +28,7 @@ def rds_instances_create(request):
             body.get('username', ''),
             body.get('password', ''),
             db_instance_class=body.get('db_instance_class') or 'db.t3.micro',
-            allocated_storage=body.get('allocated_storage') or 20,
+            allocated_storage=body.get('allocated_storage', 20),
             db_name=body.get('db_name') or '',
             engine_version=body.get('engine_version') or '',
             enable_iam_auth=body.get('enable_iam_auth') is True,

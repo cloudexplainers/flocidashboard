@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from .aws import FlociClientFactory
@@ -64,6 +65,7 @@ def create_topic(
     fifo: bool = False,
     display_name: str | None = None,
     kms_master_key_id: str | None = None,
+    content_based_deduplication: bool = True,
 ) -> dict[str, Any]:
     clean_name = (name or '').strip()
     if not clean_name:
@@ -74,7 +76,7 @@ def create_topic(
     attributes: dict[str, str] = {}
     if fifo or clean_name.endswith('.fifo'):
         attributes['FifoTopic'] = 'true'
-        attributes['ContentBasedDeduplication'] = 'true'
+        attributes['ContentBasedDeduplication'] = 'true' if content_based_deduplication else 'false'
     if display_name:
         attributes['DisplayName'] = display_name.strip()
     if kms_master_key_id:
@@ -110,6 +112,7 @@ def subscribe(
     *,
     filter_policy: Any = None,
     raw_message_delivery: bool = False,
+    filter_policy_scope: str = 'MessageAttributes',
 ) -> dict[str, Any]:
     arn = validate_topic_arn(topic_arn)
     clean_proto = (protocol or '').strip().lower()
@@ -122,11 +125,16 @@ def subscribe(
     attributes: dict[str, str] = {}
     if raw_message_delivery:
         attributes['RawMessageDelivery'] = 'true'
-    if filter_policy:
-        if isinstance(filter_policy, dict):
-            attributes['FilterPolicy'] = json.dumps(filter_policy)
-        else:
-            attributes['FilterPolicy'] = str(filter_policy)
+    if filter_policy is not None:
+        policy = json.loads(filter_policy) if isinstance(filter_policy, str) else filter_policy
+        if not isinstance(policy, dict):
+            raise ValueError('Filter policy must be a JSON object')
+        if filter_policy_scope not in ('MessageAttributes', 'MessageBody'):
+            raise ValueError('Filter policy scope must be MessageAttributes or MessageBody')
+        attributes['FilterPolicy'] = json.dumps(policy)
+        attributes['FilterPolicyScope'] = filter_policy_scope
+    if raw_message_delivery and clean_proto not in ('sqs', 'http', 'https', 'firehose'):
+        raise ValueError('Raw message delivery is not available for this protocol')
 
     payload: dict[str, Any] = {
         'TopicArn': arn,
@@ -164,7 +172,16 @@ def set_subscription_attributes(
     if not clean_arn or not clean_attr:
         raise ValueError('Subscription ARN and attribute name are required')
 
-    val = json.dumps(attribute_value) if isinstance(attribute_value, (dict, list)) else str(attribute_value)
+    if clean_attr == 'FilterPolicy':
+        policy = json.loads(attribute_value) if isinstance(attribute_value, str) else attribute_value
+        if not isinstance(policy, dict):
+            raise ValueError('Filter policy must be a JSON object')
+        attribute_value = policy
+    if clean_attr == 'FilterPolicyScope' and attribute_value not in ('MessageAttributes', 'MessageBody'):
+        raise ValueError('Invalid filter policy scope')
+    if clean_attr == 'RawMessageDelivery' and not (isinstance(attribute_value, bool) or isinstance(attribute_value, str) and attribute_value in ('true', 'false')):
+        raise ValueError('Raw message delivery must be true or false')
+    val = json.dumps(attribute_value) if isinstance(attribute_value, (dict, list, bool)) else str(attribute_value)
     _sns_client().set_subscription_attributes(
         SubscriptionArn=clean_arn,
         AttributeName=clean_attr,

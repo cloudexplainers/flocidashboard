@@ -1,3 +1,4 @@
+import { CloudTrailConsole } from './pages/CloudTrailConsole';
 import { parseEksRoute, eksClusterPath } from './pages/eksResources';
 import { parseEcsRoute, clusterPath, servicePath } from './pages/ecsResources';
 import { useSession } from './components/SessionContext';
@@ -176,6 +177,25 @@ export const App: React.FC = () => {
         { text: 'Activity & Audit Log', href: 'activity' },
       ];
     }
+    if (currentView === 'rds') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'Amazon RDS', href: 'rds' }, ...(query.get('db') || query.get('cluster') ? [{ text: (query.get('db') || query.get('cluster'))!, href: activeSubView }] : [])];
+    }
+    if (currentView === 'cloudformation') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'CloudFormation', href: 'cloudformation' },
+        ...(query.get('stack') ? [{ text: query.get('stack')!, href: `cloudformation/overview?stack=${encodeURIComponent(query.get('stack')!)}` }] : []),
+        ...(query.get('changeSet') ? [{ text: query.get('changeSet')!, href: activeSubView }] : [])];
+    }
+    if (currentView === 'appsync') {
+      const api = new URLSearchParams(activeSubView.split('?')[1] || '').get('api');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'AWS AppSync', href: 'appsync/apis' }, ...(api ? [{ text: api, href: activeSubView }] : [])];
+    }
+    if (currentView === 'eventbridge') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'Amazon EventBridge', href: 'eventbridge' },
+        ...(query.get('rule') ? [{ text: `${query.get('bus') || 'default'} / ${query.get('rule')}`, href: activeSubView }] : [])];
+    }
     if (currentView === 'eks') {
       const route = parseEksRoute(activeSubView);
       if (route.cluster) return [
@@ -192,6 +212,24 @@ export const App: React.FC = () => {
         ...(route.service ? [{ text: route.service, href: servicePath(route.cluster, route.service) }] : []),
         ...(route.task ? [{ text: route.task, href: activeSubView }] : []),
       ];
+    }
+    if (currentView === 'sns') {
+      const topic = new URLSearchParams(activeSubView.split('?')[1] || '').get('topic');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'Amazon SNS', href: 'sns' },
+        ...(topic ? [{ text: topic.split(':').pop() || topic, href: `sns/overview?${new URLSearchParams({ topic })}` }] : [])];
+    }
+    if (currentView === 'stepfunctions') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      const machine = query.get('machine'); const execution = query.get('execution');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'Step Functions', href: 'stepfunctions/machines' },
+        ...(machine ? [{ text: machine.split(':').pop() || machine, href: `stepfunctions/machines?${new URLSearchParams({ machine })}` }] : []),
+        ...(execution ? [{ text: execution.split(':').pop() || execution, href: activeSubView }] : [])];
+    }
+    if (currentView === 'apigateway') {
+      const api = new URLSearchParams(activeSubView.split('?')[1] || '').get('api');
+      const section = activeSubView.split('?')[0].split('/')[1] || 'overview';
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'API Gateway', href: 'apigateway' },
+        ...(api ? [{ text: api, href: `apigateway/overview?api=${encodeURIComponent(api)}` }, { text: section === 'resources' ? 'Routes and resources' : section.charAt(0).toUpperCase() + section.slice(1), href: activeSubView }] : [])];
     }
     if (currentView === 'cloudwatch') {
       const alarm = new URLSearchParams(activeSubView.split('?')[1] || '').get('alarm');
@@ -238,6 +276,11 @@ export const App: React.FC = () => {
         ...(repository ? [{ text: repository, href: `ecr/images?repository=${encodeURIComponent(repository)}` }] : []),
         ...(query.get('image') ? [{ text: 'Image details', href: activeSubView }] : []),
       ];
+    }
+    if (currentView === 'cloudtrail') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      const trail = query.get('trail');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'CloudTrail', href: 'cloudtrail/events' }, { text: trail ? 'Trails' : 'Event history', href: trail ? 'cloudtrail/trails' : 'cloudtrail/events' }, ...(trail ? [{ text: trail, href: activeSubView }] : query.get('event') ? [{ text: query.get('event')!, href: activeSubView }] : [])];
     }
     if (currentView === 'route53' || currentView === 'cognito') {
       const query = new URLSearchParams(activeSubView.split('?')[1] || '');
@@ -410,18 +453,38 @@ export const App: React.FC = () => {
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'sns':
+      case 'sns': {
+        const topic = new URLSearchParams(activeSubView.split('?')[1] || '').get('topic');
+        const query = topic ? `?topic=${encodeURIComponent(topic)}` : '';
         return [
-          { type: 'link' as const, text: 'Topics & Subscriptions', href: 'sns', icon: <AwsServiceIcon service="sns" size={18} /> },
-          { type: 'divider' as const },
-          { type: 'link' as const, text: '← Console Home', href: 'home' },
+          { type: 'link' as const, text: 'Topics', href: 'sns', icon: <AwsServiceIcon service="sns" size={18} /> },
+          ...(topic ? [
+            { type: 'link' as const, text: 'Message fan-out', href: `sns/overview${query}` },
+            { type: 'link' as const, text: 'Subscriptions', href: `sns/subscriptions${query}` },
+            { type: 'link' as const, text: 'Topic configuration', href: `sns/details${query}` },
+            { type: 'link' as const, text: 'Filter policies', href: `sns/filtering${query}` },
+            { type: 'link' as const, text: 'Access policy', href: `sns/policy${query}` },
+          ] : []),
+          { type: 'divider' as const }, { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'rds':
+      }
+      case 'rds': {
+        const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+        const db = query.get('db'), cluster = query.get('cluster');
+        const resource = db || cluster;
+        const base = db ? `rds/instances?db=${encodeURIComponent(db)}` : cluster ? `rds/clusters?cluster=${encodeURIComponent(cluster)}` : '';
         return [
-          { type: 'link' as const, text: 'Databases, Clusters & Parameter Groups', href: 'rds', icon: <AwsServiceIcon service="rds" size={18} /> },
-          { type: 'divider' as const },
-          { type: 'link' as const, text: '← Console Home', href: 'home' },
+          { type: 'link' as const, text: 'Databases', href: 'rds/instances', icon: <AwsServiceIcon service="rds" size={18} /> },
+          { type: 'link' as const, text: 'Clusters', href: 'rds/clusters' },
+          { type: 'link' as const, text: 'Parameter groups', href: 'rds/parameter-groups' },
+          ...(resource ? [
+            { type: 'divider' as const },
+            { type: 'link' as const, text: 'Overview', href: `${base}&tab=overview` },
+            ...(db ? [{ type: 'link' as const, text: 'Connectivity', href: `${base}&tab=connectivity` }, { type: 'link' as const, text: 'Configuration', href: `${base}&tab=configuration` }] : [{ type: 'link' as const, text: 'Members and endpoints', href: `${base}&tab=members` }]),
+          ] : []),
+          { type: 'divider' as const }, { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
+      }
       case 'kms': {
         const key = new URLSearchParams(activeSubView.split('?')[1] || '').get('key');
         const query = key ? `?key=${encodeURIComponent(key)}` : '';
@@ -445,26 +508,50 @@ export const App: React.FC = () => {
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'cloudformation':
+      case 'cloudformation': {
+        const stack = new URLSearchParams(activeSubView.split('?')[1] || '').get('stack');
+        const query = stack ? `?stack=${encodeURIComponent(stack)}` : '';
         return [
-          { type: 'link' as const, text: 'Stacks, Events & Change Sets', href: 'cloudformation', icon: <AwsServiceIcon service="cloudformation" size={18} /> },
+          { type: 'link' as const, text: 'Stacks', href: 'cloudformation', icon: <AwsServiceIcon service="cloudformation" size={18} /> },
+          ...(stack ? [
+            { type: 'link' as const, text: 'Overview', href: `cloudformation/overview${query}` },
+            { type: 'link' as const, text: 'Events', href: `cloudformation/events${query}` },
+            { type: 'link' as const, text: 'Resources', href: `cloudformation/resources${query}` },
+            { type: 'link' as const, text: 'Outputs and parameters', href: `cloudformation/outputs_params${query}` },
+            { type: 'link' as const, text: 'Change sets', href: `cloudformation/change_sets${query}` },
+            { type: 'link' as const, text: 'Template', href: `cloudformation/template${query}` },
+          ] : []),
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
+      }
+      case 'cloudtrail': {
+        const trail = new URLSearchParams(activeSubView.split('?')[1] || '').get('trail');
+        return [
+          { type: 'link' as const, text: 'Event history', href: 'cloudtrail/events', icon: <AwsServiceIcon service="cloudtrail" size={18} /> },
+          { type: 'link' as const, text: 'Trails', href: 'cloudtrail/trails' },
+          ...(trail ? [{ type: 'link' as const, text: 'Trail overview', href: `cloudtrail/trails?${new URLSearchParams({ trail, tab: 'overview' })}` }, { type: 'link' as const, text: 'Event selectors', href: `cloudtrail/trails?${new URLSearchParams({ trail, tab: 'selectors' })}` }] : []),
+          { type: 'divider' as const },
+          { type: 'link' as const, text: '← Console Home', href: 'home' },
+        ];
+      }
       case 'route53':
         return [
           { type: 'link' as const, text: 'Hosted Zones & DNS Records', href: 'route53', icon: <AwsServiceIcon service="route53" size={18} /> },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'eventbridge':
+      case 'eventbridge': {
+        const query = activeSubView.includes('?') ? `?${activeSubView.split('?')[1]}` : '';
         return [
-          { type: 'link' as const, text: 'Rules and routing', href: 'eventbridge/rules', icon: <AwsServiceIcon service="eventbridge" size={18} /> },
+          { type: 'link' as const, text: 'Rules', href: 'eventbridge/rules', icon: <AwsServiceIcon service="eventbridge" size={18} /> },
           { type: 'link' as const, text: 'Event buses', href: 'eventbridge/buses' },
-          { type: 'link' as const, text: 'Pattern tester', href: 'eventbridge/tester' },
+          { type: 'link' as const, text: 'Pattern tester', href: `eventbridge/tester${query}` },
+          { type: 'link' as const, text: 'Send events', href: `eventbridge/send${query}` },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
+      }
       case 'cloudwatch':
         return [
           { type: 'link' as const, text: 'Alarms', href: 'cloudwatch/alarms', icon: <AwsServiceIcon service="cloudwatch" size={18} /> },
@@ -488,15 +575,22 @@ export const App: React.FC = () => {
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'apigateway':
+      case 'apigateway': {
+        const api = new URLSearchParams(activeSubView.split('?')[1] || '').get('api');
+        const query = api ? `?api=${encodeURIComponent(api)}` : '';
         return [
-          { type: 'link' as const, text: 'Resources & Methods', href: 'apigateway/resources', icon: <AwsServiceIcon service="apigateway" size={18} /> },
-          { type: 'link' as const, text: 'Stages & Deployments', href: 'apigateway/stages' },
-          { type: 'link' as const, text: 'Authorizers', href: 'apigateway/authorizers' },
-          { type: 'link' as const, text: 'Test Request Runner', href: 'apigateway/test' },
-          { type: 'divider' as const },
-          { type: 'link' as const, text: '← Console Home', href: 'home' },
+          { type: 'link' as const, text: 'APIs', href: 'apigateway', icon: <AwsServiceIcon service="apigateway" size={18} /> },
+          ...(api ? [
+            { type: 'link' as const, text: 'Overview', href: `apigateway/overview${query}` },
+            { type: 'link' as const, text: 'Routes and resources', href: `apigateway/resources${query}` },
+            { type: 'link' as const, text: 'Integrations', href: `apigateway/integrations${query}` },
+            { type: 'link' as const, text: 'Stages and deployments', href: `apigateway/stages${query}` },
+            { type: 'link' as const, text: 'Authorizers', href: `apigateway/authorizers${query}` },
+            { type: 'link' as const, text: 'Test request', href: `apigateway/test${query}` },
+          ] : []),
+          { type: 'divider' as const }, { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
+      }
       case 'ssm':
         return [
           { type: 'link' as const, text: 'Parameter Store', href: 'ssm/parameters', icon: <AwsServiceIcon service="ssm" size={18} /> },
@@ -558,17 +652,23 @@ export const App: React.FC = () => {
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'appsync':
+      case 'appsync': {
+        const api = new URLSearchParams(activeSubView.split('?')[1] || '').get('api');
+        const query = api ? `?api=${encodeURIComponent(api)}` : '';
         return [
           { type: 'link' as const, text: 'APIs', href: 'appsync/apis', icon: <AwsServiceIcon service="appsync" size={18} /> },
-          { type: 'link' as const, text: 'Schema Editor', href: 'appsync/schema' },
-          { type: 'link' as const, text: 'Data Sources', href: 'appsync/datasources' },
-          { type: 'link' as const, text: 'Resolvers', href: 'appsync/resolvers' },
-          { type: 'link' as const, text: 'API Keys', href: 'appsync/apikeys' },
-          { type: 'link' as const, text: 'GraphQL Query Sandbox', href: 'appsync/sandbox' },
+          ...(api ? [
+            { type: 'link' as const, text: 'Overview', href: `appsync/overview${query}` },
+            { type: 'link' as const, text: 'Schema', href: `appsync/schema${query}` },
+            { type: 'link' as const, text: 'Data sources', href: `appsync/datasources${query}` },
+            { type: 'link' as const, text: 'Resolvers', href: `appsync/resolvers${query}` },
+            { type: 'link' as const, text: 'API keys', href: `appsync/apikeys${query}` },
+            { type: 'link' as const, text: 'Queries', href: `appsync/sandbox${query}` },
+          ] : []),
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
+      }
       case 'ses':
         return [
           { type: 'link' as const, text: 'Account dashboard', href: 'ses/overview' },
@@ -707,7 +807,7 @@ export const App: React.FC = () => {
       case 'sns':
         return <SNSConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'rds':
-        return <RDSConsole />;
+        return <RDSConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'kms':
         return (
           <KMSConsole
@@ -723,7 +823,7 @@ export const App: React.FC = () => {
       case 'secretsmanager':
         return <SecretsManagerConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'cloudformation':
-        return <CloudFormationConsole />;
+        return <CloudFormationConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'route53':
         return <Route53Console resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'eventbridge':
@@ -745,7 +845,7 @@ export const App: React.FC = () => {
           <StepFunctionsConsole
             resourcePath={activeSubView}
             onNavigate={navigateTo}
-            activeTab={activeTabOverride['stepfunctions']}
+            activeTab={activeSubView.split('?')[0].split('/')[1] || 'machines'}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, stepfunctions: tab }));
               setActiveSubView(`stepfunctions/${tab}`);
@@ -769,7 +869,7 @@ export const App: React.FC = () => {
           <ApiGatewayConsole
             resourcePath={activeSubView}
             onNavigate={navigateTo}
-            activeTab={activeTabOverride['apigateway']}
+            activeTab={activeSubView.split('?')[0].split('/')[1] || 'overview'}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, apigateway: tab }));
               setActiveSubView(`apigateway/${tab}`);
@@ -853,23 +953,17 @@ export const App: React.FC = () => {
       case 'athena':
         return (
           <AthenaConsole
-            activeTab={activeTabOverride['athena']}
+            activeTab={activeSubView.split('?')[0].split('/')[1] || 'editor'}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, athena: tab }));
               setActiveSubView(`athena/${tab}`);
             }}
           />
         );
+      case 'cloudtrail':
+        return <CloudTrailConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'appsync':
-        return (
-          <AppSyncConsole
-            activeTab={activeTabOverride['appsync']}
-            onTabChange={(tab) => {
-              setActiveTabOverride((prev) => ({ ...prev, appsync: tab }));
-              setActiveSubView(`appsync/${tab}`);
-            }}
-          />
-        );
+        return <AppSyncConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'ses':
         return (
           <SESConsole

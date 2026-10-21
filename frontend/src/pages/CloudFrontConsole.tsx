@@ -1,6 +1,6 @@
 import { DistributionBehaviors } from '../components/DistributionBehaviors';
 import { ResourceValue } from '../components/ResourceDetails';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Table from '../components/ResourceTable';
 import Box from '@cloudscape-design/components/box';
 import Button from '@cloudscape-design/components/button';
@@ -12,7 +12,6 @@ import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Textarea from '@cloudscape-design/components/textarea';
 import Select from '@cloudscape-design/components/select';
-import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Grid from '@cloudscape-design/components/grid';
 import Badge from '@cloudscape-design/components/badge';
 import Alert from '@cloudscape-design/components/alert';
@@ -27,6 +26,7 @@ import {
   createCloudFrontCachePolicy,
   createCloudFrontFunction,
   deleteCloudFrontFunction,
+  publishCloudFrontFunction,
 } from '../api/client';
 
 interface CloudFrontConsoleProps {
@@ -39,6 +39,10 @@ interface CloudFrontConsoleProps {
 export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab, onTabChange, resourcePath = 'cloudfront', onNavigate }) => {
   const query = new URLSearchParams(resourcePath.split('?')[1] || '');
   const pinned = query.get('distribution');
+  const section = activeTab || resourcePath.split('?')[0].split('/')[1] || 'distributions';
+  const latestDistribution = useRef(pinned); latestDistribution.current = pinned;
+  const [confirmation, setConfirmation] = useState<{ title: string; description: string; action: () => Promise<void> } | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [loadError, setLoadError] = useState('');
   const showTab = (tab: string, values?: Record<string, string>) => {
     const next = new URLSearchParams(resourcePath.split('?')[1] || '');
@@ -61,15 +65,16 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
 
   // Create Distribution Modal
   const [createDistOpen, setCreateDistOpen] = useState(false);
-  const [originDomain, setOriginDomain] = useState('my-bucket.s3.localhost:4566');
-  const [originId, setOriginId] = useState('s3-origin-1');
-  const [distComment, setDistComment] = useState('Production CDN distribution');
+  const [originDomain, setOriginDomain] = useState('');
+  const [originId, setOriginId] = useState('');
+  const [distComment, setDistComment] = useState('');
   const [viewerProtocolPolicy, setViewerProtocolPolicy] = useState({ label: 'Redirect HTTP to HTTPS', value: 'redirect-to-https' });
+  const [originType, setOriginType] = useState('s3');
   const [creatingDist, setCreatingDist] = useState(false);
 
   // Create Invalidation Modal
   const [createInvOpen, setCreateInvOpen] = useState(false);
-  const [invPaths, setInvPaths] = useState('/*\n/index.html\n/static/*');
+  const [invPaths, setInvPaths] = useState('');
   const [creatingInv, setCreatingInv] = useState(false);
 
   // Create Cache Policy Modal
@@ -104,7 +109,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
           origin_access_identities: [],
         }
       );
-      setSelectedDists(previous => previous.length ? (res?.distributions || []).filter((distribution: any) => (distribution.Id || distribution.id) === (previous[0].Id || previous[0].id)) : (res?.distributions || []).slice(0, 1));
+      setSelectedDists(previous => (res?.distributions || []).filter((distribution: any) => previous.some(item => (item.Id || item.id) === (distribution.Id || distribution.id))));
     } catch (err: any) {
       setLoadError(err.message || 'Inventory unavailable');
       setData({});
@@ -117,7 +122,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
     loadData();
   }, []);
 
-  const activeDist = (data.distributions || []).find((item: any) => (item.Id || item.id) === (pinned || selectedDists[0]?.Id || selectedDists[0]?.id)) || null;
+  const activeDist = (data.distributions || []).find((item: any) => (item.Id || item.id) === pinned) || null;
   const activeDistId = activeDist ? activeDist.Id || activeDist.id : '';
 
   const filteredDists = useMemo(() => {
@@ -128,6 +133,30 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
     );
   }, [data.distributions, filterText]);
 
+  const [invalidations, setInvalidations] = useState<any[]>([]);
+  const [invalidationError, setInvalidationError] = useState('');
+  const [invalidationDetail, setInvalidationDetail] = useState<any>(null);
+  const [invalidationRevision, setInvalidationRevision] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setInvalidations([]); setInvalidationDetail(null); setInvalidationError('');
+    if (activeDistId) fetch(`/api/cloudfront/distributions/${encodeURIComponent(activeDistId)}/invalidations/`)
+      .then(async response => { const result = await response.json(); if (!response.ok || result.error) throw new Error(result.error || 'Invalidations unavailable'); return result; })
+      .then(result => { if (!cancelled) setInvalidations(result.invalidations || []); })
+      .catch(error => { if (!cancelled) setInvalidationError(error.message); });
+    return () => { cancelled = true; };
+  }, [activeDistId, invalidationRevision]);
+  const inspectInvalidation = async (id: string) => {
+    const distribution = activeDistId;
+    setInvalidationDetail(null); setInvalidationError('');
+    try {
+      const response = await fetch(`/api/cloudfront/distributions/${encodeURIComponent(activeDistId)}/invalidations/${encodeURIComponent(id)}/`);
+      const result = await response.json();
+      if (!response.ok || result.error) throw new Error(result.error || 'Invalidation unavailable');
+      if (latestDistribution.current === distribution) setInvalidationDetail(result.invalidation);
+    } catch (error: any) { if (latestDistribution.current === distribution) setInvalidationError(error.message); }
+  };
+
   // Actions
   const handleCreateDistribution = async () => {
     if (!originDomain.trim()) return;
@@ -135,12 +164,13 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
     try {
       await createCloudFrontDistribution({
         origin_domain_name: originDomain.trim(),
+        origin_type: originType,
         origin_id: originId.trim() || undefined,
         comment: distComment.trim() || undefined,
         viewer_protocol_policy: viewerProtocolPolicy.value,
         enabled: true,
       });
-      setActionMessage({ type: 'success', text: 'CloudFront Distribution deployed successfully.' });
+      setActionMessage({ type: 'success', text: 'Distribution creation accepted. Check the reported deployment status.' });
       setCreateDistOpen(false);
       await loadData();
     } catch (err: any) {
@@ -161,7 +191,6 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
   };
 
   const handleDeleteDistribution = async (distId: string) => {
-    if (!confirm(`Are you sure you want to delete distribution "${distId}"?`)) return;
     try {
       await deleteCloudFrontDistribution(distId);
       setActionMessage({ type: 'success', text: `Distribution "${distId}" deleted.` });
@@ -179,7 +208,9 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         .split('\n')
         .map((p) => p.trim())
         .filter(Boolean);
+      if (paths.some(path => !path.startsWith('/'))) throw new Error('Each object path must begin with /.');
       await createCloudFrontInvalidation(activeDistId, paths);
+      setInvalidationRevision(value => value + 1);
       setActionMessage({ type: 'success', text: `Invalidation created for ${paths.length} path(s).` });
       setCreateInvOpen(false);
       await loadData();
@@ -192,13 +223,15 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
 
   const handleCreateCachePolicy = async () => {
     if (!policyName.trim()) return;
+    const ttls = [minTtl, defaultTtl, maxTtl].map(value => value.trim() === '' ? NaN : Number(value));
+    if (ttls.some(value => !Number.isSafeInteger(value) || value < 0) || ttls[0] > ttls[1] || ttls[1] > ttls[2]) { setActionMessage({ type: 'error', text: 'TTLs must be whole seconds with 0 ≤ minimum ≤ default ≤ maximum.' }); return; }
     setCreatingPolicy(true);
     try {
       await createCloudFrontCachePolicy({
         name: policyName.trim(),
-        default_ttl: parseInt(defaultTtl, 10) || 86400,
-        max_ttl: parseInt(maxTtl, 10) || 31536000,
-        min_ttl: parseInt(minTtl, 10) || 0,
+        default_ttl: Number(defaultTtl),
+        max_ttl: Number(maxTtl),
+        min_ttl: Number(minTtl),
       });
       setActionMessage({ type: 'success', text: `Cache policy "${policyName.trim()}" created.` });
       setCreatePolicyOpen(false);
@@ -244,7 +277,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         description="Amazon CloudFront is a fast content delivery network (CDN) service that securely delivers data, videos, and APIs."
         actions={
           <SpaceBetween direction="horizontal" size="xs">
-            <Button iconName="refresh" loading={loading} onClick={loadData}>
+            <Button iconName="refresh" loading={loading} onClick={() => { loadData(); setInvalidationRevision(value => value + 1); }}>
               Refresh
             </Button>
             <Button variant="primary" iconName="add-plus" onClick={() => setCreateDistOpen(true)}>
@@ -253,7 +286,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
           </SpaceBetween>
         }
       >
-        Amazon CloudFront
+        {pinned ? `Distribution: ${pinned}` : 'Amazon CloudFront'}
       </Header>
 
       {actionMessage && (
@@ -263,15 +296,15 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
       )}
 
       {loadError && <Alert type="error">{loadError}</Alert>}
-      {/* Metrics */}
-      <Grid gridDefinition={[{ colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }]}>
+      {/* Inventory totals */}
+      {!pinned && <Grid gridDefinition={[{ colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }, { colspan: { default: 12, s: 3 } }]}>
         <Container>
           <Box variant="awsui-key-label">Distributions</Box>
           <Box variant="awsui-value-large">{(data.distributions || []).length}</Box>
         </Container>
         <Container>
-          <Box variant="awsui-key-label">Invalidations</Box>
-          <Box variant="awsui-value-large">{(data.invalidations || []).length}</Box>
+          <Box variant="awsui-key-label">Origin access identities</Box>
+          <Box variant="awsui-value-large">{(data.origin_access_identities || []).length}</Box>
         </Container>
         <Container>
           <Box variant="awsui-key-label">Cache Policies</Box>
@@ -281,15 +314,15 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
           <Box variant="awsui-key-label">CloudFront Functions</Box>
           <Box variant="awsui-value-large">{(data.functions || []).length}</Box>
         </Container>
-      </Grid>
+      </Grid>}
 
       <FormField label="Distribution context"><Select ariaLabel="Distribution context" placeholder="Select a distribution" selectedOption={activeDistId ? { label: activeDistId, value: activeDistId } : null} options={(data.distributions || []).map((distribution: any) => ({ label: distribution.Id || distribution.id, value: distribution.Id || distribution.id, description: distribution.DomainName || distribution.domain_name }))} onChange={({ detail }) => showTab(activeTab || 'origins', { distribution: detail.selectedOption.value! })} /></FormField>
       {pinned && !loading && !loadError && !activeDist && <Alert type="warning">Distribution not found in the active account and Region.</Alert>}
-      {activeDist && <Container header={<Header variant="h2" description={activeDist.DomainName || 'Domain not reported'} actions={<Button onClick={() => showTab('origins')}>View origins and behaviors</Button>}>Distribution: {activeDistId}</Header>}>
-        <div className="resource-flow"><section><Header variant="h3">Viewer</Header><p>{activeDist.DomainName || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Default behavior</Header><p>Target origin: {activeDist.DefaultCacheBehavior?.TargetOriginId || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Origins</Header>{(activeDist.Origins?.Items || []).map((origin: any) => <p key={origin.Id}>{origin.Id}: {origin.DomainName}</p>)}{!activeDist.Origins?.Items?.length && <p>Not reported</p>}</section></div>
+      {activeDist && <Container header={<Header variant="h2" description={activeDist.DomainName || 'Domain not reported'} actions={<Button onClick={() => showTab('origins')}>View origins and behaviors</Button>}>Distribution overview</Header>}>
+        <SpaceBetween size="m"><Grid gridDefinition={Array.from({ length: 6 }, () => ({ colspan: { default: 12, s: 4 } }))}>{[['Deployment status', activeDist.Status], ['Enabled', activeDist.Enabled == null ? null : activeDist.Enabled ? 'Yes' : 'No'], ['Last modified', activeDist.LastModifiedTime], ['ARN', activeDist.ARN], ['Price class', activeDist.PriceClass], ['HTTP version', activeDist.HttpVersion]].map(([label, value]) => <div key={label}><Box variant="awsui-key-label">{label}</Box><Box>{value == null ? 'Not reported' : String(value)}</Box></div>)}</Grid><div className="resource-flow cloudfront-request-flow"><section><Header variant="h3">Viewer</Header><p>{activeDist.DomainName || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Default behavior</Header><p>Target origin: {activeDist.DefaultCacheBehavior?.TargetOriginId || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Origins</Header>{(activeDist.Origins?.Items || []).map((origin: any) => <p key={origin.Id}>{origin.Id}: {origin.DomainName}</p>)}{!activeDist.Origins?.Items?.length && <p>Not reported</p>}</section></div></SpaceBetween>
       </Container>}
       <Tabs
-        activeTabId={activeTab || 'distributions'}
+        activeTabId={section}
         onChange={({ detail }) => showTab(detail.activeTabId)}
         tabs={[
           {
@@ -364,13 +397,14 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                         cell: (item: any) => (
                           <SpaceBetween direction="horizontal" size="xs">
                             <Button
-                              onClick={() => handleToggleDistEnabled(item.Id || item.id, item.Enabled !== false)}
+                              disabled={item.Enabled == null} onClick={() => handleToggleDistEnabled(item.Id || item.id, item.Enabled !== false)}
                             >
                               {item.Enabled !== false ? 'Disable' : 'Enable'}
                             </Button>
                             <Button
                               iconName="remove"
-                              onClick={() => handleDeleteDistribution(item.Id || item.id)}
+                              disabled={item.Enabled !== false || item.Status !== 'Deployed'}
+                              onClick={() => setConfirmation({ title: 'Delete distribution', description: `Delete ${item.Id || item.id}? The distribution must be disabled and deployed.`, action: () => handleDeleteDistribution(item.Id || item.id) })}
                             >
                               Delete
                             </Button>
@@ -390,7 +424,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
             ),
           },
           {
-            label: `Invalidations (${(data.invalidations || []).length})`,
+            label: `Invalidations (${invalidations.length})`,
             id: 'invalidations',
             content: (
               <Container
@@ -399,7 +433,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                     variant="h2"
                     description={activeDistId ? `Invalidations for "${activeDistId}"` : 'Select a distribution'}
                     actions={
-                      <Button variant="primary" iconName="add-plus" onClick={() => setCreateInvOpen(true)}>
+                      <Button variant="primary" iconName="add-plus" disabled={!activeDistId} onClick={() => setCreateInvOpen(true)}>
                         Create Invalidation
                       </Button>
                     }
@@ -408,35 +442,39 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                   </Header>
                 }
               >
+                <SpaceBetween size="m">
+                {invalidationError && <Alert type="error">{invalidationError}</Alert>}
+                {invalidationDetail && <Container header={<Header variant="h3">Invalidation: {invalidationDetail.Id}</Header>}><SpaceBetween size="s"><Box>Status: {invalidationDetail.Status || 'Not reported'}</Box><Box>Caller reference: {invalidationDetail.InvalidationBatch?.CallerReference || 'Not reported'}</Box>{(invalidationDetail.InvalidationBatch?.Paths?.Items || []).map((path: string) => <Box key={path}><code>{path}</code></Box>)}</SpaceBetween></Container>}
                 <Table
                   columnDefinitions={[
                     {
                       id: 'id',
                       header: 'Invalidation ID',
-                      cell: (item: any) => <code>{item.Id || item.id}</code>,
+                      cell: (item: any) => <Button variant="inline-link" onClick={() => inspectInvalidation(item.Id || item.id)}>{item.Id || item.id}</Button>,
                       width: 220,
                     },
                     {
                       id: 'status',
                       header: 'Status',
-                      cell: (item: any) => <StatusIndicator type="success">{item.Status || 'Completed'}</StatusIndicator>,
+                      cell: (item: any) => <ResourceValue name="status" value={item.Status} />,
                       width: 140,
                     },
                     {
                       id: 'paths',
                       header: 'Object Paths',
-                      cell: (item: any) => <code>{item.Paths?.Items?.join(', ') || item.paths?.join(', ') || '/*'}</code>,
+                      cell: (item: any) => <code>{item.InvalidationBatch?.Paths?.Items?.join(', ') || 'Open invalidation for paths'}</code>,
                     },
                     {
                       id: 'date',
                       header: 'Created Time',
-                      cell: (item: any) => item.CreateTime || 'Just now',
+                      cell: (item: any) => item.CreateTime || 'Not reported',
                       width: 160,
                     },
                   ]}
-                  items={data.invalidations || []}
-                  empty={<Box textAlign="center">No invalidations on record. Click Create Invalidation to purge cache.</Box>}
+                  items={invalidations}
+                  empty={<Box textAlign="center">{activeDistId ? 'No invalidations reported for this distribution.' : 'Select a distribution to inspect its invalidations.'}</Box>}
                 />
+                </SpaceBetween>
               </Container>
             ),
           },
@@ -490,19 +528,13 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
               >
                 <Table
                   columnDefinitions={[
-                    { id: 'name', header: 'Policy Name', cell: (i: any) => <strong>{i.CachePolicyConfig?.Name || i.name || 'Managed-CachingOptimized'}</strong> },
-                    { id: 'minTtl', header: 'Min TTL', cell: (i: any) => `${i.CachePolicyConfig?.MinTTL || 1}s`, width: 120 },
-                    { id: 'defaultTtl', header: 'Default TTL', cell: (i: any) => `${i.CachePolicyConfig?.DefaultTTL || 86400}s`, width: 140 },
-                    { id: 'maxTtl', header: 'Max TTL', cell: (i: any) => `${i.CachePolicyConfig?.MaxTTL || 31536000}s`, width: 140 },
+                    { id: 'name', header: 'Policy Name', cell: (i: any) => <strong>{i.CachePolicyConfig?.Name || 'Not reported'}</strong> },
+                    { id: 'minTtl', header: 'Min TTL', cell: (i: any) => i.CachePolicyConfig?.MinTTL == null ? 'Not reported' : `${i.CachePolicyConfig.MinTTL}s`, width: 120 },
+                    { id: 'defaultTtl', header: 'Default TTL', cell: (i: any) => i.CachePolicyConfig?.DefaultTTL == null ? 'Not reported' : `${i.CachePolicyConfig.DefaultTTL}s`, width: 140 },
+                    { id: 'maxTtl', header: 'Max TTL', cell: (i: any) => i.CachePolicyConfig?.MaxTTL == null ? 'Not reported' : `${i.CachePolicyConfig.MaxTTL}s`, width: 140 },
                   ]}
-                  items={
-                    data.cache_policies?.length > 0
-                      ? data.cache_policies
-                      : [
-                          { name: 'Managed-CachingOptimized', CachePolicyConfig: { MinTTL: 1, DefaultTTL: 86400, MaxTTL: 31536000 } },
-                          { name: 'Managed-CachingDisabled', CachePolicyConfig: { MinTTL: 0, DefaultTTL: 0, MaxTTL: 0 } },
-                        ]
-                  }
+                  items={(data.cache_policies || []).map((item: any) => item.CachePolicy || item)}
+                  empty={<Box textAlign="center">No cache policies reported.</Box>}
                 />
               </Container>
             ),
@@ -528,15 +560,14 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                 <Table
                   columnDefinitions={[
                     { id: 'name', header: 'Function Name', cell: (i: any) => <strong>{i.Name || i.name}</strong> },
-                    { id: 'runtime', header: 'Runtime', cell: (i: any) => <Badge color="blue">{i.FunctionConfig?.Runtime || 'cloudfront-js-2.0'}</Badge>, width: 180 },
-                    { id: 'status', header: 'Status', cell: (i: any) => <StatusIndicator type="success">{i.Status || 'LIVE'}</StatusIndicator>, width: 130 },
+                    { id: 'runtime', header: 'Runtime', cell: (i: any) => <Badge color="blue">{i.FunctionConfig?.Runtime || 'Not reported'}</Badge>, width: 180 },
+                    { id: 'stage', header: 'Stage', cell: (i: any) => i.FunctionMetadata?.Stage || 'Not reported' },
+                    { id: 'status', header: 'Status', cell: (i: any) => <ResourceValue name="status" value={i.Status} />, width: 130 },
                     {
                       id: 'actions',
                       header: 'Actions',
                       cell: (i: any) => (
-                        <Button iconName="remove" onClick={() => handleDeleteFunction(i.Name || i.name)}>
-                          Delete
-                        </Button>
+                        <SpaceBetween direction="horizontal" size="xs"><Button onClick={() => setConfirmation({ title: 'Publish function', description: `Publish ${i.Name || i.name} to LIVE? Publishing does not associate the function with a distribution.`, action: async () => { try { await publishCloudFrontFunction(i.Name || i.name); setActionMessage({ type: 'success', text: 'Function publication accepted. Associate its LIVE version with a behavior to serve viewer requests.' }); await loadData(); } catch (error: any) { setActionMessage({ type: 'error', text: error.message }); } } })}>Publish</Button><Button iconName="remove" onClick={() => setConfirmation({ title: 'Delete function', description: `Delete ${i.Name || i.name}?`, action: () => handleDeleteFunction(i.Name || i.name) })}>Delete</Button></SpaceBetween>
                       ),
                       width: 120,
                     },
@@ -550,6 +581,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         ]}
       />
 
+      <Modal visible={!!confirmation} header={confirmation?.title || ''} onDismiss={() => { if (!confirming) setConfirmation(null); }} footer={<SpaceBetween direction="horizontal" size="xs"><Button disabled={confirming} onClick={() => setConfirmation(null)}>Cancel</Button><Button variant="primary" loading={confirming} onClick={async () => { if (!confirmation || confirming) return; setConfirming(true); try { await confirmation.action(); setConfirmation(null); } finally { setConfirming(false); } }}>Confirm</Button></SpaceBetween>}>{confirmation?.description}</Modal>
       {/* Create Distribution Modal */}
       <Modal
         visible={createDistOpen}
@@ -570,8 +602,11 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         }
       >
         <SpaceBetween size="m">
-          <FormField label="Origin Domain Name" description="DNS domain name of the S3 bucket or custom web server.">
-            <Input value={originDomain} onChange={({ detail }) => setOriginDomain(detail.value)} placeholder="my-bucket.s3.localhost:4566" />
+          {actionMessage?.type === 'error' && <Alert type="error">{actionMessage.text}</Alert>}
+          <FormField label="Origin type"><Select selectedOption={{ label: originType === 's3' ? 'Amazon S3' : 'Custom HTTP origin', value: originType }} options={[{ label: 'Amazon S3', value: 's3' }, { label: 'Custom HTTP origin', value: 'custom' }]} onChange={({ detail }) => setOriginType(detail.selectedOption.value!)} /></FormField>
+          {originType === 'custom' && <Box>Origin connections use HTTPS on port 443.</Box>}
+          <FormField label="Origin Domain Name" description="Hostname of the S3 bucket or custom web server, without a scheme, port, or path.">
+            <Input value={originDomain} onChange={({ detail }) => setOriginDomain(detail.value)} placeholder="assets.example.com" />
           </FormField>
           <FormField label="Origin ID">
             <Input value={originId} onChange={({ detail }) => setOriginId(detail.value)} placeholder="s3-origin-1" />
@@ -611,9 +646,9 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
           </Box>
         }
       >
-        <FormField label="Object Paths (one per line)" description='Specify exact paths e.g. "/images/logo.png" or wildcards e.g. "/*"'>
+        <SpaceBetween size="m">{actionMessage?.type === 'error' && <Alert type="error">{actionMessage.text}</Alert>}<FormField label="Object Paths (one per line)" description='Specify exact paths e.g. "/images/logo.png" or wildcards e.g. "/*"'>
           <Textarea rows={6} value={invPaths} onChange={({ detail }) => setInvPaths(detail.value)} />
-        </FormField>
+        </FormField></SpaceBetween>
       </Modal>
 
       {/* Create Cache Policy Modal */}
@@ -635,6 +670,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         }
       >
         <SpaceBetween size="m">
+          {actionMessage?.type === 'error' && <Alert type="error">{actionMessage.text}</Alert>}
           <FormField label="Policy Name">
             <Input value={policyName} onChange={({ detail }) => setPolicyName(detail.value)} placeholder="CustomStaticAssetsPolicy" />
           </FormField>
@@ -672,6 +708,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         }
       >
         <SpaceBetween size="m">
+          {actionMessage?.type === 'error' && <Alert type="error">{actionMessage.text}</Alert>}
           <FormField label="Function Name">
             <Input value={funcName} onChange={({ detail }) => setFuncName(detail.value)} placeholder="url-rewrite-function" />
           </FormField>

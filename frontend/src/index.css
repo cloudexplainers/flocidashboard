@@ -134,3 +134,71 @@ textarea {
   color: #e9ebed;
   font: 400 13px/1.6 'JetBrains Mono', Menlo, Consolas, monospace;
 }
+
+.gateway-response-body {
+  margin: 0;
+  padding: 16px;
+  max-height: 440px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid #414d5c;
+  border-radius: 8px;
+  background: #0f1b2a;
+  color: #e9ebed;
+  font: 400 13px/1.6 'JetBrains Mono', Menlo, Consolas, monospace;
+}
+
+@media (max-width: 768px) {
+  .gateway-workspace .resource-flow > span[aria-hidden="true"] {
+    transform: rotate(90deg);
+    justify-self: center;
+  }
+}
+
+.athena-sql-input textarea {
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+  line-height: 1.6;
+}
+
+.sns-fanout-source {
+  padding: 16px;
+  border: 1px solid #0972d3;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.sns-fanout-destinations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+}
+.sns-fanout-destinations > section {
+  border: 1px solid #879596;
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 0;
+}
+
+.eventbridge-resource-value { overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .eventbridge-routing-flow { flex-direction: column; }
+  .eventbridge-routing-flow > section { flex: initial; }
+  .eventbridge-routing-flow > span { transform: rotate(90deg); }
+}
+
+.appsync-resource-value { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .appsync-request-flow { flex-direction: column; }
+  .appsync-request-flow > section { flex: initial; }
+  .appsync-request-flow > span { transform: rotate(90deg); }
+}
+
+.cfn-resource-value { overflow-wrap: anywhere; }
+
+.rds-resource-value { overflow-wrap: anywhere; }
+.rds-member-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; }
+
+.cloudfront-request-flow section { overflow-wrap: anywhere; min-width: 0; }
+@media (max-width: 600px) { .cloudfront-request-flow { flex-direction: column; } .cloudfront-request-flow > span { transform: rotate(90deg); align-self: center; } }
+@media (max-width: 600px) { .cloudfront-request-flow > section { flex: 0 0 auto; } }

@@ -120,14 +120,13 @@ def describe_execution(execution_arn: str) -> dict[str, Any]:
     return _clean_response(response)
 
 
-def get_execution_history(execution_arn: str, *, max_results: int = 100, reverse_order: bool = False) -> dict[str, Any]:
+def get_execution_history(execution_arn: str, *, max_results: int = 100, reverse_order: bool = False, next_token: str = '') -> dict[str, Any]:
     from .aws import _clean_response
     arn = validate_execution_arn(execution_arn)
-    response = _stepfunctions_client().get_execution_history(
-        executionArn=arn,
-        maxResults=max_results,
-        reverseOrder=reverse_order,
-    )
+    payload = {'executionArn': arn, 'maxResults': max_results, 'reverseOrder': reverse_order}
+    if next_token:
+        payload['nextToken'] = next_token
+    response = _stepfunctions_client().get_execution_history(**payload)
     return {
         'execution_arn': arn,
         'events': _clean_response(response.get('events', [])),
@@ -191,3 +190,14 @@ def delete_state_machine(state_machine_arn: str) -> dict[str, Any]:
         'response': response,
     }
 
+
+
+def update_state_machine(state_machine_arn: str, definition: Any, role_arn: str = '') -> dict[str, Any]:
+    from .aws import _clean_response
+    value = json.loads(definition) if isinstance(definition, str) else definition
+    if not isinstance(value, dict) or not isinstance(value.get('States'), dict) or value.get('StartAt') not in value['States']:
+        raise ValueError('Definition must contain States and a valid StartAt state')
+    payload = {'stateMachineArn': validate_state_machine_arn(state_machine_arn), 'definition': json.dumps(value)}
+    if role_arn:
+        payload['roleArn'] = role_arn
+    return _clean_response(_stepfunctions_client().update_state_machine(**payload))

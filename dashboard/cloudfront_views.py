@@ -11,6 +11,8 @@ from .cloudfront_api import (
     create_distribution,
     create_function,
     create_invalidation,
+    list_invalidations,
+    get_invalidation,
     create_origin_access_identity,
     delete_distribution,
     delete_function,
@@ -34,6 +36,7 @@ def cloudfront_distributions_create(request):
             aliases=body.get('aliases'),
             viewer_protocol_policy=body.get('viewer_protocol_policy') or 'redirect-to-https',
             cache_policy_id=body.get('cache_policy_id', ''),
+            **{key: body[key] for key in ('origin_type', 'origin_protocol_policy', 'http_port', 'https_port') if key in body},
         ))
     except Exception as exc:
         return handle_action_error(exc, service='cloudfront', operation='create_distribution')
@@ -61,9 +64,11 @@ def cloudfront_distribution_detail(request, distribution_id: str):
         return handle_action_error(exc, service='cloudfront', operation='update_distribution')
 
 
-@require_http_methods(['POST'])
+@require_http_methods(['GET', 'POST'])
 def cloudfront_invalidations_create(request, distribution_id: str):
     try:
+        if request.method == 'GET':
+            return JsonResponse(list_invalidations(distribution_id))
         body = parse_json_body(request)
         return JsonResponse(create_invalidation(
             distribution_id,
@@ -71,7 +76,7 @@ def cloudfront_invalidations_create(request, distribution_id: str):
             caller_reference=body.get('caller_reference', ''),
         ))
     except Exception as exc:
-        return handle_action_error(exc, service='cloudfront', operation='create_invalidation')
+        return handle_action_error(exc, service='cloudfront', operation='list_invalidations' if request.method == 'GET' else 'create_invalidation')
 
 
 @require_http_methods(['POST'])
@@ -137,3 +142,11 @@ def cloudfront_tags(request):
     except Exception as exc:
         operation = 'untag_resource' if request.method == 'DELETE' else 'tag_resource'
         return handle_action_error(exc, service='cloudfront', operation=operation)
+
+
+@require_http_methods(['GET'])
+def cloudfront_invalidation_detail(request, distribution_id: str, invalidation_id: str):
+    try:
+        return JsonResponse(get_invalidation(distribution_id, invalidation_id))
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudfront', operation='get_invalidation')

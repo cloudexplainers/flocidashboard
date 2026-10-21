@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from time import monotonic
 from typing import Any
 from urllib.error import HTTPError
 from urllib.parse import urlencode, urlparse
@@ -143,6 +144,7 @@ def test_api_request(
         request_headers['Content-Type'] = 'application/json'
 
     request = Request(url, data=request_body, headers=request_headers, method=clean_method)
+    started = monotonic()
     try:
         with urlopen(request, timeout=8) as response:
             response_body = response.read()
@@ -166,6 +168,7 @@ def test_api_request(
         'method': clean_method,
         'url': url,
         'status_code': status,
+        'duration_ms': round((monotonic() - started) * 1000, 2),
         'headers': response_headers,
         'body': text,
         'json': parsed_body,

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import base64
 import json
+import uuid
 from typing import Any
 
-from .aws import FlociClientFactory, _clean_response
+from .aws import FlociClientFactory, _clean_response, _nested_operation_items
 
 
 def _client():
@@ -71,6 +72,10 @@ def _distribution_config(
     aliases: Any = None,
     viewer_protocol_policy: str = 'redirect-to-https',
     cache_policy_id: str = '',
+    origin_type: str = 's3',
+    origin_protocol_policy: str = 'https-only',
+    http_port: int = 80,
+    https_port: int = 443,
 ) -> dict[str, Any]:
     clean_origin_id = _required(origin_id, 'Origin ID')
     config: dict[str, Any] = {
@@ -98,6 +103,22 @@ def _distribution_config(
             'MinTTL': 0,
         },
     }
+    origin = config['Origins']['Items'][0]
+    if any(character in origin['DomainName'] for character in '/:'):
+        raise ValueError('Origin domain must be a hostname without a scheme, port, or path')
+    if origin_type == 'custom':
+        if origin_protocol_policy not in {'http-only', 'https-only', 'match-viewer'}:
+            raise ValueError('Invalid origin protocol policy')
+        try:
+            ports = [int(http_port), int(https_port)]
+        except (TypeError, ValueError) as exc:
+            raise ValueError('Origin ports must be integers') from exc
+        if any(port < 1 or port > 65535 for port in ports):
+            raise ValueError('Origin ports must be between 1 and 65535')
+        origin.pop('S3OriginConfig')
+        origin['CustomOriginConfig'] = {'HTTPPort': ports[0], 'HTTPSPort': ports[1], 'OriginProtocolPolicy': origin_protocol_policy}
+    elif origin_type != 's3':
+        raise ValueError('Origin type must be s3 or custom')
     if cache_policy_id:
         behavior = config['DefaultCacheBehavior']
         behavior['CachePolicyId'] = cache_policy_id
@@ -120,6 +141,10 @@ def create_distribution(
     aliases: Any = None,
     viewer_protocol_policy: str = 'redirect-to-https',
     cache_policy_id: str = '',
+    origin_type: str = 's3',
+    origin_protocol_policy: str = 'https-only',
+    http_port: int = 80,
+    https_port: int = 443,
 ) -> dict[str, Any]:
     response = _client().create_distribution(DistributionConfig=_distribution_config(
         caller_reference,
@@ -130,6 +155,10 @@ def create_distribution(
         aliases=aliases,
         viewer_protocol_policy=viewer_protocol_policy,
         cache_policy_id=cache_policy_id,
+        origin_type=origin_type,
+        origin_protocol_policy=origin_protocol_policy,
+        http_port=http_port,
+        https_port=https_port,
     ))
     return {'distribution': _clean_response(response.get('Distribution', {})), 'etag': response.get('ETag'), 'response': _clean_response(response)}
 
@@ -166,7 +195,9 @@ def create_invalidation(distribution_id: str, paths: Any, *, caller_reference: s
     clean_paths = _string_list(paths)
     if not clean_paths:
         raise ValueError('At least one invalidation path is required')
-    reference = caller_reference or f'dashboard-{distribution_id}-{len(clean_paths)}'
+    if any(not path.startswith('/') for path in clean_paths):
+        raise ValueError('Invalidation paths must start with /')
+    reference = caller_reference or f'dashboard-{uuid.uuid4()}'
     response = _client().create_invalidation(
         DistributionId=_required(distribution_id, 'Distribution ID'),
         InvalidationBatch={
@@ -177,15 +208,34 @@ def create_invalidation(distribution_id: str, paths: Any, *, caller_reference: s
     return {'invalidation': _clean_response(response.get('Invalidation', {})), 'response': _clean_response(response)}
 
 
+def list_invalidations(distribution_id: str) -> dict[str, Any]:
+    identifier = _required(distribution_id, 'Distribution ID')
+    items = _nested_operation_items(_client(), 'list_invalidations', 'InvalidationList', DistributionId=identifier)
+    return {'distribution_id': identifier, 'invalidations': _clean_response(items)}
+
+
+def get_invalidation(distribution_id: str, invalidation_id: str) -> dict[str, Any]:
+    response = _client().get_invalidation(DistributionId=_required(distribution_id, 'Distribution ID'), Id=_required(invalidation_id, 'Invalidation ID'))
+    return {'invalidation': _clean_response(response.get('Invalidation', {}))}
+
+
 def create_cache_policy(name: str, *, default_ttl: Any = 86400, max_ttl: Any = 31536000, min_ttl: Any = 0, comment: str = '') -> dict[str, Any]:
+    try:
+        values = [int(min_ttl), int(default_ttl), int(max_ttl)]
+        if any(isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()) for value in (min_ttl, default_ttl, max_ttl)):
+            raise ValueError()
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Cache TTLs must be whole numbers') from exc
+    if not 0 <= values[0] <= values[1] <= values[2]:
+        raise ValueError('Cache TTLs must satisfy 0 <= minimum <= default <= maximum')
     response = _client().create_cache_policy(CachePolicyConfig={
         'Name': _required(name, 'Cache policy name'),
         'Comment': comment or '',
-        'DefaultTTL': int(default_ttl or 0),
-        'MaxTTL': int(max_ttl or 0),
-        'MinTTL': int(min_ttl or 0),
+        'DefaultTTL': values[1],
+        'MaxTTL': values[2],
+        'MinTTL': values[0],
         'ParametersInCacheKeyAndForwardedToOrigin': {
-            'EnableAcceptEncodingGzip': True,
+            'EnableAcceptEncodingGzip': values[2] > 0,
             'EnableAcceptEncodingBrotli': False,
             'HeadersConfig': {'HeaderBehavior': 'none'},
             'CookiesConfig': {'CookieBehavior': 'none'},

@@ -37,3 +37,21 @@ def cloudtrail_trail_logging(request, trail_name: str):
         return JsonResponse(set_trail_logging(trail_name, body['enabled']))
     except Exception as exc:
         return handle_action_error(exc, service='cloudtrail', operation='set_trail_logging')
+
+
+@require_http_methods(['GET', 'PUT'])
+def cloudtrail_event_selectors(request, trail_name: str):
+    from .cloudtrail_api import event_selectors
+    try:
+        return JsonResponse(event_selectors(trail_name, parse_json_body(request) if request.method == 'PUT' else None))
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudtrail', operation='put_event_selectors' if request.method == 'PUT' else 'get_event_selectors')
+
+
+@require_http_methods(['GET'])
+def cloudtrail_events(request):
+    from .cloudtrail_api import lookup_events
+    try:
+        return JsonResponse(lookup_events(attribute=request.GET.get('attribute', ''), value=request.GET.get('value', ''), next_token=request.GET.get('next_token', '')))
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudtrail', operation='lookup_events')

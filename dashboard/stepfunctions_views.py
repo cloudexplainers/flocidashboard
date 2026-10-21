@@ -9,7 +9,7 @@ from .actions import handle_action_error, parse_json_body
 from .stepfunctions_api import (
     create_state_machine, delete_state_machine, delete_state_machine_version,
     describe_execution, describe_state_machine, get_execution_history,
-    publish_state_machine_version, start_execution, stop_execution,
+    publish_state_machine_version, start_execution, stop_execution, update_state_machine,
 )
 
 
@@ -30,9 +30,12 @@ def stepfunctions_state_machines_create(request):
         return handle_action_error(exc, service='stepfunctions', operation='create_state_machine')
 
 
-@require_http_methods(['GET', 'DELETE'])
+@require_http_methods(['GET', 'PATCH', 'DELETE'])
 def stepfunctions_state_machine_detail(request, state_machine_arn: str):
     try:
+        if request.method == 'PATCH':
+            body = parse_json_body(request)
+            return JsonResponse(update_state_machine(state_machine_arn, body.get('definition'), body.get('role_arn') or ''))
         if request.method == 'DELETE':
             return JsonResponse(delete_state_machine(state_machine_arn))
         return JsonResponse(describe_state_machine(state_machine_arn))
@@ -65,7 +68,7 @@ def stepfunctions_execution_detail(request, execution_arn: str):
 @require_http_methods(['GET'])
 def stepfunctions_execution_history(request, execution_arn: str):
     try:
-        return JsonResponse(get_execution_history(execution_arn))
+        return JsonResponse(get_execution_history(execution_arn, **({'next_token': request.GET['next_token']} if request.GET.get('next_token') else {})))
     except Exception as exc:
         return handle_action_error(exc, service='stepfunctions', operation='get_execution_history')
 
@@ -103,3 +106,52 @@ def stepfunctions_executions_stop(request):
         ))
     except Exception as exc:
         return handle_action_error(exc, service='stepfunctions', operation='stop_execution')
+
+
+@require_http_methods(['GET', 'POST', 'DELETE'])
+def stepfunctions_activities(request):
+    from .aws import FlociClientFactory, _clean_response
+    try:
+        client = FlociClientFactory().client('stepfunctions')
+        if request.method == 'GET':
+            activities = client.get_paginator('list_activities').paginate().build_full_result().get('activities', [])
+            return JsonResponse({'activities': _clean_response(activities)})
+        body = parse_json_body(request)
+        if request.method == 'POST':
+            name = (body.get('name') or '').strip()
+            if not name:
+                raise ValueError('Activity name is required')
+            return JsonResponse(_clean_response(client.create_activity(name=name)))
+        arn = (body.get('activity_arn') or '').strip()
+        if ':states:' not in arn or ':activity:' not in arn:
+            raise ValueError('A valid activity ARN is required')
+        client.delete_activity(activityArn=arn)
+        return JsonResponse({'activity_arn': arn, 'deleted': True})
+    except Exception as exc:
+        return handle_action_error(exc, service='stepfunctions', operation='activities')
+
+
+@require_http_methods(['POST'])
+def stepfunctions_task_callback(request):
+    import json
+    from .aws import FlociClientFactory
+    try:
+        body = parse_json_body(request)
+        token = (body.get('task_token') or '').strip()
+        if not token:
+            raise ValueError('Task token is required')
+        success = body.get('success')
+        if not isinstance(success, bool):
+            raise ValueError('Success must be a boolean')
+        if success:
+            output = body.get('output')
+            if isinstance(output, str):
+                json.loads(output)
+            else:
+                output = json.dumps(output)
+            FlociClientFactory().client('stepfunctions').send_task_success(taskToken=token, output=output)
+        else:
+            FlociClientFactory().client('stepfunctions').send_task_failure(taskToken=token, error=body.get('error') or 'TaskFailed', cause=body.get('cause') or '')
+        return JsonResponse({'success': success})
+    except Exception as exc:
+        return handle_action_error(exc, service='stepfunctions', operation='task_callback')

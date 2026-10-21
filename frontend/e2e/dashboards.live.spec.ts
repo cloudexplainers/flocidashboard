@@ -323,7 +323,11 @@ test('EventBridge live pattern tester agrees with real event delivery and does n
     await page.getByRole('button', { name: 'Test pattern', exact: true }).click();
     await expect(page.getByText('Pattern does not match sample event', { exact: true })).toBeVisible();
     await page.screenshot({ path: 'test-results/screenshots/eventbridge-tester-live.png', fullPage: true });
-    await post('/api/eventbridge/events/put/', { event_bus_name: name, source: sample.source, detail_type: sample['detail-type'], detail: { total: 75 } });
+    await page.goto(`/eventbridge/send?bus=${name}`);
+    await expect(page.getByLabel('Target Event Bus', { exact: true })).toHaveValue(name);
+    await page.getByLabel('Event Detail (JSON Payload)', { exact: true }).fill(JSON.stringify({ total: 75 }));
+    await page.getByRole('button', { name: 'Publish Event to EventBridge', exact: true }).click();
+    await expect(page.getByText('Event accepted by EventBridge. Target delivery is not confirmed by this response.', { exact: true })).toBeVisible();
     await expect.poll(async () => (await messages()).length, { timeout: 10_000 }).toBe(1);
   } finally {
     if (target) await post('/api/eventbridge/targets/remove/', { rule_name: 'orders', event_bus_name: name, target_id: 'queue' });
@@ -612,5 +616,268 @@ test('Cognito live pool, public app client, user, and authentication', async ({ 
       const removed = await page.request.delete(`/api/cognito/user-pools/${encodeURIComponent(pool)}/`, { headers: { 'X-CSRFToken': csrf } });
       expect(removed.ok(), await removed.text()).toBe(true);
     }
+  }
+});
+
+test('AppSync live workspace deploys SDL and resolves a query through a VTL data source', async ({ page }) => {
+  test.setTimeout(90_000);
+  const name = `ui-appsync-${Date.now()}`;
+  let apiId = '', csrf = '';
+  try {
+    await page.goto('/appsync/');
+    csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content') || '';
+    await page.getByRole('button', { name: 'Create GraphQL API', exact: true }).click();
+    const modal = page.getByRole('dialog');
+    await modal.getByLabel('API Name', { exact: true }).fill(name);
+    const created = page.waitForResponse(response => response.url().endsWith('/api/appsync/apis/') && response.request().method() === 'POST');
+    await modal.getByRole('button', { name: 'Create API', exact: true }).click();
+    const response = await created;
+    const payload = await response.json();
+    expect(response.ok(), JSON.stringify(payload)).toBe(true);
+    apiId = payload.api_id;
+    expect(apiId).toBeTruthy();
+    await expect(modal).not.toBeVisible();
+    await page.getByRole('button', { name, exact: true }).click();
+    await page.getByRole('tab', { name: 'Schema', exact: true }).click();
+    await page.getByLabel('Schema Definition', { exact: true }).fill('type Query { hello: String }');
+    await page.getByRole('button', { name: 'Save & Deploy Schema', exact: true }).click();
+    await expect(page.getByText(/^Schema status: (SUCCESS|ACTIVE)$/, { exact: true })).toBeVisible({ timeout: 30_000 });
+    await page.reload();
+    await expect(page.getByLabel('Schema Definition', { exact: true })).toHaveValue('type Query { hello: String }');
+    await page.getByRole('tab', { name: 'Data sources (0)', exact: true }).click();
+    await page.getByRole('button', { name: 'Create Data Source', exact: true }).click();
+    await modal.getByLabel('Data Source Name', { exact: true }).fill('local');
+    await modal.getByRole('button', { name: 'Create Data Source', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    await page.getByRole('tab', { name: 'Resolvers (0)', exact: true }).click();
+    await page.getByRole('button', { name: 'Attach Resolver', exact: true }).click();
+    await modal.getByLabel('Field Name', { exact: true }).fill('hello');
+    await modal.getByRole('button', { name: 'Data Source Name Choose a data source', exact: true }).click();
+    await page.getByRole('option', { name: 'local (NONE)', exact: true }).click();
+    await modal.getByLabel('Request mapping template', { exact: true }).fill('{"version":"2018-05-29","payload":{"hello":"Hello from a live resolver"}}');
+    await modal.getByLabel('Response mapping template', { exact: true }).fill('$util.toJson($ctx.result.hello)');
+    await modal.getByRole('button', { name: 'Attach Resolver', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    const keyResponse = await page.request.post(`/api/appsync/apis/${apiId}/api-keys/`, { headers: { 'X-CSRFToken': csrf }, data: { description: 'Temporary UI verification key' } });
+    const keyPayload = await keyResponse.json();
+    expect(keyResponse.ok(), JSON.stringify(keyPayload)).toBe(true);
+    await page.reload();
+    await page.getByRole('tab', { name: 'Queries', exact: true }).click();
+    await page.getByRole('button', { name: 'API key No API key (unsigned local request)', exact: true }).click();
+    await page.getByRole('option', { name: keyPayload.api_key.id, exact: true }).click();
+    await page.getByLabel('GraphQL Query / Mutation', { exact: true }).fill('query Hello { hello }');
+    await page.getByRole('button', { name: 'Execute Query', exact: true }).click();
+    await expect(page.getByLabel('Response data', { exact: true })).toHaveValue(/Hello from a live resolver/);
+    await expect(page.getByText('The endpoint returned a response.', { exact: true })).toBeVisible();
+    await page.screenshot({ path: 'test-results/screenshots/appsync-query-live.png', fullPage: true });
+  } finally {
+    if (apiId) {
+      const response = await page.request.delete(`/api/appsync/apis/${apiId}/`, { headers: { 'X-CSRFToken': csrf } });
+      expect(response.ok(), await response.text()).toBe(true);
+    }
+  }
+});
+
+test('CloudFormation live workspace creates a stack and reviews and executes an edited change set', async ({ page }) => {
+  test.setTimeout(90_000);
+  const name = `ui-cfn-${Date.now()}`;
+  let created = false, deleted = false, csrf = '';
+  const template = { AWSTemplateFormatVersion: '2010-09-09', Resources: { Queue: { Type: 'AWS::SQS::Queue', Properties: { QueueName: name, VisibilityTimeout: 30 } } }, Outputs: { QueueUrl: { Value: { Ref: 'Queue' } } } };
+  const stackStatus = async () => {
+    const payload = await (await page.request.get('/api/cloudformation/')).json();
+    return payload.stacks?.find((stack: any) => stack.name === name)?.status;
+  };
+  try {
+    await page.goto('/cloudformation/');
+    csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content') || '';
+    await page.getByRole('button', { name: 'Create Stack', exact: true }).first().click();
+    const modal = page.getByRole('dialog');
+    await modal.getByLabel('Stack Name', { exact: true }).fill(name);
+    await modal.getByLabel('Template Body (YAML or JSON)', { exact: true }).fill(JSON.stringify(template));
+    const creating = page.waitForResponse(response => response.url().endsWith('/api/cloudformation/stacks/') && response.request().method() === 'POST');
+    await modal.getByRole('button', { name: 'Deploy Stack', exact: true }).click();
+    const createResponse = await creating;
+    expect(createResponse.ok(), await createResponse.text()).toBe(true);
+    created = true;
+    await expect(modal).not.toBeVisible();
+    await expect.poll(stackStatus, { timeout: 30_000 }).toBe('CREATE_COMPLETE');
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.getByPlaceholder('Filter stacks by name, status, or description...', { exact: true }).fill(name);
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.getByRole('heading', { name: `Stack: ${name}`, exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Resources (1)', exact: true }).click();
+    await expect(page.getByText('AWS::SQS::Queue', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Create Change Set', exact: true }).click();
+    await modal.getByLabel('Change Set Name', { exact: true }).fill('queue-timeout');
+    const proposed = { ...template, Resources: { Queue: { ...template.Resources.Queue, Properties: { ...template.Resources.Queue.Properties, VisibilityTimeout: 60 } } } };
+    await modal.getByLabel('Proposed template (YAML or JSON)', { exact: true }).fill(JSON.stringify(proposed));
+    await modal.getByRole('button', { name: 'Create Change Set', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Change set: queue-timeout', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Execute change set', exact: true })).toBeEnabled();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Execute change set', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Execute change set', exact: true }).click();
+    await modal.getByRole('button', { name: 'Execute', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    await expect.poll(stackStatus, { timeout: 30_000 }).toBe('UPDATE_COMPLETE');
+    const attributes = await (await page.request.get(`/api/sqs/queues/${name}/attributes/`)).json();
+    expect(attributes.attributes.VisibilityTimeout).toBe('60');
+    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+    await page.screenshot({ path: 'test-results/screenshots/cloudformation-update-live.png', fullPage: true });
+    await page.getByRole('button', { name: 'Delete Stack', exact: true }).click();
+    await modal.getByRole('button', { name: 'Confirm Delete', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    await expect.poll(stackStatus, { timeout: 30_000 }).toBe('DELETE_COMPLETE');
+    deleted = true;
+  } finally {
+    if (created && !deleted) {
+      const response = await page.request.delete(`/api/cloudformation/stacks/${name}/`, { headers: { 'X-CSRFToken': csrf } });
+      expect(response.ok(), await response.text()).toBe(true);
+      await expect.poll(stackStatus, { timeout: 30_000 }).toBe('DELETE_COMPLETE');
+    }
+  }
+});
+
+function rdsSdk(code: string, parameters: Record<string, string>) {
+  return JSON.parse(execFileSync(python, ['-c', `import boto3,json,sys\np=json.loads(sys.argv[1])\nrds=boto3.client('rds',endpoint_url=${JSON.stringify(flociEndpoint)},region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\n${code}`, JSON.stringify(parameters)], { encoding: 'utf8' }));
+}
+
+test('RDS live database workspace creates modifies reboots and deletes a reported instance', async ({ page }) => {
+  test.setTimeout(90_000);
+  const name = `ui-rds-${Date.now()}`;
+  let created = false, deleted = false, csrf = '';
+  try {
+    await page.goto('/rds/');
+    csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content') || '';
+    await page.getByRole('button', { name: 'Create database', exact: true }).first().click();
+    const modal = page.getByRole('dialog');
+    await modal.getByLabel('DB instance identifier', { exact: true }).fill(name);
+    await modal.getByLabel('Master username', { exact: true }).fill('admin');
+    await modal.getByLabel('Master password', { exact: true }).fill('TemporaryTestPassword123!');
+    await modal.getByLabel('Initial database name (optional)', { exact: true }).fill('appdb');
+    const creating = page.waitForResponse(response => response.url().endsWith('/api/rds/instances/') && response.request().method() === 'POST');
+    await modal.getByRole('button', { name: 'Create database', exact: true }).click();
+    const response = await creating;
+    const payload = await response.json();
+    expect(response.ok(), JSON.stringify(payload)).toBe(true); created = true;
+    await expect(modal).not.toBeVisible();
+    await page.getByRole('button', { name, exact: true }).click();
+    await page.getByRole('tab', { name: 'Connectivity', exact: true }).click();
+    const command = page.getByLabel('CLI Connection Command', { exact: true });
+    await expect(command).toHaveValue(new RegExp(String(payload.instance.Endpoint.Port)));
+    await expect(command).toHaveValue(/--dbname='appdb' --password$/);
+    await page.reload();
+    await expect(page.getByRole('tab', { name: 'Connectivity', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('button', { name: 'Modify', exact: true }).click();
+    await modal.getByLabel('New DB instance class (optional)', { exact: true }).fill('db.t3.small');
+    await modal.getByRole('button', { name: 'Save modifications', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await expect(page.getByText('db.t3.small', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Reboot', exact: true }).click();
+    const reboot = page.waitForResponse(response => response.url().endsWith(`/api/rds/instances/${name}/reboot/`));
+    await modal.getByRole('button', { name: 'Reboot instance', exact: true }).click();
+    expect((await reboot).ok()).toBe(true);
+    await expect(modal).not.toBeVisible();
+    await page.screenshot({ path: 'test-results/screenshots/rds-database-live.png', fullPage: true });
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await modal.getByRole('button', { name: 'Delete database', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0); deleted = true;
+  } finally {
+    if (created && !deleted) {
+      const response = await page.request.delete(`/api/rds/instances/${name}/`, { headers: { 'X-CSRFToken': csrf }, data: { skip_final_snapshot: true } });
+      expect(response.ok(), await response.text()).toBe(true);
+    }
+  }
+});
+
+test('RDS live cluster workspace shows SDK reported membership and cleans up cluster resources', async ({ page }) => {
+  test.setTimeout(90_000);
+  const name = `ui-rds-cluster-${Date.now()}`;
+  const member = `${name}-writer`;
+  let clusterCreated = false, memberCreated = false, deleted = false, csrf = '';
+  try {
+    await page.goto('/rds/clusters');
+    csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content') || '';
+    await page.getByRole('button', { name: 'Create DB cluster', exact: true }).click();
+    const modal = page.getByRole('dialog');
+    await modal.getByLabel('DB cluster identifier', { exact: true }).fill(name);
+    await modal.getByLabel('Master username', { exact: true }).fill('admin');
+    await modal.getByLabel('Master password', { exact: true }).fill('TemporaryTestPassword123!');
+    const creating = page.waitForResponse(response => response.url().endsWith('/api/rds/clusters/') && response.request().method() === 'POST');
+    await modal.getByRole('button', { name: 'Create cluster', exact: true }).click();
+    const response = await creating;
+    const payload = await response.json();
+    expect(response.ok(), JSON.stringify(payload)).toBe(true); clusterCreated = true;
+    await expect(modal).not.toBeVisible();
+    rdsSdk("rds.create_db_instance(DBInstanceIdentifier=p['member'],DBClusterIdentifier=p['cluster'],DBInstanceClass='db.r6g.large',Engine='aurora-postgresql')\nprint(json.dumps({'created':True}))", { member, cluster: name });
+    memberCreated = true;
+    await page.goto(`/rds/clusters?cluster=${name}&tab=members`);
+    await expect(page.getByRole('tab', { name: 'Members (1)', exact: true })).toBeVisible();
+    await expect(page.getByText('Writer', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'View database', exact: true }).click();
+    await expect(page.getByRole('heading', { name: `Database: ${member}`, exact: true })).toBeVisible();
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.getByRole('heading', { name: `Cluster: ${name}`, exact: true })).toBeVisible();
+    rdsSdk("rds.delete_db_instance(DBInstanceIdentifier=p['member'],SkipFinalSnapshot=True)\nprint(json.dumps({'deleted':True}))", { member });
+    memberCreated = false;
+    await page.getByRole('button', { name: 'Delete cluster', exact: true }).click();
+    await modal.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(modal).not.toBeVisible();
+    await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0); deleted = true;
+  } finally {
+    if (memberCreated) rdsSdk("rds.delete_db_instance(DBInstanceIdentifier=p['member'],SkipFinalSnapshot=True)\nprint(json.dumps({'deleted':True}))", { member });
+    if (clusterCreated && !deleted) {
+      const response = await page.request.delete(`/api/rds/clusters/${name}/`, { headers: { 'X-CSRFToken': csrf }, data: { skip_final_snapshot: true } });
+      expect(response.ok(), await response.text()).toBe(true);
+    }
+  }
+});
+
+test('CloudTrail live trail configuration selectors and logging persist', async ({ page }) => {
+  test.setTimeout(90_000);
+  const name = `ui-cloudtrail-${Date.now()}`;
+  const sdk = (code: string) => execFileSync(python, ['-c', `import boto3,json,sys\np=json.loads(sys.argv[1])\noptions=dict(endpoint_url=p['endpoint'],region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\ns3=boto3.client('s3',**options)\nct=boto3.client('cloudtrail',**options)\n${code}`, JSON.stringify({ name, endpoint: flociEndpoint })], { encoding: 'utf8', timeout: 30_000 });
+  sdk("s3.create_bucket(Bucket=p['name'])");
+  let created = false;
+  try {
+    await page.goto('/cloudtrail/trails');
+    await page.getByRole('button', { name: 'Create trail', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Trail name', { exact: true }).fill(name);
+    await dialog.getByLabel('S3 bucket name', { exact: true }).fill(name);
+    const creation = page.waitForResponse(response => response.url().endsWith('/api/cloudtrail/trails/') && response.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Create trail', exact: true }).click();
+    const response = await creation;
+    expect(response.ok(), await response.text()).toBe(true); created = true;
+    await expect(page.getByRole('heading', { name: `Trail: ${name}`, exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Start logging', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Stop logging', exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Event selectors', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit event selectors', exact: true }).click();
+    await page.getByRole('dialog').getByLabel('Event selector JSON', { exact: true }).fill(JSON.stringify({ EventSelectors: [{ ReadWriteType: 'WriteOnly', IncludeManagementEvents: true, DataResources: [] }] }));
+    await page.getByRole('dialog').getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByText('WriteOnly', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText('WriteOnly', { exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit trail', exact: true }).click();
+    await page.getByRole('dialog').getByText('Multi-Region trail', { exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    const saved = JSON.parse(sdk("print(json.dumps(ct.describe_trails(trailNameList=[p['name']], includeShadowTrails=False)['trailList'][0]))"));
+    expect(saved.IsMultiRegionTrail).toBe(true);
+    await page.getByRole('button', { name: 'Stop logging', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Start logging', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Delete trail', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete trail', exact: true }).click();
+    await expect(page).toHaveURL(/\/cloudtrail\/trails$/); created = false;
+  } finally {
+    if (created) sdk("ct.delete_trail(Name=p['name'])");
+    sdk("s3.delete_bucket(Bucket=p['name'])");
   }
 });

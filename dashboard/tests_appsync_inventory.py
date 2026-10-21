@@ -1,4 +1,5 @@
 import json
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase
@@ -49,6 +50,7 @@ class AppSyncInventoryTests(SimpleTestCase):
         factory_mock.return_value.client.return_value = client
         client.list_tags_for_resource.return_value = {'tags': {'env': 'test'}}
         client.get_schema_creation_status.return_value = {'status': 'ACTIVE'}
+        client.get_introspection_schema.return_value = {'schema': BytesIO(b'type Query { hello: String }')}
 
         def items(_client, operation, _result_key, **_kwargs):
             return {

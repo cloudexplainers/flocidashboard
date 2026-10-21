@@ -17,10 +17,10 @@ export function ResourceValue({ value, name = '' }: { value: unknown; name?: str
   }
   return <span style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}</span>;
 }
-export function ResourceDetails({ resource, title = 'Resource details' }: { resource: Record<string, unknown>; title?: string }) {
+export function ResourceDetails({ resource, title = 'Resource details', columns = 2 }: { resource: Record<string, unknown>; title?: string; columns?: 1 | 2 }) {
   const entries = Object.entries(resource);
   return <Container header={<Header variant="h2">{title}</Header>}><SpaceBetween size="m">
-    <KeyValuePairs columns={2} items={entries.filter(([, value]) => value == null || typeof value !== 'object').map(([key, value]) => ({ label: attributeLabel(key), value: <ResourceValue name={key} value={value} /> }))} />
+    <KeyValuePairs columns={columns} items={entries.filter(([, value]) => value == null || typeof value !== 'object').map(([key, value]) => ({ label: attributeLabel(key), value: <ResourceValue name={key} value={value} /> }))} />
     {entries.filter(([, value]) => value !== null && typeof value === 'object').map(([key, value]) => <ExpandableSection key={key} headerText={attributeLabel(key)}><CodeSnippet language="json" code={JSON.stringify(value, null, 2)} /></ExpandableSection>)}
     <ExpandableSection headerText="Raw resource JSON"><CodeSnippet language="json" code={JSON.stringify(resource, null, 2)} /></ExpandableSection>
   </SpaceBetween></Container>;

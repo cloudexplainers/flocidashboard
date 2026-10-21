@@ -3124,7 +3124,7 @@ def _cloudtrail_optional(loader: Callable[[], Any], empty_codes: set[str]) -> An
 def cloudtrail_inventory() -> dict[str, Any]:
     cloudtrail = FlociClientFactory().client('cloudtrail')
     operations = set(cloudtrail.meta.service_model.operation_names)
-    trail_summaries = _safe_value(lambda: cloudtrail.describe_trails(includeShadowTrails=False).get('trailList', []), [])
+    trail_summaries = cloudtrail.describe_trails(includeShadowTrails=False).get('trailList', [])
 
     def trail_name(trail: dict[str, Any]) -> str | None:
         return trail.get('Name') or trail.get('TrailARN') or trail.get('TrailArn')
@@ -3740,6 +3740,7 @@ def apigateway_inventory() -> dict[str, Any]:
             'id': api_id,
             'protocol_type': api.get('ProtocolType'),
             'api_endpoint': api.get('ApiEndpoint'),
+            'execute_url_pattern': f'{factory.endpoint_url.rstrip("/")}/restapis/{api_id}/{{stage}}/_user_request_/{{path}}' if api_id else None,
             'created': api.get('CreatedDate'),
             'description': api.get('Description'),
             'route_selection_expression': api.get('RouteSelectionExpression'),
@@ -4138,6 +4139,8 @@ def appconfig_inventory() -> dict[str, Any]:
 
 
 def appsync_inventory() -> dict[str, Any]:
+    from .appsync_schema import read_sdl, resolver_type_names
+
     appsync = FlociClientFactory().client('appsync')
     apis = _safe_value(lambda: _operation_items(appsync, 'list_graphql_apis', 'graphqlApis'), [])
 
@@ -4159,16 +4162,25 @@ def appsync_inventory() -> dict[str, Any]:
             lambda: _operation_items(appsync, 'list_types', 'types', apiId=api_id, format='SDL'),
             [],
         )
+        schema_status = _safe_value(
+            lambda: appsync.get_schema_creation_status(apiId=api_id), {},
+        )
+        schema_definition = _safe_value(
+            lambda: read_sdl(appsync.get_introspection_schema(apiId=api_id, format='SDL')), '',
+        ) if isinstance(schema_status, dict) and schema_status.get('status') in {'SUCCESS', 'ACTIVE'} else ''
+        type_names = list(dict.fromkeys([
+            *[item.get('name') for item in types if item.get('name')],
+            *resolver_type_names(schema_definition),
+        ]))
         resolvers = [
             {
                 **_clean_response(resolver),
                 'apiId': api_id,
-                'typeName': type_item.get('name'),
+                'typeName': type_name,
             }
-            for type_item in types
-            if type_item.get('name')
+            for type_name in type_names
             for resolver in _safe_value(
-                lambda type_name=type_item.get('name'): _operation_items(
+                lambda type_name=type_name: _operation_items(
                     appsync,
                     'list_resolvers',
                     'resolvers',
@@ -4182,10 +4194,6 @@ def appsync_inventory() -> dict[str, Any]:
             lambda: appsync.list_tags_for_resource(resourceArn=api.get('arn')).get('tags', {}),
             {},
         ) if api.get('arn') else {}
-        schema_status = _safe_value(
-            lambda: appsync.get_schema_creation_status(apiId=api_id),
-            {},
-        )
 
         return {
             **_clean_response(api),
@@ -8057,7 +8065,7 @@ def cloudformation_inventory() -> dict[str, Any]:
             {'ValidationError'},
         )
         resources = _cloudformation_optional(
-            lambda: _paginate(cloudformation, 'describe_stack_resources', 'StackResources', StackName=name),
+            lambda: _operation_items(cloudformation, 'describe_stack_resources', 'StackResources', StackName=name),
             {'ValidationError'},
         )
         resource_summaries = _cloudformation_optional(
@@ -8387,9 +8395,13 @@ def _rds_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
 def rds_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     rds = factory.client('rds')
-    instances = _safe_value(lambda: _paginate(rds, 'describe_db_instances', 'DBInstances'), [])
-    clusters = _safe_value(lambda: _paginate(rds, 'describe_db_clusters', 'DBClusters'), [])
-    parameter_groups = _safe_value(lambda: _paginate(rds, 'describe_db_parameter_groups', 'DBParameterGroups'), [])
+    raw_instances = _rds_optional(lambda: _paginate(rds, 'describe_db_instances', 'DBInstances'), set())
+    raw_clusters = _rds_optional(lambda: _paginate(rds, 'describe_db_clusters', 'DBClusters'), set())
+    raw_groups = _rds_optional(lambda: _paginate(rds, 'describe_db_parameter_groups', 'DBParameterGroups'), set())
+    issues = [f'{label}: {value["error"]}' for label, value in [('Databases', raw_instances), ('Clusters', raw_clusters), ('Parameter groups', raw_groups)] if isinstance(value, dict) and value.get('error')]
+    instances = raw_instances if isinstance(raw_instances, list) else []
+    clusters = raw_clusters if isinstance(raw_clusters, list) else []
+    parameter_groups = raw_groups if isinstance(raw_groups, list) else []
 
     def instance_detail(instance: dict[str, Any]) -> dict[str, Any]:
         endpoint = instance.get('Endpoint') or {}
@@ -8415,6 +8427,12 @@ def rds_inventory() -> dict[str, Any]:
             'security_groups': instance.get('VpcSecurityGroups'),
             'created': instance.get('InstanceCreateTime'),
             'cluster_identifier': instance.get('DBClusterIdentifier'),
+            'availability_zone': instance.get('AvailabilityZone'),
+            'secondary_availability_zone': instance.get('SecondaryAvailabilityZone'),
+            'storage_encrypted': instance.get('StorageEncrypted'),
+            'deletion_protection': instance.get('DeletionProtection'),
+            'backup_retention_period': instance.get('BackupRetentionPeriod'),
+            'pending_modifications': instance.get('PendingModifiedValues'),
             'tags': _rds_optional(
                 lambda: rds.list_tags_for_resource(ResourceName=instance.get('DBInstanceArn')).get('TagList', []),
                 {'DBInstanceNotFound', 'InvalidParameterValue'},
@@ -8432,6 +8450,13 @@ def rds_inventory() -> dict[str, Any]:
             'master_username': cluster.get('MasterUsername'),
             'endpoint': cluster.get('Endpoint'),
             'reader_endpoint': cluster.get('ReaderEndpoint'),
+            'storage_encrypted': cluster.get('StorageEncrypted'),
+            'deletion_protection': cluster.get('DeletionProtection'),
+            'multi_az': cluster.get('MultiAZ'),
+            'availability_zones': cluster.get('AvailabilityZones'),
+            'subnet_group': cluster.get('DBSubnetGroup'),
+            'security_groups': cluster.get('VpcSecurityGroups'),
+            'backup_retention_period': cluster.get('BackupRetentionPeriod'),
             'port': cluster.get('Port'),
             'members': cluster.get('DBClusterMembers'),
             'parameter_group': cluster.get('DBClusterParameterGroup'),
@@ -8464,6 +8489,7 @@ def rds_inventory() -> dict[str, Any]:
     detailed_parameter_groups = [parameter_group_detail(group) for group in parameter_groups]
 
     return {
+        'issues': issues,
         'summary': {
             'instances': len(detailed_instances),
             'clusters': len(detailed_clusters),

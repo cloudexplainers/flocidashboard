@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from botocore.exceptions import ClientError
+
 from .aws import FlociClientFactory, _clean_response
+from .appsync_schema import read_sdl
 
 
 def _client():
@@ -54,6 +57,25 @@ def start_schema_creation(api_id: str, definition: str) -> dict[str, Any]:
     return {'api_id': clean_id, 'status': response.get('status'), 'response': _clean_response(response)}
 
 
+def get_schema(api_id: str) -> dict[str, Any]:
+    clean_id = _required(api_id, 'API ID')
+    client = _client()
+    try:
+        status = client.get_schema_creation_status(apiId=clean_id)
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') not in {'NotFoundException', 'ResourceNotFoundException'}:
+            raise
+        # Verify the API exists before treating absent status as a new API.
+        client.get_graphql_api(apiId=clean_id)
+        return {'api_id': clean_id, 'status': None, 'details': 'No schema deployment has been reported for this API.'}
+    result = {'api_id': clean_id, 'status': status.get('status'), 'details': status.get('details')}
+    # A new API may have no schema to introspect yet.
+    if result['status'] in {'NOT_APPLICABLE', 'FAILED', 'PROCESSING', 'DELETING'}:
+        return result
+    result['definition'] = read_sdl(client.get_introspection_schema(apiId=clean_id, format='SDL'))
+    return result
+
+
 def create_api_key(api_id: str, *, description: str = '', expires: Any = None) -> dict[str, Any]:
     clean_id = _required(api_id, 'API ID')
     kwargs: dict[str, Any] = {'apiId': clean_id}
@@ -72,7 +94,7 @@ def delete_api_key(api_id: str, key_id: str) -> dict[str, Any]:
     return {'api_id': clean_api_id, 'key_id': clean_key_id, 'response': _clean_response(response)}
 
 
-def create_data_source(api_id: str, name: str, *, source_type: str = 'NONE', description: str = '') -> dict[str, Any]:
+def create_data_source(api_id: str, name: str, *, source_type: str = 'NONE', description: str = '', service_role_arn: str = '', config: Any = None) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         'apiId': _required(api_id, 'API ID'),
         'name': _required(name, 'Data source name'),
@@ -80,6 +102,13 @@ def create_data_source(api_id: str, name: str, *, source_type: str = 'NONE', des
     }
     if description:
         kwargs['description'] = description
+    if service_role_arn:
+        kwargs['serviceRoleArn'] = service_role_arn.strip()
+    if config is not None:
+        config_key = {'AMAZON_DYNAMODB': 'dynamodbConfig', 'AWS_LAMBDA': 'lambdaConfig', 'HTTP': 'httpConfig'}.get(kwargs['type'])
+        if not config_key:
+            raise ValueError('This data source type does not accept configuration')
+        kwargs[config_key] = _dict(config, 'Data source configuration')
     response = _client().create_data_source(**kwargs)
     return {'api_id': kwargs['apiId'], 'data_source': _clean_response(response.get('dataSource', {}))}
 
@@ -91,7 +120,7 @@ def delete_data_source(api_id: str, name: str) -> dict[str, Any]:
     return {'api_id': clean_api_id, 'name': clean_name, 'response': _clean_response(response)}
 
 
-def create_resolver(api_id: str, type_name: str, field_name: str, *, data_source_name: str = '') -> dict[str, Any]:
+def create_resolver(api_id: str, type_name: str, field_name: str, *, data_source_name: str = '', request_mapping_template: str | None = None, response_mapping_template: str | None = None) -> dict[str, Any]:
     kwargs: dict[str, Any] = {
         'apiId': _required(api_id, 'API ID'),
         'typeName': _required(type_name, 'Type name'),
@@ -99,6 +128,10 @@ def create_resolver(api_id: str, type_name: str, field_name: str, *, data_source
     }
     if data_source_name:
         kwargs['dataSourceName'] = data_source_name
+    if request_mapping_template is not None:
+        kwargs['requestMappingTemplate'] = request_mapping_template
+    if response_mapping_template is not None:
+        kwargs['responseMappingTemplate'] = response_mapping_template
     response = _client().create_resolver(**kwargs)
     return {'api_id': kwargs['apiId'], 'resolver': _clean_response(response.get('resolver', {}))}
 
@@ -186,17 +219,19 @@ def execute_graphql(
     target_url = endpoint_url
     if not target_url:
         floci_endpoint = FlociClientFactory().endpoint_url.rstrip('/')
-        target_url = f'{floci_endpoint}/graphql/{clean_api_id}'
+        from urllib.parse import quote
+        target_url = f'{floci_endpoint}/v1/apis/{quote(clean_api_id, safe="")}/graphql'
 
     payload: dict[str, Any] = {'query': clean_query}
-    if variables:
+    if variables is not None:
         if isinstance(variables, str):
             try:
-                payload['variables'] = json.loads(variables)
+                variables = json.loads(variables)
             except json.JSONDecodeError as exc:
                 raise ValueError('Variables must be valid JSON') from exc
-        elif isinstance(variables, dict):
-            payload['variables'] = variables
+        if not isinstance(variables, dict):
+            raise ValueError('Variables must be a JSON object')
+        payload['variables'] = variables
     if operation_name:
         payload['operationName'] = operation_name.strip()
 
@@ -221,6 +256,7 @@ def execute_graphql(
                 resp_json = {'raw': resp_body}
             return {
                 'api_id': clean_api_id,
+                'endpoint_url': target_url,
                 'status_code': response.status,
                 'latency_ms': latency_ms,
                 'data': resp_json.get('data'),
@@ -236,15 +272,18 @@ def execute_graphql(
             err_json = {'error': err_body}
         return {
             'api_id': clean_api_id,
+            'endpoint_url': target_url,
             'status_code': err.code,
             'latency_ms': latency_ms,
-            'errors': err_json.get('errors', [{'message': str(err)}]),
+            'errors': err_json.get('errors') or [{'message': err_json.get('message') or err_json.get('error') or str(err)}],
+            'raw': err_json,
             'data': err_json.get('data'),
         }
     except Exception as err:
         latency_ms = round((time.perf_counter() - start_time) * 1000, 2)
         return {
             'api_id': clean_api_id,
+            'endpoint_url': target_url,
             'status_code': 500,
             'latency_ms': latency_ms,
             'errors': [{'message': str(err)}],

@@ -125,3 +125,46 @@ class SNSMessagesApiTests(SimpleTestCase):
         self.assertTrue(response.json()['unsubscribed'])
         unsub_mock.assert_called_once_with('arn:aws:sns:...:sub-101')
 
+
+
+class SNSDeliveryContractTests(SimpleTestCase):
+    @patch('dashboard.sns_api._sns_client')
+    def test_fifo_creation_can_require_explicit_deduplication(self, client_mock):
+        client_mock.return_value.create_topic.return_value = {'TopicArn': 'arn:aws:sns:us-east-1:000000000000:orders.fifo'}
+        response = self.client.post('/api/sns/topics/', data=json.dumps({'name': 'orders.fifo', 'fifo': True, 'content_based_deduplication': False}), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        client_mock.return_value.create_topic.assert_called_once_with(Name='orders.fifo', Attributes={'FifoTopic': 'true', 'ContentBasedDeduplication': 'false'})
+
+    @patch('dashboard.sns_api._sns_client')
+    def test_subscribe_serializes_filter_scope_and_raw_delivery(self, client_mock):
+        client_mock.return_value.subscribe.return_value = {'SubscriptionArn': 'arn:subscription'}
+        response = self.client.post('/api/sns/subscriptions/', data=json.dumps({'topic_arn': 'arn:aws:sns:us-east-1:000000000000:orders', 'protocol': 'sqs', 'endpoint': 'arn:aws:sqs:us-east-1:000000000000:orders', 'filter_policy': {'kind': ['order']}, 'filter_policy_scope': 'MessageBody', 'raw_message_delivery': True}), content_type='application/json')
+        self.assertEqual(response.status_code, 200, response.content)
+        attrs = client_mock.return_value.subscribe.call_args.kwargs['Attributes']
+        self.assertEqual(json.loads(attrs['FilterPolicy']), {'kind': ['order']})
+        self.assertEqual(attrs['FilterPolicyScope'], 'MessageBody')
+        self.assertEqual(attrs['RawMessageDelivery'], 'true')
+
+    @patch('dashboard.sns_api._sns_client')
+    def test_attribute_url_resolves_put_and_serializes_boolean_false(self, client_mock):
+        arn = 'arn:aws:sns:us-east-1:000000000000:orders:subscription'
+        response = self.client.put(reverse('dashboard:sns-subscription-attributes', kwargs={'subscription_arn': arn}), data=json.dumps({'attribute_name': 'RawMessageDelivery', 'attribute_value': False}), content_type='application/json')
+        self.assertEqual(response.status_code, 200, response.content)
+        client_mock.return_value.set_subscription_attributes.assert_called_once_with(SubscriptionArn=arn, AttributeName='RawMessageDelivery', AttributeValue='false')
+
+    @patch('dashboard.sns_api._sns_client')
+    def test_invalid_filter_policy_never_calls_sdk(self, client_mock):
+        response = self.client.post('/api/sns/subscriptions/', data=json.dumps({'topic_arn': 'arn:aws:sns:us-east-1:000000000000:orders', 'protocol': 'sqs', 'endpoint': 'arn:queue', 'filter_policy': ['invalid']}), content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        client_mock.assert_not_called()
+
+    @patch('dashboard.sns_api._sns_client')
+    def test_fifo_publish_preserves_typed_attributes_and_deduplication(self, client_mock):
+        client_mock.return_value.publish.return_value = {'MessageId': 'message-1', 'SequenceNumber': '0'}
+        response = self.client.post('/api/sns/messages/publish/', data=json.dumps({'topic_arn': 'arn:aws:sns:us-east-1:000000000000:orders.fifo', 'message': '0', 'message_group_id': 'customer-7', 'message_deduplication_id': 'request-1', 'message_attributes': {'amount': 0}}), content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        args = client_mock.return_value.publish.call_args.kwargs
+        self.assertEqual(args['MessageGroupId'], 'customer-7')
+        self.assertEqual(args['MessageDeduplicationId'], 'request-1')
+        self.assertEqual(args['MessageAttributes']['amount'], {'DataType': 'Number', 'StringValue': '0'})
+        self.assertEqual(response.json()['sequence_number'], '0')

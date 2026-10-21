@@ -137,8 +137,8 @@ def delete_db_instance(identifier: str, *, skip_final_snapshot: bool = True, fin
         'DBInstanceIdentifier': clean_identifier,
         'SkipFinalSnapshot': bool(skip_final_snapshot),
     }
-    if not kwargs['SkipFinalSnapshot'] and final_snapshot_identifier:
-        kwargs['FinalDBSnapshotIdentifier'] = final_snapshot_identifier
+    if not kwargs['SkipFinalSnapshot']:
+        kwargs['FinalDBSnapshotIdentifier'] = _required(final_snapshot_identifier, 'Final snapshot identifier')
     response = _client().delete_db_instance(**kwargs)
     return {
         'identifier': clean_identifier,
@@ -183,8 +183,8 @@ def delete_db_cluster(identifier: str, *, skip_final_snapshot: bool = True, fina
         'DBClusterIdentifier': clean_identifier,
         'SkipFinalSnapshot': bool(skip_final_snapshot),
     }
-    if not kwargs['SkipFinalSnapshot'] and final_snapshot_identifier:
-        kwargs['FinalDBSnapshotIdentifier'] = final_snapshot_identifier
+    if not kwargs['SkipFinalSnapshot']:
+        kwargs['FinalDBSnapshotIdentifier'] = _required(final_snapshot_identifier, 'Final snapshot identifier')
     response = _client().delete_db_cluster(**kwargs)
     return {
         'identifier': clean_identifier,

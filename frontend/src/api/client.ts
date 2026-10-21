@@ -1034,11 +1034,7 @@ export async function publishSnsMessage(
 }
 
 export async function createSnsSubscription(topicArn: string, protocol: string, endpoint: string): Promise<any> {
-  return await executeServiceAction('sns', 'subscribe', {
-    TopicArn: topicArn,
-    Protocol: protocol,
-    Endpoint: endpoint,
-  });
+  return snsRequest('subscriptions/', 'POST', { topic_arn: topicArn, protocol, endpoint });
 }
 
 // RDS Operational APIs
@@ -1146,13 +1142,15 @@ export async function createRdsCluster(
   return data;
 }
 
-export async function deleteRdsCluster(identifier: string, skipFinalSnapshot: boolean = true): Promise<any> {
+export async function deleteRdsCluster(identifier: string, skipFinalSnapshot: boolean = true, finalSnapshotId: string = ''): Promise<any> {
   const res = await fetch(`/api/rds/clusters/${encodeURIComponent(identifier)}/`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ skip_final_snapshot: skipFinalSnapshot }),
+    body: JSON.stringify({ skip_final_snapshot: skipFinalSnapshot, final_snapshot_identifier: finalSnapshotId }),
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'RDS operation failed');
+  return data;
 }
 
 export async function createRdsParameterGroup(name: string, family: string, description: string): Promise<any> {
@@ -1171,7 +1169,9 @@ export async function deleteRdsParameterGroup(name: string): Promise<any> {
     method: 'DELETE',
     headers: { 'X-CSRFToken': getCsrfToken() },
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'RDS operation failed');
+  return data;
 }
 
 // S3 Deepening APIs (Permissions & Properties)
@@ -1366,7 +1366,7 @@ export async function validateCloudFormationTemplate(templateBody: string): Prom
 export async function createCloudFormationStack(
   stackName: string,
   templateBody: string,
-  parameters?: Array<{ ParameterKey: string; ParameterValue: string }>,
+  parameters?: any,
   capabilities?: string[],
   disableRollback: boolean = false
 ): Promise<any> {
@@ -1377,7 +1377,7 @@ export async function createCloudFormationStack(
       stack_name: stackName,
       template_body: templateBody,
       parameters,
-      capabilities: capabilities || ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
+      capabilities: capabilities || [],
       disable_rollback: disableRollback,
     }),
   });
@@ -1389,7 +1389,8 @@ export async function createCloudFormationStack(
 export async function updateCloudFormationStack(
   stackName: string,
   templateBody?: string,
-  parameters?: Array<{ ParameterKey: string; ParameterValue: string }>
+  parameters?: any,
+  capabilities?: string[]
 ): Promise<any> {
   const res = await fetch(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/`, {
     method: 'PUT',
@@ -1397,6 +1398,7 @@ export async function updateCloudFormationStack(
     body: JSON.stringify({
       template_body: templateBody,
       parameters,
+      capabilities,
     }),
   });
   const data = await res.json();
@@ -1409,7 +1411,9 @@ export async function deleteCloudFormationStack(stackName: string): Promise<any>
     method: 'DELETE',
     headers: { 'X-CSRFToken': getCsrfToken() },
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'CloudFormation operation failed');
+  return data;
 }
 
 export async function createCloudFormationChangeSet(
@@ -1417,7 +1421,8 @@ export async function createCloudFormationChangeSet(
   changeSetName: string,
   templateBody: string,
   changeSetType: string = 'UPDATE',
-  parameters?: any
+  parameters?: any,
+  capabilities?: string[]
 ): Promise<any> {
   const res = await fetch('/api/cloudformation/change-sets/', {
     method: 'POST',
@@ -1428,6 +1433,7 @@ export async function createCloudFormationChangeSet(
       template_body: templateBody,
       change_set_type: changeSetType,
       parameters,
+      capabilities,
     }),
   });
   const data = await res.json();
@@ -1437,8 +1443,9 @@ export async function createCloudFormationChangeSet(
 
 export async function describeCloudFormationChangeSet(stackName: string, changeSetName: string): Promise<any> {
   const res = await fetch(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/change-sets/${encodeURIComponent(changeSetName)}/`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'CloudFormation operation failed');
+  return data;
 }
 
 export async function executeCloudFormationChangeSet(stackName: string, changeSetName: string): Promise<any> {
@@ -1456,7 +1463,9 @@ export async function deleteCloudFormationChangeSet(stackName: string, changeSet
     method: 'DELETE',
     headers: { 'X-CSRFToken': getCsrfToken() },
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || 'CloudFormation operation failed');
+  return data;
 }
 
 // EventBridge Operational APIs
@@ -1477,7 +1486,9 @@ export async function deleteEventBus(name: string): Promise<any> {
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({ name }),
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error || data.removed === false || data.failed_entries?.length) throw new Error(data.error || data.failed_entries?.[0]?.ErrorMessage || 'EventBridge operation failed');
+  return data;
 }
 
 export async function putEventRule(
@@ -1522,7 +1533,9 @@ export async function deleteEventRule(name: string, busName: string = 'default')
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({ name, event_bus_name: busName }),
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error || data.removed === false || data.failed_entries?.length) throw new Error(data.error || data.failed_entries?.[0]?.ErrorMessage || 'EventBridge operation failed');
+  return data;
 }
 
 export async function putEventTarget(
@@ -1546,7 +1559,7 @@ export async function putEventTarget(
     }),
   });
   const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to add target');
+  if (!res.ok || data.error || data.failed_entry_count > 0 || data.failed_entries?.length) throw new Error(data.error || data.failed_entries?.[0]?.ErrorMessage || 'Failed to add target');
   return data;
 }
 
@@ -1560,14 +1573,18 @@ export async function removeEventTarget(ruleName: string, busName: string = 'def
       target_id: targetId,
     }),
   });
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok || data.error || data.removed === false || data.failed_entries?.length) throw new Error(data.error || data.failed_entries?.[0]?.ErrorMessage || 'EventBridge operation failed');
+  return data;
 }
 
 export async function putEvents(entries: any[]): Promise<any> {
+  if (entries.length !== 1) throw new Error('Send one event at a time.');
+  const entry = entries[0];
   const res = await fetch('/api/eventbridge/events/put/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ entries }),
+    body: JSON.stringify({ event_bus_name: entry.EventBusName, source: entry.Source, detail_type: entry.DetailType, detail: entry.Detail, resources: entry.Resources }),
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to send events');
@@ -1806,42 +1823,28 @@ export async function fetchStepFunctionExecutionHistory(executionArn: string): P
   return data.events || [];
 }
 
-export async function stopStepFunctionExecution(executionArn: string, error: string = 'UserCancelled', cause: string = 'Execution stopped manually from workbench'): Promise<any> {
-  return await executeServiceAction('stepfunctions', 'stop_execution', { execution_arn: executionArn, error, cause });
-}
-
-export async function updateStepFunctionDefinition(stateMachineArn: string, definition: string, roleArn?: string): Promise<any> {
-  return await executeServiceAction('stepfunctions', 'update_state_machine', {
-    state_machine_arn: stateMachineArn,
-    definition,
-    role_arn: roleArn,
+export async function stepFunctionsRequest(path = '', method = 'GET', payload?: Record<string, unknown>): Promise<any> {
+  const response = await fetch(`/api/stepfunctions/${path}`, { method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
   });
+  const data = await response.json();
+  // DescribeExecution uses error/cause as workflow outcome fields, even on HTTP 200.
+  const executionOutcome = path.startsWith('executions/detail/') && typeof data.status === 'string';
+  if (!response.ok || (data.error && !executionOutcome)) throw new Error(data.error || `Step Functions request failed (${response.status})`);
+  return data;
 }
-
-export async function fetchStepFunctionActivities(): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('stepfunctions', 'list_activities', {});
-    return res.activities || res.Activities || [];
-  } catch {
-    return [];
-  }
+export async function stopStepFunctionExecution(executionArn: string, error = 'UserCancelled', cause = 'Execution stopped manually from workbench') {
+  return stepFunctionsRequest('executions/stop/', 'POST', { execution_arn: executionArn, error, cause });
 }
-
-export async function createStepFunctionActivity(name: string): Promise<any> {
-  return await executeServiceAction('stepfunctions', 'create_activity', { name });
+export async function updateStepFunctionDefinition(stateMachineArn: string, definition: string, roleArn?: string) {
+  return stepFunctionsRequest(`state-machines/${encodeURIComponent(stateMachineArn)}/`, 'PATCH', { definition, role_arn: roleArn });
 }
-
-export async function deleteStepFunctionActivity(activityArn: string): Promise<any> {
-  return await executeServiceAction('stepfunctions', 'delete_activity', { activity_arn: activityArn });
-}
-
-export async function sendStepFunctionTaskSuccess(taskToken: string, output: string): Promise<any> {
-  return await executeServiceAction('stepfunctions', 'send_task_success', { task_token: taskToken, output });
-}
-
-export async function sendStepFunctionTaskFailure(taskToken: string, error: string = 'ManualFailure', cause: string = 'Task failed from workbench'): Promise<any> {
-  return await executeServiceAction('stepfunctions', 'send_task_failure', { task_token: taskToken, error, cause });
-}
+export async function fetchStepFunctionActivities(): Promise<any[]> { return (await stepFunctionsRequest('activities/')).activities || []; }
+export async function createStepFunctionActivity(name: string) { return stepFunctionsRequest('activities/', 'POST', { name }); }
+export async function deleteStepFunctionActivity(activityArn: string) { return stepFunctionsRequest('activities/', 'DELETE', { activity_arn: activityArn }); }
+export async function sendStepFunctionTaskSuccess(taskToken: string, output: string) { return stepFunctionsRequest('tasks/callback/', 'POST', { task_token: taskToken, output, success: true }); }
+export async function sendStepFunctionTaskFailure(taskToken: string, error = 'ManualFailure', cause = 'Task failed from workbench') { return stepFunctionsRequest('tasks/callback/', 'POST', { task_token: taskToken, error, cause, success: false }); }
 
 // Cognito Additional APIs
 export async function fetchCognitoUserGroups(userPoolId: string): Promise<any[]> {
@@ -2292,6 +2295,10 @@ export async function createCloudFrontDistribution(params: {
   viewer_protocol_policy?: string;
   aliases?: string[];
   cache_policy_id?: string;
+  origin_type?: string;
+  origin_protocol_policy?: string;
+  http_port?: number;
+  https_port?: number;
 }): Promise<any> {
   const res = await fetch('/api/cloudfront/distributions/', {
     method: 'POST',
@@ -2305,6 +2312,10 @@ export async function createCloudFrontDistribution(params: {
       viewer_protocol_policy: params.viewer_protocol_policy || 'redirect-to-https',
       aliases: params.aliases,
       cache_policy_id: params.cache_policy_id,
+      origin_type: params.origin_type,
+      origin_protocol_policy: params.origin_protocol_policy,
+      http_port: params.http_port,
+      https_port: params.https_port,
     }),
   });
   if (!res.ok) {
@@ -2344,7 +2355,7 @@ export async function createCloudFrontInvalidation(distributionId: string, paths
   const res = await fetch(`/api/cloudfront/distributions/${distributionId}/invalidations/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ paths, caller_reference: `inv-${Date.now()}` }),
+    body: JSON.stringify({ paths, caller_reference: `inv-${crypto.randomUUID()}` }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -2385,8 +2396,8 @@ export async function createCloudFrontFunction(name: string, functionCode: strin
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({
       name,
-      function_config: { comment: comment || '', runtime: 'cloudfront-js-2.0' },
-      function_code: functionCode,
+      comment: comment || '', runtime: 'cloudfront-js-2.0',
+      code: functionCode,
     }),
   });
   if (!res.ok) {
@@ -2400,13 +2411,20 @@ export async function deleteCloudFrontFunction(name: string, ifMatch?: string): 
   const res = await fetch(`/api/cloudfront/functions/${name}/`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ if_match: ifMatch || '*' }),
+    body: JSON.stringify({ if_match: ifMatch || '' }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || `HTTP ${res.status}`);
   }
   return await res.json();
+}
+
+export async function publishCloudFrontFunction(name: string): Promise<any> {
+  const response = await fetch(`/api/cloudfront/functions/${encodeURIComponent(name)}/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() }, body: JSON.stringify({}) });
+  const result = await response.json();
+  if (!response.ok || result.error) throw new Error(result.error || 'Unable to publish function');
+  return result;
 }
 
 // ==========================================
@@ -2566,11 +2584,11 @@ export async function stopAthenaQuery(queryExecutionId: string): Promise<any> {
   return await res.json();
 }
 
-export async function fetchAthenaQueryResults(queryExecutionId: string, maxResults: number = 50): Promise<any> {
+export async function fetchAthenaQueryResults(queryExecutionId: string, maxResults: number = 50, nextToken: string = ''): Promise<any> {
   const res = await fetch('/api/athena/queries/results/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ query_execution_id: queryExecutionId, max_results: maxResults }),
+    body: JSON.stringify({ query_execution_id: queryExecutionId, max_results: maxResults, next_token: nextToken }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -2646,11 +2664,11 @@ export async function createAppSyncSchema(apiId: string, definition: string): Pr
   return await res.json();
 }
 
-export async function createAppSyncApiKey(apiId: string, description?: string): Promise<any> {
+export async function createAppSyncApiKey(apiId: string, description?: string, expires?: number): Promise<any> {
   const res = await fetch(`/api/appsync/apis/${apiId}/api-keys/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ description: description || 'Workbench generated API Key' }),
+    body: JSON.stringify({ description: description || '', expires }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -2672,11 +2690,11 @@ export async function deleteAppSyncApiKey(apiId: string, keyId: string): Promise
   return await res.json();
 }
 
-export async function createAppSyncDataSource(apiId: string, name: string, sourceType: string = 'NONE', description?: string): Promise<any> {
+export async function createAppSyncDataSource(apiId: string, name: string, sourceType: string = 'NONE', description?: string, options?: { service_role_arn?: string; config?: Record<string, unknown> }): Promise<any> {
   const res = await fetch(`/api/appsync/apis/${apiId}/data-sources/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, source_type: sourceType, description: description || '' }),
+    body: JSON.stringify({ name, source_type: sourceType, description: description || '', ...options }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -2698,11 +2716,11 @@ export async function deleteAppSyncDataSource(apiId: string, name: string): Prom
   return await res.json();
 }
 
-export async function createAppSyncResolver(apiId: string, typeName: string, fieldName: string, dataSourceName?: string): Promise<any> {
+export async function createAppSyncResolver(apiId: string, typeName: string, fieldName: string, dataSourceName?: string, templates?: { request_mapping_template: string; response_mapping_template: string }): Promise<any> {
   const res = await fetch(`/api/appsync/apis/${apiId}/resolvers/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ type_name: typeName, field_name: fieldName, data_source_name: dataSourceName || '' }),
+    body: JSON.stringify({ type_name: typeName, field_name: fieldName, data_source_name: dataSourceName || '', ...templates }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -3045,11 +3063,11 @@ export async function untagEksResource(resourceArn: string, tagKeys: string[]): 
 
 
 
-export async function runAppSyncGraphQL(apiId: string, query: string, variables: Record<string, unknown>, apiKey?: string): Promise<any> {
+export async function runAppSyncGraphQL(apiId: string, query: string, variables: Record<string, unknown>, apiKey?: string, operationName?: string): Promise<any> {
   const response = await fetch('/api/appsync/graphql/run/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ api_id: apiId, query, variables, api_key: apiKey }),
+    body: JSON.stringify({ api_id: apiId, query, variables, api_key: apiKey, operation_name: operationName }),
   });
   const result = await response.json();
   if (!response.ok || result.error) throw new Error(result.error || 'GraphQL execution failed');
@@ -3114,5 +3132,15 @@ export async function cloudWatchRequest(path = '', method = 'GET', payload?: Rec
   });
   const data = await response.json();
   if (!response.ok || data.error) throw new Error(data.error || `CloudWatch request failed (${response.status})`);
+  return data;
+}
+
+export async function snsRequest(path = '', method = 'GET', payload?: Record<string, unknown>): Promise<any> {
+  const response = await fetch(`/api/sns/${path}`, { method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || `SNS request failed (${response.status})`);
   return data;
 }
