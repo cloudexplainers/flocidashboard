@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from botocore.config import Config
 from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
 from botocore.parsers import ResponseParserError
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -942,6 +943,21 @@ class FlociClientFactoryTests(SimpleTestCase):
         self.assertIsNot(first, other_endpoint)
         self.assertIsNot(first, other_identity)
         self.assertEqual(other_identity._request_signer._credentials.access_key, 'AKIDALICE')
+
+    def test_long_running_config_is_not_replaced_by_a_cached_default_client(self):
+        env = {'AWS_ACCESS_KEY_ID': 'test', 'AWS_SECRET_ACCESS_KEY': 'test'}
+        with patch.dict(os.environ, env, clear=True):
+            default = FlociClientFactory().client('eks')
+            factory = FlociClientFactory()
+            factory.config = factory.config.merge(Config(read_timeout=120, retries={'max_attempts': 0}))
+            long_running = factory.client('eks')
+            long_running_again = factory.client('eks')
+
+        self.assertIsNot(default, long_running)
+        self.assertIs(long_running, long_running_again)
+        self.assertEqual(long_running.meta.config.read_timeout, 120)
+        self.assertEqual(long_running.meta.config.retries['total_max_attempts'], 1)
+        self.assertEqual(default.meta.config.read_timeout, 5)
 
     def test_credential_context_reports_environment_credentials(self):
         with patch.dict(os.environ, {

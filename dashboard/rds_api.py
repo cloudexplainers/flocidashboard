@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
+from botocore.config import Config
+
 from .aws import FlociClientFactory, _clean_response
 
 
-def _client():
-    return FlociClientFactory().client('rds')
+def _client(*, long_running: bool = False):
+    factory = FlociClientFactory()
+    if long_running:
+        # These calls can wait for Floci to start or stop a local database container.
+        # Do not retry a mutation that may already have succeeded after a read timeout.
+        factory.config = factory.config.merge(Config(read_timeout=120, retries={'max_attempts': 0}))
+    return factory.client('rds')
 
 
 def _required(value: str, label: str) -> str:
@@ -83,7 +90,7 @@ def create_db_instance(
     if parsed_tags:
         kwargs['Tags'] = parsed_tags
 
-    response = _client().create_db_instance(**kwargs)
+    response = _client(long_running=True).create_db_instance(**kwargs)
     instance = response.get('DBInstance', {})
     return {
         'identifier': kwargs['DBInstanceIdentifier'],
@@ -123,7 +130,7 @@ def modify_db_instance(
 
 def reboot_db_instance(identifier: str) -> dict[str, Any]:
     clean_identifier = _required(identifier, 'DB instance identifier')
-    response = _client().reboot_db_instance(DBInstanceIdentifier=clean_identifier)
+    response = _client(long_running=True).reboot_db_instance(DBInstanceIdentifier=clean_identifier)
     return {
         'identifier': clean_identifier,
         'instance': _clean_response(response.get('DBInstance', {})),
@@ -139,7 +146,7 @@ def delete_db_instance(identifier: str, *, skip_final_snapshot: bool = True, fin
     }
     if not kwargs['SkipFinalSnapshot']:
         kwargs['FinalDBSnapshotIdentifier'] = _required(final_snapshot_identifier, 'Final snapshot identifier')
-    response = _client().delete_db_instance(**kwargs)
+    response = _client(long_running=True).delete_db_instance(**kwargs)
     return {
         'identifier': clean_identifier,
         'instance': _clean_response(response.get('DBInstance', {})),
@@ -169,7 +176,7 @@ def create_db_cluster(
         kwargs['EngineVersion'] = engine_version
     if enable_iam_auth:
         kwargs['EnableIAMDatabaseAuthentication'] = True
-    response = _client().create_db_cluster(**kwargs)
+    response = _client(long_running=True).create_db_cluster(**kwargs)
     return {
         'identifier': kwargs['DBClusterIdentifier'],
         'cluster': _clean_response(response.get('DBCluster', {})),
@@ -185,7 +192,7 @@ def delete_db_cluster(identifier: str, *, skip_final_snapshot: bool = True, fina
     }
     if not kwargs['SkipFinalSnapshot']:
         kwargs['FinalDBSnapshotIdentifier'] = _required(final_snapshot_identifier, 'Final snapshot identifier')
-    response = _client().delete_db_cluster(**kwargs)
+    response = _client(long_running=True).delete_db_cluster(**kwargs)
     return {
         'identifier': clean_identifier,
         'cluster': _clean_response(response.get('DBCluster', {})),

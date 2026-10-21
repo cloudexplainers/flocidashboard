@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 import json
 import threading
@@ -198,8 +199,10 @@ class FlociClientFactory:
     def client(self, service_name: str):
         # Building a boto3 session and client costs ~30ms, and lab progress
         # alone needs hundreds. Clients are thread-safe, so reuse one per
-        # endpoint/region/credential combination. boto3.Session is part of the
-        # key so tests that patch it never receive a stale cached client.
+        # endpoint/region/credential/config combination. The config is part of
+        # the key so long-running callers (EKS, EC2, ECS, RDS) keep their longer
+        # timeout and no-retry settings. boto3.Session is part of the key so
+        # tests that patch it never receive a stale cached client.
         cache_key = (
             boto3.Session,
             service_name,
@@ -209,6 +212,9 @@ class FlociClientFactory:
             self.access_key_id,
             self.secret_access_key,
             self.session_token,
+            self.config.connect_timeout,
+            self.config.read_timeout,
+            repr(self.config.retries),
         )
         with _CLIENT_CACHE_LOCK:
             cached = _CLIENT_CACHE.get(cache_key)
@@ -237,16 +243,22 @@ class FlociClientFactory:
                 aws_session_token=self.session_token,
             )
 
-        return session.client(
-            service_name,
-            endpoint_url=self.endpoint_url,
-            region_name=self.region,
-            config=Config(
+        if service_name == 's3':
+            config = Config(
                 retries={'max_attempts': 2, 'mode': 'standard'},
                 connect_timeout=2,
                 read_timeout=5,
                 s3={'addressing_style': 'auto'},
-            ) if service_name == 's3' else self.config,
+            )
+        else:
+            # botocore rewrites a config's retries dict in place; pass a copy so
+            # self.config, and the cache key built from it, stay unchanged.
+            config = copy.deepcopy(self.config)
+        return session.client(
+            service_name,
+            endpoint_url=self.endpoint_url,
+            region_name=self.region,
+            config=config,
         )
 
     def credential_context(self) -> dict[str, Any]:
