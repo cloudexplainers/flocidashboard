@@ -1,3 +1,5 @@
+import { normalizeSessionIdentity } from '../sessionIdentity';
+import { CliResponse } from '../pages/cliResources';
 import { IdentityInfo, LabDefinition, ServiceAction, ServiceDefinition } from '../types';
 
 function getCsrfToken(): string {
@@ -33,22 +35,8 @@ export async function fetchServices(): Promise<ServiceDefinition[]> {
 }
 
 export async function fetchIdentity(): Promise<IdentityInfo> {
-  try {
-    const res = await fetch('/api/session-identity/');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const caller = data.caller_identity || {};
-    return {
-      account_id: caller.Account || data.account_id || 'Unknown',
-      user_id: caller.UserId || data.user_id || 'Unknown',
-      arn: caller.Arn || data.arn || 'Unavailable',
-      role: data.session_identity?.label || data.role || 'Current session',
-      region: data.region || 'Unknown',
-      endpoint: data.endpoint_url || data.endpoint || 'Unavailable',
-    };
-  } catch {
-    return { account_id: 'Unknown', user_id: 'Unavailable', arn: 'Unavailable', role: 'Unavailable', region: 'Unknown', endpoint: 'Unavailable' };
-  }
+  try { return normalizeSessionIdentity(await fetchIdentityDetail()); }
+  catch (error) { return normalizeSessionIdentity({ identity_resolved: false, identity_error: error instanceof Error ? error.message : 'Identity unavailable' }); }
 }
 
 export async function fetchServiceInventory(serviceKey: string): Promise<any> {
@@ -273,14 +261,10 @@ export async function resetFlociState(): Promise<any> {
 }
 
 export async function fetchIdentityDetail(): Promise<any> {
-  try {
-    const res = await fetch('/api/session-identity/');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    console.error('Failed to fetch identity detail:', err);
-    return {};
-  }
+  const response = await fetch('/api/session-identity/');
+  const result = await response.json();
+  if (!response.ok || result.error) throw new Error(result.error || `HTTP ${response.status}`);
+  return result;
 }
 
 export async function useAdminIdentity(): Promise<any> {
@@ -290,7 +274,7 @@ export async function useAdminIdentity(): Promise<any> {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const result = await res.json();
-  window.dispatchEvent(new Event('floci_session_changed'));
+  window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: result }));
   return result;
 }
 
@@ -302,19 +286,19 @@ export async function useUserIdentity(userName: string, rotateAccessKeys: boolea
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to switch user identity');
-  window.dispatchEvent(new Event('floci_session_changed'));
+  window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: data }));
   return data;
 }
 
-export async function assumeRoleIdentity(roleName: string, sessionName?: string, accountId?: string): Promise<any> {
+export async function assumeRoleIdentity(roleName: string, sessionName?: string, accountId?: string, roleArn?: string): Promise<any> {
   const res = await fetch('/api/session-identity/assume-role/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ role_name: roleName, session_name: sessionName, account_id: accountId }),
+    body: JSON.stringify({ role_name: roleName, session_name: sessionName, account_id: accountId, ...(roleArn ? { role_arn: roleArn } : {}) }),
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || 'Failed to assume role');
-  window.dispatchEvent(new Event('floci_session_changed'));
+  window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: data }));
   return data;
 }
 
@@ -325,18 +309,18 @@ export async function clearSessionIdentity(): Promise<any> {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const result = await res.json();
-  window.dispatchEvent(new Event('floci_session_changed'));
+  window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: result }));
   return result;
 }
 
-export async function runCliCommand(command: string, confirmed: boolean = false): Promise<any> {
+export async function runCliCommand(command: string, confirmed: boolean = false): Promise<CliResponse> {
   const res = await fetch('/api/console/run/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({ command, confirmed }),
   });
   const data = await res.json();
-  if (!res.ok && !data.confirmation_required) {
+  if (!(res.status === 409 && data.requires_confirmation === true) && (!res.ok || data.error)) {
     throw new Error(data.error || `HTTP ${res.status}`);
   }
   return data;
@@ -2833,7 +2817,7 @@ export async function createSesTemplate(name: string, subject: string, htmlPart?
   const res = await fetch('/api/ses/templates/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, subject, html_part: htmlPart || '', text_part: textPart || '' }),
+    body: JSON.stringify({ template_name: name, subject, html: htmlPart || '', text: textPart || '' }),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -2882,7 +2866,7 @@ export async function createSesConfigurationSet(name: string): Promise<any> {
 
 export async function updateSesSendingEnabled(enabled: boolean): Promise<any> {
   const res = await fetch('/api/ses/account/sending/', {
-    method: 'POST',
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({ enabled }),
   });
@@ -2895,7 +2879,7 @@ export async function updateSesSendingEnabled(enabled: boolean): Promise<any> {
 
 export async function clearSesMailbox(): Promise<any> {
   const res = await fetch('/api/ses/mailbox/', {
-    method: 'POST',
+    method: 'DELETE',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
     body: JSON.stringify({}),
   });
@@ -3087,5 +3071,48 @@ export async function postConsoleAction(path: string, payload: Record<string, un
   });
   const data = await response.json();
   if (!response.ok || data.error) throw new Error(data.error || `Action failed (HTTP ${response.status})`);
+  return data;
+}
+
+/** Dedicated KMS endpoints; /api/kms/ is a read-only inventory, not an action dispatcher. */
+export async function executeKmsAction(action: string, payload: Record<string, any>): Promise<any> {
+  const paths: Record<string, [string, string]> = {
+    create_key: ['POST', 'keys'], create_alias: ['POST', 'aliases'],
+    encrypt: ['POST', 'crypto/encrypt'], decrypt: ['POST', 'crypto/decrypt'],
+    generate_data_key: ['POST', 'data-keys'], set_key_rotation: ['POST', 'rotation'],
+    set_key_enabled: ['POST', 'key-state'], put_key_policy: ['PUT', 'key-policy'],
+    create_grant: ['POST', 'grants'], revoke_grant: ['DELETE', 'grants'],
+  };
+  const target = paths[action];
+  if (!target) throw new Error(`Unsupported KMS action: ${action}`);
+  const response = await fetch(`/api/kms/${target[1]}/`, {
+    method: target[0], headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json();
+  if (!response.ok || result.error) throw new Error(result.error || `HTTP ${response.status}`);
+  return result;
+}
+
+/** Secrets Manager uses dedicated endpoints; inventory is read-only. */
+export async function secretsRequest(path = '', method = 'GET', payload?: Record<string, unknown>): Promise<any> {
+  const response = await fetch(`/api/secretsmanager/${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || `Secrets Manager request failed (${response.status})`);
+  return data;
+}
+
+export async function cloudWatchRequest(path = '', method = 'GET', payload?: Record<string, unknown>): Promise<any> {
+  const response = await fetch(`/api/cloudwatch/${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+  });
+  const data = await response.json();
+  if (!response.ok || data.error) throw new Error(data.error || `CloudWatch request failed (${response.status})`);
   return data;
 }

@@ -160,3 +160,81 @@ class CloudWatchMetricStatisticsTests(SimpleTestCase):
                 response = self.client.get(reverse('dashboard:cloudwatch-metric-statistics'), params)
                 self.assertEqual(response.status_code, 400)
         factory.assert_not_called()
+
+
+class CloudWatchConsoleOperationsTests(SimpleTestCase):
+    def request(self, path, payload, method='post'):
+        return getattr(self.client, method)('/api/cloudwatch/' + path, data=json.dumps(payload), content_type='application/json')
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_alarm_zero_threshold_dimensions_and_evaluation_settings(self, factory):
+        response = self.request('alarms/', {
+            'alarm_name': 'Failures', 'metric_name': 'Errors', 'namespace': 'App', 'threshold': 0,
+            'comparison_operator': 'GreaterThanThreshold', 'period': 60, 'evaluation_periods': 3,
+            'datapoints_to_alarm': 2, 'statistic': 'Sum', 'treat_missing_data': 'notBreaching',
+            'dimensions': [{'Name': 'Service', 'Value': 'worker'}],
+        })
+        self.assertEqual(response.status_code, 200)
+        arguments = factory.return_value.client.return_value.put_metric_alarm.call_args.kwargs
+        self.assertEqual(arguments['Threshold'], 0)
+        self.assertEqual(arguments['Statistic'], 'Sum')
+        self.assertEqual(arguments['DatapointsToAlarm'], 2)
+        self.assertEqual(arguments['EvaluationPeriods'], 3)
+        self.assertEqual(arguments['Dimensions'], [{'Name': 'Service', 'Value': 'worker'}])
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_invalid_alarms_never_call_aws(self, factory):
+        baseline = dict(alarm_name='Errors', metric_name='Errors', namespace='App', threshold=0,
+                        comparison_operator='GreaterThanThreshold', period=60, evaluation_periods=1)
+        for overrides in [{'threshold': None}, {'threshold': float('inf')}, {'threshold': True},
+                          {'period': 17}, {'evaluation_periods': 1.5}, {'datapoints_to_alarm': 2},
+                          {'statistic': 'Invented'}, {'comparison_operator': ''}, {'dimensions': [{}]}]:
+            response = self.request('alarms/', {**baseline, **overrides})
+            self.assertEqual(response.status_code, 400, response.content)
+        factory.assert_not_called()
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_state_override_requires_reason_and_preserves_insufficient_data(self, factory):
+        response = self.request('alarms/state/', {'alarm_name': 'Errors', 'state_value': 'INSUFFICIENT_DATA', 'state_reason': 'Manual test'})
+        self.assertEqual(response.status_code, 200)
+        factory.return_value.client.return_value.set_alarm_state.assert_called_once_with(AlarmName='Errors', StateValue='INSUFFICIENT_DATA', StateReason='Manual test')
+        response = self.request('alarms/state/', {'alarm_name': 'Errors', 'state_value': 'OK', 'state_reason': ''})
+        self.assertEqual(response.status_code, 400)
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_delete_alarm_uses_explicit_delete_method(self, factory):
+        response = self.request('alarms/', {'alarm_name': 'Errors'}, 'delete')
+        self.assertEqual(response.status_code, 200)
+        factory.return_value.client.return_value.delete_alarms.assert_called_once_with(AlarmNames=['Errors'])
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_retention_remove_and_update_are_distinct_operations(self, factory):
+        response = self.request('retention/', {'log_group_name': '/app/worker'}, 'delete')
+        self.assertEqual(response.status_code, 200)
+        client = factory.return_value.client.return_value
+        client.delete_retention_policy.assert_called_once_with(logGroupName='/app/worker')
+        client.put_retention_policy.assert_not_called()
+        response = self.request('retention/', {'log_group_name': '/app/worker', 'retention_in_days': 7}, 'put')
+        self.assertEqual(response.status_code, 200)
+        client.put_retention_policy.assert_called_once_with(logGroupName='/app/worker', retentionInDays=7)
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_stream_creation_preserves_log_group_and_stream_names(self, factory):
+        response = self.request('log-streams/create/', {'log_group_name': '/app/worker', 'log_stream_name': '2026/10/test'})
+        self.assertEqual(response.status_code, 200)
+        factory.return_value.client.return_value.create_log_stream.assert_called_once_with(logGroupName='/app/worker', logStreamName='2026/10/test')
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_metric_zero_is_published_and_nonfinite_rejected(self, factory):
+        response = self.request('metric-data/', {'namespace': 'App', 'metric_name': 'Errors', 'value': 0, 'unit': 'Count'})
+        self.assertEqual(response.status_code, 200)
+        factory.return_value.client.return_value.put_metric_data.assert_called_once_with(Namespace='App', MetricData=[{'MetricName': 'Errors', 'Value': 0, 'Unit': 'Count'}])
+        response = self.request('metric-data/', {'namespace': 'App', 'metric_name': 'Errors', 'value': 'NaN'})
+        self.assertEqual(response.status_code, 400)
+
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_statistics_uses_requested_statistic(self, factory):
+        factory.return_value.client.return_value.get_metric_statistics.return_value = {'Datapoints': []}
+        response = self.client.get('/api/cloudwatch/metric-statistics/', {'namespace': 'App', 'metric_name': 'Errors', 'statistic': 'Sum'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(factory.return_value.client.return_value.get_metric_statistics.call_args.kwargs['Statistics'], ['Sum'])

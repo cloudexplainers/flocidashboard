@@ -3,7 +3,7 @@ import re
 from django.urls import path, re_path
 from .services import SERVICE_REGISTRY
 
-from . import acm_views, apigateway_views, appconfig_views, appsync_views, athena_views, autoscaling_views, backup_views, bedrockruntime_views, cloudformation_views, cloudfront_views, cloudmap_views, cloudtrail_views, cloudwatch_logs_views, codebuild_views, codedeploy_views, codepipeline_views, cognito_views, config_views, console_views, dynamodb_views, ec2_views, ecr_views, ecs_views, eks_views, elasticache_views, elasticbeanstalk_views, elasticloadbalancing_views, eventbridge_views, firehose_views, glue_views, iam_views, identity_views, inspector_views, iot_views, kafka_views, kinesis_views, kms_views, lambda_views, neptune_views, opensearch_views, pipes_views, rds_views, rdsdata_views, resource_graph_views, resourcegroupstagging_views, route53_views, s3_views, scheduler_views, secretsmanager_views, ses_views, settings_views, sns_views, sqs_views, ssm_views, stepfunctions_views, textract_views, transcribe_views, transfer_views, views
+from . import acm_views, apigateway_views, appconfig_views, appsync_views, athena_views, autoscaling_views, backup_views, bedrockruntime_views, cloudformation_views, cloudfront_views, cloudmap_views, cloudtrail_views, cloudwatch_console_views, cloudwatch_logs_views, codebuild_views, codedeploy_views, codepipeline_views, cognito_views, config_views, console_views, dynamodb_views, ec2_views, ecr_views, ecs_views, eks_views, elasticache_views, elasticbeanstalk_views, elasticloadbalancing_views, eventbridge_views, firehose_views, glue_views, iam_views, identity_views, inspector_views, iot_views, kafka_views, kinesis_views, kms_views, lambda_views, neptune_views, opensearch_views, pipes_views, rds_views, rdsdata_views, resource_graph_views, resourcegroupstagging_views, route53_views, s3_views, scheduler_views, secretsmanager_views, ses_views, settings_views, sns_views, sqs_views, ssm_views, stepfunctions_views, textract_views, transcribe_views, transfer_views, views
 
 app_name = 'dashboard'
 
@@ -64,6 +64,7 @@ urlpatterns = [
     path('api/settings/test-connection/', settings_views.settings_test_connection, name='settings-test-connection'),
     path('api/settings/floci-reset/', settings_views.settings_floci_reset, name='settings-floci-reset'),
     path('api/session-identity/', identity_views.identity_detail, name='session-identity-detail'),
+    path('api/session-identity/options/', identity_views.identity_options, name='session-identity-options'),
     path('api/session-identity/use-admin/', identity_views.identity_use_admin, name='session-identity-use-admin'),
     path('api/session-identity/use-user/', identity_views.identity_use_user, name='session-identity-use-user'),
     path('api/session-identity/assume-role/', identity_views.identity_assume_role, name='session-identity-assume-role'),
@@ -229,6 +230,11 @@ urlpatterns = [
     path('api/cognito/auth/revoke/', cognito_views.cognito_revoke_token, name='cognito-revoke-token'),
     path('api/costexplorer/', views.costexplorer, name='costexplorer'),
     path('api/cur/', views.cur, name='cur'),
+    path('api/cloudwatch/alarms/', cloudwatch_console_views.alarms, name='cloudwatch-alarms'),
+    path('api/cloudwatch/alarms/state/', cloudwatch_console_views.alarm_state, name='cloudwatch-alarm-state'),
+    path('api/cloudwatch/metric-data/', cloudwatch_console_views.metric_data, name='cloudwatch-metric-data'),
+    path('api/cloudwatch/log-streams/create/', cloudwatch_console_views.create_stream, name='cloudwatch-create-stream'),
+    path('api/cloudwatch/retention/', cloudwatch_console_views.retention, name='cloudwatch-retention'),
     path('api/cloudwatch/metric-statistics/', cloudwatch_logs_views.cloudwatch_metric_statistics, name='cloudwatch-metric-statistics'),
     path('api/cloudwatch/', views.cloudwatch, name='cloudwatch'),
     path('api/cloudwatch/log-streams/', cloudwatch_logs_views.cloudwatch_log_streams, name='cloudwatch-log-streams'),
@@ -607,6 +613,9 @@ urlpatterns = [
     path('api/sqs/queues/<str:queue_name>/messages/send/', sqs_views.sqs_messages_send, name='sqs-messages-send'),
     path('api/sqs/queues/<str:queue_name>/messages/delete/', sqs_views.sqs_message_delete, name='sqs-message-delete'),
     path('api/ssm/', views.ssm, name='ssm'),
+    path('api/ssm/history/', ssm_views.ssm_history, name='ssm-history'),
+    path('api/ssm/tags/', ssm_views.ssm_tags, name='ssm-tags'),
+    path('api/ssm/documents/', ssm_views.ssm_documents, name='ssm-documents'),
     path('api/ssm/parameters/', ssm_views.ssm_parameters_create, name='ssm-parameters'),
     path('api/ssm/parameters/<path:parameter_name>/value/', ssm_views.ssm_parameter_value, name='ssm-parameter-value'),
     path('api/stepfunctions/', views.stepfunctions, name='stepfunctions'),

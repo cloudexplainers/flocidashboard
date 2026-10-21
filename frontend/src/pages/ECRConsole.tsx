@@ -1,569 +1,1006 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import Table from '../components/ResourceTable';
-import Box from '@cloudscape-design/components/box';
-import Button from '@cloudscape-design/components/button';
-import Header from '@cloudscape-design/components/header';
-import SpaceBetween from '@cloudscape-design/components/space-between';
-import Container from '@cloudscape-design/components/container';
-import Modal from '@cloudscape-design/components/modal';
-import FormField from '@cloudscape-design/components/form-field';
-import Input from '@cloudscape-design/components/input';
-import Textarea from '@cloudscape-design/components/textarea';
-import Select from '@cloudscape-design/components/select';
-import Grid from '@cloudscape-design/components/grid';
-import Badge from '@cloudscape-design/components/badge';
-import Alert from '@cloudscape-design/components/alert';
-import TextFilter from '@cloudscape-design/components/text-filter';
-import Tabs from '@cloudscape-design/components/tabs';
+import React, { useEffect, useMemo, useState } from "react";
+import Table from "../components/ResourceTable";
+import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
+import Header from "@cloudscape-design/components/header";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import Container from "@cloudscape-design/components/container";
+import Modal from "@cloudscape-design/components/modal";
+import FormField from "@cloudscape-design/components/form-field";
+import Input from "@cloudscape-design/components/input";
+import Textarea from "@cloudscape-design/components/textarea";
+import Select from "@cloudscape-design/components/select";
+import Badge from "@cloudscape-design/components/badge";
+import Alert from "@cloudscape-design/components/alert";
+import TextFilter from "@cloudscape-design/components/text-filter";
+import Tabs from "@cloudscape-design/components/tabs";
+import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
+import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
+import { CodeSnippet } from "../components/CodeSnippet";
+import { useSession } from "../components/SessionContext";
 import {
-  fetchInventory,
+  EcrImage,
+  ecrRepositories,
+  ecrDate,
+  ecrSize,
+  shellQuote,
+} from "./ecrResources";
+import {
   createEcrRepository,
   deleteEcrRepository,
-  fetchEcrAuthToken,
   batchDeleteEcrImages,
   putEcrTagMutability,
-  fetchEcrLifecyclePolicy,
   putEcrLifecyclePolicy,
   runEcrGarbageCollection,
-} from '../api/client';
+} from "../api/client";
 
 interface ECRConsoleProps {
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
 }
+const unavailable = "Unavailable";
+const copy = (value?: string) =>
+  value ? (
+    <CopyToClipboard
+      copyButtonAriaLabel={`Copy ${value}`}
+      copySuccessText="Copied"
+      copyErrorText="Unable to copy"
+      textToCopy={value}
+      variant="inline"
+    />
+  ) : (
+    unavailable
+  );
+const imageKey = (image: EcrImage) => image.digest || image.tags[0] || "";
 
-export const ECRConsole: React.FC<ECRConsoleProps> = ({ activeTab, onTabChange }) => {
-  const [data, setData] = useState<any>({ repositories: [], images: [] });
+export const ECRConsole: React.FC<ECRConsoleProps> = ({
+  activeTab,
+  onTabChange,
+  resourcePath,
+  onNavigate,
+}) => {
+  const { identity } = useSession();
+  const [data, setData] = useState<any>({});
   const [loading, setLoading] = useState(true);
-  const [filterText, setFilterText] = useState('');
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [filter, setFilter] = useState("");
+  const [imageFilter, setImageFilter] = useState("");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [selectedImages, setSelectedImages] = useState<EcrImage[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [repoName, setRepoName] = useState("");
+  const [mutability, setMutability] = useState("MUTABLE");
+  const [pushOpen, setPushOpen] = useState(false);
+  const [imageTag, setImageTag] = useState("latest");
+  const [lifecycleDoc, setLifecycleDoc] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirmation, setConfirmation] = useState<
+    "repository" | "images" | null
+  >(null);
+  const route = new URLSearchParams(
+    (resourcePath || window.location.search).split("?").pop(),
+  );
+  const repoQuery = route.get("repository") || "";
+  const imageQuery = route.get("image") || "";
+  const tab = (activeTab || "repositories").split("?")[0];
+  const repositories = useMemo(() => ecrRepositories(data), [data]);
+  const repository = repositories.find((repo) => repo.name === repoQuery);
+  const image = repository?.images.find(
+    (item) => imageKey(item) === imageQuery,
+  );
 
-  // Selected Repository
-  const [selectedRepos, setSelectedRepos] = useState<any[]>([]);
-  const [selectedImages, setSelectedImages] = useState<any[]>([]);
-
-  // Create Repository Modal
-  const [createRepoOpen, setCreateRepoOpen] = useState(false);
-  const [repoName, setRepoName] = useState('');
-  const [tagMutability, setTagMutability] = useState<{ label: string; value: 'MUTABLE' | 'IMMUTABLE' }>({
-    label: 'MUTABLE (Tags can be overwritten)',
-    value: 'MUTABLE',
-  });
-  const [creatingRepo, setCreatingRepo] = useState(false);
-
-  // Push Commands Modal
-  const [pushCommandsOpen, setPushCommandsOpen] = useState(false);
-  const [authTokenData, setAuthTokenData] = useState<any | null>(null);
-
-  // Lifecycle Policy
-  const [lifecycleDoc, setLifecycleDoc] = useState('{\n  "rules": [\n    {\n      "rulePriority": 1,\n      "description": "Expire untagged images older than 14 days",\n      "selection": {\n        "tagStatus": "untagged",\n        "countType": "sinceImagePushed",\n        "countUnit": "days",\n        "countNumber": 14\n      },\n      "action": {\n        "type": "expire"\n      }\n    }\n  ]\n}');
-  const [savingLifecycle, setSavingLifecycle] = useState(false);
-
-  // Garbage Collection
-  const [runningGc, setRunningGc] = useState(false);
-
+  const navigate = (nextTab: string, name = "", digest = "") => {
+    const query = new URLSearchParams();
+    if (name) query.set("repository", name);
+    if (digest) query.set("image", digest);
+    const target = `${nextTab}${query.size ? `?${query}` : ""}`;
+    if (onNavigate) onNavigate(`ecr/${target}`);
+    else onTabChange?.(target);
+  };
   const loadData = async () => {
     setLoading(true);
+    setLoadError("");
     try {
-      const res = await fetchInventory('ecr');
-      setData(res || { repositories: [], images: [] });
-      if (res?.repositories?.length > 0 && selectedRepos.length === 0) {
-        setSelectedRepos([res.repositories[0]]);
-      }
-    } catch (err) {
-      console.error(err);
+      const response = await fetch("/api/ecr/");
+      const result = await response.json();
+      if (!response.ok || result.error)
+        throw new Error(result.error || `HTTP ${response.status}`);
+      setData(result);
+      setSelectedImages([]);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load ECR resources.",
+      );
     } finally {
       setLoading(false);
     }
   };
-
   useEffect(() => {
-    loadData();
-  }, []);
+    void loadData();
+  }, [
+    identity?.account_id,
+    identity?.region,
+    identity?.arn,
+    identity?.endpoint,
+  ]);
+  useEffect(() => {
+    setSelectedImages([]);
+    setImageFilter("");
+    setTagFilter("all");
+    setPushOpen(false);
+    setConfirmation(null);
+    setMessage(null);
+  }, [repoQuery]);
+  useEffect(() => {
+    setLifecycleDoc(repository?.lifecycle || "");
+  }, [repository?.name, repository?.lifecycle]);
 
-  const activeRepo = selectedRepos[0] || null;
-  const activeRepoName = activeRepo ? activeRepo.repositoryName || activeRepo.name : '';
-  const activeRepoUri = activeRepo ? activeRepo.repositoryUri || `000000000000.dkr.ecr.us-east-1.localhost:4566/${activeRepoName}` : '';
-
-  const loadLifecycle = async (rName: string) => {
-    if (!rName) return;
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setMessage(null);
     try {
-      const pol = await fetchEcrLifecyclePolicy(rName);
-      if (pol?.lifecyclePolicyText) {
-        setLifecycleDoc(pol.lifecyclePolicyText);
-      }
-    } catch (err) {
-      console.error(err);
+      await action();
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Operation failed.",
+      });
+    } finally {
+      setBusy(false);
     }
   };
-
-  useEffect(() => {
-    if (activeRepoName) {
-      loadLifecycle(activeRepoName);
-    }
-  }, [activeRepoName]);
-
-  const filteredRepos = useMemo(() => {
-    const list = data.repositories || [];
-    if (!filterText) return list;
-    return list.filter((r: any) =>
-      (r.repositoryName || r.name || '').toLowerCase().includes(filterText.toLowerCase())
-    );
-  }, [data.repositories, filterText]);
-
-  const repoImages = useMemo(() => {
-    const allImgs = data.images || [];
-    if (!activeRepoName) return allImgs;
-    return allImgs.filter((img: any) => {
-      const r = img.repositoryName || img.repository;
-      return r === activeRepoName || !r;
+  const createRepository = () =>
+    run(async () => {
+      await createEcrRepository(
+        repoName.trim(),
+        mutability as "MUTABLE" | "IMMUTABLE",
+      );
+      setCreateOpen(false);
+      await loadData();
+      navigate("images", repoName.trim());
+      setRepoName("");
     });
-  }, [data.images, activeRepoName]);
-
-  // Actions
-  const handleCreateRepo = async () => {
-    if (!repoName.trim()) return;
-    setCreatingRepo(true);
-    try {
-      await createEcrRepository(repoName.trim(), tagMutability.value);
-      setActionMessage({ type: 'success', text: `ECR Repository "${repoName.trim()}" created.` });
-      setCreateRepoOpen(false);
-      setRepoName('');
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create repository' });
-    } finally {
-      setCreatingRepo(false);
-    }
-  };
-
-  const handleDeleteRepo = async (rName: string) => {
-    if (!confirm(`Are you sure you want to delete repository "${rName}"?`)) return;
-    try {
-      await deleteEcrRepository(rName, true);
-      setActionMessage({ type: 'success', text: `Repository "${rName}" deleted.` });
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete repository' });
-    }
-  };
-
-  const handleFetchPushCommands = async () => {
-    setPushCommandsOpen(true);
-    try {
-      const auth = await fetchEcrAuthToken();
-      setAuthTokenData(auth);
-    } catch (err: any) {
-      console.error(err);
-    }
-  };
-
-  const handleDeleteSelectedImages = async () => {
-    if (!activeRepoName || selectedImages.length === 0) return;
-    try {
-      const imageIds = selectedImages.map((img: any) => ({
-        imageDigest: img.imageDigest,
-        imageTag: img.imageTag || img.imageTags?.[0],
-      }));
-      await batchDeleteEcrImages(activeRepoName, imageIds);
-      setActionMessage({ type: 'success', text: `Deleted ${selectedImages.length} images from "${activeRepoName}".` });
-      setSelectedImages([]);
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete images' });
-    }
-  };
-
-  const handleToggleMutability = async (current: string) => {
-    if (!activeRepoName) return;
-    const next: 'MUTABLE' | 'IMMUTABLE' = current === 'IMMUTABLE' ? 'MUTABLE' : 'IMMUTABLE';
-    try {
-      await putEcrTagMutability(activeRepoName, next);
-      setActionMessage({ type: 'success', text: `Repository mutability set to ${next}.` });
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to update tag mutability' });
-    }
-  };
-
-  const handleSaveLifecyclePolicy = async () => {
-    if (!activeRepoName) return;
-    setSavingLifecycle(true);
-    try {
-      await putEcrLifecyclePolicy(activeRepoName, lifecycleDoc);
-      setActionMessage({ type: 'success', text: 'Lifecycle policy saved successfully.' });
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to save lifecycle policy' });
-    } finally {
-      setSavingLifecycle(false);
-    }
-  };
-
-  const handleRunGc = async () => {
-    setRunningGc(true);
-    try {
-      await runEcrGarbageCollection();
-      setActionMessage({ type: 'success', text: 'ECR Garbage Collection completed. Untagged images cleaned up.' });
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Garbage collection failed' });
-    } finally {
-      setRunningGc(false);
-    }
-  };
+  const deleteResources = () =>
+    run(async () => {
+      if (!repository) return;
+      if (confirmation === "repository") {
+        await deleteEcrRepository(repository.name, true);
+        setConfirmation(null);
+        navigate("repositories");
+        await loadData();
+        setMessage({
+          type: "success",
+          text: `Repository "${repository.name}" deleted.`,
+        });
+      } else {
+        const result = await batchDeleteEcrImages(
+          repository.name,
+          selectedImages.map((item) =>
+            item.digest
+              ? { imageDigest: item.digest }
+              : { imageTag: item.tags[0] },
+          ),
+        );
+        setConfirmation(null);
+        setSelectedImages([]);
+        await loadData();
+        const failures = result.failures || [];
+        setMessage({
+          type: failures.length ? "error" : "success",
+          text: failures.length
+            ? `Some images could not be deleted: ${failures.map((f: any) => f.failureReason || f.failureCode).join("; ")}`
+            : "Selected images deleted.",
+        });
+      }
+    });
+  const visibleImages = (repository?.images || []).filter(
+    (item) =>
+      `${item.digest || ""} ${item.tags.join(" ")}`
+        .toLowerCase()
+        .includes(imageFilter.toLowerCase()) &&
+      (tagFilter === "all" ||
+        (tagFilter === "tagged"
+          ? item.tags.length > 0
+          : item.tags.length === 0)),
+  );
+  const validRepoName =
+    /^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*\/)*[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(
+      repoName,
+    ) &&
+    repoName.length >= 2 &&
+    repoName.length <= 256;
+  const validTag = /^[\w][\w.-]{0,127}$/.test(imageTag);
+  const repoUri = repository?.uri?.replace(/^https?:\/\//, "");
+  const registry = repoUri?.split("/")[0];
+  const region = repository?.arn?.split(":")[3] || identity?.region;
+  const canAuthenticate = !!(
+    registry &&
+    region &&
+    region !== "Unknown" &&
+    identity?.endpoint &&
+    identity.endpoint !== "Unavailable"
+  );
+  const loginCommand = canAuthenticate
+    ? `aws ecr get-login-password --region ${shellQuote(region!)} --endpoint-url ${shellQuote(identity!.endpoint)} | docker login --username AWS --password-stdin ${shellQuote(registry!)}`
+    : "";
+  const imageUri =
+    repoUri && image
+      ? image.digest
+        ? `${repoUri}@${image.digest}`
+        : image.tags[0]
+          ? `${repoUri}:${image.tags[0]}`
+          : undefined
+      : undefined;
+  const tagBadges = (item: EcrImage) =>
+    item.tags.length ? (
+      <SpaceBetween direction="horizontal" size="xxs">
+        {item.tags.map((tag) => (
+          <Badge key={tag} color="blue">
+            {tag}
+          </Badge>
+        ))}
+      </SpaceBetween>
+    ) : (
+      <Badge color="grey">Untagged</Badge>
+    );
 
   return (
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description="Amazon Elastic Container Registry (ECR) is a fully managed container registry for Docker OCI images."
+        description={
+          repository
+            ? "Manage container images and repository settings."
+            : "Store, manage, and deploy container images in your private registry."
+        }
         actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button iconName="refresh" loading={loading} onClick={loadData}>
               Refresh
             </Button>
-            <Button loading={runningGc} onClick={handleRunGc}>
-              Run Garbage Collection
-            </Button>
-            <Button variant="primary" iconName="add-plus" onClick={() => setCreateRepoOpen(true)}>
-              Create Repository
-            </Button>
+            {repository ? (
+              <>
+                <Button
+                  disabled={busy}
+                  onClick={() => setConfirmation("repository")}
+                >
+                  Delete repository
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={!repoUri}
+                  onClick={() => setPushOpen(true)}
+                >
+                  View push commands
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" onClick={() => setCreateOpen(true)}>
+                Create repository
+              </Button>
+            )}
           </SpaceBetween>
         }
       >
-        Amazon Elastic Container Registry (ECR)
+        {imageQuery
+          ? "Image details"
+          : repository?.name || "Private repositories"}
       </Header>
-
-      {actionMessage && (
-        <Alert type={actionMessage.type} dismissible onDismiss={() => setActionMessage(null)}>
-          {actionMessage.text}
+      {loadError && (
+        <Alert type="error" header="Unable to load ECR resources">
+          {loadError} Refresh to retry. Previously loaded resources may be out
+          of date.
         </Alert>
       )}
-
-      {/* Metrics */}
-      <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
+      {repository?.issues.length ? (
+        <Alert type="warning" header="Some repository details are unavailable">
+          {repository.issues.join(" ")} Refresh to retry.
+        </Alert>
+      ) : null}
+      {message && (
+        <Alert
+          type={message.type}
+          dismissible
+          onDismiss={() => setMessage(null)}
+        >
+          {message.text}
+        </Alert>
+      )}
+      {repoQuery && !repository ? (
         <Container>
-          <Box variant="awsui-key-label">Repositories</Box>
-          <Box variant="awsui-value-large">{(data.repositories || []).length}</Box>
+          <Box textAlign="center" padding="l">
+            <SpaceBetween size="m">
+              <Box>
+                {loading
+                  ? "Loading repository…"
+                  : `Repository "${repoQuery}" was not found in the current account and Region.`}
+              </Box>
+              <Button onClick={() => navigate("repositories")}>
+                View repositories
+              </Button>
+            </SpaceBetween>
+          </Box>
         </Container>
-        <Container>
-          <Box variant="awsui-key-label">Total Container Images</Box>
-          <Box variant="awsui-value-large">{(data.images || []).length}</Box>
-        </Container>
-        <Container>
-          <Box variant="awsui-key-label">Active Registry</Box>
-          <Box variant="awsui-value-large">000000000000</Box>
-        </Container>
-      </Grid>
-
-      <Tabs
-        activeTabId={activeTab || 'repositories'}
-        onChange={({ detail }) => onTabChange && onTabChange(detail.activeTabId)}
-        tabs={[
-          {
-            label: `Repositories (${(data.repositories || []).length})`,
-            id: 'repositories',
-            content: (
-              <Container
-                header={
-                  <Header
-                    variant="h2"
-                    actions={
-                      <SpaceBetween direction="horizontal" size="xs">
-                        {activeRepo && (
-                          <Button onClick={handleFetchPushCommands}>
-                            View Push Commands
-                          </Button>
-                        )}
-                        <Button variant="primary" iconName="add-plus" onClick={() => setCreateRepoOpen(true)}>
-                          Create Repository
-                        </Button>
-                      </SpaceBetween>
-                    }
-                  >
-                    Private Repositories
-                  </Header>
-                }
-              >
-                <SpaceBetween size="m">
-                  <TextFilter
-                    filteringText={filterText}
-                    onChange={({ detail }) => setFilterText(detail.filteringText)}
-                    filteringPlaceholder="Filter repositories by name..."
-                  />
-                  <Table
-                    columnDefinitions={[
-                      {
-                        id: 'name',
-                        header: 'Repository Name',
-                        cell: (item: any) => (
-                          <Button variant="inline-link" onClick={() => setSelectedRepos([item])}>
-                            <strong>{item.repositoryName || item.name}</strong>
-                          </Button>
-                        ),
-                      },
-                      {
-                        id: 'uri',
-                        header: 'URI',
-                        cell: (item: any) => <code>{item.repositoryUri || `000000000000.dkr.ecr.us-east-1.localhost:4566/${item.repositoryName}`}</code>,
-                      },
-                      {
-                        id: 'mutability',
-                        header: 'Tag Mutability',
-                        cell: (item: any) => (
-                          <Badge color={item.imageTagMutability === 'IMMUTABLE' ? 'blue' : 'grey'}>
-                            {item.imageTagMutability || 'MUTABLE'}
-                          </Badge>
-                        ),
-                        width: 140,
-                      },
-                      {
-                        id: 'created',
-                        header: 'Created At',
-                        cell: (item: any) => item.createdAt || 'Just now',
-                        width: 140,
-                      },
-                      {
-                        id: 'actions',
-                        header: 'Actions',
-                        cell: (item: any) => (
-                          <SpaceBetween direction="horizontal" size="xs">
-                            <Button
-                              onClick={() => {
-                                setSelectedRepos([item]);
-                                handleFetchPushCommands();
-                              }}
-                            >
-                              Push Commands
-                            </Button>
-                            <Button
-                              iconName="remove"
-                              onClick={() => handleDeleteRepo(item.repositoryName || item.name)}
-                            >
-                              Delete
-                            </Button>
-                          </SpaceBetween>
-                        ),
-                        width: 220,
-                      },
-                    ]}
-                    items={filteredRepos}
-                    selectionType="single"
-                    selectedItems={selectedRepos}
-                    onSelectionChange={({ detail }) => setSelectedRepos(detail.selectedItems)}
-                    empty={<Box textAlign="center">No ECR repositories found.</Box>}
-                  />
-                </SpaceBetween>
-              </Container>
-            ),
-          },
-          {
-            label: `Images Explorer (${repoImages.length})`,
-            id: 'images',
-            content: (
-              <Container
-                header={
-                  <Header
-                    variant="h2"
-                    description={activeRepoName ? `Images in "${activeRepoName}"` : 'Select a repository to inspect images'}
-                    actions={
-                      <SpaceBetween direction="horizontal" size="xs">
-                        <Button
-                          disabled={selectedImages.length === 0}
-                          iconName="remove"
-                          onClick={handleDeleteSelectedImages}
-                        >
-                          Delete ({selectedImages.length})
-                        </Button>
-                        <Button variant="primary" onClick={handleFetchPushCommands}>
-                          Push Image
-                        </Button>
-                      </SpaceBetween>
-                    }
-                  >
-                    Image Artifacts
-                  </Header>
-                }
-              >
-                <Table
-                  columnDefinitions={[
-                    {
-                      id: 'tags',
-                      header: 'Image Tags',
-                      cell: (item: any) => (
-                        <SpaceBetween direction="horizontal" size="xxs">
-                          {(item.imageTags || [item.imageTag || 'latest']).map((t: string) => (
-                            <Badge key={t} color="blue">{t}</Badge>
-                          ))}
-                        </SpaceBetween>
+      ) : !repository ? (
+        <>
+          <Container header={<Header variant="h2">Registry overview</Header>}>
+            <KeyValuePairs
+              columns={3}
+              items={[
+                {
+                  label: "Repositories",
+                  value: loading ? "Loading…" : repositories.length,
+                },
+                {
+                  label: "Images",
+                  value: loading
+                    ? "Loading…"
+                    : repositories.reduce(
+                        (count, repo) => count + repo.images.length,
+                        0,
                       ),
-                      width: 180,
-                    },
-                    {
-                      id: 'digest',
-                      header: 'Image Digest (SHA256)',
-                      cell: (item: any) => <code>{item.imageDigest || 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}</code>,
-                    },
-                    {
-                      id: 'size',
-                      header: 'Size',
-                      cell: (item: any) => `${((item.imageSizeInBytes || 52428800) / (1024 * 1024)).toFixed(1)} MB`,
-                      width: 110,
-                    },
-                    {
-                      id: 'pushedAt',
-                      header: 'Pushed At',
-                      cell: (item: any) => item.imagePushedAt || 'Recent',
-                      width: 140,
-                    },
-                  ]}
-                  items={repoImages}
-                  selectionType="multi"
-                  selectedItems={selectedImages}
-                  onSelectionChange={({ detail }) => setSelectedImages(detail.selectedItems)}
-                  empty={<Box textAlign="center">No images found in this repository. Use Push Commands to push an image.</Box>}
-                />
-              </Container>
-            ),
-          },
-          {
-            label: 'Lifecycle Policy & Mutability',
-            id: 'lifecycle',
-            content: (
-              <Grid gridDefinition={[{ colspan: { default: 12, s: 7 } }, { colspan: { default: 12, s: 5 } }]}>
+                },
+                { label: "Region", value: identity?.region || unavailable },
+              ]}
+            />
+          </Container>
+          <Table
+            loading={loading}
+            loadingText="Loading repositories"
+            trackBy="name"
+            header={
+              <Header variant="h2" counter={`(${repositories.length})`}>
+                Repositories
+              </Header>
+            }
+            filter={
+              <TextFilter
+                filteringText={filter}
+                filteringAriaLabel="Find repositories"
+                filteringPlaceholder="Find repositories by name"
+                onChange={({ detail }) => setFilter(detail.filteringText)}
+              />
+            }
+            items={repositories.filter((repo) =>
+              repo.name.toLowerCase().includes(filter.toLowerCase()),
+            )}
+            columnDefinitions={[
+              {
+                id: "name",
+                header: "Repository name",
+                sortingField: "name",
+                cell: (item) => (
+                  <Button
+                    variant="inline-link"
+                    onClick={() => navigate("images", item.name)}
+                  >
+                    {item.name}
+                  </Button>
+                ),
+              },
+              { id: "uri", header: "URI", cell: (item) => copy(item.uri) },
+              {
+                id: "images",
+                header: "Images",
+                sortingComparator: (a, b) => a.images.length - b.images.length,
+                cell: (item) => item.images.length,
+              },
+              {
+                id: "mutability",
+                header: "Tag mutability",
+                cell: (item) => item.mutability || unavailable,
+              },
+              {
+                id: "created",
+                header: "Created at",
+                cell: (item) => ecrDate(item.created),
+              },
+            ]}
+            empty={
+              <Box textAlign="center" padding="l">
+                <SpaceBetween size="m">
+                  <Box variant="strong">
+                    {filter ? "No matching repositories" : "No repositories"}
+                  </Box>
+                  <Box>
+                    {filter
+                      ? "Try a different name."
+                      : "Create a repository to start storing container images."}
+                  </Box>
+                  <Button
+                    onClick={() =>
+                      filter ? setFilter("") : setCreateOpen(true)
+                    }
+                  >
+                    {filter ? "Clear filter" : "Create repository"}
+                  </Button>
+                </SpaceBetween>
+              </Box>
+            }
+          />
+          <ExpandableSection headerText="Local registry maintenance">
+            <SpaceBetween size="m">
+              <Box>
+                Garbage collection is a Floci maintenance operation for the
+                local registry.
+              </Box>
+              <Button
+                loading={busy}
+                onClick={() =>
+                  run(async () => {
+                    await runEcrGarbageCollection();
+                    await loadData();
+                    setMessage({
+                      type: "success",
+                      text: "Local registry garbage collection completed.",
+                    });
+                  })
+                }
+              >
+                Run garbage collection
+              </Button>
+            </SpaceBetween>
+          </ExpandableSection>
+        </>
+      ) : (
+        <>
+          <Container header={<Header variant="h2">Repository overview</Header>}>
+            <KeyValuePairs
+              columns={3}
+              items={[
+                { label: "URI", value: copy(repository.uri) },
+                { label: "ARN", value: copy(repository.arn) },
+                {
+                  label: "Registry ID",
+                  value: repository.registryId || unavailable,
+                },
+                { label: "Created at", value: ecrDate(repository.created) },
+                {
+                  label: "Tag mutability",
+                  value: repository.mutability || unavailable,
+                },
+                {
+                  label: "Encryption",
+                  value: repository.encryption || unavailable,
+                },
+              ]}
+            />
+          </Container>
+          {imageQuery ? (
+            image ? (
+              <SpaceBetween size="l">
                 <Container
                   header={
                     <Header
-                      variant="h3"
+                      variant="h2"
                       actions={
-                        <Button variant="primary" loading={savingLifecycle} onClick={handleSaveLifecyclePolicy}>
-                          Save Policy
+                        <Button
+                          onClick={() => navigate("images", repository.name)}
+                        >
+                          View all images
                         </Button>
                       }
                     >
-                      Lifecycle Policy Document (JSON)
+                      Image overview
                     </Header>
                   }
                 >
-                  <SpaceBetween size="m">
-                    <FormField label="JSON Lifecycle Rules" description="Automates expiration and clean up of obsolete images.">
-                      <Textarea
-                        rows={12}
-                        value={lifecycleDoc}
-                        onChange={({ detail }) => setLifecycleDoc(detail.value)}
+                  <KeyValuePairs
+                    columns={2}
+                    items={[
+                      { label: "Image tags", value: tagBadges(image) },
+                      { label: "Digest", value: copy(image.digest) },
+                      { label: "Image URI", value: copy(imageUri) },
+                      { label: "Size", value: ecrSize(image.size) },
+                      { label: "Pushed at", value: ecrDate(image.pushed) },
+                      {
+                        label: "Manifest media type",
+                        value: image.mediaType || unavailable,
+                      },
+                      {
+                        label: "Scan status",
+                        value: image.scanStatus || unavailable,
+                      },
+                    ]}
+                  />
+                </Container>
+                {imageUri && (
+                  <Container header={<Header variant="h2">Pull image</Header>}>
+                    <SpaceBetween size="m">
+                      <Box>
+                        Authenticate with the registry before pulling a private
+                        image.
+                      </Box>
+                      {loginCommand && (
+                        <CodeSnippet language="cli" code={loginCommand} />
+                      )}
+                      <CodeSnippet
+                        language="cli"
+                        code={`docker pull ${shellQuote(imageUri)}`}
                       />
-                    </FormField>
-                  </SpaceBetween>
-                </Container>
-
-                <Container header={<Header variant="h3">Repository Settings</Header>}>
-                  <SpaceBetween size="l">
-                    <FormField label="Tag Mutability">
-                      <SpaceBetween direction="horizontal" size="s">
-                        <Box>
-                          Current: <Badge color={activeRepo?.imageTagMutability === 'IMMUTABLE' ? 'blue' : 'grey'}>
-                            {activeRepo?.imageTagMutability || 'MUTABLE'}
-                          </Badge>
-                        </Box>
-                        <Button
-                          onClick={() => handleToggleMutability(activeRepo?.imageTagMutability || 'MUTABLE')}
+                    </SpaceBetween>
+                  </Container>
+                )}
+              </SpaceBetween>
+            ) : (
+              <Alert type="warning" header="Image not found">
+                This image may have been deleted.{" "}
+                <Button
+                  variant="inline-link"
+                  onClick={() => navigate("images", repository.name)}
+                >
+                  View all images
+                </Button>
+              </Alert>
+            )
+          ) : (
+            <Tabs
+              activeTabId={tab === "repositories" ? "images" : tab}
+              onChange={({ detail }) =>
+                navigate(detail.activeTabId, repository.name)
+              }
+              tabs={[
+                {
+                  id: "images",
+                  label: "Images",
+                  content: (
+                    <Table
+                      loading={loading}
+                      loadingText="Loading images"
+                      trackBy={imageKey}
+                      header={
+                        <Header
+                          variant="h2"
+                          counter={`(${repository.images.length})`}
+                          description="Select an image digest to view its details and pull command."
+                          actions={
+                            <Button
+                              disabled={!selectedImages.length || busy}
+                              onClick={() => setConfirmation("images")}
+                            >
+                              Delete images
+                            </Button>
+                          }
                         >
-                          Switch to {activeRepo?.imageTagMutability === 'IMMUTABLE' ? 'MUTABLE' : 'IMMUTABLE'}
-                        </Button>
-                      </SpaceBetween>
-                    </FormField>
-
-                    <FormField label="Garbage Collection">
-                      <Button loading={runningGc} onClick={handleRunGc}>
-                        Run Image GC Now
-                      </Button>
-                    </FormField>
-                  </SpaceBetween>
-                </Container>
-              </Grid>
-            ),
-          },
-        ]}
-      />
-
-      {/* Create Repository Modal */}
+                          Images
+                        </Header>
+                      }
+                      filter={
+                        <SpaceBetween direction="horizontal" size="s">
+                          <TextFilter
+                            filteringText={imageFilter}
+                            filteringAriaLabel="Find images"
+                            filteringPlaceholder="Find images by tag or digest"
+                            onChange={({ detail }) => {
+                              setImageFilter(detail.filteringText);
+                              setSelectedImages([]);
+                            }}
+                          />
+                          <Select
+                            selectedOption={{
+                              label:
+                                tagFilter === "all"
+                                  ? "All images"
+                                  : tagFilter === "tagged"
+                                    ? "Tagged images"
+                                    : "Untagged images",
+                              value: tagFilter,
+                            }}
+                            ariaLabel="Image tag status"
+                            options={[
+                              { label: "All images", value: "all" },
+                              { label: "Tagged images", value: "tagged" },
+                              { label: "Untagged images", value: "untagged" },
+                            ]}
+                            onChange={({ detail }) => {
+                              setTagFilter(detail.selectedOption.value!);
+                              setSelectedImages([]);
+                            }}
+                          />
+                        </SpaceBetween>
+                      }
+                      items={visibleImages}
+                      selectionType="multi"
+                      selectedItems={selectedImages}
+                      onSelectionChange={({ detail }) =>
+                        setSelectedImages(detail.selectedItems)
+                      }
+                      columnDefinitions={[
+                        { id: "tags", header: "Image tags", cell: tagBadges },
+                        {
+                          id: "digest",
+                          header: "Image digest",
+                          sortingField: "digest",
+                          cell: (item) =>
+                            imageKey(item) ? (
+                              <Button
+                                variant="inline-link"
+                                onClick={() =>
+                                  navigate(
+                                    "images",
+                                    repository.name,
+                                    imageKey(item),
+                                  )
+                                }
+                              >
+                                {item.digest || item.tags[0]}
+                              </Button>
+                            ) : (
+                              unavailable
+                            ),
+                        },
+                        {
+                          id: "size",
+                          header: "Size",
+                          sortingField: "size",
+                          cell: (item) => ecrSize(item.size),
+                        },
+                        {
+                          id: "pushed",
+                          header: "Pushed at",
+                          cell: (item) => ecrDate(item.pushed),
+                        },
+                        {
+                          id: "scanStatus",
+                          header: "Scan status",
+                          cell: (item) => item.scanStatus || unavailable,
+                        },
+                      ]}
+                      empty={
+                        <Box textAlign="center" padding="l">
+                          <SpaceBetween size="m">
+                            <Box variant="strong">
+                              {imageFilter || tagFilter !== "all"
+                                ? "No matching images"
+                                : "No images"}
+                            </Box>
+                            <Box>
+                              Push a container image to this repository or
+                              adjust the image filters.
+                            </Box>
+                            <Button
+                              disabled={!repoUri}
+                              onClick={() => setPushOpen(true)}
+                            >
+                              View push commands
+                            </Button>
+                          </SpaceBetween>
+                        </Box>
+                      }
+                    />
+                  ),
+                },
+                {
+                  id: "lifecycle",
+                  label: "Lifecycle policy & settings",
+                  content: (
+                    <SpaceBetween size="l">
+                      <Container
+                        header={<Header variant="h2">Lifecycle policy</Header>}
+                      >
+                        <SpaceBetween size="m">
+                          {!repository.lifecycle && (
+                            <Alert type="info">
+                              No lifecycle policy is configured for this
+                              repository.
+                            </Alert>
+                          )}
+                          <FormField
+                            label="Lifecycle policy JSON"
+                            description="Define rules to expire images automatically."
+                          >
+                            <Textarea
+                              rows={12}
+                              value={lifecycleDoc}
+                              onChange={({ detail }) =>
+                                setLifecycleDoc(detail.value)
+                              }
+                              placeholder={'{ "rules": [] }'}
+                            />
+                          </FormField>
+                          <Button
+                            variant="primary"
+                            loading={busy}
+                            disabled={!lifecycleDoc.trim() || loading}
+                            onClick={() =>
+                              run(async () => {
+                                try {
+                                  JSON.parse(lifecycleDoc);
+                                } catch {
+                                  throw new Error(
+                                    "Enter valid JSON for the lifecycle policy.",
+                                  );
+                                }
+                                await putEcrLifecyclePolicy(
+                                  repository.name,
+                                  lifecycleDoc,
+                                );
+                                await loadData();
+                                setMessage({
+                                  type: "success",
+                                  text: "Lifecycle policy saved.",
+                                });
+                              })
+                            }
+                          >
+                            Save policy
+                          </Button>
+                        </SpaceBetween>
+                      </Container>
+                      <Container
+                        header={
+                          <Header variant="h2">Repository settings</Header>
+                        }
+                      >
+                        <SpaceBetween size="m">
+                          <KeyValuePairs
+                            columns={2}
+                            items={[
+                              {
+                                label: "Tag mutability",
+                                value: repository.mutability || unavailable,
+                              },
+                              {
+                                label: "Scan on push",
+                                value:
+                                  repository.scanOnPush == null
+                                    ? unavailable
+                                    : repository.scanOnPush
+                                      ? "Enabled"
+                                      : "Disabled",
+                              },
+                            ]}
+                          />
+                          <Button
+                            loading={busy}
+                            disabled={!repository.mutability || loading}
+                            onClick={() =>
+                              run(async () => {
+                                await putEcrTagMutability(
+                                  repository.name,
+                                  repository.mutability === "IMMUTABLE"
+                                    ? "MUTABLE"
+                                    : "IMMUTABLE",
+                                );
+                                await loadData();
+                                setMessage({
+                                  type: "success",
+                                  text: "Tag mutability updated.",
+                                });
+                              })
+                            }
+                          >
+                            Switch to{" "}
+                            {repository.mutability === "IMMUTABLE"
+                              ? "mutable"
+                              : "immutable"}{" "}
+                            tags
+                          </Button>
+                        </SpaceBetween>
+                      </Container>
+                    </SpaceBetween>
+                  ),
+                },
+                {
+                  id: "permissions",
+                  label: "Permissions",
+                  content: (
+                    <Container
+                      header={<Header variant="h2">Repository policy</Header>}
+                    >
+                      {repository.policy ? (
+                        <CodeSnippet language="json" code={repository.policy} />
+                      ) : (
+                        <Box>No repository policy is configured.</Box>
+                      )}
+                    </Container>
+                  ),
+                },
+                {
+                  id: "tags",
+                  label: "Tags",
+                  content: (
+                    <Table
+                      header={
+                        <Header
+                          variant="h2"
+                          counter={`(${repository.tags.length})`}
+                        >
+                          Repository tags
+                        </Header>
+                      }
+                      items={repository.tags}
+                      trackBy="Key"
+                      columnDefinitions={[
+                        { id: "Key", header: "Key", cell: (item) => item.Key },
+                        {
+                          id: "Value",
+                          header: "Value",
+                          cell: (item) => item.Value,
+                        },
+                      ]}
+                      empty={
+                        <Box textAlign="center" padding="l">
+                          No tags associated with this repository.
+                        </Box>
+                      }
+                    />
+                  ),
+                },
+              ]}
+            />
+          )}
+        </>
+      )}
       <Modal
-        visible={createRepoOpen}
-        onDismiss={() => setCreateRepoOpen(false)}
-        header="Create ECR Repository"
+        visible={createOpen}
+        onDismiss={() => !busy && setCreateOpen(false)}
+        header="Create private repository"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateRepoOpen(false)}>
+              <Button
+                variant="link"
+                disabled={busy}
+                onClick={() => setCreateOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button variant="primary" loading={creatingRepo} onClick={handleCreateRepo}>
-                Create Repository
+              <Button
+                variant="primary"
+                loading={busy}
+                disabled={!validRepoName}
+                onClick={createRepository}
+              >
+                Create repository
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
-        <SpaceBetween size="m">
-          <FormField label="Repository Name" description="Unique namespace name for container images.">
-            <Input value={repoName} onChange={({ detail }) => setRepoName(detail.value)} placeholder="my-service/backend" />
+        <SpaceBetween size="l">
+          <FormField
+            label="Repository name"
+            description="Use 2–256 lowercase letters, numbers, and separators. A namespace such as my-service/backend is supported."
+            errorText={
+              repoName && !validRepoName
+                ? "Enter a valid repository name using lowercase letters, numbers, and . _ - / separators."
+                : undefined
+            }
+          >
+            <Input
+              value={repoName}
+              onChange={({ detail }) => setRepoName(detail.value)}
+              placeholder="my-service/backend"
+            />
           </FormField>
-          <FormField label="Tag Mutability" description="Determines whether image tags can be overwritten.">
+          <FormField
+            label="Image tag mutability"
+            description="Immutable tags prevent an existing image tag from being overwritten."
+          >
             <Select
-              selectedOption={tagMutability}
-              onChange={({ detail }) => setTagMutability(detail.selectedOption as any)}
+              selectedOption={{
+                label: mutability === "MUTABLE" ? "Mutable" : "Immutable",
+                value: mutability,
+              }}
               options={[
-                { label: 'MUTABLE (Tags can be overwritten)', value: 'MUTABLE' },
-                { label: 'IMMUTABLE (Prevent tag overwriting)', value: 'IMMUTABLE' },
+                { label: "Mutable", value: "MUTABLE" },
+                { label: "Immutable", value: "IMMUTABLE" },
               ]}
+              onChange={({ detail }) =>
+                setMutability(detail.selectedOption.value!)
+              }
             />
           </FormField>
         </SpaceBetween>
       </Modal>
-
-      {/* Push Commands Modal */}
       <Modal
-        visible={pushCommandsOpen}
-        onDismiss={() => setPushCommandsOpen(false)}
-        header={`Push commands for ${activeRepoName || 'repository'}`}
+        visible={pushOpen && !!repository}
+        onDismiss={() => setPushOpen(false)}
         size="large"
+        header={`Push commands for ${repository?.name}`}
         footer={
           <Box float="right">
-            <Button variant="primary" onClick={() => setPushCommandsOpen(false)}>
+            <Button variant="primary" onClick={() => setPushOpen(false)}>
               Done
             </Button>
           </Box>
         }
       >
-        <SpaceBetween size="m">
+        <SpaceBetween size="l">
           <Alert type="info">
-            Run these terminal commands in your local Docker environment to build, tag, and push images to this repository.
+            Run these commands in a local terminal with Docker running. The
+            login command uses your configured Floci endpoint and AWS CLI
+            credentials.
           </Alert>
-
-          <FormField label="1. Retrieve an authentication token and authenticate Docker client">
-            <Textarea
-              rows={2}
-              readOnly
-              value={
-                authTokenData?.authorizationData?.[0]?.authorizationToken
-                  ? `echo "${authTokenData.authorizationData[0].authorizationToken}" | docker login --username AWS --password-stdin ${activeRepoUri.split('/')[0]}`
-                  : `aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${activeRepoUri.split('/')[0]}`
-              }
+          <FormField
+            label="Image tag"
+            errorText={
+              !validTag
+                ? "Use up to 128 letters, numbers, underscores, periods, or hyphens; start with a letter, number, or underscore."
+                : undefined
+            }
+          >
+            <Input
+              value={imageTag}
+              onChange={({ detail }) => setImageTag(detail.value)}
             />
           </FormField>
-
-          <FormField label="2. Build your Docker image">
-            <Textarea rows={1} readOnly value={`docker build -t ${activeRepoName || 'my-app'} .`} />
-          </FormField>
-
-          <FormField label="3. Tag your image to match repository URI">
-            <Textarea rows={1} readOnly value={`docker tag ${activeRepoName || 'my-app'}:latest ${activeRepoUri}:latest`} />
-          </FormField>
-
-          <FormField label="4. Push the image to Amazon ECR">
-            <Textarea rows={1} readOnly value={`docker push ${activeRepoUri}:latest`} />
-          </FormField>
+          {loginCommand ? (
+            <FormField label="1. Authenticate Docker">
+              <CodeSnippet language="cli" code={loginCommand} />
+            </FormField>
+          ) : (
+            <Alert type="warning">
+              Registry, Region, or endpoint metadata is unavailable. Check the
+              session and refresh before generating an authentication command.
+            </Alert>
+          )}
+          {validTag && repository && repoUri && (
+            <>
+              <FormField label="2. Build the image">
+                <CodeSnippet
+                  language="cli"
+                  code={`docker build -t ${shellQuote(`${repository.name}:${imageTag}`)} .`}
+                />
+              </FormField>
+              <FormField label="3. Tag the image">
+                <CodeSnippet
+                  language="cli"
+                  code={`docker tag ${shellQuote(`${repository.name}:${imageTag}`)} ${shellQuote(`${repoUri}:${imageTag}`)}`}
+                />
+              </FormField>
+              <FormField label="4. Push the image">
+                <CodeSnippet
+                  language="cli"
+                  code={`docker push ${shellQuote(`${repoUri}:${imageTag}`)}`}
+                />
+              </FormField>
+            </>
+          )}
         </SpaceBetween>
+      </Modal>
+      <Modal
+        visible={!!confirmation}
+        onDismiss={() => !busy && setConfirmation(null)}
+        header={
+          confirmation === "repository" ? "Delete repository" : "Delete images"
+        }
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                disabled={busy}
+                onClick={() => setConfirmation(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={busy}
+                onClick={deleteResources}
+              >
+                Delete
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <Alert type="warning">
+          {confirmation === "repository"
+            ? `Permanently delete repository "${repository?.name}" and all of its images?`
+            : `Permanently delete ${selectedImages.length} selected images from "${repository?.name}"? Deleting an image by digest removes all of its tags.`}
+        </Alert>
       </Modal>
     </SpaceBetween>
   );

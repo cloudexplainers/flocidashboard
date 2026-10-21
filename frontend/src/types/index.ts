@@ -77,4 +77,7 @@ export interface IdentityInfo {
   role: string;
   region: string;
   endpoint: string;
+  resolved?: boolean;
+  error?: string;
+  expires_at?: string | null;
 }

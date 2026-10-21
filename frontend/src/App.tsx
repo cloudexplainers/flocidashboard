@@ -137,6 +137,9 @@ export const App: React.FC = () => {
     if (currentView === 'home') {
       return [{ text: 'AWS Management Console', href: '#' }];
     }
+    if (currentView === 'console') {
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'AWS CLI', href: 'console' }];
+    }
     if (currentView === 'labs') {
       return [
         { text: 'AWS Management Console', href: 'home' },
@@ -188,6 +191,52 @@ export const App: React.FC = () => {
         { text: route.cluster, href: clusterPath(route.cluster) },
         ...(route.service ? [{ text: route.service, href: servicePath(route.cluster, route.service) }] : []),
         ...(route.task ? [{ text: route.task, href: activeSubView }] : []),
+      ];
+    }
+    if (currentView === 'cloudwatch') {
+      const alarm = new URLSearchParams(activeSubView.split('?')[1] || '').get('alarm');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'CloudWatch', href: 'cloudwatch' },
+        { text: activeSubView.includes('/metrics') ? 'Metrics' : activeSubView.includes('/logs') ? 'Log groups' : 'Alarms', href: activeSubView.split('?')[0] }, ...(alarm ? [{ text: alarm, href: activeSubView }] : [])];
+    }
+    if (currentView === 'secretsmanager') {
+      const secret = new URLSearchParams(activeSubView.split('?')[1] || '').get('secret');
+      return [{ text: 'AWS Management Console', href: 'home' }, { text: 'Secrets Manager', href: 'secretsmanager' },
+        ...(secret ? [{ text: secret, href: activeSubView }] : [])];
+    }
+    if (currentView === 'ses') {
+      const identity = new URLSearchParams(activeSubView.split('?')[1] || '').get('identity');
+      return [
+        { text: 'AWS Management Console', href: 'home' },
+        { text: 'Amazon SES', href: 'ses/overview' },
+        ...(identity ? [{ text: 'Identities', href: 'ses/identities' }, { text: identity, href: `ses/details?identity=${encodeURIComponent(identity)}` }] : []),
+      ];
+    }
+    if (currentView === 'ssm') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      const parameter = query.get('parameter');
+      return [
+        { text: 'AWS Management Console', href: 'home' },
+        { text: 'Systems Manager', href: 'ssm/parameters' },
+        { text: 'Parameter Store', href: `ssm/parameters${query.get('path') ? `?path=${encodeURIComponent(query.get('path')!)}` : ''}` },
+        ...(parameter ? [{ text: parameter, href: `ssm/details?parameter=${encodeURIComponent(parameter)}` }] : []),
+      ];
+    }
+    if (currentView === 'kms') {
+      const key = new URLSearchParams(activeSubView.split('?')[1] || '').get('key');
+      return [
+        { text: 'AWS Management Console', href: 'home' },
+        { text: 'AWS KMS', href: 'kms/keys' },
+        ...(key ? [{ text: key, href: `kms/details?key=${encodeURIComponent(key)}` }] : []),
+      ];
+    }
+    if (currentView === 'ecr') {
+      const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+      const repository = query.get('repository');
+      return [
+        { text: 'AWS Management Console', href: 'home' },
+        { text: 'Amazon ECR', href: 'ecr/repositories' },
+        ...(repository ? [{ text: repository, href: `ecr/images?repository=${encodeURIComponent(repository)}` }] : []),
+        ...(query.get('image') ? [{ text: 'Image details', href: activeSubView }] : []),
       ];
     }
     if (currentView === 'route53' || currentView === 'cognito') {
@@ -373,16 +422,26 @@ export const App: React.FC = () => {
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'kms':
+      case 'kms': {
+        const key = new URLSearchParams(activeSubView.split('?')[1] || '').get('key');
+        const query = key ? `?key=${encodeURIComponent(key)}` : '';
         return [
-          { type: 'link' as const, text: 'Customer Managed Keys', href: 'kms/keys', icon: <AwsServiceIcon service="kms" size={18} /> },
-          { type: 'link' as const, text: 'Cryptographic Workbench', href: 'kms/workbench' },
+          { type: 'link' as const, text: 'Keys', href: 'kms/keys', icon: <AwsServiceIcon service="kms" size={18} /> },
+          ...(key ? [
+            { type: 'link' as const, text: 'Cryptographic configuration', href: `kms/details${query}` },
+            { type: 'link' as const, text: 'Key policy', href: `kms/policy${query}` },
+            { type: 'link' as const, text: 'Key rotation', href: `kms/rotation${query}` },
+            { type: 'link' as const, text: 'Grants', href: `kms/grants${query}` },
+            { type: 'link' as const, text: 'Tags', href: `kms/tags${query}` },
+            { type: 'link' as const, text: 'Cryptographic tools', href: `kms/tools${query}` },
+          ] : []),
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
+      }
       case 'secretsmanager':
         return [
-          { type: 'link' as const, text: 'Secrets & Decryption Vault', href: 'secretsmanager', icon: <AwsServiceIcon service="secretsmanager" size={18} /> },
+          { type: 'link' as const, text: 'Secrets', href: 'secretsmanager', icon: <AwsServiceIcon service="secretsmanager" size={18} /> },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -408,9 +467,9 @@ export const App: React.FC = () => {
         ];
       case 'cloudwatch':
         return [
-          { type: 'link' as const, text: 'Metric Alarms', href: 'cloudwatch/alarms', icon: <AwsServiceIcon service="cloudwatch" size={18} /> },
-          { type: 'link' as const, text: 'Metrics Explorer & Ingestion', href: 'cloudwatch/metrics' },
-          { type: 'link' as const, text: 'Log Streams & Retention', href: 'cloudwatch/logs' },
+          { type: 'link' as const, text: 'Alarms', href: 'cloudwatch/alarms', icon: <AwsServiceIcon service="cloudwatch" size={18} /> },
+          { type: 'link' as const, text: 'Metrics', href: 'cloudwatch/metrics' },
+          { type: 'link' as const, text: 'Log groups', href: 'cloudwatch/logs' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -440,8 +499,8 @@ export const App: React.FC = () => {
         ];
       case 'ssm':
         return [
-          { type: 'link' as const, text: 'Parameters & Secrets', href: 'ssm/parameters', icon: <AwsServiceIcon service="ssm" size={18} /> },
-          { type: 'link' as const, text: 'SSM Documents & Runbooks', href: 'ssm/documents' },
+          { type: 'link' as const, text: 'Parameter Store', href: 'ssm/parameters', icon: <AwsServiceIcon service="ssm" size={18} /> },
+          { type: 'link' as const, text: 'Documents', href: 'ssm/documents' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -455,14 +514,21 @@ export const App: React.FC = () => {
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
-      case 'ecr':
+      case 'ecr': {
+        const repository = new URLSearchParams(activeSubView.split('?')[1] || '').get('repository');
+        const query = repository ? `?repository=${encodeURIComponent(repository)}` : '';
         return [
-          { type: 'link' as const, text: 'Repositories', href: 'ecr/repositories', icon: <AwsServiceIcon service="ecr" size={18} /> },
-          { type: 'link' as const, text: 'Images Explorer', href: 'ecr/images' },
-          { type: 'link' as const, text: 'Lifecycle Policy & Mutability', href: 'ecr/lifecycle' },
+          { type: 'link' as const, text: 'Private repositories', href: 'ecr/repositories', icon: <AwsServiceIcon service="ecr" size={18} /> },
+          ...(repository ? [
+            { type: 'link' as const, text: 'Images', href: `ecr/images${query}` },
+            { type: 'link' as const, text: 'Lifecycle policy & settings', href: `ecr/lifecycle${query}` },
+            { type: 'link' as const, text: 'Permissions', href: `ecr/permissions${query}` },
+            { type: 'link' as const, text: 'Tags', href: `ecr/tags${query}` },
+          ] : []),
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
+      }
       case 'cloudfront':
         return [
           { type: 'link' as const, text: 'Distributions', href: 'cloudfront/distributions', icon: <AwsServiceIcon service="cloudfront" size={18} /> },
@@ -505,11 +571,12 @@ export const App: React.FC = () => {
         ];
       case 'ses':
         return [
-          { type: 'link' as const, text: 'Verified Identities', href: 'ses/identities', icon: <AwsServiceIcon service="ses" size={18} /> },
-          { type: 'link' as const, text: 'Send Email Workbench', href: 'ses/send' },
+          { type: 'link' as const, text: 'Account dashboard', href: 'ses/overview' },
+          { type: 'link' as const, text: 'Identities', href: 'ses/identities', icon: <AwsServiceIcon service="ses" size={18} /> },
+          { type: 'link' as const, text: 'Send test email', href: 'ses/send' },
           { type: 'link' as const, text: 'Email Templates', href: 'ses/templates' },
           { type: 'link' as const, text: 'Configuration Sets', href: 'ses/configsets' },
-          { type: 'link' as const, text: 'Test Mailbox', href: 'ses/mailbox' },
+          { type: 'link' as const, text: 'Local test mailbox', href: 'ses/mailbox' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -644,6 +711,8 @@ export const App: React.FC = () => {
       case 'kms':
         return (
           <KMSConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['kms']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, kms: tab }));
@@ -652,7 +721,7 @@ export const App: React.FC = () => {
           />
         );
       case 'secretsmanager':
-        return <SecretsManagerConsole />;
+        return <SecretsManagerConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'cloudformation':
         return <CloudFormationConsole />;
       case 'route53':
@@ -662,7 +731,9 @@ export const App: React.FC = () => {
       case 'cloudwatch':
         return (
           <CloudWatchConsole
-            activeTab={activeTabOverride['cloudwatch']}
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
+            activeTab={activeSubView.split('?')[0].split('/')[1] || 'alarms'}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, cloudwatch: tab }));
               setActiveSubView(`cloudwatch/${tab}`);
@@ -708,6 +779,8 @@ export const App: React.FC = () => {
       case 'ssm':
         return (
           <SSMConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['ssm']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, ssm: tab }));
@@ -742,6 +815,8 @@ export const App: React.FC = () => {
       case 'ecr':
         return (
           <ECRConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['ecr']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, ecr: tab }));
@@ -798,6 +873,8 @@ export const App: React.FC = () => {
       case 'ses':
         return (
           <SESConsole
+            resourcePath={activeSubView}
+            onNavigate={navigateTo}
             activeTab={activeTabOverride['ses']}
             onTabChange={(tab) => {
               setActiveTabOverride((prev) => ({ ...prev, ses: tab }));
@@ -812,11 +889,11 @@ export const App: React.FC = () => {
       case 'settings':
         return <SettingsConsole />;
       case 'environment':
-        return <EnvironmentConsole />;
+        return <EnvironmentConsole resourcePath={activeSubView} onNavigate={navigateTo} />;
       case 'activity':
         return <ActivityConsole onNavigateService={(s) => navigateTo(s)} />;
       case 'console':
-        return <CliConsole />;
+        return <CliConsole onNavigate={navigateTo} />;
       case 'topology':
         return <ResourceGraphConsole onNavigateService={(s) => navigateTo(s)} />;
       default:

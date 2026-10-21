@@ -84,3 +84,53 @@ textarea {
 }
 
 #resource-operations { scroll-margin-top: 96px; }
+
+/* CLI panels keep terminal contrast while the surrounding controls use Cloudscape. */
+.cli-terminal-output {
+  background: #0f1b2a;
+  color: #e9ebed;
+  border: 1px solid #414d5c;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cli-output-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  color: #c6c6cd;
+  border-bottom: 1px solid #414d5c;
+  font-size: 12px;
+}
+.cli-terminal-output pre {
+  font-family: 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+  padding: 16px;
+  max-height: 440px;
+  overflow: auto;
+  tab-size: 2;
+}
+.cli-command-input { display: flex; align-items: flex-start; gap: 10px; }
+.cli-command-input > :last-child { flex: 1; min-width: 0; }
+.cli-command-input textarea, .cli-prompt, .cli-history-command { font-family: 'JetBrains Mono', Menlo, Consolas, monospace; }
+.cli-prompt { padding-top: 8px; font-weight: 700; }
+.cli-history-command { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cli-output-toolbar button { color: #d6e4ff; }
+.cli-output-toolbar button:hover { color: #ffffff; }
+.cli-terminal-output pre { font-weight: 400; }
+
+.secret-value-output {
+  margin: 0;
+  padding: 16px;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid #414d5c;
+  border-radius: 8px;
+  background: #0f1b2a;
+  color: #e9ebed;
+  font: 400 13px/1.6 'JetBrains Mono', Menlo, Consolas, monospace;
+}

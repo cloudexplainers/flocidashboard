@@ -21,6 +21,7 @@ SHELL_TOKENS = (';', '&&', '||', '|', '<', '>', '`', '$(')
 BLOCKED_AWS_COMMANDS = {'configure'}
 BLOCKED_AWS_OPTIONS = {'--profile'}
 BLOCKED_TOKEN_PREFIXES = ('file://', 'fileb://')
+GLOBAL_FLAG_OPTIONS = {'--debug', '--no-verify-ssl', '--no-paginate', '--cli-auto-prompt', '--no-cli-auto-prompt', '--no-cli-pager', '--version'}
 DESTRUCTIVE_PREFIXES = (
     'delete-',
     'remove-',
@@ -56,6 +57,8 @@ def _positional_tokens(args: list[str]) -> list[str]:
     for token in args[1:]:
         if skip_next:
             skip_next = False
+            continue
+        if token in GLOBAL_FLAG_OPTIONS:
             continue
         if token.startswith('--') and '=' not in token:
             skip_next = True
@@ -98,13 +101,18 @@ def _parse_command(command: str) -> list[str]:
     return args
 
 
-def _endpoint_arg(args: list[str]) -> str | None:
+def _option_arg(args: list[str], option: str) -> str | None:
+    value = None
     for index, arg in enumerate(args):
-        if arg == '--endpoint-url' and index + 1 < len(args):
-            return args[index + 1]
-        if arg.startswith('--endpoint-url='):
-            return arg.split('=', 1)[1]
-    return None
+        if arg == option and index + 1 < len(args):
+            value = args[index + 1]
+        elif arg.startswith(f'{option}='):
+            value = arg.split('=', 1)[1]
+    return value
+
+
+def _endpoint_arg(args: list[str]) -> str | None:
+    return _option_arg(args, '--endpoint-url')
 
 
 def _with_endpoint(args: list[str], endpoint_url: str) -> list[str]:
@@ -128,6 +136,8 @@ def _env_for_factory(factory: FlociClientFactory) -> dict[str, str]:
     env = os.environ.copy()
     env['AWS_DEFAULT_REGION'] = factory.region
     env['AWS_REGION'] = factory.region
+    env['AWS_PAGER'] = ''
+    env['AWS_CLI_AUTO_PROMPT'] = 'off'
     env['AWS_ENDPOINT_URL'] = factory.endpoint_url
 
     if factory.profile:
@@ -160,7 +170,7 @@ def console_run(request):
     try:
         body = parse_json_body(request)
         command = body.get('command') or ''
-        confirmed = bool(body.get('confirmed'))
+        confirmed = body.get('confirmed') is True
         args = _parse_command(command)
         factory = FlociClientFactory()
         args = _with_endpoint(args, factory.endpoint_url)
@@ -201,8 +211,11 @@ def console_run(request):
             'stderr': stderr,
             'json': _parsed_stdout(stdout),
             'duration_ms': duration_ms,
-            'endpoint_url': factory.endpoint_url,
-            'region': factory.region,
+            'endpoint_url': _endpoint_arg(args) or factory.endpoint_url,
+            'region': _option_arg(args, '--region') or factory.region,
+            'stdout_truncated': len(result.stdout) > OUTPUT_LIMIT,
+            'stderr_truncated': len(result.stderr) > OUTPUT_LIMIT,
+            'output_limit': OUTPUT_LIMIT,
             'credential_source': factory.credential_source,
             'identity_expires_at': factory.identity_expires_at,
             'identity_label': factory.identity_label,

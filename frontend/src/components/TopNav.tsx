@@ -85,8 +85,8 @@ export const TopNav: React.FC<TopNavProps> = ({
           },
           {
             type: 'menu-dropdown',
-            text: identity ? `${identity.user_id} @ ${identity.account_id}` : 'Loading identity…',
-            description: identity?.arn || 'Resolving caller identity',
+            text: identity?.resolved === false ? 'Identity unavailable' : identity ? `${identity.user_id} @ ${identity.account_id}` : 'Loading identity…',
+            description: identity?.error || identity?.arn || 'Resolving caller identity',
             iconName: 'user-profile',
             onItemClick: ({ detail }) => {
               if (['environment', 'settings', 'console', 'activity'].includes(detail.id)) {

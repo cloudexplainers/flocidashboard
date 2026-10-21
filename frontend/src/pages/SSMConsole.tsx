@@ -1,644 +1,755 @@
-import React, { useState, useEffect } from 'react';
-import Container from '@cloudscape-design/components/container';
-import Header from '@cloudscape-design/components/header';
-import Table from '../components/ResourceTable';
-import Button from '@cloudscape-design/components/button';
-import SpaceBetween from '@cloudscape-design/components/space-between';
-import TextFilter from '@cloudscape-design/components/text-filter';
-import Tabs from '@cloudscape-design/components/tabs';
-import Modal from '@cloudscape-design/components/modal';
-import FormField from '@cloudscape-design/components/form-field';
-import Input from '@cloudscape-design/components/input';
-import Textarea from '@cloudscape-design/components/textarea';
-import Select from '@cloudscape-design/components/select';
-import StatusIndicator from '@cloudscape-design/components/status-indicator';
-import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
-import Grid from '@cloudscape-design/components/grid';
-import Box from '@cloudscape-design/components/box';
-import Badge from '@cloudscape-design/components/badge';
-import Alert from '@cloudscape-design/components/alert';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Container from "@cloudscape-design/components/container";
+import Header from "@cloudscape-design/components/header";
+import Table from "../components/ResourceTable";
+import Button from "@cloudscape-design/components/button";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import TextFilter from "@cloudscape-design/components/text-filter";
+import Tabs from "@cloudscape-design/components/tabs";
+import Modal from "@cloudscape-design/components/modal";
+import FormField from "@cloudscape-design/components/form-field";
+import Input from "@cloudscape-design/components/input";
+import Textarea from "@cloudscape-design/components/textarea";
+import Select from "@cloudscape-design/components/select";
+import Checkbox from "@cloudscape-design/components/checkbox";
+import KeyValuePairs from "@cloudscape-design/components/key-value-pairs";
+import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
+import Box from "@cloudscape-design/components/box";
+import Badge from "@cloudscape-design/components/badge";
+import Alert from "@cloudscape-design/components/alert";
+import { useSession } from "../components/SessionContext";
+import { SsmParameterDetails } from "../components/SsmParameterDetails";
 import {
-  fetchServiceInventory,
-  putSsmParameter,
-  getSsmParameterValue,
-  deleteSsmParameter,
-  fetchSsmParameterHistory,
-  fetchSsmParameterTags,
-  addSsmParameterTags,
-  removeSsmParameterTags,
-  fetchSsmDocuments,
-  createSsmDocument,
-  deleteSsmDocument,
-} from '../api/client';
+  ssmParameters,
+  ssmDate,
+  ssmRequest,
+  parameterUrl,
+} from "./ssmResources";
 
 interface SSMConsoleProps {
   activeTab?: string;
-  onTabChange?: (tabId: string) => void;
+  onTabChange?: (tab: string) => void;
+  resourcePath?: string;
+  onNavigate?: (path: string) => void;
 }
-
-export const SSMConsole: React.FC<SSMConsoleProps> = ({ activeTab, onTabChange }) => {
-  const [data, setData] = useState<any>({ parameters: [] });
+const copy = (value?: string) =>
+  value ? (
+    <CopyToClipboard
+      variant="inline"
+      textToCopy={value}
+      copyButtonAriaLabel={`Copy ${value}`}
+      copySuccessText="Copied"
+      copyErrorText="Unable to copy"
+    />
+  ) : (
+    "Unavailable"
+  );
+export const SSMConsole: React.FC<SSMConsoleProps> = ({
+  activeTab,
+  onTabChange,
+  resourcePath,
+  onNavigate,
+}) => {
+  const { identity } = useSession();
+  const query = new URLSearchParams(
+    (resourcePath || window.location.search).split("?").pop(),
+  );
+  const name = query.get("parameter") || "";
+  const rawPath = query.get("path") || "";
+  const path = rawPath ? `${rawPath.replace(/\/+$/, "")}/` : "";
+  const requestedTab = (activeTab || "parameters").split("?")[0];
+  const tab = name && requestedTab === "parameters" ? "details" : requestedTab;
+  const [data, setData] = useState<any>({});
   const [loading, setLoading] = useState(true);
-  const [selectedParams, setSelectedParams] = useState<any[]>([]);
-  const [filterText, setFilterText] = useState('');
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedTabId, setSelectedTabId] = useState(activeTab || 'parameters');
-
-  useEffect(() => {
-    if (activeTab) {
-      setSelectedTabId(activeTab);
-    }
-  }, [activeTab]);
-
-  // Create Parameter Modal
-  const [createParamOpen, setCreateParamOpen] = useState(false);
-  const [paramName, setParamName] = useState('');
-  const [paramType, setParamType] = useState({ label: 'String', value: 'String' });
-  const [paramValue, setParamValue] = useState('');
-  const [paramDescription, setParamDescription] = useState('');
-  const [creatingParam, setCreatingParam] = useState(false);
-
-  // Decryption Revealer State
-  const [revealedValue, setRevealedValue] = useState<string | null>(null);
-  const [revealing, setRevealing] = useState(false);
-
-  // Parameter History State
-  const [paramHistory, setParamHistory] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-
-  // Tags State
-  const [paramTags, setParamTags] = useState<any[]>([]);
-  const [createTagOpen, setCreateTagOpen] = useState(false);
-  const [tagKey, setTagKey] = useState('');
-  const [tagValue, setTagValue] = useState('');
-  const [savingTag, setSavingTag] = useState(false);
-
-  // Documents State
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [createDocOpen, setCreateDocOpen] = useState(false);
-  const [docName, setDocName] = useState('');
-  const [docType, setDocType] = useState({ label: 'Command (Automation script)', value: 'Command' });
-  const [docContent, setDocContent] = useState('{\n  "schemaVersion": "2.2",\n  "description": "Custom SSM Command Document",\n  "mainSteps": []\n}');
-  const [creatingDoc, setCreatingDoc] = useState(false);
-
+  const [loadError, setLoadError] = useState("");
+  const [revision, setRevision] = useState(0);
+  const [filter, setFilter] = useState("");
+  const [nested, setNested] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+  const [form, setForm] = useState<"create" | "edit" | "document" | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formType, setFormType] = useState("String");
+  const [formValue, setFormValue] = useState("");
+  const [description, setDescription] = useState("");
+  const [docType, setDocType] = useState("Command");
+  const [confirmation, setConfirmation] = useState<{
+    type: "parameter" | "document";
+    name: string;
+  } | null>(null);
+  const requestId = useRef(0);
+  const parameters = useMemo(() => ssmParameters(data), [data]);
+  const parameter = parameters.find((item) => item.name === name);
+  const documents: any[] = data.documents || [];
+  const navigate = (nextTab: string, param = "", nextPath = path) => {
+    const qs = new URLSearchParams();
+    if (param) qs.set("parameter", param);
+    if (nextPath) qs.set("path", nextPath);
+    const target = `${nextTab}${qs.size ? `?${qs}` : ""}`;
+    if (onNavigate) onNavigate(`ssm/${target}`);
+    else onTabChange?.(target);
+  };
   const loadData = async () => {
+    const version = ++requestId.current;
     setLoading(true);
+    setLoadError("");
     try {
-      const [res, docRes]: any[] = await Promise.all([
-        fetchServiceInventory('ssm'),
-        fetchSsmDocuments(),
-      ]);
-      const list = (res?.parameters || res?.Parameters || []).map((p: any) => ({
-        ...p,
-        Name: p.Name || p.name,
-        Type: p.Type || p.type || 'String',
-        Version: p.Version || p.version || 1,
-        LastModifiedDate: p.LastModifiedDate || p.last_modified || new Date().toISOString().split('T')[0],
-        Description: p.Description || p.description || '—',
-        Value: p.Value || p.value,
-      }));
-      setData({ parameters: list });
-      setDocuments(docRes?.DocumentIdentifiers || docRes?.documents || []);
-      if (list.length > 0 && selectedParams.length === 0) {
-        setSelectedParams([list[0]]);
+      const result = await ssmRequest("/api/ssm/");
+      if (version === requestId.current) {
+        setData(result);
+        setRevision((value) => value + 1);
       }
     } catch (err) {
-      console.error(err);
+      if (version === requestId.current)
+        setLoadError(
+          err instanceof Error ? err.message : "Unable to load SSM resources.",
+        );
     } finally {
-      setLoading(false);
+      if (version === requestId.current) setLoading(false);
     }
   };
-
   useEffect(() => {
-    loadData();
-  }, []);
-
-  const activeParam = selectedParams[0] || null;
-
-  const loadParamDetails = async (name: string) => {
-    if (!name) return;
-    setLoadingHistory(true);
+    setData({});
+    void loadData();
+    return () => {
+      requestId.current++;
+    };
+  }, [
+    identity?.account_id,
+    identity?.region,
+    identity?.arn,
+    identity?.endpoint,
+  ]);
+  useEffect(() => {
+    setForm(null);
+    setFormValue("");
+    setConfirmation(null);
+    setMessage(null);
+  }, [name, path]);
+  const run = async (action: () => Promise<void>) => {
+    setBusy(true);
+    setMessage(null);
     try {
-      const [histRes, tagRes]: any[] = await Promise.all([
-        fetchSsmParameterHistory(name),
-        fetchSsmParameterTags(name),
-      ]);
-      setParamHistory(histRes?.Parameters || histRes?.history || []);
-      setParamTags(tagRes?.TagList || tagRes?.tags || []);
+      await action();
     } catch (err) {
-      console.error(err);
+      setMessage({
+        type: "error",
+        text: err instanceof Error ? err.message : "Operation failed.",
+      });
     } finally {
-      setLoadingHistory(false);
+      setBusy(false);
     }
   };
-
-  useEffect(() => {
-    setRevealedValue(null);
-    if (activeParam?.Name) {
-      loadParamDetails(activeParam.Name);
-    }
-  }, [activeParam?.Name]);
-
-  const handleCreateParam = async () => {
-    if (!paramName.trim() || !paramValue.trim()) return;
-    setCreatingParam(true);
-    setActionMessage(null);
-    try {
-      await putSsmParameter(
-        paramName.trim(),
-        paramValue.trim(),
-        paramType.value as any,
-        paramDescription.trim()
-      );
-      setActionMessage({ type: 'success', text: `Parameter "${paramName.trim()}" created successfully.` });
-      setCreateParamOpen(false);
-      setParamName('');
-      setParamValue('');
-      setParamDescription('');
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create parameter' });
-    } finally {
-      setCreatingParam(false);
-    }
+  const openForm = (next: "create" | "edit" | "document") => {
+    setForm(next);
+    setMessage(null);
+    setFormName(next === "edit" ? name : next === "create" ? path : "");
+    setFormValue(
+      next === "document"
+        ? '{\n  "schemaVersion": "2.2",\n  "description": "Run a command",\n  "mainSteps": []\n}'
+        : "",
+    );
+    setDescription(next === "edit" ? parameter?.description || "" : "");
+    setFormType(next === "edit" ? parameter?.type || "String" : "String");
   };
-
-  const handleDeleteParam = async () => {
-    if (!activeParam) return;
-    try {
-      await deleteSsmParameter(activeParam.Name);
-      setActionMessage({ type: 'success', text: `Parameter "${activeParam.Name}" deleted.` });
-      setSelectedParams([]);
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete parameter' });
-    }
-  };
-
-  const handleRevealDecrypted = async () => {
-    if (!activeParam) return;
-    setRevealing(true);
-    try {
-      const res = await getSsmParameterValue(activeParam.Name, true);
-      setRevealedValue(res.parameter?.Value || res.Value || res.value || 'Decrypted');
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to decrypt parameter' });
-    } finally {
-      setRevealing(false);
-    }
-  };
-
-  const handleAddTag = async () => {
-    if (!activeParam || !tagKey.trim() || !tagValue.trim()) return;
-    setSavingTag(true);
-    try {
-      await addSsmParameterTags(activeParam.Name, [{ Key: tagKey.trim(), Value: tagValue.trim() }]);
-      setActionMessage({ type: 'success', text: `Tag "${tagKey.trim()}" added.` });
-      setCreateTagOpen(false);
-      setTagKey('');
-      setTagValue('');
-      await loadParamDetails(activeParam.Name);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to add tag' });
-    } finally {
-      setSavingTag(false);
-    }
-  };
-
-  const handleRemoveTag = async (key: string) => {
-    if (!activeParam || !key) return;
-    try {
-      await removeSsmParameterTags(activeParam.Name, [key]);
-      setActionMessage({ type: 'success', text: `Tag "${key}" removed.` });
-      await loadParamDetails(activeParam.Name);
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to remove tag' });
-    }
-  };
-
-  const handleCreateDocument = async () => {
-    if (!docName.trim()) return;
-    setCreatingDoc(true);
-    try {
-      await createSsmDocument(docName.trim(), docContent.trim(), docType.value as any);
-      setActionMessage({ type: 'success', text: `SSM Document "${docName.trim()}" created.` });
-      setCreateDocOpen(false);
-      setDocName('');
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create document' });
-    } finally {
-      setCreatingDoc(false);
-    }
-  };
-
-  const handleDeleteDocument = async (name: string) => {
-    try {
-      await deleteSsmDocument(name);
-      setActionMessage({ type: 'success', text: `SSM Document "${name}" deleted.` });
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete document' });
-    }
-  };
-
-  const paramsList = data.parameters || [];
-
-  const filteredParams = paramsList.filter((p: any) =>
-    `${p.Name} ${p.Type} ${p.Description}`.toLowerCase().includes(filterText.toLowerCase())
+  const saveForm = () =>
+    run(async () => {
+      if (form === "document") {
+        try {
+          JSON.parse(formValue);
+        } catch {
+          throw new Error("Enter valid JSON for the document.");
+        }
+        await ssmRequest("/api/ssm/documents/", "POST", {
+          name: formName.trim(),
+          content: formValue,
+          document_type: docType,
+        });
+        setForm(null);
+        setFormValue("");
+        await loadData();
+        setMessage({ type: "success", text: "Document created." });
+      } else {
+        const editing = form === "edit";
+        await ssmRequest(
+          editing ? parameterUrl(name) : "/api/ssm/parameters/",
+          editing ? "PUT" : "POST",
+          {
+            name: formName.trim(),
+            value: formValue,
+            type: formType,
+            description,
+            overwrite: editing,
+            ...(editing
+              ? {
+                  key_id: parameter?.keyId,
+                  tier: parameter?.tier,
+                  data_type: parameter?.dataType,
+                }
+              : {}),
+          },
+        );
+        const savedName = editing ? name : formName.trim();
+        setForm(null);
+        setFormValue("");
+        await loadData();
+        navigate("details", savedName);
+      }
+    });
+  const validName =
+    /^[a-zA-Z0-9_.\-/]+$/.test(formName) &&
+    !formName.endsWith("/") &&
+    !formName.includes("//");
+  const underPath = parameters.filter((item) => item.name.startsWith(path));
+  const folders = [
+    ...new Set(
+      underPath
+        .map((item) => {
+          const remainder = item.name.slice(path.length).replace(/^\//, "");
+          const slash = remainder.indexOf("/");
+          return slash >= 0
+            ? `${path || "/"}${remainder.slice(0, slash)}/`
+            : "";
+        })
+        .filter(Boolean),
+    ),
+  ].sort();
+  const visibleParameters = underPath.filter(
+    (item) =>
+      (nested ||
+        !!filter ||
+        !item.name.slice(path.length).replace(/^\//, "").includes("/")) &&
+      `${item.name} ${item.description || ""} ${item.type || ""}`
+        .toLowerCase()
+        .includes(filter.toLowerCase()),
   );
-
+  const disabled = loading || !!loadError || busy;
   return (
     <SpaceBetween size="l">
-      {/* Header Container */}
-      <Container
-        header={
-          <Header
-            variant="h1"
-            description="Secure hierarchical configuration, secret storage with KMS encryption, and operational runbook automation."
-            actions={
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button iconName="refresh" onClick={loadData} loading={loading}>
-                  Refresh
+      <Header
+        variant="h1"
+        description={
+          parameter
+            ? "Inspect configuration, retrieve values, and manage parameter versions and tags."
+            : tab === "documents"
+              ? "Manage Systems Manager command documents and automation runbooks."
+              : "Store configuration and encrypted values using hierarchical parameter paths."
+        }
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button
+              iconName="refresh"
+              loading={loading}
+              disabled={busy}
+              onClick={loadData}
+            >
+              Refresh
+            </Button>
+            {parameter ? (
+              <>
+                <Button
+                  disabled={disabled || !parameter.type}
+                  onClick={() => openForm("edit")}
+                >
+                  Edit parameter
                 </Button>
-                <Button disabled={!activeParam} onClick={handleDeleteParam}>
-                  Delete Parameter
+                <Button
+                  disabled={disabled}
+                  onClick={() => setConfirmation({ type: "parameter", name })}
+                >
+                  Delete parameter
                 </Button>
-                <Button variant="primary" iconName="add-plus" onClick={() => setCreateParamOpen(true)}>
-                  Create Parameter
-                </Button>
-              </SpaceBetween>
-            }
-          >
-            AWS Systems Manager (SSM)
-          </Header>
+              </>
+            ) : (
+              <Button
+                variant="primary"
+                onClick={() =>
+                  openForm(tab === "documents" ? "document" : "create")
+                }
+              >
+                {tab === "documents" ? "Create document" : "Create parameter"}
+              </Button>
+            )}
+          </SpaceBetween>
         }
       >
-        {actionMessage && (
-          <Box margin={{ bottom: 'm' }}>
-            <Alert type={actionMessage.type} dismissible onDismiss={() => setActionMessage(null)}>
-              {actionMessage.text}
-            </Alert>
+        {parameter?.name ||
+          (tab === "documents"
+            ? "Systems Manager documents"
+            : "Parameter Store")}
+      </Header>
+      {loadError && (
+        <Alert type="error" header="Unable to load SSM resources">
+          {loadError} Refresh to retry. Previously loaded resources may be out
+          of date.
+        </Alert>
+      )}
+      {message && !form && !confirmation && (
+        <Alert
+          type={message.type}
+          dismissible
+          onDismiss={() => setMessage(null)}
+        >
+          {message.text}
+        </Alert>
+      )}
+      {name && !parameter ? (
+        <Container>
+          <Box textAlign="center" padding="l">
+            <SpaceBetween size="m">
+              <Box>
+                {loading
+                  ? "Loading parameter…"
+                  : `Parameter "${name}" was not found in the current account and Region.`}
+              </Box>
+              <Button onClick={() => navigate("parameters")}>
+                View parameters
+              </Button>
+            </SpaceBetween>
           </Box>
-        )}
-
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Stored Parameters</Box>
-            <Box variant="h1" color="text-status-info">
-              {paramsList.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">SSM Documents</Box>
-            <Box variant="h1" color="text-status-info">
-              {documents.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">KMS Integration</Box>
-            <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">SecureString Ready</StatusIndicator>
-            </Box>
-          </Box>
-        </Grid>
-      </Container>
-
-      {/* Main Tabs */}
-      <Tabs
-        activeTabId={selectedTabId}
-        onChange={({ detail }) => {
-          setSelectedTabId(detail.activeTabId);
-          onTabChange?.(detail.activeTabId);
-        }}
-        tabs={[
-          {
-            label: `Parameters (${paramsList.length})`,
-            id: 'parameters',
-            content: (
-              <SpaceBetween size="l">
-                <Container header={<Header variant="h2">Parameters</Header>}>
-                  <SpaceBetween size="m">
-                    <TextFilter
-                      filteringText={filterText}
-                      filteringPlaceholder="Filter by parameter path (/app/config...)"
-                      onChange={({ detail }) => setFilterText(detail.filteringText)}
-                    />
-
-                    <Table
-                      columnDefinitions={[
-                        {
-                          id: 'name',
-                          header: 'Name / Path',
-                          cell: (item) => (
-                            <Button variant="inline-link" onClick={() => setSelectedParams([item])}>
-                              <strong>{item.Name}</strong>
-                            </Button>
-                          ),
-                        },
-                        {
-                          id: 'type',
-                          header: 'Type',
-                          cell: (item) => (
-                            <Badge color={item.Type === 'SecureString' ? 'red' : item.Type === 'StringList' ? 'blue' : 'green'}>
-                              {item.Type}
-                            </Badge>
-                          ),
-                          width: 140,
-                        },
-                        {
-                          id: 'version',
-                          header: 'Version',
-                          cell: (item) => <Badge color="grey">{`v${item.Version}`}</Badge>,
-                          width: 100,
-                        },
-                        {
-                          id: 'description',
-                          header: 'Description',
-                          cell: (item) => item.Description,
-                        },
-                      ]}
-                      items={filteredParams}
-                      selectionType="single"
-                      selectedItems={selectedParams}
-                      onSelectionChange={({ detail }) => setSelectedParams(detail.selectedItems)}
-                      empty={<Box textAlign="center">No parameters found.</Box>}
-                    />
-                  </SpaceBetween>
-                </Container>
-
-                {activeParam && (
-                  <Container header={<Header variant="h2">Parameter: {activeParam.Name}</Header>}>
-                    <Tabs
-                      tabs={[
-                        {
-                          label: 'Value & Decryption',
-                          id: 'val',
-                          content: (
-                            <SpaceBetween size="m">
-                              <Container
-                                header={
-                                  <Header
-                                    variant="h3"
-                                    actions={
-                                      activeParam.Type === 'SecureString' && (
-                                        <Button loading={revealing} onClick={handleRevealDecrypted}>
-                                          {revealedValue ? 'Re-decrypt with KMS' : 'Reveal Decrypted Value'}
-                                        </Button>
-                                      )
-                                    }
-                                  >
-                                    Stored Value
-                                  </Header>
-                                }
-                              >
-                                {activeParam.Type === 'SecureString' ? (
-                                  revealedValue ? (
-                                    <SpaceBetween size="s">
-                                      <div style={{ fontFamily: 'monospace', fontSize: '13px', background: '#0f1b2a', padding: '12px', borderRadius: '4px', color: '#58a6ff' }}>
-                                        {revealedValue}
-                                      </div>
-                                      <Button iconName="copy" onClick={() => navigator.clipboard.writeText(revealedValue)}>
-                                        Copy Value
-                                      </Button>
-                                    </SpaceBetween>
-                                  ) : (
-                                    <Box color="text-status-inactive">
-                                      ●●●●●●●●●●●● (Encrypted with KMS key). Click "Reveal Decrypted Value" to decrypt.
-                                    </Box>
-                                  )
-                                ) : (
-                                  <div style={{ fontFamily: 'monospace', fontSize: '13px', background: '#0f1b2a', padding: '12px', borderRadius: '4px', color: '#58a6ff' }}>
-                                    {activeParam.Value || 'Active value'}
-                                  </div>
-                                )}
-                              </Container>
-
-                              <KeyValuePairs
-                                columns={3}
-                                items={[
-                                  { label: 'Name', value: activeParam.Name },
-                                  { label: 'Type', value: activeParam.Type },
-                                  { label: 'Version', value: `v${activeParam.Version}` },
-                                  { label: 'KMS Key ID', value: activeParam.Type === 'SecureString' ? 'alias/aws/ssm' : 'None' },
-                                  { label: 'Tier', value: 'Standard' },
-                                  { label: 'Data Type', value: 'text' },
-                                ]}
-                              />
-                            </SpaceBetween>
-                          ),
-                        },
-                        {
-                          label: `Version History (${paramHistory.length || 1})`,
-                          id: 'history',
-                          content: (
-                            <Table
-                              columnDefinitions={[
-                                { id: 'ver', header: 'Version', cell: (h: any) => <Badge color="blue">{`v${h.Version || h.version || 1}`}</Badge>, width: 100 },
-                                { id: 'type', header: 'Type', cell: (h: any) => h.Type || h.type || 'String', width: 130 },
-                                { id: 'date', header: 'Modified Date', cell: (h: any) => h.LastModifiedDate || 'Today', width: 160 },
-                                { id: 'val', header: 'Historical Value', cell: (h: any) => <code>{h.Value || h.value || 'Encrypted / Active'}</code> },
-                              ]}
-                              items={paramHistory.length > 0 ? paramHistory : [{ Version: activeParam.Version, Type: activeParam.Type, LastModifiedDate: activeParam.LastModifiedDate, Value: activeParam.Value }]}
-                              loading={loadingHistory}
-                            />
-                          ),
-                        },
-                        {
-                          label: `Tags (${paramTags.length})`,
-                          id: 'tags',
-                          content: (
-                            <SpaceBetween size="m">
-                              <Box float="right">
-                                <Button variant="primary" iconName="add-plus" onClick={() => setCreateTagOpen(true)}>
-                                  Add Tag
-                                </Button>
-                              </Box>
-
-                              <Table
-                                columnDefinitions={[
-                                  { id: 'key', header: 'Key', cell: (t: any) => <strong>{t.Key || t.key}</strong> },
-                                  { id: 'val', header: 'Value', cell: (t: any) => t.Value || t.value },
-                                  {
-                                    id: 'act',
-                                    header: 'Action',
-                                    cell: (t: any) => (
-                                      <Button iconName="remove" onClick={() => handleRemoveTag(t.Key || t.key)}>
-                                        Remove
-                                      </Button>
-                                    ),
-                                    width: 110,
-                                  },
-                                ]}
-                                items={paramTags}
-                                empty={<Box textAlign="center">No tags assigned to this parameter.</Box>}
-                              />
-                            </SpaceBetween>
-                          ),
-                        },
-                      ]}
-                    />
-                  </Container>
-                )}
-              </SpaceBetween>
-            ),
-          },
-          {
-            label: `SSM Documents / Runbooks (${documents.length})`,
-            id: 'documents',
-            content: (
-              <SpaceBetween size="l">
-                <Container
-                  header={
-                    <Header
-                      variant="h2"
-                      actions={
-                        <Button variant="primary" iconName="add-plus" onClick={() => setCreateDocOpen(true)}>
-                          Create SSM Document
-                        </Button>
-                      }
-                    >
-                      SSM Documents (Automation Runbooks)
-                    </Header>
+        </Container>
+      ) : parameter ? (
+        <>
+          <Container header={<Header variant="h2">Parameter overview</Header>}>
+            <KeyValuePairs
+              columns={3}
+              minColumnWidth={220}
+              items={[
+                { label: "Name", value: copy(parameter.name) },
+                { label: "Type", value: parameter.type || "Unavailable" },
+                { label: "Version", value: parameter.version ?? "Unavailable" },
+                {
+                  label: "Description",
+                  value: parameter.description || "No description",
+                },
+                { label: "Last modified", value: ssmDate(parameter.modified) },
+                {
+                  label: "Modified by",
+                  value: parameter.modifiedBy || "Unavailable",
+                },
+                { label: "Tier", value: parameter.tier || "Unavailable" },
+                {
+                  label: "Data type",
+                  value: parameter.dataType || "Unavailable",
+                },
+                {
+                  label: "KMS key",
+                  value:
+                    parameter.type === "SecureString"
+                      ? copy(parameter.keyId)
+                      : "Not applicable",
+                },
+              ]}
+            />
+          </Container>
+          <Tabs
+            activeTabId={tab}
+            onChange={({ detail }) => navigate(detail.activeTabId, name)}
+            tabs={[
+              { id: "details", label: "Value" },
+              { id: "history", label: "Version history" },
+              { id: "tags", label: "Tags" },
+            ]}
+          />
+          <SsmParameterDetails
+            key={`${name}:${tab}:${revision}:${identity?.arn}:${identity?.endpoint}`}
+            parameter={parameter}
+            tab={tab}
+            disabled={disabled}
+          />
+        </>
+      ) : tab === "documents" ? (
+        <Table
+          loading={loading}
+          loadingText="Loading documents"
+          trackBy={(item) => item.name || item.Name}
+          header={
+            <Header variant="h2" counter={`(${documents.length})`}>
+              Documents
+            </Header>
+          }
+          items={documents}
+          columnDefinitions={[
+            {
+              id: "name",
+              header: "Name",
+              cell: (item) => item.name || item.Name,
+            },
+            {
+              id: "document_type",
+              header: "Document type",
+              cell: (item) =>
+                item.document_type || item.DocumentType || "Unavailable",
+            },
+            {
+              id: "status",
+              header: "Status",
+              cell: (item) => item.status || item.Status || "Unavailable",
+            },
+            {
+              id: "document_version",
+              header: "Version",
+              cell: (item) =>
+                item.document_version || item.DocumentVersion || "Unavailable",
+            },
+            {
+              id: "owner",
+              header: "Owner",
+              cell: (item) => item.owner || item.Owner || "Unavailable",
+            },
+            {
+              id: "actions",
+              header: "Actions",
+              cell: (item) => (
+                <Button
+                  disabled={disabled}
+                  onClick={() =>
+                    setConfirmation({
+                      type: "document",
+                      name: item.name || item.Name,
+                    })
                   }
                 >
-                  <Table
-                    columnDefinitions={[
-                      { id: 'name', header: 'Document Name', cell: (d: any) => <strong>{d.Name || d.name}</strong> },
-                      { id: 'type', header: 'Document Type', cell: (d: any) => <Badge color="blue">{d.DocumentType || d.documentType || 'Command'}</Badge>, width: 150 },
-                      { id: 'format', header: 'Format', cell: (d: any) => d.DocumentFormat || 'JSON', width: 100 },
-                      {
-                        id: 'act',
-                        header: 'Action',
-                        cell: (d: any) => (
-                          <Button iconName="remove" onClick={() => handleDeleteDocument(d.Name || d.name)}>
-                            Delete
-                          </Button>
-                        ),
-                        width: 110,
-                      },
-                    ]}
-                    items={documents}
-                    empty={<Box textAlign="center">No SSM documents created.</Box>}
-                  />
-                </Container>
+                  Delete document
+                </Button>
+              ),
+            },
+          ]}
+          empty={
+            <Box textAlign="center" padding="l">
+              No documents returned.
+            </Box>
+          }
+        />
+      ) : (
+        <>
+          <Container header={<Header variant="h2">Parameter paths</Header>}>
+            <SpaceBetween size="m">
+              <SpaceBetween direction="horizontal" size="xs">
+                <Button
+                  variant="inline-link"
+                  onClick={() => navigate("parameters", "", "")}
+                >
+                  All parameters
+                </Button>
+                {path && (
+                  <>
+                    <Box>{path}</Box>
+                    <Button
+                      onClick={() =>
+                        navigate(
+                          "parameters",
+                          "",
+                          path
+                            .slice(0, -1)
+                            .substring(
+                              0,
+                              path.slice(0, -1).lastIndexOf("/") + 1,
+                            ),
+                        )
+                      }
+                    >
+                      Up one level
+                    </Button>
+                  </>
+                )}
               </SpaceBetween>
-            ),
-          },
-        ]}
-      />
-
-      {/* Create Parameter Modal */}
+              {folders.length ? (
+                <SpaceBetween direction="horizontal" size="xs">
+                  {folders.map((folder) => (
+                    <Button
+                      key={folder}
+                      iconName="folder"
+                      onClick={() => navigate("parameters", "", folder)}
+                    >
+                      {folder}
+                    </Button>
+                  ))}
+                </SpaceBetween>
+              ) : (
+                <Box>No child paths.</Box>
+              )}
+            </SpaceBetween>
+          </Container>
+          <Table
+            loading={loading}
+            loadingText="Loading parameters"
+            trackBy="name"
+            header={
+              <Header variant="h2" counter={`(${visibleParameters.length})`}>
+                Parameters
+              </Header>
+            }
+            filter={
+              <SpaceBetween size="s">
+                <TextFilter
+                  filteringText={filter}
+                  filteringAriaLabel="Find parameters"
+                  filteringPlaceholder="Find by name, type, or description"
+                  onChange={({ detail }) => setFilter(detail.filteringText)}
+                />
+                <Checkbox
+                  checked={nested}
+                  onChange={({ detail }) => setNested(detail.checked)}
+                >
+                  Include nested paths
+                </Checkbox>
+              </SpaceBetween>
+            }
+            items={visibleParameters}
+            columnDefinitions={[
+              {
+                id: "name",
+                header: "Name",
+                sortingField: "name",
+                cell: (item) => (
+                  <Button
+                    variant="inline-link"
+                    onClick={() => navigate("details", item.name)}
+                  >
+                    {item.name}
+                  </Button>
+                ),
+              },
+              {
+                id: "type",
+                header: "Type",
+                cell: (item) =>
+                  item.type ? (
+                    <Badge
+                      color={item.type === "SecureString" ? "blue" : "grey"}
+                    >
+                      {item.type}
+                    </Badge>
+                  ) : (
+                    "Unavailable"
+                  ),
+              },
+              {
+                id: "version",
+                header: "Version",
+                cell: (item) => item.version ?? "Unavailable",
+              },
+              {
+                id: "tier",
+                header: "Tier",
+                cell: (item) => item.tier || "Unavailable",
+              },
+              {
+                id: "modified",
+                header: "Last modified",
+                cell: (item) => ssmDate(item.modified),
+              },
+            ]}
+            empty={
+              <Box textAlign="center" padding="l">
+                <SpaceBetween size="m">
+                  <Box variant="strong">
+                    {filter
+                      ? "No matching parameters"
+                      : "No parameters at this level"}
+                  </Box>
+                  <Box>
+                    {folders.length
+                      ? "Open a child path or include nested paths to view its parameters."
+                      : "Create a parameter or adjust your filters."}
+                  </Box>
+                </SpaceBetween>
+              </Box>
+            }
+          />
+        </>
+      )}
       <Modal
-        visible={createParamOpen}
-        onDismiss={() => setCreateParamOpen(false)}
-        header="Create Parameter"
+        visible={!!form}
+        onDismiss={() => !busy && setForm(null)}
         size="large"
+        header={
+          form === "document"
+            ? "Create document"
+            : form === "edit"
+              ? "Edit parameter"
+              : "Create parameter"
+        }
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateParamOpen(false)}>
+              <Button
+                variant="link"
+                disabled={busy}
+                onClick={() => {
+                  setForm(null);
+                  setFormValue("");
+                }}
+              >
                 Cancel
               </Button>
-              <Button variant="primary" loading={creatingParam} onClick={handleCreateParam}>
-                Save Parameter
+              <Button
+                variant="primary"
+                loading={busy}
+                disabled={
+                  !formName.trim() ||
+                  !formValue.length ||
+                  (form !== "document" && !validName)
+                }
+                onClick={saveForm}
+              >
+                {form === "edit"
+                  ? "Save new version"
+                  : form === "document"
+                    ? "Create document"
+                    : "Create parameter"}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
-        <SpaceBetween size="m">
-          <FormField label="Name / Path" description="Use hierarchical paths like /config/prod/db_url or /secrets/api_key.">
-            <Input value={paramName} onChange={({ detail }) => setParamName(detail.value)} placeholder="/config/prod/database_url" />
-          </FormField>
-
-          <FormField label="Type">
-            <Select
-              selectedOption={paramType}
-              onChange={({ detail }) => setParamType(detail.selectedOption as any)}
-              options={[
-                { label: 'String (Plaintext configuration)', value: 'String' },
-                { label: 'StringList (Comma-separated list)', value: 'StringList' },
-                { label: 'SecureString (Encrypted with KMS)', value: 'SecureString' },
-              ]}
+        <SpaceBetween size="l">
+          <FormField
+            label={form === "document" ? "Document name" : "Parameter name"}
+            description={
+              form === "document"
+                ? undefined
+                : "Use a name or hierarchical path, such as /app/production/database."
+            }
+            errorText={
+              form !== "document" && formName && !validName
+                ? "Use letters, numbers, periods, hyphens, underscores, and path separators; do not end with /."
+                : undefined
+            }
+          >
+            <Input
+              disabled={form === "edit"}
+              value={formName}
+              onChange={({ detail }) => setFormName(detail.value)}
             />
           </FormField>
-
-          <FormField label="Value">
-            <Textarea rows={4} value={paramValue} onChange={({ detail }) => setParamValue(detail.value)} placeholder="postgres://user:secret@localhost:5432/mydb" />
-          </FormField>
-
-          <FormField label="Description (Optional)">
-            <Input value={paramDescription} onChange={({ detail }) => setParamDescription(detail.value)} placeholder="Database connection string" />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      {/* Add Tag Modal */}
-      <Modal
-        visible={createTagOpen}
-        onDismiss={() => setCreateTagOpen(false)}
-        header="Add Tag to Parameter"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateTagOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" loading={savingTag} onClick={handleAddTag}>
-                Add Tag
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="m">
-          <FormField label="Key">
-            <Input value={tagKey} onChange={({ detail }) => setTagKey(detail.value)} placeholder="Environment" />
-          </FormField>
-          <FormField label="Value">
-            <Input value={tagValue} onChange={({ detail }) => setTagValue(detail.value)} placeholder="production" />
-          </FormField>
-        </SpaceBetween>
-      </Modal>
-
-      {/* Create Document Modal */}
-      <Modal
-        visible={createDocOpen}
-        onDismiss={() => setCreateDocOpen(false)}
-        header="Create SSM Document"
-        size="large"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateDocOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" loading={creatingDoc} onClick={handleCreateDocument}>
-                Create Document
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
-      >
-        <SpaceBetween size="m">
-          <FormField label="Document Name">
-            <Input value={docName} onChange={({ detail }) => setDocName(detail.value)} placeholder="RestartWebServices" />
-          </FormField>
-          <FormField label="Document Type">
-            <Select
-              selectedOption={docType}
-              onChange={({ detail }) => setDocType(detail.selectedOption as any)}
-              options={[
-                { label: 'Command', value: 'Command' },
-                { label: 'Automation', value: 'Automation' },
-                { label: 'Package', value: 'Package' },
-              ]}
+          {form === "document" ? (
+            <FormField label="Document type">
+              <Select
+                selectedOption={{ label: docType, value: docType }}
+                options={["Command", "Automation", "Package"].map((value) => ({
+                  label: value,
+                  value,
+                }))}
+                onChange={({ detail }) =>
+                  setDocType(detail.selectedOption.value!)
+                }
+              />
+            </FormField>
+          ) : (
+            <>
+              <FormField label="Parameter type">
+                <Select
+                  disabled={form === "edit"}
+                  selectedOption={{ label: formType, value: formType }}
+                  options={["String", "StringList", "SecureString"].map(
+                    (value) => ({ label: value, value }),
+                  )}
+                  onChange={({ detail }) =>
+                    setFormType(detail.selectedOption.value!)
+                  }
+                />
+              </FormField>
+              <FormField label="Description (optional)">
+                <Input
+                  value={description}
+                  onChange={({ detail }) => setDescription(detail.value)}
+                />
+              </FormField>
+            </>
+          )}
+          {form === "edit" && (
+            <Alert type="info">
+              Enter the replacement value. Saving creates a new version and
+              preserves the parameter name and type.
+            </Alert>
+          )}
+          <FormField
+            label={
+              form === "document"
+                ? "Document content (JSON)"
+                : form === "edit"
+                  ? "New value"
+                  : "Value"
+            }
+            description={
+              form === "document"
+                ? undefined
+                : "The value is saved exactly as entered, including whitespace."
+            }
+          >
+            <Textarea
+              rows={form === "document" ? 10 : 4}
+              value={formValue}
+              onChange={({ detail }) => setFormValue(detail.value)}
             />
           </FormField>
-          <FormField label="Document Content (JSON)">
-            <Textarea rows={10} value={docContent} onChange={({ detail }) => setDocContent(detail.value)} />
-          </FormField>
+          {form && message?.type === "error" && (
+            <Alert type="error">{message.text}</Alert>
+          )}
+        </SpaceBetween>
+      </Modal>
+      <Modal
+        visible={!!confirmation}
+        onDismiss={() => !busy && setConfirmation(null)}
+        header={`Delete ${confirmation?.type || "resource"}`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button
+                variant="link"
+                disabled={busy}
+                onClick={() => setConfirmation(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={busy}
+                onClick={() =>
+                  run(async () => {
+                    if (!confirmation) return;
+                    await ssmRequest(
+                      confirmation.type === "parameter"
+                        ? parameterUrl(confirmation.name)
+                        : "/api/ssm/documents/",
+                      "DELETE",
+                      confirmation.type === "document"
+                        ? { name: confirmation.name }
+                        : undefined,
+                    );
+                    const wasParameter = confirmation.type === "parameter";
+                    setConfirmation(null);
+                    await loadData();
+                    if (wasParameter) navigate("parameters");
+                    else
+                      setMessage({
+                        type: "success",
+                        text: "Document deleted.",
+                      });
+                  })
+                }
+              >
+                Delete
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Alert type="warning">
+            Delete "{confirmation?.name}"?{" "}
+            {confirmation?.type === "parameter"
+              ? "All versions of this parameter will be deleted."
+              : "Applications using this document may fail."}
+          </Alert>
+          {confirmation && message?.type === "error" && (
+            <Alert type="error">{message.text}</Alert>
+          )}
         </SpaceBetween>
       </Modal>
     </SpaceBetween>

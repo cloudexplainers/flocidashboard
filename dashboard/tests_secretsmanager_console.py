@@ -159,3 +159,51 @@ class SecretsManagerActionsApiTests(SimpleTestCase):
         password_mock.return_value = {'random_password': 'abc123'}
         response = self.client.post(reverse('dashboard:secretsmanager-random-password'), data=json.dumps({'PasswordLength': 6}), content_type='application/json')
         self.assertEqual(response.status_code, 200); password_mock.assert_called_once_with({'PasswordLength': 6})
+
+
+class SecretsManagerMetadataInventoryTests(SimpleTestCase):
+    @patch('dashboard.aws._paginate')
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_inventory_lists_deletion_and_versions_without_retrieving_values(self, factory_mock, paginate_mock):
+        from .aws import secretsmanager_inventory
+        client = factory_mock.return_value.client.return_value
+        paginate_mock.side_effect = [[{'Name': 'app/db', 'ARN': 'arn:secret:db'}], [
+            {'VersionId': 'v1', 'VersionStages': ['AWSCURRENT']},
+        ]]
+        client.describe_secret.return_value = {
+            'Name': 'app/db', 'ARN': 'arn:secret:db', 'DeletedDate': '2026-10-30T00:00:00Z',
+            'KmsKeyId': 'alias/application', 'RotationEnabled': False,
+        }
+        result = secretsmanager_inventory()
+        paginate_mock.assert_any_call(client, 'list_secrets', 'SecretList', IncludePlannedDeletion=True)
+        client.get_secret_value.assert_not_called()
+        self.assertEqual(result['summary']['scheduled_for_deletion'], 1)
+        self.assertEqual(result['secrets'][0]['versions'][0]['VersionId'], 'v1')
+        self.assertNotIn('current_value', result['secrets'][0])
+
+    @patch('dashboard.secretsmanager_api._client')
+    def test_metadata_edit_preserves_encryption_when_key_is_blank(self, client_mock):
+        from .secretsmanager_api import update_secret
+        client_mock.return_value.update_secret.return_value = {'Name': 'app/db'}
+        update_secret('app/db', description='Updated')
+        client_mock.return_value.update_secret.assert_called_once_with(SecretId='app/db', Description='Updated')
+
+    @patch('dashboard.secretsmanager_api._client')
+    def test_binary_value_response_keeps_base64_and_version_metadata(self, client_mock):
+        from .secretsmanager_api import get_secret_value
+        client_mock.return_value.get_secret_value.return_value = {
+            'SecretBinary': b'\x00\xff', 'VersionId': 'binary-v1', 'VersionStages': ['AWSPREVIOUS'],
+        }
+        result = get_secret_value('app/db', version_id='binary-v1')
+        self.assertEqual(result['type'], 'binary')
+        self.assertEqual(result['value'], 'AP8=')
+        self.assertEqual(result['size_bytes'], 2)
+        self.assertEqual(result['version_stages'], ['AWSPREVIOUS'])
+        client_mock.return_value.get_secret_value.assert_called_once_with(SecretId='app/db', VersionId='binary-v1')
+
+    @patch('dashboard.aws._paginate', side_effect=ValueError('Inventory unavailable'))
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_inventory_errors_are_visible_instead_of_reporting_no_secrets(self, factory_mock, paginate_mock):
+        response = self.client.get('/api/secretsmanager/')
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(response.json()['error'], 'Inventory unavailable')

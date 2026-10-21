@@ -337,6 +337,8 @@ class SESInventoryTests(SimpleTestCase):
         ses = MagicMock()
         ses.list_verified_email_addresses.return_value = {'VerifiedEmailAddresses': []}
         sesv2 = MagicMock()
+        sesv2.meta.service_model.operation_names = ['GetAccount']
+        sesv2.get_account.return_value = {'ProductionAccessEnabled': False, 'SendingEnabled': False}
         sesv2.list_email_identities.return_value = {'EmailIdentities': []}
         sesv2.list_email_templates.return_value = {'TemplatesMetadata': []}
         sesv2.list_configuration_sets.return_value = {'ConfigurationSets': [{'ConfigurationSetName': 'local-events'}]}
@@ -361,6 +363,9 @@ class SESInventoryTests(SimpleTestCase):
 
         result = ses_inventory()
         config_set = result['v2_configuration_sets'][0]
+        self.assertFalse(result['account']['ProductionAccessEnabled'])
+        self.assertFalse(result['account']['SendingEnabled'])
+        sesv2.get_account.assert_called_once_with()
 
         self.assertEqual(result['summary']['v2_configuration_sets'], 1)
         self.assertEqual(result['summary']['v2_event_destinations'], 1)

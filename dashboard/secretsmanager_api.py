@@ -145,7 +145,10 @@ def delete_secret(
 
 def update_secret(secret_id: str, *, description: str = '', kms_key_id: str = '') -> dict[str, Any]:
     clean_id = _clean_required(secret_id, 'Secret ID')
-    response = _client().update_secret(SecretId=clean_id, Description=str(description or ''), KmsKeyId=str(kms_key_id or ''))
+    kwargs = {'SecretId': clean_id, 'Description': str(description or '')}
+    if kms_key_id:
+        kwargs['KmsKeyId'] = str(kms_key_id)
+    response = _client().update_secret(**kwargs)
     return {'name': response.get('Name') or clean_id, 'arn': response.get('ARN'), 'version_id': response.get('VersionId')}
 
 

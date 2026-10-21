@@ -60,6 +60,9 @@ def put_parameter(
     parameter_type: str = 'String',
     description: str = '',
     overwrite: bool = False,
+    key_id: str = '',
+    tier: str = '',
+    data_type: str = '',
 ) -> dict[str, Any]:
     parameter_name = _clean_required(name, 'Parameter name')
     kwargs: dict[str, Any] = {
@@ -70,6 +73,13 @@ def put_parameter(
     }
     if description:
         kwargs['Description'] = description
+
+    if key_id:
+        kwargs['KeyId'] = key_id
+    if tier:
+        kwargs['Tier'] = tier
+    if data_type:
+        kwargs['DataType'] = data_type
 
     response = _client().put_parameter(**kwargs)
     return {
@@ -108,3 +118,39 @@ def delete_parameter(name: str) -> dict[str, Any]:
         'name': parameter_name,
         'response': response,
     }
+
+
+def parameter_history(name: str) -> dict[str, Any]:
+    from .aws import _clean_response, _paginate
+    versions = _paginate(_client(), 'get_parameter_history', 'Parameters', Name=_clean_required(name, 'Parameter name'), WithDecryption=False)
+    # History is metadata only. Values are retrieved explicitly by name:version.
+    return {'parameters': _clean_response([{key: value for key, value in version.items() if key != 'Value'} for version in versions])}
+
+
+def parameter_tags(name: str, *, tags=None, tag_keys=None) -> dict[str, Any]:
+    client = _client()
+    kwargs = {'ResourceType': 'Parameter', 'ResourceId': _clean_required(name, 'Parameter name')}
+    if tags is not None:
+        if not isinstance(tags, list) or not tags or any(not isinstance(tag, dict) or not tag.get('Key') for tag in tags):
+            raise ValueError('Tags must contain a key')
+        client.add_tags_to_resource(**kwargs, Tags=tags)
+    elif tag_keys is not None:
+        if not isinstance(tag_keys, list) or not tag_keys:
+            raise ValueError('Tag keys are required')
+        client.remove_tags_from_resource(**kwargs, TagKeys=tag_keys)
+    from .aws import _clean_response
+    return {'tags': _clean_response(client.list_tags_for_resource(**kwargs).get('TagList', []))}
+
+
+def create_document(name: str, content: str, document_type: str = 'Command') -> dict[str, Any]:
+    from .aws import _clean_response
+    json.loads(content)
+    if document_type not in {'Command', 'Automation', 'Package'}:
+        raise ValueError('Unsupported document type')
+    response = _client().create_document(Name=_clean_required(name, 'Document name'), Content=content, DocumentType=document_type, DocumentFormat='JSON')
+    return _clean_response(response.get('DocumentDescription', {}))
+
+
+def delete_document(name: str) -> dict[str, Any]:
+    _client().delete_document(Name=_clean_required(name, 'Document name'))
+    return {'name': name, 'deleted': True}

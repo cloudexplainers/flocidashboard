@@ -337,7 +337,7 @@ const SecretsManagerConsole = (() => {
     consoleUi.addField(details, 'Rotation Lambda', secret.rotation_lambda_arn);
     consoleUi.addField(details, 'Rotation rules', secret.rotation_rules);
     consoleUi.addField(details, 'Tags', secret.tags);
-    consoleUi.addField(details, 'Current value preview', secret.current_value);
+    consoleUi.addField(details, 'Secret value', 'Hidden. Select Reveal value to retrieve it.');
     content.append(details);
 
     const actions = el('div', 'secretsmanager-actions');

@@ -224,8 +224,8 @@ test('session switch updates global caller identity without a reload', async ({ 
   } }));
   await page.route('**/api/session-identity/use-user/', route => { switched = true; return route.fulfill({ json: { changed: true } }); });
   await page.goto('/environment/');
-  await page.getByRole('tab', { name: 'Switch to IAM User', exact: true }).click();
-  await page.getByLabel('IAM User Name', { exact: true }).fill('switched-user');
+  await page.getByRole('tab', { name: 'IAM user', exact: true }).click();
+  await page.getByRole('combobox', { name: 'IAM user name', exact: true }).fill('switched-user');
   await page.getByRole('button', { name: /Switch.*User/i }).click();
   await expect(page.getByRole('button', { name: /switched-user @ 123456789012/ })).toBeVisible();
 });
@@ -308,6 +308,8 @@ test('CloudWatch alarm drill-down retains the selected metric dimensions', async
   await page.route('**/api/cloudwatch/metric-statistics/**', route => { requests.push(new URL(route.request().url())); return route.fulfill({ json: { datapoints: [] } }); });
   await page.goto('/cloudwatch/');
   await page.getByRole('button', { name: 'Payment latency', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Alarm details', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'View metric', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Metrics', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect.poll(() => requests.some(url => url.searchParams.get('namespace') === 'App' && JSON.stringify(JSON.parse(url.searchParams.get('dimensions') || '[]')) === JSON.stringify(dimensions))).toBe(true);
   await expect(page.getByRole('button', { name: /^Metric / })).toContainText('App / Latency');
@@ -315,7 +317,7 @@ test('CloudWatch alarm drill-down retains the selected metric dimensions', async
 });
 
 test('CloudWatch loads stream-specific events, filters them, and exposes retrieval failures', async ({ page }) => {
-  await page.route('**/api/inspector/lambda/log-groups/**', route => route.fulfill({ json: { log_groups: [{ logGroupName: '/app/worker' }, { logGroupName: '/app/empty' }] } }));
+  await inventory(page, 'cloudwatch', { log_groups: [{ name: '/app/worker' }, { name: '/app/empty' }] });
   await page.route('**/api/cloudwatch/log-streams/', route => route.fulfill({ json: { streams: route.request().postDataJSON().log_group_name === '/app/empty' ? [] : [{ logStreamName: 'stream-a' }, { logStreamName: 'stream-b' }] } }));
   let fail = false;
   const eventRequests: any[] = [];
@@ -553,8 +555,9 @@ test('home provides a connection recovery action and CloudWatch summarizes alarm
   await expect(page).toHaveURL(/\/settings$/);
   await inventory(page, 'cloudwatch', { alarms: [{ AlarmName: 'Latency', StateValue: 'ALARM' }, { AlarmName: 'Availability', StateValue: 'OK' }] });
   await page.goto('/cloudwatch/');
-  await expect(page.getByText('ALARM: 1', { exact: true })).toBeVisible();
-  await expect(page.getByText('OK: 1', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ALARM', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Alarm health', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'OK', exact: true })).toBeVisible();
 });
 
 test('resource details remain usable with long identifiers on a narrow viewport', async ({ page }) => {
@@ -1179,3 +1182,1058 @@ for (const width of [1440, 390]) {
     }
   });
 }
+
+const ecrFixture = {
+  repositories: [
+    { name: 'team/backend', arn: 'arn:aws:ecr:eu-west-1:123456789012:repository/team/backend', registry_id: '123456789012', uri: 'localhost:5100/team/backend', tag_mutability: 'IMMUTABLE', created: '2026-10-19T12:00:00Z', encryption_configuration: { encryptionType: 'AES256' }, scanning_configuration: { scanOnPush: false }, tags: [{ Key: 'env', Value: 'development' }], lifecycle_policy: { lifecyclePolicyText: '{"rules":[{"rulePriority":1}]}' }, images: [{ imageDigest: 'sha256:backend', imageTag: 'v1' }, { imageDigest: 'sha256:backend', imageTag: 'stable' }, { imageDigest: 'sha256:untagged' }], image_details: [{ imageDigest: 'sha256:backend', imageTags: ['v1', 'stable'], imageSizeInBytes: 0, imagePushedAt: '2026-10-19T12:00:00Z' }, { imageDigest: 'sha256:untagged' }] },
+    { name: 'team/worker', uri: 'localhost:5101/team/worker', tag_mutability: 'MUTABLE', images: [{ imageDigest: 'sha256:worker', imageTag: 'release' }], image_details: [{ imageDigest: 'sha256:worker', imageTags: ['release'], imageSizeInBytes: 1048576 }] },
+  ],
+};
+
+test('ECR browses nested repositories and image details with accurate metadata and durable routes', async ({ page }) => {
+  await inventory(page, 'ecr', ecrFixture);
+  await page.goto('/ecr/');
+  await page.getByRole('button', { name: 'team/backend', exact: true }).click();
+  await expect(page).toHaveURL(/repository=team%2Fbackend/);
+  await expect(page.getByRole('heading', { name: 'team/backend', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'sha256:worker', exact: true })).toHaveCount(0);
+  await expect(page.getByText('0.00 MiB', { exact: true })).toBeVisible();
+  await expect(page.getByText('Untagged', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'sha256:backend', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Image details', exact: true })).toBeVisible();
+  await expect(page.getByText('localhost:5100/team/backend@sha256:backend', { exact: true })).toBeVisible();
+  await expect(page.getByText("docker pull 'localhost:5100/team/backend@sha256:backend'", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Image details', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'View all images', exact: true }).click();
+  await page.getByRole('button', { name: 'sha256:untagged', exact: true }).click();
+  await expect(page.getByText('Unavailable', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('50.0 MB', { exact: true })).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByRole('heading', { name: 'team/backend', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/screenshots/ecr-repository-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/screenshots/ecr-repository-mobile.png', fullPage: true });
+});
+
+test('ECR push commands use the actual registry, endpoint and Region; repository policies stay scoped', async ({ page }) => {
+  await inventory(page, 'ecr', ecrFixture);
+  await page.goto('/ecr/images?repository=team%2Fbackend');
+  await page.getByRole('button', { name: 'View push commands', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText(/aws ecr get-login-password/)).toContainText("--region 'eu-west-1' --endpoint-url 'http://local-floci:4566'");
+  await expect(dialog.getByText(/aws ecr get-login-password/)).toContainText("--password-stdin 'localhost:5100'");
+  await dialog.getByRole('textbox', { name: 'Image tag', exact: true }).fill('v2');
+  await expect(dialog.getByText("docker push 'localhost:5100/team/backend:v2'", { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('tab', { name: 'Lifecycle policy & settings' }).click();
+  await expect(page.getByRole('textbox', { name: 'Lifecycle policy JSON' })).toHaveValue('{"rules":[{"rulePriority":1}]}');
+  await page.goto('/ecr/lifecycle?repository=team%2Fworker');
+  await expect(page.getByRole('textbox', { name: 'Lifecycle policy JSON' })).toHaveValue('');
+  await expect(page.getByText('No lifecycle policy is configured for this repository.')).toBeVisible();
+  await page.getByRole('button', { name: 'View push commands', exact: true }).click();
+  await expect(dialog.getByText("docker push 'localhost:5101/team/worker:latest'", { exact: true })).toBeVisible();
+});
+
+test('ECR handles missing resources, failed loads, and partial image deletion without false success', async ({ page }) => {
+  await inventory(page, 'ecr', ecrFixture);
+  await page.goto('/ecr/images?repository=missing');
+  await expect(page.getByText('Repository "missing" was not found in the current account and Region.')).toBeVisible();
+  await page.goto('/ecr/images?repository=team%2Fbackend');
+  let deletion: any;
+  await page.route('**/api/ecr/images/delete/', async route => {
+    deletion = route.request().postDataJSON();
+    await route.fulfill({ json: { failures: [{ failureCode: 'ImageNotFound', failureReason: 'Image no longer exists' }] } });
+  });
+  await page.getByRole('table').getByRole('checkbox').first().check();
+  await page.getByRole('button', { name: 'Delete images', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Deleting an image by digest removes all of its tags.');
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByText(/Some images could not be deleted/)).toBeVisible();
+  expect(deletion.repository_name).toBe('team/backend');
+  expect(deletion.image_ids).toEqual([{ imageDigest: 'sha256:backend' }, { imageDigest: 'sha256:untagged' }]);
+  await page.route('**/api/ecr/', route => route.fulfill({ status: 503, json: { error: 'Registry unavailable' } }));
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByText('Unable to load ECR resources', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'team/backend', exact: true })).toBeVisible();
+});
+
+function kmsFixture() {
+  return { keys: [
+    { key_id: 'key-app', key_arn: 'arn:aws:kms:eu-west-1:123456789012:key/key-app', metadata: { KeyId: 'key-app', KeyState: 'Enabled', KeySpec: 'SYMMETRIC_DEFAULT', KeyUsage: 'ENCRYPT_DECRYPT', Origin: 'AWS_KMS', KeyManager: 'CUSTOMER', CreationDate: '2026-10-19T12:00:00Z', Description: 'Application encryption', MultiRegion: false }, aliases: [{ AliasName: 'alias/application' }, { AliasName: 'alias/backup' }], policy: { Version: '2012-10-17', Statement: [] }, rotation_enabled: true, tags: [{ TagKey: 'env', TagValue: 'development' }], grants: [{ GrantId: 'grant-app', GranteePrincipal: 'arn:aws:iam::123456789012:role/application', Operations: ['Decrypt'] }] },
+    { key_id: 'key-pending', metadata: { KeyState: 'PendingDeletion', DeletionDate: '2026-11-01T12:00:00Z', KeySpec: 'SYMMETRIC_DEFAULT', KeyUsage: 'ENCRYPT_DECRYPT', Origin: 'AWS_KMS', KeyManager: 'CUSTOMER' }, policy: { Statement: [{ Sid: 'PendingKeyPolicy' }] }, rotation_enabled: false, grants: [], tags: [] },
+    { key_id: 'key-sign', metadata: { KeyState: 'Enabled', KeySpec: 'ECC_NIST_P256', KeyUsage: 'SIGN_VERIFY', Origin: 'AWS_KMS', KeyManager: 'CUSTOMER' }, grants: [], tags: [] },
+    { key_id: 'key-unknown', metadata: { error: 'Access denied to DescribeKey' }, rotation_enabled: { error: 'Rotation unavailable' }, grants: { error: 'Grants unavailable' } },
+  ] };
+}
+
+test('KMS reads nested metadata and preserves key routes, policies, and real states', async ({ page }) => {
+  await inventory(page, 'kms', kmsFixture());
+  await page.goto('/kms/keys');
+  const pendingRow = page.getByRole('row').filter({ hasText: 'key-pending' });
+  await expect(pendingRow).toContainText('PendingDeletion');
+  const unknownRow = page.getByRole('row').filter({ hasText: 'key-unknown' });
+  await expect(unknownRow).not.toContainText('Enabled');
+  await page.getByRole('button', { name: 'key-app', exact: true }).click();
+  await expect(page).toHaveURL(/key=key-app/);
+  await expect(page.getByRole('heading', { name: 'alias/application', exact: true })).toBeVisible();
+  await expect(page.getByText('alias/application, alias/backup', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Key policy', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Key policy JSON' })).toHaveValue(/2012-10-17/);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Key policy JSON' })).toHaveValue(/2012-10-17/);
+  await page.goto('/kms/policy?key=key-pending');
+  await expect(page.getByRole('textbox', { name: 'Key policy JSON' })).toHaveValue(/PendingKeyPolicy/);
+  await expect(page.getByText('Key pending deletion', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enable key', exact: true })).toHaveCount(0);
+  await page.goto('/kms/details?key=key-app');
+  await page.screenshot({ path: 'test-results/screenshots/kms-key-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/screenshots/kms-key-mobile.png', fullPage: true });
+});
+
+function kmsRequestAction(path: string, method: string) {
+  const actions: Record<string, string> = {
+    '/api/kms/keys/': 'create_key', '/api/kms/aliases/': 'create_alias',
+    '/api/kms/rotation/': 'set_key_rotation', '/api/kms/key-state/': 'set_key_enabled',
+    '/api/kms/crypto/encrypt/': 'encrypt', '/api/kms/crypto/decrypt/': 'decrypt',
+    '/api/kms/data-keys/': 'generate_data_key', '/api/kms/key-policy/': 'put_key_policy',
+    '/api/kms/grants/': method === 'DELETE' ? 'revoke_grant' : 'create_grant',
+  };
+  if (!actions[path]) throw new Error(`Unexpected KMS mutation endpoint: ${path}`);
+  return actions[path];
+}
+
+test('KMS rotation and state changes use supported actions and refresh the active key', async ({ page }) => {
+  const fixture = kmsFixture();
+  const requests: any[] = [];
+  await page.route('**/api/kms/**', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: fixture });
+    const body = { ...route.request().postDataJSON(), action: kmsRequestAction(new URL(route.request().url()).pathname, route.request().method()) }; requests.push(body);
+    if (body.action === 'set_key_rotation') fixture.keys[0].rotation_enabled = body.enabled;
+    if (body.action === 'set_key_enabled') fixture.keys[0].metadata.KeyState = body.enabled ? 'Enabled' : 'Disabled';
+    return route.fulfill({ json: {} });
+  });
+  await page.goto('/kms/rotation?key=key-app');
+  await expect(page.getByRole('button', { name: 'Disable automatic rotation' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Disable automatic rotation' }).click();
+  await expect(page.getByRole('button', { name: 'Enable automatic rotation' })).toBeEnabled();
+  expect(requests[0]).toEqual({ action: 'set_key_rotation', key_id: 'key-app', enabled: false });
+  await page.getByRole('button', { name: 'Disable key', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Applications using this key');
+  await page.getByRole('dialog').getByRole('button', { name: 'Disable key', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable key', exact: true })).toBeVisible();
+  expect(requests[1]).toEqual({ action: 'set_key_enabled', key_id: 'key-app', enabled: false });
+  await expect(page.getByRole('button', { name: 'Enable automatic rotation' })).toBeDisabled();
+  await page.goto('/kms/rotation?key=key-sign');
+  await expect(page.getByRole('button', { name: 'Enable automatic rotation' })).toBeDisabled();
+  await page.goto('/kms/rotation?key=key-unknown');
+  await expect(page.getByText('Some key details are unavailable', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enable automatic rotation' })).toBeDisabled();
+});
+
+test('KMS crypto tools use backend response fields, mask data keys and clear results between keys', async ({ page }) => {
+  const fixture = kmsFixture();
+  const requests: any[] = [];
+  await page.route('**/api/kms/**', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: fixture });
+    const body = { ...route.request().postDataJSON(), action: kmsRequestAction(new URL(route.request().url()).pathname, route.request().method()) }; requests.push(body);
+    return route.fulfill({ json: body.action === 'encrypt' ? { ciphertext_blob: 'ZW5jcnlwdGVk' } : body.action === 'decrypt' ? { plaintext: 'Hello KMS', key_id: 'key-app' } : { plaintext_base64: 'c2VjcmV0LWtleQ==', ciphertext_blob: 'ZW5jcnlwdGVkLWtleQ==', key_id: 'key-app' } });
+  });
+  await page.goto('/kms/tools?key=key-app');
+  await page.getByRole('textbox', { name: 'Plaintext', exact: true }).fill('Hello KMS');
+  await page.getByRole('button', { name: 'Encrypt', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Ciphertext (Base64)', exact: true })).toHaveValue('ZW5jcnlwdGVk');
+  await page.getByRole('button', { name: 'Decrypt', exact: true }).click();
+  await expect(page.locator('span').getByText('Hello KMS', { exact: true })).toBeVisible();
+  expect(requests[1]).toEqual({ action: 'decrypt', ciphertext_blob: 'ZW5jcnlwdGVk' });
+  await page.getByRole('button', { name: 'Generate data key', exact: true }).click();
+  await expect(page.getByText('Hidden', { exact: true })).toBeVisible();
+  await expect(page.getByText('c2VjcmV0LWtleQ==', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Reveal plaintext key' }).click();
+  await expect(page.getByText('c2VjcmV0LWtleQ==', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'AWS KMS', exact: true }).click();
+  await page.getByRole('button', { name: 'key-sign', exact: true }).click();
+  await page.getByRole('tab', { name: 'Cryptographic tools', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Encrypt', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Generate data key', exact: true })).toBeDisabled();
+  await expect(page.getByText('c2VjcmV0LWtleQ==', { exact: true })).toHaveCount(0);
+});
+
+test('KMS creation keeps compatible specs and reports a created key when alias creation fails', async ({ page }) => {
+  const fixture = kmsFixture();
+  let creates = 0;
+  let createBody: any;
+  await page.route('**/api/kms/**', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: fixture });
+    const body = { ...route.request().postDataJSON(), action: kmsRequestAction(new URL(route.request().url()).pathname, route.request().method()) };
+    if (body.action === 'create_key') {
+      creates++; createBody = body;
+      return route.fulfill({ json: { key_id: 'key-app' } });
+    }
+    return route.fulfill({ status: 400, json: { error: 'Alias already exists' } });
+  });
+  await page.goto('/kms/keys');
+  await page.getByRole('button', { name: 'Create key', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: 'SYMMETRIC_DEFAULT' }).click();
+  await page.getByRole('option', { name: 'ECC_NIST_P256', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'SIGN_VERIFY' })).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Alias (optional)' }).fill('alias/application');
+  await dialog.getByRole('button', { name: 'Create key', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText(/Key created, but its alias could not be created: Alias already exists/)).toBeVisible();
+  expect(creates).toBe(1);
+  expect(createBody.key_usage).toBe('SIGN_VERIFY');
+  expect(createBody.key_spec).toBe('ECC_NIST_P256');
+});
+
+test('KMS validates policy JSON and confirms grant revocation, with visible load failures', async ({ page }) => {
+  const fixture = kmsFixture();
+  const requests: any[] = [];
+  await page.route('**/api/kms/**', async route => {
+    if (route.request().method() === 'GET') return route.fulfill({ json: fixture });
+    const body = { ...route.request().postDataJSON(), action: kmsRequestAction(new URL(route.request().url()).pathname, route.request().method()) }; requests.push(body);
+    if (body.action === 'revoke_grant') fixture.keys[0].grants = [];
+    return route.fulfill({ json: {} });
+  });
+  await page.goto('/kms/policy?key=key-app');
+  await page.getByRole('textbox', { name: 'Key policy JSON' }).fill('{');
+  await page.getByRole('button', { name: 'Save policy' }).click();
+  await expect(page.getByText('Enter valid JSON for the key policy.')).toBeVisible();
+  expect(requests).toHaveLength(0);
+  await page.getByRole('tab', { name: 'Grants (1)', exact: true }).click();
+  await page.getByRole('button', { name: 'Revoke grant', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('grant-app');
+  expect(requests).toHaveLength(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Revoke grant', exact: true }).click();
+  await expect(page.getByText('Grant revoked.', { exact: true })).toBeVisible();
+  expect(requests[0]).toEqual({ action: 'revoke_grant', key_id: 'key-app', grant_id: 'grant-app' });
+  await page.route('**/api/kms/', route => route.fulfill({ status: 503, json: { error: 'KMS unavailable' } }));
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByText('Unable to load KMS resources', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Disable key', exact: true })).toBeDisabled();
+});
+
+function ssmFixture() {
+  return { parameters: [
+    { name: '/app/prod/password', type: 'SecureString', version: 3, key_id: 'alias/customer-key', description: 'Database password', tier: 'Advanced', data_type: 'text', last_modified: '2026-10-19T12:00:00Z', last_modified_user: 'arn:aws:iam::123456789012:role/deployer' },
+    { name: '/app/prod/endpoint', type: 'String', version: 1 },
+    { name: '/apple/config', type: 'StringList', version: 2 },
+    { name: 'flat-setting', type: 'String' },
+  ], documents: [{ name: 'RunTask', document_type: 'Command', document_format: 'JSON', document_version: '1', owner: '123456789012', status: 'Active' }] };
+}
+
+test('SSM browses path boundaries and durable parameter details without invented metadata', async ({ page }) => {
+  await inventory(page, 'ssm', ssmFixture());
+  await page.goto('/ssm/parameters');
+  await page.getByRole('button', { name: '/app/', exact: true }).click();
+  await expect(page.getByRole('button', { name: '/apple/config', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '/app/prod/', exact: true }).click();
+  await page.getByRole('button', { name: '/app/prod/password', exact: true }).click();
+  await expect(page).toHaveURL(/parameter=%2Fapp%2Fprod%2Fpassword/);
+  await expect(page.getByText('alias/customer-key', { exact: true })).toBeVisible();
+  await expect(page.getByText('Advanced', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: '/app/prod/password', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/screenshots/ssm-parameter-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/screenshots/ssm-parameter-mobile.png', fullPage: true });
+  await page.goto('/ssm/details?parameter=%2Fapp%2Fprod%2Fendpoint');
+  await expect(page.getByText('Unavailable', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('Active value', { exact: true })).toHaveCount(0);
+});
+
+test('SSM reveals values and historical versions only on request and hides them on navigation', async ({ page }) => {
+  let reveals = 0;
+  let revealedPath = '';
+  await inventory(page, 'ssm', ssmFixture());
+  await page.route('**/api/ssm/history/**', route => route.fulfill({ json: { parameters: [{ Version: 3, LastModifiedDate: '2026-10-19T12:00:00Z', Labels: ['current'] }, { Version: 2 }] } }));
+  await page.route('**/api/ssm/parameters/**', route => { reveals++; revealedPath = decodeURIComponent(new URL(route.request().url()).pathname); return route.fulfill({ json: { value: '  secret value\n', version: revealedPath.includes(':2') ? 2 : 3 } }); });
+  await page.goto('/ssm/details?parameter=%2Fapp%2Fprod%2Fpassword');
+  await expect(page.getByRole('button', { name: 'Reveal decrypted value' })).toBeVisible();
+  expect(reveals).toBe(0);
+  await page.getByRole('button', { name: 'Reveal decrypted value' }).click();
+  await expect(page.getByText('secret value', { exact: true })).toBeVisible();
+  expect(revealedPath).toBe('/api/ssm/parameters//app/prod/password/value/');
+  await page.getByRole('button', { name: 'Hide value' }).click();
+  await expect(page.getByText('secret value', { exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Version history', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'View version 2' })).toBeVisible();
+  expect(reveals).toBe(1);
+  await page.getByRole('button', { name: 'View version 2' }).click();
+  await expect(page.getByRole('heading', { name: 'Value · version 2', exact: true })).toBeVisible();
+  expect(revealedPath).toContain('/app/prod/password:2/value/');
+  await page.getByRole('link', { name: 'Parameter Store', exact: true }).first().click();
+  await page.getByRole('checkbox', { name: 'Include nested paths' }).check();
+  await page.getByRole('button', { name: '/app/prod/endpoint', exact: true }).click();
+  await expect(page.getByText('secret value', { exact: true })).toHaveCount(0);
+});
+
+test('SSM creation preserves whitespace without overwriting and editing creates a new version', async ({ page }) => {
+  const fixture = ssmFixture();
+  const requests: any[] = [];
+  await page.route('**/api/ssm/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/ssm/') return route.fulfill({ json: fixture });
+    requests.push({ method: route.request().method(), path: decodeURIComponent(url.pathname), ...route.request().postDataJSON() });
+    fixture.parameters.push({ name: '/app/prod/new', type: 'String', version: 1 });
+    return route.fulfill({ json: { name: '/app/prod/new', version: 1 } });
+  });
+  await page.goto('/ssm/parameters');
+  await page.getByRole('button', { name: 'Create parameter', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Parameter name', exact: true }).fill('/app/prod/new');
+  await dialog.getByRole('textbox', { name: 'Value', exact: true }).fill('  keep whitespace\n');
+  await dialog.getByRole('button', { name: 'Create parameter', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '/app/prod/new', exact: true })).toBeVisible();
+  expect(requests[0].overwrite).toBe(false);
+  expect(requests[0].value).toBe('  keep whitespace\n');
+  await page.getByRole('button', { name: 'Edit parameter', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'New value', exact: true }).fill(' next version ');
+  await dialog.getByRole('button', { name: 'Save new version', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests[1].method).toBe('PUT');
+  expect(requests[1].path).toBe('/api/ssm/parameters//app/prod/new/value/');
+  expect(requests[1].value).toBe(' next version ');
+});
+
+test('SSM tags accept an empty value and parameter deletion requires confirmation', async ({ page }) => {
+  const fixture = ssmFixture();
+  let tags: any[] = [];
+  let deletion = '';
+  await inventory(page, 'ssm', fixture);
+  await page.route('**/api/ssm/tags/**', route => {
+    if (route.request().method() === 'POST') tags = route.request().postDataJSON().tags;
+    if (route.request().method() === 'DELETE') tags = [];
+    return route.fulfill({ json: { tags } });
+  });
+  await page.route('**/api/ssm/parameters/**', route => { deletion = decodeURIComponent(new URL(route.request().url()).pathname); return route.fulfill({ json: {} }); });
+  await page.goto('/ssm/tags?parameter=%2Fapp%2Fprod%2Fpassword');
+  await page.getByRole('button', { name: 'Add tag', exact: true }).click();
+  await page.getByRole('dialog').getByRole('textbox', { name: 'Tag key' }).fill('owner');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save tag' }).click();
+  await expect(page.getByRole('table').getByText('owner', { exact: true })).toBeVisible();
+  expect(tags).toEqual([{ Key: 'owner', Value: '' }]);
+  await page.getByRole('button', { name: 'Remove tag', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove tag', exact: true }).click();
+  await expect(page.getByText('No tags associated with this parameter.')).toBeVisible();
+  await page.getByRole('button', { name: 'Delete parameter', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('All versions of this parameter will be deleted.');
+  expect(deletion).toBe('');
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page).toHaveURL(/ssm\/parameters/);
+  expect(deletion).toBe('/api/ssm/parameters//app/prod/password/value/');
+});
+
+test('SSM shows real history errors and validates document creation', async ({ page }) => {
+  await inventory(page, 'ssm', ssmFixture());
+  await page.route('**/api/ssm/history/**', route => route.fulfill({ status: 403, json: { error: 'History access denied' } }));
+  await page.goto('/ssm/history?parameter=%2Fapp%2Fprod%2Fpassword');
+  await expect(page.getByText('History access denied', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /View version/ })).toHaveCount(0);
+  await page.goto('/ssm/documents');
+  await expect(page.getByRole('table')).toContainText('RunTask');
+  await page.getByRole('button', { name: 'Create document', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Document name' }).fill('NewTask');
+  await dialog.getByRole('textbox', { name: 'Document content (JSON)' }).fill('{');
+  await dialog.getByRole('button', { name: 'Create document', exact: true }).click();
+  await expect(dialog.getByText('Enter valid JSON for the document.', { exact: true })).toBeVisible();
+});
+
+function sesFixture() {
+  return {
+    account: { ProductionAccessEnabled: false, SendingEnabled: true },
+    account_sending_enabled: { Enabled: true }, send_quota: { Max24HourSend: 200, MaxSendRate: 1, SentLast24Hours: 0 },
+    identities: [
+      { name: 'sender@example.com', type: 'email', verification: { VerificationStatus: 'Success' }, dkim: { DkimEnabled: true, DkimVerificationStatus: 'Success' } },
+      { name: 'example.org', type: 'domain', verification: { VerificationStatus: 'Pending', VerificationToken: 'domain-token' }, dkim: { DkimEnabled: false, DkimVerificationStatus: 'Pending', DkimTokens: ['dkim-token'] }, notifications: { BounceTopic: 'arn:aws:sns:eu-west-1:123456789012:bounces', ForwardingEnabled: false } },
+      { name: 'verified.example.com', verification: { VerificationStatus: 'Success' } },
+      { name: 'unknown@example.com', type: 'email' },
+    ],
+    templates: [{ name: 'Welcome', created: '2026-10-19T12:00:00Z', details: { SubjectPart: 'Hello {{name}}', TextPart: 'Welcome {{name}}' } }],
+    v2_configuration_sets: [{ name: 'transactional', sending_enabled: false, event_destinations: [], delivery_options: { TlsPolicy: 'REQUIRE' } }],
+    mailbox: { messages: [] },
+  };
+}
+
+test('SES reports actual sending readiness and browses identity verification details with durable routes', async ({ page }) => {
+  await inventory(page, 'ses', sesFixture());
+  await page.goto('/ses/overview');
+  await expect(page.getByText('Sandbox', { exact: true })).toBeVisible();
+  await expect(page.getByText('0', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Manage identities' }).click();
+  const table = page.getByRole('table');
+  await expect(table.getByRole('row').filter({ hasText: 'unknown@example.com' })).toContainText('Unavailable');
+  await expect(table.getByRole('row').filter({ hasText: 'unknown@example.com' })).not.toContainText('Verified');
+  await page.getByRole('button', { name: 'example.org', exact: true }).click();
+  await expect(page).toHaveURL(/identity=example.org/);
+  await expect(page.getByText('Verification is not confirmed', { exact: true })).toBeVisible();
+  await expect(page.getByText('_amazonses.example.org', { exact: true })).toBeVisible();
+  await expect(page.getByText('domain-token', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'DKIM authentication' }).click();
+  await expect(page.getByText('dkim-token', { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('tab', { name: 'DKIM authentication' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'Notifications', exact: true }).click();
+  await expect(page.getByText('arn:aws:sns:eu-west-1:123456789012:bounces', { exact: true })).toBeVisible();
+  await page.goto('/ses/details?identity=example.org');
+  await page.screenshot({ path: 'test-results/screenshots/ses-identity-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/screenshots/ses-identity-mobile.png', fullPage: true });
+});
+
+test('SES requests verification without claiming success and surfaces account errors', async ({ page }) => {
+  const fixture = sesFixture();
+  await inventory(page, 'ses', fixture);
+  await page.route('**/api/ses/identities/email/', async route => {
+    const body = route.request().postDataJSON();
+    fixture.identities.push({ name: body.email_address, type: 'email', verification: { VerificationStatus: 'Pending' } });
+    await route.fulfill({ json: { identity: body.email_address } });
+  });
+  await page.goto('/ses/identities');
+  await page.getByRole('button', { name: 'Create identity', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Email address', exact: true }).fill('new@example.com');
+  await dialog.getByRole('button', { name: 'Request verification' }).click();
+  await expect(page.getByRole('heading', { name: 'new@example.com', exact: true })).toBeVisible();
+  await expect(page.getByText('Verification is not confirmed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Pending', { exact: true })).toBeVisible();
+  await page.route('**/api/ses/', route => route.fulfill({ json: { account_sending_enabled: { error: 'Sending status access denied' }, identities: ['legacy@example.com'] } }));
+  await page.goto('/ses/overview');
+  await expect(page.getByText('Sending status access denied', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Enable account sending' })).toBeDisabled();
+  await page.goto('/ses/send?source=legacy%40example.com');
+  await expect(page.getByRole('button', { name: 'Send test email', exact: true })).toBeDisabled();
+});
+
+test('SES composes local test email with verified sender gating, exact content and acceptance ID', async ({ page }) => {
+  await inventory(page, 'ses', sesFixture());
+  let sent: any;
+  await page.route('**/api/ses/email/send/', async route => { sent = route.request().postDataJSON(); await route.fulfill({ json: { message_id: 'accepted-message-id' } }); });
+  await page.goto('/ses/send');
+  await page.getByRole('textbox', { name: 'From address' }).fill('attacker@notverified.example.com');
+  await page.getByRole('textbox', { name: 'To addresses' }).fill('recipient@example.com');
+  await page.getByRole('textbox', { name: 'Subject', exact: true }).fill('Test subject');
+  await page.getByRole('textbox', { name: 'Text body', exact: true }).fill('  preserve body\n');
+  await expect(page.getByRole('button', { name: 'Send test email', exact: true })).toBeDisabled();
+  await page.getByRole('textbox', { name: 'From address' }).fill('sender@verified.example.com');
+  await expect(page.getByRole('button', { name: 'Send test email', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Send test email', exact: true }).click();
+  await expect(page.getByText('Message accepted', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Message ID: accepted-message-id/)).toBeVisible();
+  expect(sent).toEqual({ source: 'sender@verified.example.com', to_addresses: ['recipient@example.com'], subject: 'Test subject', text: '  preserve body\n' });
+  await page.getByRole('textbox', { name: 'From address' }).fill('sender@evilverified.example.com');
+  await expect(page.getByRole('button', { name: 'Send test email', exact: true })).toBeDisabled();
+});
+
+test('SES templates use backend field names and clear rendered output between templates', async ({ page }) => {
+  await inventory(page, 'ses', sesFixture());
+  let created: any;
+  await page.route('**/api/ses/templates/', async route => { created = route.request().postDataJSON(); await route.fulfill({ json: { template_name: created.template_name } }); });
+  await page.route('**/api/ses/templates/Welcome/render/', route => route.fulfill({ json: { rendered_template: 'Hello Alice' } }));
+  await page.goto('/ses/templates');
+  await expect(page.getByRole('table')).toContainText('Hello {{name}}');
+  await page.getByRole('button', { name: 'Create template', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('NewTemplate');
+  await dialog.getByRole('textbox', { name: 'Subject', exact: true }).fill('Hello');
+  await dialog.getByRole('textbox', { name: 'Text body', exact: true }).fill('  template body\n');
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(created).toEqual({ template_name: 'NewTemplate', subject: 'Hello', html: '', text: '  template body\n' });
+  await page.getByRole('button', { name: 'Test render', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'Template data (JSON)' }).fill('{');
+  await dialog.getByRole('button', { name: 'Render template', exact: true }).click();
+  await expect(dialog.getByText('Enter valid JSON for the template data.')).toBeVisible();
+  await dialog.getByRole('textbox', { name: 'Template data (JSON)' }).fill('{"name":"Alice"}');
+  await dialog.getByRole('button', { name: 'Render template', exact: true }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Rendered message source' })).toHaveValue('Hello Alice');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Test render', exact: true }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Rendered message source' })).toHaveCount(0);
+});
+
+test('SES account sending uses PUT after confirmation and configuration sets retain paused status', async ({ page }) => {
+  const fixture = sesFixture(); let method = '';
+  await inventory(page, 'ses', fixture);
+  await page.route('**/api/ses/account/sending/', async route => { method = route.request().method(); fixture.account_sending_enabled.Enabled = route.request().postDataJSON().enabled; await route.fulfill({ json: { enabled: false } }); });
+  await page.goto('/ses/overview');
+  await page.getByRole('button', { name: 'Pause account sending', exact: true }).click();
+  expect(method).toBe('');
+  await expect(page.getByRole('dialog')).toContainText('every application');
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Enable account sending', exact: true })).toBeEnabled();
+  expect(method).toBe('PUT');
+  await page.goto('/ses/configsets');
+  await expect(page.getByRole('row').filter({ hasText: 'transactional' })).toContainText('Paused');
+  await expect(page.getByRole('row').filter({ hasText: 'transactional' })).toContainText('REQUIRE');
+});
+
+test('SES local mailbox preserves real message metadata and confirms DELETE clearing', async ({ page }) => {
+  await inventory(page, 'ses', sesFixture());
+  let cleared = false;
+  await page.route('**/api/inspector/ses/messages/', route => route.fulfill({ json: { messages: cleared ? [] : [{ MessageId: 'real-message', Source: 'sender@example.com', Destination: { ToAddresses: ['recipient@example.com'] }, Message: { Subject: { Data: 'Captured subject' }, Body: { Text: { Data: 'Captured text' }, Html: { Data: '<script>window.untrustedEmail=true</script>' } } } }] } }));
+  let method = '';
+  await page.route('**/api/ses/mailbox/', async route => { method = route.request().method(); cleared = true; await route.fulfill({ json: {} }); });
+  await page.goto('/ses/mailbox');
+  await expect(page.getByRole('table')).toContainText('real-message');
+  await expect(page.getByRole('table')).toContainText('recipient@example.com');
+  await page.getByRole('button', { name: 'Captured subject', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Captured text', { exact: true })).toBeVisible();
+  await dialog.getByRole('tab', { name: 'HTML source', exact: true }).click();
+  await expect(dialog.getByText('<script>window.untrustedEmail=true</script>', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).untrustedEmail)).toBeUndefined();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Clear local mailbox', exact: true }).click();
+  expect(method).toBe('');
+  await dialog.getByRole('button', { name: 'Clear mailbox', exact: true }).click();
+  await expect(page.getByText(/No captured messages. Send a local test email/)).toBeVisible();
+  expect(method).toBe('DELETE');
+});
+
+function sessionFixture(user = 'alice') {
+  return {
+    region: 'eu-west-1', endpoint_url: 'http://local-floci:4566', identity_resolved: true,
+    credential_source: 'environment', caller_identity: { account: '123456789012', arn: `arn:aws:iam::123456789012:user/${user}`, user_id: user },
+    session_identity: null as any,
+  };
+}
+const identityOptions = { users: [{ name: 'alice', arn: 'arn:aws:iam::123456789012:user/alice' }, { name: 'bob', arn: 'arn:aws:iam::123456789012:user/bob' }], roles: [{ name: 'AppRole', arn: 'arn:aws:iam::123456789012:role/team/application/AppRole', path: '/team/application/' }], errors: {} };
+
+test('Session identity normalizes real lowercase caller metadata without administrator assumptions', async ({ page }) => {
+  await page.route('**/api/session-identity/', route => route.fulfill({ json: sessionFixture() }));
+  await page.route('**/api/session-identity/options/', route => route.fulfill({ json: identityOptions }));
+  await page.goto('/environment/');
+  await expect(page.getByRole('button', { name: 'alice @ 123456789012', exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText('arn:aws:iam::123456789012:user/alice', { exact: true })).toBeVisible();
+  await expect(page.getByText('Verified by STS', { exact: true })).toBeVisible();
+  await expect(page.getByText('Root Admin', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Full AdministratorAccess', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Persistent (Never expires)', { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/screenshots/session-identity-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: 'test-results/screenshots/session-identity-mobile.png', fullPage: true });
+});
+
+test('Session identity shows unresolved STS and request failures without trusting local hints', async ({ page }) => {
+  await page.route('**/api/session-identity/', route => route.fulfill({ json: { ...sessionFixture(), identity_resolved: false, identity_error: 'STS unavailable', caller_identity: { account: 'local', arn: 'test (local credentials)', user_id: 'test' } } }));
+  await page.goto('/environment/');
+  await expect(page.getByText('Caller identity could not be verified', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Identity unavailable', exact: true })).toBeVisible();
+  await expect(page.getByText('test (local credentials)', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('000000000000', { exact: true })).toHaveCount(0);
+  await page.route('**/api/session-identity/', route => route.fulfill({ status: 503, json: { error: 'Session service unavailable' } }));
+  await page.getByRole('button', { name: 'Refresh identity', exact: true }).click();
+  await expect(page.getByText('Unable to load session identity', { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText(/Session service unavailable/)).toBeVisible();
+});
+
+test('Session identity uses listed role ARNs with paths and updates global identity and expiry', async ({ page }) => {
+  await page.route('**/api/session-identity/', route => route.fulfill({ json: sessionFixture() }));
+  await page.route('**/api/session-identity/options/', route => route.fulfill({ json: identityOptions }));
+  let request: any;
+  const expires = new Date(Date.now() + 3600_000).toISOString();
+  await page.route('**/api/session-identity/assume-role/', async route => {
+    request = route.request().postDataJSON();
+    await route.fulfill({ json: { ...sessionFixture('role-session'), caller_identity: { account: '123456789012', user_id: 'role-session', arn: 'arn:aws:sts::123456789012:assumed-role/AppRole/review-session' }, session_identity: { type: 'assumed_role', label: 'AppRole/review-session', expires_at: expires, has_session_token: true }, changed: true } });
+  });
+  await page.goto('/environment/role');
+  await page.getByRole('combobox', { name: 'Role ARN', exact: true }).fill('AppRole');
+  await page.getByRole('option', { name: /^AppRole / }).click();
+  await page.getByRole('textbox', { name: 'Role session name', exact: true }).fill('review-session');
+  await expect(page.getByText('team/application/AppRole', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Switch role', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'role-session @ 123456789012', exact: true })).toBeVisible();
+  await expect(page.getByText('Assumed role', { exact: true })).toBeVisible();
+  expect(request).toEqual({ role_name: 'AppRole', session_name: 'review-session', account_id: '123456789012', role_arn: 'arn:aws:iam::123456789012:role/team/application/AppRole' });
+  await page.getByRole('tab', { name: 'IAM user', exact: true }).click();
+  await expect(page).toHaveURL(/environment\/user$/);
+});
+
+test('Session identity permits manual user entry when listing fails and confirms replacing all keys', async ({ page }) => {
+  await page.route('**/api/session-identity/', route => route.fulfill({ json: sessionFixture() }));
+  await page.route('**/api/session-identity/options/', route => route.fulfill({ json: { users: [], roles: [], errors: { users: 'ListUsers denied' } } }));
+  const requests: any[] = [];
+  await page.route('**/api/session-identity/use-user/', async route => { requests.push(route.request().postDataJSON()); await route.fulfill({ json: { ...sessionFixture('bob'), changed: true, session_identity: { type: 'user', label: 'bob' } } }); });
+  await page.goto('/environment/user');
+  await expect(page.getByText('User list unavailable', { exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'IAM user name', exact: true }).fill('bob');
+  await page.getByRole('checkbox', { name: 'Replace all existing access keys for this user', exact: true }).check();
+  await page.getByRole('button', { name: 'Switch user', exact: true }).click();
+  expect(requests).toHaveLength(0);
+  await expect(page.getByRole('dialog')).toContainText('All existing access keys for bob will be deleted');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(requests).toHaveLength(0);
+  await page.getByRole('button', { name: 'Switch user', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Replace keys and switch user', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'bob @ 123456789012', exact: true })).toBeVisible();
+  expect(requests).toEqual([{ user_name: 'bob', rotate_access_keys: true }]);
+});
+
+test('Session identity reports expired sessions and restores configured credentials without admin claims', async ({ page }) => {
+  const role = { ...sessionFixture('expired-role'), session_identity: { type: 'assumed_role', label: 'AppRole/review', expires_at: '2000-01-01T00:00:00Z', has_session_token: true, secret_access_key: 'NEVER-SHOW-SECRET', session_token: 'NEVER-SHOW-TOKEN' } };
+  await page.route('**/api/session-identity/', route => route.fulfill({ json: role }));
+  let restores = 0;
+  await page.route('**/api/session-identity/use-admin/', async route => { restores++; await route.fulfill({ json: { ...sessionFixture('configured-user'), changed: true } }); });
+  await page.goto('/environment/configured');
+  await expect(page.getByText('Session expired', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Session metadata', exact: true }).click();
+  await expect(page.getByText(/NEVER-SHOW-SECRET/)).toHaveCount(0);
+  await expect(page.getByText(/NEVER-SHOW-TOKEN/)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Use configured credentials', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'configured-user @ 123456789012', exact: true })).toBeVisible();
+  await expect(page.getByText('Session expired', { exact: true })).toHaveCount(0);
+  expect(restores).toBe(1);
+});
+
+test('Session identity ignores older refresh responses after a newer session change', async ({ page }) => {
+  let delayed = false;
+  await page.route('**/api/session-identity/', async route => {
+    if (delayed) await new Promise(resolve => setTimeout(resolve, 350));
+    await route.fulfill({ json: sessionFixture('old-user') });
+  });
+  await page.goto('/environment/');
+  await expect(page.getByRole('button', { name: 'old-user @ 123456789012', exact: true })).toBeVisible();
+  delayed = true;
+  const staleResponse = page.waitForResponse(response => response.url().endsWith('/api/session-identity/'));
+  await page.evaluate(() => window.dispatchEvent(new Event('floci_session_changed')));
+  await page.evaluate(payload => window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: payload })), sessionFixture('new-user'));
+  await staleResponse;
+  await expect(page.getByRole('button', { name: 'new-user @ 123456789012', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'old-user @ 123456789012', exact: true })).toHaveCount(0);
+});
+
+const cliResponse = (stdout = '{"Account":"123456789012"}\n', stderr = '', exitCode = 0) => ({
+  command: 'aws sts get-caller-identity', exit_code: exitCode, stdout, stderr, duration_ms: 18,
+  endpoint_url: 'http://local-floci:4566', region: 'eu-west-1', credential_source: 'environment',
+  executed_args: ['aws', '--endpoint-url', 'http://local-floci:4566', 'sts', 'get-caller-identity'],
+});
+
+test('CLI shows actual exit status, timing and both output streams', async ({ page }) => {
+  await page.route('**/api/console/run/', route => route.fulfill({ json: cliResponse('{"partial":true}\n', 'An operation failed\n', 7) }));
+  await page.goto('/console/');
+  await page.getByRole('button', { name: 'Run command', exact: true }).click();
+  await expect(page.locator('pre[aria-label="stdout"]')).toHaveText('{"partial":true}\n');
+  await expect(page.locator('pre[aria-label="stderr"]')).toHaveText('An operation failed\n');
+  await expect(page.getByText('Exit code 7', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('18 ms', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Execution details', exact: true }).click();
+  await expect(page.locator('pre[aria-label="Executed command"]')).toContainText('--endpoint-url http://local-floci:4566');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'test-results/screenshots/cli-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'test-results/screenshots/cli-mobile.png', fullPage: true });
+});
+
+test('CLI handles real 409 confirmation responses and runs the frozen command once', async ({ page }) => {
+  const requests: any[] = [];
+  await page.route('**/api/console/run/', async route => {
+    const body = route.request().postDataJSON(); requests.push(body);
+    if (!body.confirmed) return route.fulfill({ status: 409, json: { requires_confirmation: true, command: body.command, message: 'This command removes a local bucket.' } });
+    await new Promise(resolve => setTimeout(resolve, 100));
+    return route.fulfill({ json: { ...cliResponse('', ''), command: body.command } });
+  });
+  await page.goto('/console/');
+  const input = page.getByRole('textbox', { name: 'AWS CLI command', exact: true });
+  await input.fill('aws s3 rb s3://test-bucket');
+  await page.getByRole('button', { name: 'Run command', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('This command removes a local bucket.');
+  await expect(input).toBeDisabled();
+  await expect(dialog.locator('pre')).toHaveText('aws s3 rb s3://test-bucket');
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(requests).toEqual([{ command: 'aws s3 rb s3://test-bucket', confirmed: false }]);
+  await page.getByRole('button', { name: 'Run command', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Confirm and run', exact: true }).evaluate((element: HTMLButtonElement) => { element.click(); element.click(); });
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('Exit code 0', { exact: true }).first()).toBeVisible();
+  expect(requests).toHaveLength(3);
+  expect(requests[2]).toEqual({ command: 'aws s3 rb s3://test-bucket', confirmed: true });
+});
+
+test('CLI presets and history recall load commands without executing them', async ({ page }) => {
+  const commands: string[] = [];
+  await page.route('**/api/console/run/', async route => { commands.push(route.request().postDataJSON().command); await route.fulfill({ json: cliResponse('bucket-list\n') }); });
+  await page.goto('/console/');
+  await page.getByRole('button', { name: /^Command presets / }).click();
+  await page.getByRole('option', { name: 'S3 · List buckets', exact: true }).click();
+  const input = page.getByRole('textbox', { name: 'AWS CLI command', exact: true });
+  await expect(input).toHaveValue('aws s3 ls');
+  expect(commands).toHaveLength(0);
+  await input.press('Control+Enter');
+  await expect(page.locator('pre[aria-label="stdout"]')).toHaveText('bucket-list\n');
+  await input.fill('aws sqs list-queues');
+  await input.press('Alt+ArrowUp');
+  await expect(input).toHaveValue('aws s3 ls');
+  await input.press('Alt+ArrowDown');
+  await expect(input).toHaveValue('aws sqs list-queues');
+  await page.getByRole('button', { name: 'Load command', exact: true }).click();
+  await expect(input).toHaveValue('aws s3 ls');
+  expect(commands).toEqual(['aws s3 ls']);
+  await page.getByRole('button', { name: 'Manage session', exact: true }).click();
+  await page.goBack();
+  await expect(page.getByRole('table')).toContainText('aws s3 ls');
+  expect(commands).toHaveLength(1);
+  await page.getByRole('button', { name: 'Clear history', exact: true }).click();
+  await expect(page.getByText('No commands run in this session context yet.', { exact: true })).toBeVisible();
+  await expect(page.locator('pre[aria-label="stdout"]')).toHaveCount(0);
+});
+
+test('CLI formats JSON primitives, preserves empty output, and reports truncation and request errors', async ({ page }) => {
+  let output = 'false'; let truncate = false; let fail = false;
+  await page.route('**/api/console/run/', route => fail ? route.fulfill({ status: 408, json: { error: 'Command timed out after 30 seconds.' } }) : route.fulfill({ json: { ...cliResponse(output), stdout_truncated: truncate, output_limit: 100000 } }));
+  await page.goto('/console/');
+  for (const value of ['false', '0', '[]']) {
+    output = value;
+    await page.getByRole('button', { name: 'Run command', exact: true }).click();
+    await page.getByRole('tab', { name: 'Formatted JSON', exact: true }).click();
+    await expect(page.locator('pre[aria-label="JSON output"]')).toHaveText(value);
+  }
+  truncate = true; output = '[1]';
+  await page.getByRole('button', { name: 'Run command', exact: true }).click();
+  await expect(page.getByText(/Output was truncated/)).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Formatted JSON', exact: true })).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'Wrap output lines', exact: true }).uncheck();
+  await expect(page.locator('pre[aria-label="stdout"]')).toHaveCSS('white-space', 'pre');
+  output = ''; truncate = false;
+  await page.getByRole('button', { name: 'Run command', exact: true }).click();
+  await expect(page.getByText('No standard output returned.', { exact: true })).toBeVisible();
+  fail = true;
+  await page.getByRole('button', { name: 'Run command', exact: true }).click();
+  await expect(page.getByText('Command request failed', { exact: true })).toBeVisible();
+  await expect(page.getByText('Command timed out after 30 seconds.', { exact: true })).toBeVisible();
+});
+
+test('CLI prevents repeated keyboard submission and isolates history after a session change', async ({ page }) => {
+  let count = 0;
+  await page.route('**/api/console/run/', async route => { count++; await new Promise(resolve => setTimeout(resolve, 150)); await route.fulfill({ json: cliResponse('old-session-output') }); });
+  await page.goto('/console/');
+  const input = page.getByRole('textbox', { name: 'AWS CLI command', exact: true });
+  await input.press('Control+Enter');
+  await input.press('Control+Enter');
+  await expect(page.locator('pre[aria-label="stdout"]')).toHaveText('old-session-output');
+  expect(count).toBe(1);
+  await page.evaluate(payload => window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: payload })), sessionFixture('different-user'));
+  await expect(page.getByRole('button', { name: 'different-user @ 123456789012', exact: true })).toBeVisible();
+  await expect(page.getByText('No commands run in this session context yet.', { exact: true })).toBeVisible();
+  await expect(page.getByText('old-session-output', { exact: true })).toHaveCount(0);
+});
+
+test('CLI ignores late output from a command submitted under a previous session', async ({ page }) => {
+  await page.route('**/api/console/run/', async route => { await new Promise(resolve => setTimeout(resolve, 400)); await route.fulfill({ json: cliResponse('late-private-output') }); });
+  await page.goto('/console/');
+  const completed = page.waitForResponse(response => response.url().endsWith('/api/console/run/'));
+  await page.getByRole('button', { name: 'Run command', exact: true }).click();
+  await page.evaluate(payload => window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: payload })), sessionFixture('new-cli-user'));
+  await completed;
+  await expect(page.getByRole('button', { name: 'new-cli-user @ 123456789012', exact: true })).toBeVisible();
+  await expect(page.getByText('late-private-output', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('No commands run in this session context yet.', { exact: true })).toBeVisible();
+});
+
+const polishedSecret = {
+  name: 'production/database/credentials', arn: 'arn:aws:secretsmanager:eu-west-1:123456789012:secret:production/database/credentials-AbCdEf',
+  description: 'Credentials used by the production application', kms_key_id: 'alias/application-secrets',
+  created: '2026-10-01T12:00:00Z', last_changed: '2026-10-20T12:00:00Z', rotation_enabled: true,
+  rotation_lambda_arn: 'arn:aws:lambda:eu-west-1:123456789012:function:rotate-database',
+  rotation_rules: { AutomaticallyAfterDays: 30, Duration: '2h' }, next_rotation: '2026-11-19T12:00:00Z',
+  tags: [{ Key: 'environment', Value: 'production' }],
+  versions: [{ VersionId: 'version-current', VersionStages: ['AWSCURRENT'], CreatedDate: '2026-10-20T12:00:00Z' },
+    { VersionId: 'version-previous', VersionStages: ['AWSPREVIOUS'], CreatedDate: '2026-10-01T12:00:00Z' }],
+};
+const secretDetailsUrl = `/secretsmanager/details?secret=${encodeURIComponent(polishedSecret.name)}`;
+
+test('Secrets Manager metadata, lifecycle, rotation and versions use real inventory fields', async ({ page }) => {
+  let reveals = 0;
+  await inventory(page, 'secretsmanager', { secrets: [polishedSecret, { name: 'pending-cleanup', deleted: '2026-10-27T12:00:00Z', rotation_enabled: false }] });
+  await page.route('**/api/secretsmanager/secrets/**/value/**', route => { reveals++; return route.fulfill({ json: {} }); });
+  await page.goto('/secretsmanager/');
+  await expect(page.getByText('Active Credentials', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: polishedSecret.name, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp('details\\?secret='));
+  await expect(page.getByText('alias/application-secrets', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: `Secret: ${polishedSecret.name}`, exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Rotation', exact: true }).click();
+  await expect(page.getByText('30 days', { exact: true })).toBeVisible();
+  await expect(page.getByText(polishedSecret.rotation_lambda_arn, { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Versions (2)', exact: true }).click();
+  await expect(page.getByText('AWSPREVIOUS', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Tags (1)', exact: true }).click();
+  await expect(page.getByRole('cell', { name: 'production', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Secret details', exact: true })).toBeVisible();
+  expect(reveals).toBe(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'test-results/screenshots/secretsmanager-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'test-results/screenshots/secretsmanager-mobile.png', fullPage: true });
+});
+
+test('Secrets Manager explicitly retrieves and edits values through dedicated endpoints', async ({ page }) => {
+  const requests: { method: string; payload?: any; url: string }[] = [];
+  await inventory(page, 'secretsmanager', { secrets: [polishedSecret] });
+  await page.route('**/api/secretsmanager/secrets/**/value/**', async route => {
+    requests.push({ method: route.request().method(), payload: route.request().postDataJSON(), url: route.request().url() });
+    return route.fulfill({ json: route.request().method() === 'GET' ? {
+      type: 'string', value: '{"username":"dbadmin","password":"current-secret"}', size_bytes: 49,
+      version_id: 'version-current', version_stages: ['AWSCURRENT'],
+    } : { version_id: 'version-new' } });
+  });
+  await page.goto(secretDetailsUrl);
+  await page.getByRole('button', { name: 'Retrieve secret value', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('pre')).toContainText('current-secret');
+  await dialog.getByRole('checkbox', { name: 'Format JSON', exact: true }).check();
+  await expect(dialog.locator('pre')).toContainText('"username": "dbadmin"');
+  await dialog.getByRole('button', { name: 'Edit value', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'New secret value', exact: true }).fill('replacement-secret');
+  await dialog.getByRole('button', { name: 'Save new version', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests.map(r => r.method)).toEqual(['GET', 'PUT']);
+  expect(requests[1].payload).toEqual({ value: 'replacement-secret' });
+  expect(requests[0].url).toContain(encodeURIComponent(polishedSecret.arn));
+  await expect(page.getByText('Stored a new version of production/database/credentials.', { exact: true })).toBeVisible();
+  await expect(page.getByText('replacement-secret', { exact: true })).toHaveCount(0);
+});
+
+test('Secrets Manager retrieves specific binary versions and handles value errors without fake values', async ({ page }) => {
+  let fail = false;
+  await inventory(page, 'secretsmanager', { secrets: [polishedSecret] });
+  await page.route('**/api/secretsmanager/secrets/**/value/**', route => {
+    if (fail) return route.fulfill({ status: 403, json: { error: 'Access denied to this version' } });
+    expect(new URL(route.request().url()).searchParams.get('version_id')).toBe('version-previous');
+    return route.fulfill({ json: { type: 'binary', value: 'AP8=', size_bytes: 2, version_id: 'version-previous', version_stages: ['AWSPREVIOUS'] } });
+  });
+  await page.goto(secretDetailsUrl);
+  await page.getByRole('tab', { name: 'Versions (2)', exact: true }).click();
+  await page.getByRole('row').filter({ hasText: 'version-previous' }).getByRole('button', { name: 'Retrieve version' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Binary (base64)', { exact: true })).toBeVisible();
+  await expect(dialog.locator('pre')).toHaveText('AP8=');
+  await expect(dialog.getByRole('button', { name: 'Edit value', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  fail = true;
+  await page.getByRole('row').filter({ hasText: 'version-current' }).getByRole('button', { name: 'Retrieve version' }).click();
+  await expect(dialog.getByText('Access denied to this version', { exact: true })).toBeVisible();
+  await expect(dialog.locator('pre')).toHaveCount(0);
+});
+
+test('Secrets Manager creates blank-default secrets and edits metadata without a fake action dispatch', async ({ page }) => {
+  const requests: any[] = [];
+  await inventory(page, 'secretsmanager', { secrets: [polishedSecret] });
+  await page.route('**/api/secretsmanager/secrets/', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: {} }); });
+  await page.route('**/api/secretsmanager/secrets/**/metadata/', route => { requests.push(route.request().postDataJSON()); expect(route.request().method()).toBe('PATCH'); return route.fulfill({ json: {} }); });
+  await page.goto('/secretsmanager/');
+  await page.getByRole('button', { name: 'Store a new secret', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('textbox', { name: 'Secret value', exact: true })).toHaveValue('');
+  await expect(dialog.getByRole('button', { name: 'Store secret', exact: true })).toBeDisabled();
+  await dialog.getByRole('textbox', { name: 'Secret name', exact: true }).fill('new/application');
+  await dialog.getByRole('textbox', { name: 'Secret value', exact: true }).fill('false');
+  await dialog.getByRole('button', { name: 'Store secret', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests[0]).toEqual({ name: 'new/application', value: 'false', description: '', kms_key_id: '' });
+  await page.goto(secretDetailsUrl);
+  await page.getByRole('button', { name: 'Edit details', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'Description', exact: true }).fill('Updated description');
+  await expect(dialog.getByRole('textbox', { name: 'Encryption key', exact: true })).toHaveValue('alias/application-secrets');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests[1]).toEqual({ description: 'Updated description', kms_key_id: 'alias/application-secrets' });
+});
+
+test('Secrets Manager schedules recoverable deletion and can cancel deletion', async ({ page }) => {
+  const requests: any[] = [];
+  let deleted = false;
+  await page.route('**/api/secretsmanager/', route => route.fulfill({ json: { secrets: [{ ...polishedSecret, deleted: deleted ? '2026-10-27T12:00:00Z' : undefined }] } }));
+  await page.route('**/api/secretsmanager/secrets/**/value/', route => {
+    expect(route.request().method()).toBe('DELETE'); requests.push(route.request().postDataJSON()); deleted = true;
+    return route.fulfill({ json: { deletion_date: '2026-10-27T12:00:00Z' } });
+  });
+  await page.route('**/api/secretsmanager/secrets/**/restore/', route => { expect(route.request().method()).toBe('POST'); deleted = false; return route.fulfill({ json: { restored: true } }); });
+  await page.goto(secretDetailsUrl);
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('checkbox')).not.toBeChecked();
+  await dialog.getByRole('button', { name: 'Schedule deletion', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests).toEqual([{ recovery_window_days: 7, force_delete_without_recovery: false }]);
+  await page.getByRole('button', { name: polishedSecret.name, exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retrieve secret value', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Cancel deletion', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retrieve secret value', exact: true })).toBeEnabled();
+});
+
+test('Secrets Manager ignores late retrievals after the value dialog closes', async ({ page }) => {
+  let finish: (() => void) | undefined;
+  let started: (() => void) | undefined;
+  const pending = new Promise<void>(resolve => { started = resolve; });
+  await inventory(page, 'secretsmanager', { secrets: [polishedSecret] });
+  await page.route('**/api/secretsmanager/secrets/**/value/', async route => {
+    started?.(); await new Promise<void>(resolve => { finish = resolve; });
+    return route.fulfill({ json: { type: 'string', value: 'late-secret', version_id: 'version-current' } });
+  });
+  await page.goto(secretDetailsUrl);
+  await page.getByRole('button', { name: 'Retrieve secret value', exact: true }).click();
+  await pending;
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
+  finish?.();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('late-secret', { exact: true })).toHaveCount(0);
+});
+
+test('Secrets Manager clears revealed values when the session changes and displays inventory failures', async ({ page }) => {
+  let fail = false;
+  await page.route('**/api/secretsmanager/', route => fail
+    ? route.fulfill({ status: 502, json: { error: 'Inventory unavailable' } })
+    : route.fulfill({ json: { secrets: [polishedSecret] } }));
+  await page.route('**/api/secretsmanager/secrets/**/value/', route => route.fulfill({ json: {
+    type: 'string', value: '0', version_id: 'version-current', version_stages: ['AWSCURRENT'], size_bytes: 1,
+  } }));
+  await page.goto(secretDetailsUrl);
+  await page.getByRole('button', { name: 'Retrieve secret value', exact: true }).click();
+  await expect(page.getByRole('dialog').locator('pre')).toHaveText('0');
+  await page.getByRole('dialog').getByRole('checkbox', { name: 'Format JSON', exact: true }).check();
+  await expect(page.getByRole('dialog').locator('pre')).toHaveText('0');
+  await page.evaluate(payload => window.dispatchEvent(new CustomEvent('floci_session_changed', { detail: payload })), sessionFixture('new-secret-user'));
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  fail = true;
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByText('Unable to load secrets', { exact: true })).toBeVisible();
+  await expect(page.getByText('Inventory unavailable', { exact: true })).toBeVisible();
+});
+
+const polishedAlarm = {
+  AlarmName: 'Payments failure rate', AlarmArn: 'arn:aws:cloudwatch:eu-west-1:123456789012:alarm:Payments failure rate',
+  AlarmDescription: 'Detect failed payment requests', Namespace: 'Payments/API', MetricName: 'FailedRequests',
+  Dimensions: [{ Name: 'Environment', Value: 'production' }], StateValue: 'ALARM',
+  StateReason: '2 of the last 3 datapoints were at or above the threshold.', StateUpdatedTimestamp: '2026-10-20T12:30:00Z',
+  ComparisonOperator: 'GreaterThanOrEqualToThreshold', Threshold: 0, Statistic: 'Sum', Period: 60,
+  EvaluationPeriods: 3, DatapointsToAlarm: 2, TreatMissingData: 'notBreaching', ActionsEnabled: true,
+  AlarmActions: ['arn:aws:sns:eu-west-1:123456789012:payments-alerts'],
+};
+
+test('CloudWatch renders true alarm conditions, unknown states and state filters', async ({ page }) => {
+  await inventory(page, 'cloudwatch', { alarms: [polishedAlarm,
+    { AlarmName: 'Low throughput', StateValue: 'OK', ComparisonOperator: 'LessThanThreshold', Threshold: 10 },
+    { AlarmName: 'Maximum latency', StateValue: 'INSUFFICIENT_DATA', ComparisonOperator: 'LessThanOrEqualToThreshold', Threshold: 100 },
+    { AlarmName: 'Unknown state', ComparisonOperator: 'GreaterThanUpperThreshold' },
+  ] });
+  await page.goto('/cloudwatch/');
+  await expect(page.getByRole('cell', { name: '≥ 0', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '< 10', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '≤ 100', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Above anomaly detection band', exact: true })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Unknown state' }).getByText('Not reported', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Low throughput', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: polishedAlarm.AlarmName, exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'All alarms', exact: true }).click();
+  await page.getByRole('button', { name: polishedAlarm.AlarmName, exact: true }).click();
+  await expect(page).toHaveURL(/alarm=Payments/);
+  await expect(page.getByText('2 of 3', { exact: true })).toBeVisible();
+  await expect(page.getByText(polishedAlarm.StateReason, { exact: true })).toBeVisible();
+  await expect(page.getByText('Environment = production', { exact: true })).toBeVisible();
+  await expect(page.getByText(polishedAlarm.AlarmActions[0], { exact: true })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'test-results/screenshots/cloudwatch-alarms-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: 'test-results/screenshots/cloudwatch-alarms-mobile.png', fullPage: true });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Alarm details', exact: true })).toBeVisible();
+});
+
+test('CloudWatch alarm creation preserves zero thresholds and configurable evaluation settings', async ({ page }) => {
+  const requests: any[] = [];
+  await inventory(page, 'cloudwatch', {});
+  await page.route('**/api/cloudwatch/alarms/', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: {} }); });
+  await page.goto('/cloudwatch/');
+  await page.getByRole('button', { name: 'Create Alarm', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Alarm Name', exact: true }).fill('Zero threshold');
+  await dialog.getByRole('spinbutton', { name: 'Threshold (Value)', exact: true }).fill('0');
+  await dialog.getByRole('spinbutton', { name: 'Evaluation periods', exact: true }).fill('3');
+  await dialog.getByRole('spinbutton', { name: 'Datapoints to alarm', exact: true }).fill('2');
+  await dialog.getByRole('textbox', { name: 'Dimensions (JSON)', exact: true }).fill('[{"Name":"Service","Value":"worker"}]');
+  await dialog.getByRole('button', { name: 'Create Alarm', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests[0]).toMatchObject({ threshold: 0, evaluation_periods: 3, datapoints_to_alarm: 2, dimensions: [{ Name: 'Service', Value: 'worker' }] });
+});
+
+test('CloudWatch requires explicit state and delete operations and keeps failures visible', async ({ page }) => {
+  const requests: any[] = [];
+  let fail = true;
+  await inventory(page, 'cloudwatch', { alarms: [polishedAlarm] });
+  await page.route('**/api/cloudwatch/alarms/state/', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: {} }); });
+  await page.route('**/api/cloudwatch/alarms/', route => {
+    expect(route.request().method()).toBe('DELETE');
+    requests.push(route.request().postDataJSON());
+    return route.fulfill(fail ? { status: 403, json: { error: 'Alarm deletion denied' } } : { json: {} });
+  });
+  await page.goto(`/cloudwatch/alarms?alarm=${encodeURIComponent(polishedAlarm.AlarmName)}`);
+  await page.getByRole('button', { name: 'Set state for testing', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: /^State / }).click();
+  await page.getByRole('option', { name: 'INSUFFICIENT_DATA', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'State reason', exact: true }).fill('Testing missing observations');
+  await dialog.getByRole('button', { name: 'Set state', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests[0]).toEqual({ alarm_name: polishedAlarm.AlarmName, state_value: 'INSUFFICIENT_DATA', state_reason: 'Testing missing observations' });
+  await page.getByRole('button', { name: 'Delete alarm', exact: true }).click();
+  expect(requests).toHaveLength(1);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect(requests).toHaveLength(1);
+  await page.getByRole('button', { name: 'Delete alarm', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Delete alarm', exact: true }).click();
+  await expect(dialog.getByText('Alarm deletion denied', { exact: true })).toBeVisible();
+  fail = false;
+  await dialog.getByRole('button', { name: 'Delete alarm', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test('CloudWatch uses log group metadata and removes retention for Never expire', async ({ page }) => {
+  const requests: any[] = [];
+  await inventory(page, 'cloudwatch', { log_groups: [{ name: '/app/worker', retention_days: 7, stored_bytes: 1024, arn: 'arn:aws:logs:eu-west-1:123456789012:log-group:/app/worker' }] });
+  await page.route('**/api/cloudwatch/log-streams/', route => route.fulfill({ json: { streams: [] } }));
+  await page.route('**/api/cloudwatch/retention/', route => { requests.push({ method: route.request().method(), ...route.request().postDataJSON() }); return route.fulfill({ json: {} }); });
+  await page.route('**/api/cloudwatch/log-streams/create/', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: {} }); });
+  await page.goto('/cloudwatch/logs');
+  await expect(page.getByText('7 days', { exact: true })).toBeVisible();
+  await expect(page.getByText('1024', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Retention Settings', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('button', { name: /^Retention Period / }).click();
+  await page.getByRole('option', { name: 'Never expire', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save Retention', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests[0]).toEqual({ method: 'DELETE', log_group_name: '/app/worker' });
+  await page.getByRole('button', { name: 'Create Log Stream', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'Log Stream Name', exact: true }).fill('manual-test-stream');
+  await dialog.getByRole('button', { name: 'Create Stream', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(requests[1]).toEqual({ log_group_name: '/app/worker', log_stream_name: 'manual-test-stream' });
+});
+
+test('CloudWatch metric statistic selection requests real Sum samples and publishes zero', async ({ page }) => {
+  const requests: URL[] = [];
+  let published: any;
+  await inventory(page, 'cloudwatch', { metrics: [{ Namespace: 'App', MetricName: 'Errors' }] });
+  await page.route('**/api/cloudwatch/metric-statistics/**', route => { requests.push(new URL(route.request().url())); return route.fulfill({ json: { datapoints: [{ Timestamp: '2026-10-20T12:00:00Z', Average: 0, Sum: 0 }] } }); });
+  await page.route('**/api/cloudwatch/metric-data/', route => { published = route.request().postDataJSON(); return route.fulfill({ json: {} }); });
+  await page.goto('/cloudwatch/metrics');
+  await page.getByRole('button', { name: /^Statistic / }).click();
+  await page.getByRole('option', { name: 'Sum', exact: true }).click();
+  await expect.poll(() => requests.at(-1)?.searchParams.get('statistic')).toBe('Sum');
+  await page.getByRole('button', { name: 'Publish Custom Metric Data', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Value', exact: true }).fill('0');
+  await page.getByRole('button', { name: 'Publish Metric Data', exact: true }).click();
+  await expect.poll(() => published?.value).toBe(0);
+  await expect(page.getByRole('button', { name: /^Metric / })).toContainText('App / Errors');
+});

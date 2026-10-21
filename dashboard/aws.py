@@ -2489,31 +2489,10 @@ def _secrets_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
         return {'error': str(exc)}
 
 
-def _secret_value_preview(value: Any) -> dict[str, Any]:
-    if value is None:
-        return {'present': False}
-
-    if isinstance(value, bytes):
-        return {
-            'present': True,
-            'type': 'binary',
-            'length': len(value),
-            'preview': '<binary secret hidden>',
-        }
-
-    text = str(value)
-    return {
-        'present': True,
-        'type': 'string',
-        'length': len(text),
-        'preview': f'{text[:6]}...' if len(text) > 6 else '<short secret hidden>',
-    }
-
-
 def secretsmanager_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     client = factory.client('secretsmanager')
-    secrets = _safe_value(lambda: _paginate(client, 'list_secrets', 'SecretList'), [])
+    secrets = _paginate(client, 'list_secrets', 'SecretList', IncludePlannedDeletion=True)
 
     def secret_detail(secret: dict[str, Any]) -> dict[str, Any]:
         secret_id = secret.get('ARN') or secret.get('Name')
@@ -2522,10 +2501,6 @@ def secretsmanager_inventory() -> dict[str, Any]:
             {'ResourceNotFoundException'},
         )
         metadata = description if isinstance(description, dict) and not description.get('error') else secret
-        value = _secrets_optional(
-            lambda: client.get_secret_value(SecretId=secret_id),
-            {'ResourceNotFoundException', 'InvalidRequestException'},
-        )
         versions = _secrets_optional(
             lambda: _paginate(client, 'list_secret_version_ids', 'Versions', SecretId=secret_id),
             {'ResourceNotFoundException'},
@@ -2547,8 +2522,6 @@ def secretsmanager_inventory() -> dict[str, Any]:
             'version_ids_to_stages': metadata.get('VersionIdsToStages'),
             'tags': metadata.get('Tags', []),
             'versions': versions,
-            'current_value': _secret_value_preview(value.get('SecretString') if isinstance(value, dict) else None),
-            'current_binary_value': _secret_value_preview(value.get('SecretBinary') if isinstance(value, dict) else None),
         }
 
     if len(secrets) > 1:
@@ -2589,7 +2562,7 @@ def secretsmanager_inventory() -> dict[str, Any]:
         'configuration': {
             'default_recovery_window_days': 30,
             'protocol': 'JSON 1.1, X-Amz-Target: secretsmanager.*',
-            'value_display': 'Secret values are masked; only type, length, and a short preview are shown.',
+            'value_display': 'Secret values are retrieved only on explicit request.',
         },
         'notes': [
             'Floci 1.5.31 supports filters and pagination in BatchGetSecretValue.',
@@ -2753,7 +2726,7 @@ def cloudwatch_inventory() -> dict[str, Any]:
     logs = factory.client('logs')
     cloudwatch = factory.client('cloudwatch')
 
-    log_groups = _safe_value(lambda: _paginate(logs, 'describe_log_groups', 'logGroups'), [])
+    log_groups = _paginate(logs, 'describe_log_groups', 'logGroups')
 
     def log_group_detail(group: dict[str, Any]) -> dict[str, Any]:
         name = group.get('logGroupName')
@@ -2796,8 +2769,8 @@ def cloudwatch_inventory() -> dict[str, Any]:
         }
 
     detailed_log_groups = [log_group_detail(group) for group in log_groups]
-    metrics = _safe_value(lambda: _paginate(cloudwatch, 'list_metrics', 'Metrics'), [])
-    alarms = _safe_value(lambda: _paginate(cloudwatch, 'describe_alarms', 'MetricAlarms'), [])
+    metrics = _paginate(cloudwatch, 'list_metrics', 'Metrics')
+    alarms = _paginate(cloudwatch, 'describe_alarms', 'MetricAlarms')
 
     return {
         'summary': {
@@ -7849,6 +7822,7 @@ def ses_inventory() -> dict[str, Any]:
         'templates': detailed_templates,
         'send_quota': _ses_optional(lambda: ses.get_send_quota(), set()),
         'send_statistics': _ses_optional(lambda: ses.get_send_statistics().get('SendDataPoints', []), set()),
+        'account': _ses_optional(lambda: sesv2.get_account(), set()) if 'GetAccount' in sesv2_operations else None,
         'account_sending_enabled': _ses_optional(lambda: ses.get_account_sending_enabled(), set()),
         'mailbox': {
             'url': f'{factory.endpoint_url.rstrip("/")}/_aws/ses',

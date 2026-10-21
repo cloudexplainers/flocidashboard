@@ -82,11 +82,14 @@ def cloudwatch_metric_statistics(request):
             for dimension in dimensions
         ):
             raise ValueError('Dimensions must contain Name and Value strings')
+        statistic = request.GET.get('statistic', 'Average')
+        if statistic not in ('Average', 'Sum', 'Minimum', 'Maximum', 'SampleCount'):
+            raise ValueError('Unsupported metric statistic')
         end = datetime.now(timezone.utc)
         response = FlociClientFactory().client('cloudwatch').get_metric_statistics(
             Namespace=namespace, MetricName=metric_name, Dimensions=dimensions,
             StartTime=end - timedelta(hours=hours), EndTime=end,
-            Period=60 if hours <= 3 else 300, Statistics=['Average'],
+            Period=60 if hours <= 3 else 300, Statistics=[statistic],
         )
         points = sorted(response.get('Datapoints', []), key=lambda point: point['Timestamp'])
         return JsonResponse({'label': response.get('Label', metric_name), 'datapoints': points})

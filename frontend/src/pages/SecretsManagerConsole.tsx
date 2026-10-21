@@ -1,385 +1,982 @@
-import { ResourceDetails } from '../components/ResourceDetails';
-import React, { useState, useEffect } from 'react';
-import Container from '@cloudscape-design/components/container';
-import Header from '@cloudscape-design/components/header';
-import Table from '../components/ResourceTable';
-import Button from '@cloudscape-design/components/button';
-import SpaceBetween from '@cloudscape-design/components/space-between';
-import FormField from '@cloudscape-design/components/form-field';
-import Input from '@cloudscape-design/components/input';
-import Textarea from '@cloudscape-design/components/textarea';
-import Modal from '@cloudscape-design/components/modal';
-import Box from '@cloudscape-design/components/box';
-import Badge from '@cloudscape-design/components/badge';
-import StatusIndicator from '@cloudscape-design/components/status-indicator';
-import Grid from '@cloudscape-design/components/grid';
-import Alert from '@cloudscape-design/components/alert';
-import TextFilter from '@cloudscape-design/components/text-filter';
-import { fetchInventory, executeServiceAction } from '../api/client';
-import { CodeSnippet } from '../components/CodeSnippet';
+import React, { useEffect, useRef, useState } from "react";
+import Alert from "@cloudscape-design/components/alert";
+import Badge from "@cloudscape-design/components/badge";
+import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
+import Checkbox from "@cloudscape-design/components/checkbox";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
+import Container from "@cloudscape-design/components/container";
+import FormField from "@cloudscape-design/components/form-field";
+import Header from "@cloudscape-design/components/header";
+import Input from "@cloudscape-design/components/input";
+import Modal from "@cloudscape-design/components/modal";
+import Select from "@cloudscape-design/components/select";
+import SpaceBetween from "@cloudscape-design/components/space-between";
+import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import Tabs from "@cloudscape-design/components/tabs";
+import Textarea from "@cloudscape-design/components/textarea";
+import TextFilter from "@cloudscape-design/components/text-filter";
+import Table from "../components/ResourceTable";
+import { secretsRequest } from "../api/client";
+import { useSession } from "../components/SessionContext";
+import {
+  SecretResource,
+  SecretVersion,
+  secretDate,
+  secretPath,
+  secretResources,
+} from "./secretResources";
 
-export const SecretsManagerConsole: React.FC = () => {
-  const [data, setData] = useState<any>({ secrets: [] });
+type Props = { resourcePath?: string; onNavigate?: (path: string) => void };
+const Field = ({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) => (
+  <div>
+    <Box variant="awsui-key-label">{label}</Box>
+    <div style={{ overflowWrap: "anywhere" }}>{children || "—"}</div>
+  </div>
+);
+const Rotation = ({ secret }: { secret: SecretResource }) => (
+  <StatusIndicator
+    type={
+      secret.rotation === true
+        ? "success"
+        : secret.rotation === false
+          ? "stopped"
+          : "not-started"
+    }
+  >
+    {secret.rotation === true
+      ? "Enabled"
+      : secret.rotation === false
+        ? "Disabled"
+        : "Not reported"}
+  </StatusIndicator>
+);
+const Stages = ({ stages }: { stages: string[] }) => (
+  <SpaceBetween direction="horizontal" size="xxs">
+    {stages.length
+      ? stages.map((stage) => (
+          <Badge key={stage} color={stage === "AWSCURRENT" ? "green" : "blue"}>
+            {stage}
+          </Badge>
+        ))
+      : "—"}
+  </SpaceBetween>
+);
+
+export const SecretsManagerConsole: React.FC<Props> = (props) => {
+  const { identity, details } = useSession();
+  const scope = JSON.stringify([
+    identity?.arn,
+    identity?.account_id,
+    identity?.region,
+    identity?.endpoint,
+    identity?.expires_at,
+    details?.session_identity?.access_key_id,
+  ]);
+  return <SecretWorkspace key={scope} {...props} />;
+};
+
+const SecretWorkspace: React.FC<Props> = ({
+  resourcePath = "secretsmanager",
+  onNavigate,
+}) => {
+  const [data, setData] = useState<any>({});
   const [loading, setLoading] = useState(true);
-  const [filterText, setFilterText] = useState('');
-  const [selectedSecrets, setSelectedSecrets] = useState<any[]>([]);
-  const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Store Secret Modal
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [secretName, setSecretName] = useState('');
-  const [secretDescription, setSecretDescription] = useState('');
-  const [secretValue, setSecretValue] = useState('{\n  "username": "dbadmin",\n  "password": "SuperSecretPassword123!"\n}');
-  const [creating, setCreating] = useState(false);
-
-  // Reveal Secret Modal
-  const [revealModalOpen, setRevealModalOpen] = useState(false);
-  const [revealedValue, setRevealedValue] = useState<any | null>(null);
-  const [revealing, setRevealing] = useState(false);
-
-  // Delete Modal
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-
-  const loadData = async () => {
+  const [loadError, setLoadError] = useState("");
+  const [filter, setFilter] = useState("");
+  const [selected, setSelected] = useState<SecretResource[]>([]);
+  const [localPath, setLocalPath] = useState(resourcePath);
+  const [tab, setTab] = useState("overview");
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  }>();
+  const [modal, setModal] = useState<
+    "" | "create" | "metadata" | "value" | "delete"
+  >("");
+  const [target, setTarget] = useState<SecretResource>();
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [kmsKey, setKmsKey] = useState("");
+  const [draft, setDraft] = useState("");
+  const [value, setValue] = useState<any>();
+  const [valueError, setValueError] = useState("");
+  const [retrieving, setRetrieving] = useState(false);
+  const [editingValue, setEditingValue] = useState(false);
+  const [retrievedVersion, setRetrievedVersion] = useState("");
+  const [formatJson, setFormatJson] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [modalError, setModalError] = useState("");
+  const [forceDelete, setForceDelete] = useState(false);
+  const [recovery, setRecovery] = useState("7");
+  const mounted = useRef(true);
+  const loadSequence = useRef(0);
+  const valueSequence = useRef(0);
+  const mutation = useRef(false);
+  const navigate = (path: string) => {
+    setLocalPath(path);
+    onNavigate?.(path);
+  };
+  const path = onNavigate ? resourcePath : localPath;
+  const secretName = new URLSearchParams(path.split("?")[1] || "").get(
+    "secret",
+  );
+  const secrets = secretResources(data);
+  const secret = secrets.find(
+    (s) => s.name === secretName || s.id === secretName,
+  );
+  const endpoint = (s: SecretResource, suffix: string) =>
+    `secrets/${encodeURIComponent(s.id)}/${suffix}/`;
+  const load = async () => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
+    setLoadError("");
     try {
-      const res = await fetchInventory('secretsmanager');
-      setData(res || { secrets: [] });
-    } catch (err) {
-      console.error(err);
+      const result = await secretsRequest();
+      if (mounted.current && sequence === loadSequence.current) {
+        setData(result);
+        setSelected((previous) =>
+          secretResources(result).filter((s) =>
+            previous.some((p) => p.id === s.id),
+          ),
+        );
+      }
+    } catch (error: any) {
+      if (mounted.current && sequence === loadSequence.current)
+        setLoadError(error.message);
     } finally {
-      setLoading(false);
+      if (mounted.current && sequence === loadSequence.current)
+        setLoading(false);
     }
   };
-
   useEffect(() => {
-    loadData();
+    mounted.current = true;
+    void load();
+    return () => {
+      mounted.current = false;
+      valueSequence.current++;
+    };
   }, []);
-
-  const handleCreateSecret = async () => {
-    if (!secretName.trim()) return;
-    setCreating(true);
-    setActionMessage(null);
+  const close = () => {
+    if (mutation.current) return;
+    valueSequence.current++;
+    setModal("");
+    setValue(undefined);
+    setDraft("");
+    setValueError("");
+    setRetrieving(false);
+    setTarget(undefined);
+  };
+  useEffect(() => {
+    close();
+    setTab("overview");
+  }, [secretName]);
+  const open = (
+    kind: "create" | "metadata" | "delete",
+    item?: SecretResource,
+  ) => {
+    setTarget(item);
+    setName("");
+    setDescription(item?.description || "");
+    setKmsKey(item?.kmsKey || "");
+    setDraft("");
+    setModalError("");
+    setForceDelete(false);
+    setRecovery("7");
+    setModal(kind);
+  };
+  const run = async (
+    action: () => Promise<any>,
+    success: string,
+    after?: () => void,
+  ) => {
+    if (mutation.current) return;
+    mutation.current = true;
+    setBusy(true);
+    setModalError("");
+    setMessage(undefined);
     try {
-      await executeServiceAction('secretsmanager', 'create_secret', {
-        name: secretName.trim(),
-        description: secretDescription,
-        secret_string: secretValue,
-      });
-      setActionMessage({ type: 'success', text: `Secret "${secretName.trim()}" created successfully.` });
-      setCreateModalOpen(false);
-      setSecretName('');
-      setSecretDescription('');
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to create secret' });
+      await action();
+      if (!mounted.current) return;
+      valueSequence.current++;
+      setModal("");
+      setValue(undefined);
+      setDraft("");
+      setTarget(undefined);
+      setMessage({ type: "success", text: success });
+      after?.();
+      await load();
+    } catch (error: any) {
+      if (mounted.current) {
+        setModalError(error.message);
+        setMessage({ type: "error", text: error.message });
+      }
     } finally {
-      setCreating(false);
+      mutation.current = false;
+      if (mounted.current) setBusy(false);
     }
   };
-
-  const handleRevealSecret = async (secret: any) => {
-    setRevealing(true);
-    setRevealModalOpen(true);
-    setRevealedValue(null);
+  const reveal = async (item: SecretResource, version?: SecretVersion) => {
+    const sequence = ++valueSequence.current;
+    setTarget(item);
+    setValue(undefined);
+    setValueError("");
+    setModalError("");
+    setDraft("");
+    setEditingValue(false);
+    setFormatJson(false);
+    setCopied(false);
+    setRetrievedVersion(version?.id || "");
+    setRetrieving(true);
+    setModal("value");
     try {
-      const res = await executeServiceAction('secretsmanager', 'get_secret_value', {
-        secret_id: secret.Name || secret.name || secret.ARN,
-      });
-      setRevealedValue(res);
-    } catch (err: any) {
-      setRevealedValue({ error: err.message || 'Failed to retrieve secret value' });
+      const result = await secretsRequest(
+        endpoint(item, "value") +
+          (version ? `?version_id=${encodeURIComponent(version.id)}` : ""),
+      );
+      if (mounted.current && sequence === valueSequence.current)
+        setValue(result);
+    } catch (error: any) {
+      if (mounted.current && sequence === valueSequence.current)
+        setValueError(error.message);
     } finally {
-      setRevealing(false);
+      if (mounted.current && sequence === valueSequence.current)
+        setRetrieving(false);
     }
   };
-
-  const handleDeleteSecret = async () => {
-    if (!selectedSecrets.length) return;
-    const secret = selectedSecrets[0];
-    setDeleting(true);
+  const filtered = secrets.filter((s) =>
+    `${s.name} ${s.description} ${s.arn || ""} ${s.kmsKey || ""}`
+      .toLowerCase()
+      .includes(filter.toLowerCase()),
+  );
+  let jsonValue = "";
+  let validJson = false;
+  if (value?.type === "string") {
     try {
-      await executeServiceAction('secretsmanager', 'delete_secret', {
-        secret_id: secret.Name || secret.name || secret.ARN,
-        recovery_window_in_days: 0,
-      });
-      setActionMessage({ type: 'success', text: `Secret "${secret.Name || secret.name}" deleted.` });
-      setDeleteModalOpen(false);
-      setSelectedSecrets([]);
-      await loadData();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Failed to delete secret' });
-    } finally {
-      setDeleting(false);
+      jsonValue = JSON.stringify(JSON.parse(value.value), null, 2);
+      validJson = true;
+    } catch {
+      /* Plain text values are valid secrets. */
     }
-  };
-
-  const secretsList = (data.secrets || []).map((s: any) => ({
-    ...s,
-    Name: s.Name || s.name,
-    ARN: s.ARN || s.arn,
-    Description: s.Description || s.description || '—',
-    LastChangedDate: s.LastChangedDate || s.last_changed_date,
-    Stages: [...new Set(Object.values(s.SecretVersionsToStages || s.VersionIdsToStages || {}).flat())] as string[],
-  }));
-
-  const filteredSecrets = secretsList.filter((s: any) => {
-    const text = `${s.Name} ${s.Description} ${s.ARN}`.toLowerCase();
-    return text.includes(filterText.toLowerCase());
-  });
+  }
+  const active = secrets.filter((s) => !s.deleted).length;
+  const currentTarget = secret || selected[0];
+  const isCurrentValue =
+    !retrievedVersion ||
+    target?.versions.some(
+      (v) => v.id === retrievedVersion && v.stages.includes("AWSCURRENT"),
+    );
+  const actions = (item?: SecretResource) => (
+    <SpaceBetween direction="horizontal" size="xs">
+      {item?.deleted ? (
+        <Button
+          loading={busy}
+          onClick={() =>
+            run(
+              () => secretsRequest(endpoint(item, "restore"), "POST", {}),
+              `Restored ${item.name}.`,
+            )
+          }
+        >
+          Cancel deletion
+        </Button>
+      ) : (
+        <>
+          <Button
+            disabled={!item}
+            onClick={() => item && open("metadata", item)}
+          >
+            Edit details
+          </Button>
+          <Button disabled={!item} onClick={() => item && open("delete", item)}>
+            Delete
+          </Button>
+        </>
+      )}
+    </SpaceBetween>
+  );
 
   return (
     <SpaceBetween size="l">
-      {/* Header */}
-      <Container
-        header={
-          <Header
-            variant="h1"
-            description="Rotate, manage, and retrieve database credentials, API keys, and other secrets throughout their lifecycle."
-            actions={
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button iconName="refresh" onClick={loadData} loading={loading}>
-                  Refresh
-                </Button>
-                <Button variant="primary" iconName="add-plus" onClick={() => setCreateModalOpen(true)}>
-                  Store a New Secret
-                </Button>
-              </SpaceBetween>
-            }
-          >
-            AWS Secrets Manager
-          </Header>
+      <Header
+        variant="h1"
+        description={
+          secretName
+            ? "Manage secret metadata, values, versions, and rotation settings."
+            : "Store and manage application credentials, API keys, and other secrets."
+        }
+        actions={
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button iconName="refresh" loading={loading} onClick={load}>
+              Refresh
+            </Button>
+            {!secretName && (
+              <Button variant="primary" onClick={() => open("create")}>
+                Store a new secret
+              </Button>
+            )}
+          </SpaceBetween>
         }
       >
-        {actionMessage && (
-          <Box margin={{ bottom: 'm' }}>
-            <Alert type={actionMessage.type} dismissible onDismiss={() => setActionMessage(null)}>
-              {actionMessage.text}
+        {secretName ? `Secret: ${secretName}` : "AWS Secrets Manager"}
+      </Header>
+      {message && (
+        <Alert
+          type={message.type}
+          dismissible
+          onDismiss={() => setMessage(undefined)}
+        >
+          {message.text}
+        </Alert>
+      )}
+      {loadError && (
+        <Alert type="error" header="Unable to load secrets">
+          {loadError}
+        </Alert>
+      )}
+      {secretName ? (
+        <>
+          <Button
+            variant="link"
+            iconName="arrow-left"
+            onClick={() => navigate("secretsmanager")}
+          >
+            Secrets
+          </Button>
+          {loading && !secret ? (
+            <StatusIndicator type="loading">
+              Loading secret metadata
+            </StatusIndicator>
+          ) : !secret ? (
+            <Alert type="warning" header="Secret not found">
+              Refresh or return to the secrets list to select an available
+              secret.
             </Alert>
-          </Box>
-        )}
-
-        <Grid gridDefinition={[{ colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }, { colspan: { default: 12, s: 4 } }]}>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Total Secrets</Box>
-            <Box variant="h1" color="text-status-info">
-              {secretsList.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Active Credentials</Box>
-            <Box variant="h1" color="text-status-info">
-              {secretsList.length}
-            </Box>
-          </Box>
-          <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Encryption Engine</Box>
-            <Box variant="h2" color="text-status-info">
-              <Badge color="green">AWS KMS (Mock)</Badge>
-            </Box>
-          </Box>
-        </Grid>
-      </Container>
-
-      {/* Secrets Table */}
-      <Container
-        header={
-          <Header
-            variant="h2"
-            description="Secrets stored securely in local Floci Secrets Manager."
-            actions={
-              <SpaceBetween direction="horizontal" size="xs">
-                <Button
-                  disabled={!selectedSecrets.length}
-                  onClick={() => handleRevealSecret(selectedSecrets[0])}
-                >
-                  Retrieve Secret Value
-                </Button>
-                <Button
-                  disabled={!selectedSecrets.length}
-                  onClick={() => setDeleteModalOpen(true)}
-                >
-                  Delete Secret
-                </Button>
-              </SpaceBetween>
-            }
-          >
-            Secrets ({secretsList.length})
-          </Header>
-        }
-      >
-        <SpaceBetween size="m">
-          <TextFilter
-            filteringText={filterText}
-            filteringPlaceholder="Filter secrets by name, description..."
-            onChange={({ detail }) => setFilterText(detail.filteringText)}
-          />
-
+          ) : (
+            <>
+              {secret.deleted && (
+                <Alert type="warning" header="Scheduled for deletion">
+                  This secret is scheduled for deletion on{" "}
+                  {secretDate(secret.deleted)}. Cancel deletion to retrieve or
+                  update its value.
+                </Alert>
+              )}
+              <Container
+                header={
+                  <Header variant="h2" actions={actions(secret)}>
+                    Secret details
+                  </Header>
+                }
+              >
+                <ColumnLayout columns={2} variant="text-grid">
+                  <Field label="Secret name">{secret.name}</Field>
+                  <Field label="Secret ARN">{secret.arn}</Field>
+                  <Field label="Description">{secret.description}</Field>
+                  <Field label="Encryption key">
+                    {secret.kmsKey || "Default key (aws/secretsmanager)"}
+                  </Field>
+                  <Field label="Created">{secretDate(secret.created)}</Field>
+                  <Field label="Last changed">
+                    {secretDate(secret.changed)}
+                  </Field>
+                </ColumnLayout>
+              </Container>
+              <Tabs
+                activeTabId={tab}
+                onChange={({ detail }) => setTab(detail.activeTabId)}
+                tabs={[
+                  {
+                    id: "overview",
+                    label: "Overview",
+                    content: (
+                      <SpaceBetween size="l">
+                        <Container
+                          header={
+                            <Header
+                              variant="h2"
+                              description="Retrieve a value explicitly. Opening metadata or refreshing this page does not retrieve secret values."
+                              actions={
+                                <Button
+                                  variant="primary"
+                                  disabled={!!secret.deleted}
+                                  onClick={() => reveal(secret)}
+                                >
+                                  Retrieve secret value
+                                </Button>
+                              }
+                            >
+                              Secret value
+                            </Header>
+                          }
+                        >
+                          <Box color="text-body-secondary">
+                            The secret value is hidden. Retrieved values are
+                            cleared when you close the value dialog or leave
+                            this secret.
+                          </Box>
+                        </Container>
+                        <Container
+                          header={<Header variant="h2">Lifecycle</Header>}
+                        >
+                          <ColumnLayout columns={3} variant="text-grid">
+                            <Field label="Status">
+                              <StatusIndicator
+                                type={secret.deleted ? "warning" : "success"}
+                              >
+                                {secret.deleted
+                                  ? "Scheduled for deletion"
+                                  : "Active"}
+                              </StatusIndicator>
+                            </Field>
+                            <Field label="Last accessed">
+                              {secretDate(secret.accessed)}
+                            </Field>
+                            <Field label="Automatic rotation">
+                              <Rotation secret={secret} />
+                            </Field>
+                          </ColumnLayout>
+                        </Container>
+                      </SpaceBetween>
+                    ),
+                  },
+                  {
+                    id: "versions",
+                    label: `Versions (${secret.versions.length})`,
+                    content: (
+                      <Container
+                        header={
+                          <Header
+                            variant="h2"
+                            description="Staging labels identify the current, previous, and pending versions. Unreported labels are left blank."
+                          >
+                            Secret versions
+                          </Header>
+                        }
+                      >
+                        {secret.versionsError && (
+                          <Alert type="warning">{secret.versionsError}</Alert>
+                        )}
+                        <Table
+                          items={secret.versions}
+                          columnDefinitions={[
+                            {
+                              id: "id",
+                              header: "Version ID",
+                              cell: (v) => (
+                                <span style={{ overflowWrap: "anywhere" }}>
+                                  {v.id}
+                                </span>
+                              ),
+                              minWidth: 220,
+                            },
+                            {
+                              id: "stages",
+                              header: "Staging labels",
+                              cell: (v) => <Stages stages={v.stages} />,
+                              minWidth: 180,
+                            },
+                            {
+                              id: "created",
+                              header: "Created",
+                              cell: (v) => secretDate(v.created),
+                              minWidth: 170,
+                            },
+                            {
+                              id: "actions",
+                              header: "Value",
+                              cell: (v) => (
+                                <Button
+                                  disabled={!!secret.deleted}
+                                  onClick={() => reveal(secret, v)}
+                                >
+                                  Retrieve version
+                                </Button>
+                              ),
+                              minWidth: 160,
+                            },
+                          ]}
+                          empty={
+                            <Box textAlign="center">No versions reported.</Box>
+                          }
+                        />
+                      </Container>
+                    ),
+                  },
+                  {
+                    id: "rotation",
+                    label: "Rotation",
+                    content: (
+                      <Container
+                        header={
+                          <Header
+                            variant="h2"
+                            description="Rotation settings reported by Secrets Manager."
+                          >
+                            Rotation configuration
+                          </Header>
+                        }
+                      >
+                        <ColumnLayout columns={2} variant="text-grid">
+                          <Field label="Automatic rotation">
+                            <Rotation secret={secret} />
+                          </Field>
+                          <Field label="Rotation Lambda ARN">
+                            {secret.rotationLambda}
+                          </Field>
+                          <Field label="Rotation interval">
+                            {secret.rotationRules.AutomaticallyAfterDays != null
+                              ? `${secret.rotationRules.AutomaticallyAfterDays} days`
+                              : "—"}
+                          </Field>
+                          <Field label="Schedule expression">
+                            {secret.rotationRules.ScheduleExpression}
+                          </Field>
+                          <Field label="Last rotated">
+                            {secretDate(secret.rotated)}
+                          </Field>
+                          <Field label="Next rotation">
+                            {secretDate(secret.nextRotation)}
+                          </Field>
+                          <Field label="Rotation window">
+                            {secret.rotationRules.Duration}
+                          </Field>
+                        </ColumnLayout>
+                      </Container>
+                    ),
+                  },
+                  {
+                    id: "tags",
+                    label: `Tags (${secret.tags.length})`,
+                    content: (
+                      <Container header={<Header variant="h2">Tags</Header>}>
+                        <Table
+                          items={secret.tags}
+                          columnDefinitions={[
+                            { id: "Key", header: "Key", cell: (t) => t.Key },
+                            {
+                              id: "Value",
+                              header: "Value",
+                              cell: (t) => t.Value || "—",
+                            },
+                          ]}
+                          empty={
+                            <Box textAlign="center">
+                              No tags associated with this secret.
+                            </Box>
+                          }
+                        />
+                      </Container>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <Container header={<Header variant="h2">Secret overview</Header>}>
+            <ColumnLayout columns={3} variant="text-grid">
+              <Field label="Active secrets">
+                <Box variant="h1">{loading ? "—" : active}</Box>
+              </Field>
+              <Field label="Automatic rotation enabled">
+                <Box variant="h1">
+                  {loading
+                    ? "—"
+                    : secrets.filter((s) => s.rotation === true && !s.deleted)
+                        .length}
+                </Box>
+              </Field>
+              <Field label="Scheduled for deletion">
+                <Box variant="h1">
+                  {loading ? "—" : secrets.filter((s) => s.deleted).length}
+                </Box>
+              </Field>
+            </ColumnLayout>
+          </Container>
           <Table
+            loading={loading}
+            loadingText="Loading secrets"
+            items={filtered}
+            selectionType="single"
+            selectedItems={selected}
+            onSelectionChange={({ detail }) =>
+              setSelected(detail.selectedItems)
+            }
+            header={
+              <Header
+                variant="h2"
+                counter={`(${filtered.length}${filter ? ` of ${secrets.length}` : ""})`}
+                actions={actions(currentTarget)}
+              >
+                Secrets
+              </Header>
+            }
+            filter={
+              <TextFilter
+                filteringText={filter}
+                filteringPlaceholder="Find secrets by name, description, ARN, or encryption key"
+                onChange={({ detail }) => setFilter(detail.filteringText)}
+              />
+            }
             columnDefinitions={[
               {
-                id: 'name',
-                header: 'Secret Name',
-                cell: (item) => (
-                  <Button variant="inline-link" onClick={() => setSelectedSecrets([item])}>
-                    <strong>{item.Name}</strong>
+                id: "name",
+                header: "Secret name",
+                minWidth: 210,
+                cell: (s) => (
+                  <Button
+                    variant="inline-link"
+                    onClick={() => navigate(secretPath(s.name))}
+                  >
+                    {s.name}
                   </Button>
                 ),
               },
               {
-                id: 'description',
-                header: 'Description',
-                cell: (item) => item.Description,
+                id: "description",
+                header: "Description",
+                minWidth: 200,
+                cell: (s) => s.description || "—",
               },
               {
-                id: 'stages',
-                header: 'Version Stages',
-                cell: (item) => (
-                  <SpaceBetween direction="horizontal" size="xs">
-                    {(item.Stages.length > 0 ? item.Stages : ['AWSCURRENT']).map((st: string) => (
-                      <Badge key={st} color={st === 'AWSCURRENT' ? 'green' : 'blue'}>
-                        {st}
-                      </Badge>
-                    ))}
-                  </SpaceBetween>
+                id: "status",
+                header: "Status",
+                minWidth: 180,
+                cell: (s) => (
+                  <StatusIndicator type={s.deleted ? "warning" : "success"}>
+                    {s.deleted ? "Scheduled for deletion" : "Active"}
+                  </StatusIndicator>
                 ),
-                width: 220,
               },
               {
-                id: 'actions',
-                header: 'Value',
-                cell: (item) => (
-                  <Button variant="normal" iconName="security" onClick={() => handleRevealSecret(item)}>
-                    Reveal Value
-                  </Button>
-                ),
-                width: 150,
+                id: "rotation",
+                header: "Automatic rotation",
+                minWidth: 150,
+                cell: (s) => <Rotation secret={s} />,
+              },
+              {
+                id: "changed",
+                header: "Last changed",
+                minWidth: 180,
+                cell: (s) => secretDate(s.changed),
               },
             ]}
-            items={filteredSecrets}
-            selectionType="single"
-            selectedItems={selectedSecrets}
-            onSelectionChange={({ detail }) => setSelectedSecrets(detail.selectedItems)}
             empty={
-              <Box textAlign="center" color="inherit">
-                <b>No secrets found</b>
-                <p>Store a new secret to begin managing credentials in Secrets Manager.</p>
+              <Box textAlign="center">
+                <b>{filter ? "No matching secrets" : "No secrets"}</b>
+                <p>
+                  {filter
+                    ? "Adjust your search to find a secret."
+                    : "Store a secret to get started."}
+                </p>
               </Box>
             }
           />
-        </SpaceBetween>
-      </Container>
+        </>
+      )}
 
-      {selectedSecrets[0] && <ResourceDetails resource={Object.fromEntries(Object.entries(selectedSecrets[0]).filter(([key]) => !/secretstring|secretbinary|value/i.test(key)))} title={`Secret: ${selectedSecrets[0].Name}`} />}
-      {/* Store Secret Modal */}
       <Modal
-        visible={createModalOpen}
-        onDismiss={() => setCreateModalOpen(false)}
-        header="Store a New Secret"
+        visible={modal === "create" || modal === "metadata"}
+        onDismiss={close}
         size="large"
+        header={
+          modal === "create"
+            ? "Store a new secret"
+            : `Edit details: ${target?.name}`
+        }
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateModalOpen(false)}>
+              <Button variant="link" disabled={busy} onClick={close}>
                 Cancel
               </Button>
-              <Button variant="primary" loading={creating} onClick={handleCreateSecret}>
-                Store Secret
+              <Button
+                variant="primary"
+                loading={busy}
+                disabled={
+                  modal === "create" &&
+                  (!name.trim() ||
+                    !draft.length ||
+                    !/^[a-zA-Z0-9/_+=.@-]+$/.test(name.trim()))
+                }
+                onClick={() =>
+                  modal === "create"
+                    ? run(
+                        () =>
+                          secretsRequest("secrets/", "POST", {
+                            name: name.trim(),
+                            description,
+                            kms_key_id: kmsKey.trim(),
+                            value: draft,
+                          }),
+                        `Stored ${name.trim()}.`,
+                        () => navigate(secretPath(name.trim())),
+                      )
+                    : target &&
+                      run(
+                        () =>
+                          secretsRequest(
+                            endpoint(target, "metadata"),
+                            "PATCH",
+                            { description, kms_key_id: kmsKey.trim() },
+                          ),
+                        `Updated ${target.name}.`,
+                      )
+                }
+              >
+                {modal === "create" ? "Store secret" : "Save changes"}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="m">
-          <FormField label="Secret Name" description="Unique identifier for the secret (e.g. prod/database/master).">
-            <Input
-              value={secretName}
-              onChange={({ detail }) => setSecretName(detail.value)}
-              placeholder="prod/db/credentials"
-            />
-          </FormField>
-
-          <FormField label="Description" description="Optional description.">
-            <Input
-              value={secretDescription}
-              onChange={({ detail }) => setSecretDescription(detail.value)}
-              placeholder="Production PostgreSQL database master credentials"
-            />
-          </FormField>
-
-          <FormField
-            label="Secret Value (JSON or Plaintext)"
-            description="Enter the secret content to encrypt and store."
-          >
+          {modalError && <Alert type="error">{modalError}</Alert>}
+          {modal === "create" && (
+            <FormField
+              label="Secret name"
+              description="Use letters, numbers, and /_+=.@- to organize secrets by application or environment."
+            >
+              <Input
+                value={name}
+                onChange={({ detail }) => setName(detail.value)}
+                placeholder="production/database/credentials"
+              />
+            </FormField>
+          )}
+          <FormField label="Description">
             <Textarea
-              rows={6}
-              value={secretValue}
-              onChange={({ detail }) => setSecretValue(detail.value)}
-              placeholder="{\n  &quot;key&quot;: &quot;value&quot;\n}"
+              value={description}
+              onChange={({ detail }) => setDescription(detail.value)}
+              rows={2}
             />
           </FormField>
+          <FormField
+            label="Encryption key"
+            description="Optional KMS key ID, ARN, or alias. Leave blank to use the default key when creating a secret; blank preserves the existing key when editing."
+          >
+            <Input
+              value={kmsKey}
+              onChange={({ detail }) => setKmsKey(detail.value)}
+              placeholder="alias/aws/secretsmanager"
+            />
+          </FormField>
+          {modal === "create" && (
+            <FormField
+              label="Secret value"
+              description="Enter JSON or plain text. The exact text will be stored as a secret string."
+            >
+              <Textarea
+                value={draft}
+                onChange={({ detail }) => setDraft(detail.value)}
+                rows={8}
+              />
+            </FormField>
+          )}
         </SpaceBetween>
       </Modal>
 
-      {/* Reveal Secret Modal */}
       <Modal
-        visible={revealModalOpen}
-        onDismiss={() => setRevealModalOpen(false)}
-        header={`Secret Value: ${selectedSecrets[0]?.Name || 'Retrieved Secret'}`}
+        visible={modal === "value"}
+        onDismiss={close}
         size="large"
-        footer={
-          <Box float="right">
-            <Button variant="primary" onClick={() => setRevealModalOpen(false)}>
-              Close
-            </Button>
-          </Box>
-        }
-      >
-        {revealing ? (
-          <Box textAlign="center" padding="l">
-            <StatusIndicator type="loading">Retrieving decrypted secret value from KMS...</StatusIndicator>
-          </Box>
-        ) : revealedValue?.error ? (
-          <Alert type="error">{revealedValue.error}</Alert>
-        ) : (
-          <SpaceBetween size="m">
-            <div>
-              <strong>ARN: </strong> <code>{revealedValue?.ARN || revealedValue?.arn || '—'}</code>
-            </div>
-            <div>
-              <strong>Version ID: </strong> <code>{revealedValue?.VersionId || revealedValue?.version_id || 'AWSCURRENT'}</code>
-            </div>
-            <Header variant="h3">Decrypted Secret String</Header>
-            <CodeSnippet
-              language={revealedValue?.SecretString?.trim().startsWith('{') ? 'json' : 'cli'}
-              code={revealedValue?.SecretString || '(Empty secret string)'}
-            />
-          </SpaceBetween>
-        )}
-      </Modal>
-
-      {/* Delete Confirmation Modal */}
-      <Modal
-        visible={deleteModalOpen}
-        onDismiss={() => setDeleteModalOpen(false)}
-        header={`Delete Secret: ${selectedSecrets[0]?.Name}`}
+        header={`Secret value: ${target?.name || ""}`}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setDeleteModalOpen(false)}>
+              <Button disabled={busy} onClick={close}>
+                Close
+              </Button>
+              {editingValue && (
+                <Button
+                  variant="primary"
+                  loading={busy}
+                  disabled={!draft.length}
+                  onClick={() =>
+                    target &&
+                    run(
+                      () =>
+                        secretsRequest(endpoint(target, "value"), "PUT", {
+                          value: draft,
+                        }),
+                      `Stored a new version of ${target.name}.`,
+                    )
+                  }
+                >
+                  Save new version
+                </Button>
+              )}
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          {retrieving ? (
+            <StatusIndicator type="loading">
+              Retrieving secret value
+            </StatusIndicator>
+          ) : valueError ? (
+            <Alert type="error">{valueError}</Alert>
+          ) : (
+            value && (
+              <>
+                {modalError && <Alert type="error">{modalError}</Alert>}
+                <ColumnLayout columns={2} variant="text-grid">
+                  <Field label="Version ID">{value.version_id}</Field>
+                  <Field label="Staging labels">
+                    <Stages stages={value.version_stages || []} />
+                  </Field>
+                  <Field label="Value type">
+                    {value.type === "binary"
+                      ? "Binary (base64)"
+                      : "Secret string"}
+                  </Field>
+                  <Field label="Size">
+                    {value.size_bytes == null
+                      ? "—"
+                      : `${value.size_bytes} bytes`}
+                  </Field>
+                </ColumnLayout>
+                {editingValue ? (
+                  <>
+                    <Alert type="info">
+                      Saving creates a new version with the AWSCURRENT staging
+                      label. The previous current version becomes AWSPREVIOUS.
+                    </Alert>
+                    <FormField label="New secret value">
+                      <Textarea
+                        rows={8}
+                        value={draft}
+                        onChange={({ detail }) => setDraft(detail.value)}
+                      />
+                    </FormField>
+                  </>
+                ) : (
+                  <>
+                    <SpaceBetween direction="horizontal" size="xs">
+                      <Button
+                        iconName="copy"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(
+                              value.value ?? "",
+                            );
+                            setCopied(true);
+                          } catch {
+                            setModalError(
+                              "Unable to copy. Select and copy the value manually.",
+                            );
+                          }
+                        }}
+                      >
+                        {copied ? "Copied" : "Copy value"}
+                      </Button>
+                      {value.type === "string" && isCurrentValue && (
+                        <Button
+                          onClick={() => {
+                            setDraft(value.value ?? "");
+                            setEditingValue(true);
+                          }}
+                        >
+                          Edit value
+                        </Button>
+                      )}
+                      {validJson && (
+                        <Checkbox
+                          checked={formatJson}
+                          onChange={({ detail }) =>
+                            setFormatJson(detail.checked)
+                          }
+                        >
+                          Format JSON
+                        </Checkbox>
+                      )}
+                    </SpaceBetween>
+                    <pre className="secret-value-output">
+                      {formatJson ? jsonValue : (value.value ?? "")}
+                    </pre>
+                  </>
+                )}
+              </>
+            )
+          )}
+        </SpaceBetween>
+      </Modal>
+
+      <Modal
+        visible={modal === "delete"}
+        onDismiss={close}
+        header={`Delete secret: ${target?.name || ""}`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={busy} onClick={close}>
                 Cancel
               </Button>
-              <Button variant="primary" loading={deleting} onClick={handleDeleteSecret}>
-                Confirm Delete
+              <Button
+                variant="primary"
+                loading={busy}
+                onClick={() =>
+                  target &&
+                  run(
+                    () =>
+                      secretsRequest(endpoint(target, "value"), "DELETE", {
+                        recovery_window_days: Number(recovery),
+                        force_delete_without_recovery: forceDelete,
+                      }),
+                    forceDelete
+                      ? `Permanently deleted ${target.name}.`
+                      : `Scheduled ${target.name} for deletion.`,
+                    () => {
+                      setSelected([]);
+                      navigate("secretsmanager");
+                    },
+                  )
+                }
+              >
+                {forceDelete ? "Permanently delete" : "Schedule deletion"}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
-        <Alert type="warning">
-          Are you sure you want to permanently delete secret <strong>{selectedSecrets[0]?.Name}</strong>?
-        </Alert>
+        <SpaceBetween size="m">
+          {modalError && <Alert type="error">{modalError}</Alert>}
+          <Alert type="warning">
+            {forceDelete
+              ? "Permanent deletion cannot be undone."
+              : "The secret cannot be retrieved while scheduled for deletion. You can cancel deletion during the recovery window."}
+          </Alert>
+          <Checkbox
+            checked={forceDelete}
+            onChange={({ detail }) => setForceDelete(detail.checked)}
+          >
+            Permanently delete without recovery
+          </Checkbox>
+          {!forceDelete && (
+            <FormField label="Recovery window">
+              <Select
+                selectedOption={{ label: `${recovery} days`, value: recovery }}
+                options={["7", "14", "30"].map((days) => ({
+                  label: `${days} days`,
+                  value: days,
+                }))}
+                onChange={({ detail }) =>
+                  setRecovery(detail.selectedOption.value!)
+                }
+              />
+            </FormField>
+          )}
+        </SpaceBetween>
       </Modal>
     </SpaceBetween>
   );
