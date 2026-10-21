@@ -6643,8 +6643,8 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIsNone(cache.get('floci-lab:lambda:sqs-event-source:logs'))
 
 
-    @patch('dashboard.labs._verify_kms_lab_key')
-    @patch('dashboard.labs._find_kms_lab_key_id')
+    @patch('dashboard.labs.kms_labs._verify_kms_lab_key')
+    @patch('dashboard.labs.kms_labs._find_kms_lab_key_id')
     @patch('dashboard.labs.FlociClientFactory')
     def test_kms_lab_create_key_tags_symmetric_key(
         self,
@@ -6676,7 +6676,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         cache.clear()
 
-    @patch('dashboard.labs._verify_kms_lab_ciphertext')
+    @patch('dashboard.labs.kms_labs._verify_kms_lab_ciphertext')
     @patch('dashboard.labs.FlociClientFactory')
     def test_kms_lab_encrypt_records_ciphertext(self, factory_mock, verify_mock):
         cache.clear()
@@ -6701,7 +6701,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         cache.clear()
 
-    @patch('dashboard.labs._verify_kms_lab_decrypt')
+    @patch('dashboard.labs.kms_labs._verify_kms_lab_decrypt')
     @patch('dashboard.labs.FlociClientFactory')
     def test_kms_lab_decrypt_records_plaintext_match(self, factory_mock, verify_mock):
         cache.clear()
@@ -6734,7 +6734,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_kms_lab_decrypt',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.kms_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
@@ -6747,7 +6747,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(status['steps']['encrypt']['verified'])
         self.assertTrue(status['steps']['decrypt']['verified'])
 
-    @patch('dashboard.labs._find_kms_lab_key_id')
+    @patch('dashboard.labs.kms_labs._find_kms_lab_key_id')
     @patch('dashboard.labs.FlociClientFactory')
     def test_kms_lab_reset_deletes_alias_schedules_key_and_clears_cache(
         self,
