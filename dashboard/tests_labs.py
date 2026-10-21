@@ -4819,23 +4819,23 @@ class LabsRunnerTests(SimpleTestCase):
         passed = {'status': 'passed', 'message': 'verified'}
         with ExitStack() as stack:
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_fanout_topic',
+                'dashboard.labs.sns_labs._verify_sns_fanout_topic',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_fanout_queue',
+                'dashboard.labs.sns_labs._verify_sns_fanout_queue',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_fanout_queue_policy',
+                'dashboard.labs.sns_labs._verify_sns_fanout_queue_policy',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_fanout_subscription',
+                'dashboard.labs.sns_labs._verify_sns_fanout_subscription',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_fanout_delivery',
+                'dashboard.labs.sns_labs._verify_sns_fanout_delivery',
                 return_value=passed,
             ))
             from .labs import lab_status
@@ -5022,23 +5022,23 @@ class LabsRunnerTests(SimpleTestCase):
         passed = {'status': 'passed', 'message': 'verified'}
         with ExitStack() as stack:
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_filter_topic',
+                'dashboard.labs.sns_labs._verify_sns_filter_topic',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_filter_queue',
+                'dashboard.labs.sns_labs._verify_sns_filter_queue',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_filter_queue_policy',
+                'dashboard.labs.sns_labs._verify_sns_filter_queue_policy',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_filter_subscription',
+                'dashboard.labs.sns_labs._verify_sns_filter_subscription',
                 return_value=passed,
             ))
             stack.enter_context(patch(
-                'dashboard.labs._verify_sns_filter_route',
+                'dashboard.labs.sns_labs._verify_sns_filter_route',
                 return_value=passed,
             ))
             from .labs import lab_status
