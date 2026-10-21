@@ -131,7 +131,7 @@ To watch the suite one browser at a time:
 E2E_SLOW_MO=150 npm run test:e2e -- --headed --workers=1
 ```
 
-Playwright starts Django on port **18000**, uses a separate SQLite database at `/tmp/flocidashboard-playwright.sqlite3`, and defaults to `../.venv/bin/python`. Override `E2E_PYTHON` for another interpreter. Screenshots and failure traces are in `frontend/test-results/`; the HTML report is in `frontend/playwright-report/`.
+Playwright starts Django on port **18000**, uses a separate SQLite database at `/tmp/flocidashboard-playwright.sqlite3`, and defaults to `../.venv/bin/python`. Override `E2E_PYTHON` for another interpreter. That server talks to `http://localhost:4566` unless you set `E2E_FLOCI_ENDPOINT`; point it at the disposable emulator below to keep test traffic off your everyday Floci. Screenshots and failure traces are in `frontend/test-results/`; the HTML report is in `frontend/playwright-report/`.
 
 ### Live browser tests and lab audit
 
@@ -164,4 +164,4 @@ docker compose -f compose.labs.yml -p flocidashboard-lab-tests down
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for service and lab guidelines. Python dependencies are pinned in `requirements.txt` and `requirements.lock`; update both together. Frontend dependencies are recorded in `frontend/package.json` and `frontend/package-lock.json`.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the project layout, how to add service consoles and labs, and the pre-PR checklist. Release notes are in [`CHANGELOG.md`](./CHANGELOG.md) and planned work is in [`ROADMAP.md`](./ROADMAP.md). Python dependencies are pinned in `requirements.txt` and `requirements.lock`; update both together. Frontend dependencies are recorded in `frontend/package.json` and `frontend/package-lock.json`.

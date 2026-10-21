@@ -1,76 +1,118 @@
 # Contributing to Floci Dashboard
 
-Thank you for contributing to Floci Dashboard! This guide explains the core architecture, coding standards, and verification steps for adding new features, services, or workflow labs.
+Thanks for helping out. Floci Dashboard is a local console and lab environment for the [Floci](https://floci.io/) AWS emulator: a Django + boto3 backend and a React + Cloudscape frontend. This guide covers how the code is laid out, how to add a service console or a workflow lab, and what to run before you open a pull request.
 
----
+For product direction and open ideas, see [`ROADMAP.md`](./ROADMAP.md). For lab design notes and the full curriculum, see [`buildinglabs.md`](./buildinglabs.md).
 
-## Core Architecture
+## Ground rules
 
-Floci Dashboard is a Django web application that interfaces with a local [Floci](https://floci.io/) AWS-compatible emulator via `boto3`.
+- **Local only.** The dashboard talks to a local Floci endpoint. Don't add calls to real AWS or other outside services.
+- **Keep it additive.** Read-only inventory is the base layer of every service page; interactive tools sit on top of it.
+- **Make risky actions explicit.** Delete, purge, reset, empty, and cleanup actions need a confirmation. Put resource-scoped buttons next to the resource they act on, and keep only page-wide actions in the toolbar.
+- **Fail clearly.** Return normalized errors from the backend and show them in the UI. Never show fabricated or fallback data as if it were real.
+- **Keep changes focused.** One feature or fix per pull request, with tests in the same change.
 
-### Key Components
+## Getting set up
 
-- **Service Registry (`dashboard/services.py`)**: Canonical registry of all supported services, maturity stages (`interactive_workbench`, `read_only_inspector`, `inventory_only`), and action metadata.
-- **Service Inventory (`dashboard/aws.py`)**: Read-only inventory loaders and release-aware service summaries. Always return graceful empty/error shapes when Floci has no resources provisioned.
-- **Interactive Action Endpoints (`dashboard/actions.py` & `dashboard/*_views.py`)**: REST/JSON endpoints for mutating service resources with strict error normalization.
-- **Workflow Labs (`dashboard/labs/`)**: Curated multi-step AWS workflows with live-state verification and multi-SDK (AWS CLI, Python `boto3`, Terraform) code generation.
-- **Console UI (`frontend/src/`)**: React + TypeScript single-page app built with Cloudscape. `App.tsx` routes each service to a page in `pages/` (falling back to `GenericServiceWorkbench`), and `api/client.ts` wraps the JSON endpoints. Vite builds it into `dashboard/static/dashboard/dist/`, which Django serves through `dashboard/templates/dashboard/console_spa.html`.
-
----
-
-## Adding a New Service Workbench
-
-1. **Register the Service**: Add an entry to `dashboard/services.py` with title, category, maturity, docs URL, and action metadata.
-2. **Implement Inventory Loading**: Add the inventory loader function to `dashboard/aws.py`.
-3. **Add a Dedicated Console (Optional)**: Services render in `GenericServiceWorkbench` by default. For a dedicated page, add `frontend/src/pages/<Service>Console.tsx`, route it in `frontend/src/App.tsx`, and add its API calls to `frontend/src/api/client.ts`. Rebuild with `npm run build` in `frontend/`.
-4. **Add Automated Tests**: Add Django tests in `dashboard/tests_new_services_inventory.py` or a dedicated test module, and Playwright coverage in `frontend/e2e/dashboards.spec.ts`.
-
----
-
-## Adding a New Workflow Lab
-
-1. Create a lab module under `dashboard/labs/` (e.g. `<service>_labs.py`).
-2. Define the lab using `WorkflowLab` and `LabStep` structures with descriptive goals, hints, and expected AWS CLI commands.
-3. Multi-SDK code generation (`boto3` and Terraform) will be automatically derived from the CLI command shape via `dashboard/labs/snippets.py`.
-4. Implement the execution runner and live-state verification functions.
-5. Register the batch in `dashboard/labs/registry.py` and update batch progression in `dashboard/views.py`.
-
----
-
-## Development & Testing Workflow
-
-### Running Tests
-
-Install the tested Python dependency set with `python -m pip install -r requirements.lock`. Docker uses Python 3.14. For frontend changes, use Node.js 22.12+ and run `npm ci && npm run build` in `frontend/`; Docker builds use Node.js 26 and compile assets automatically.
-
-Execute the test suite inside the Docker container:
+The quickest path is Docker, which starts Floci on port 4566 and the dashboard on 8000:
 
 ```bash
-docker compose exec -T dashboard python manage.py test
+docker compose up -d
 ```
 
-Or from your host virtual environment:
+For host development you need Python 3.14, and Node.js 22.12+ if you touch the frontend. Floci must be running.
 
 ```bash
-python3 manage.py test
+python3.14 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.lock
+python manage.py migrate
+python manage.py runserver 127.0.0.1:8000
 ```
-
-Run the separate live Floci suite as well when changing SDKs, inventory loaders, authentication, or emulator integration:
 
 ```bash
-docker compose exec -T dashboard python manage.py test dashboard.integration_tests
+cd frontend
+npm ci
+npm run dev      # Vite dev server
+npm run build    # type-check and write dashboard/static/dashboard/dist/
 ```
 
-It checks every registered inventory and temporary S3, SQS, DynamoDB, SSM, and IAM/STS resources. Existing resources are preserved. Tests in `dashboard/integration_tests.py` are deliberately excluded from default unit discovery so contributors can run unit tests without an emulator.
+See the [README](./README.md#configuration) for endpoint, Region, credential, and profile settings.
 
-### Checking JavaScript Syntax
+## Project layout
+
+| Path | What lives there |
+| --- | --- |
+| `dashboard/services.py` | Service registry: title, category, maturity (`interactive_workbench`, `read_only_inspector`, `inventory_only`), docs links, and action metadata. |
+| `dashboard/aws.py` | `FlociClientFactory`, response cleaning, and read-only inventory loaders. Loaders return empty or error shapes, never exceptions, when Floci has nothing to show. |
+| `dashboard/actions.py` | Shared JSON parsing and normalized action errors. |
+| `dashboard/<service>_api.py`, `dashboard/<service>_views.py` | Service-specific boto3 logic and JSON endpoints. |
+| `dashboard/urls.py` | API routes under `api/<service>/…`. Every registered service also gets an SPA deep link automatically. |
+| `dashboard/labs/` | Workflow labs: one `<service>_labs.py` per service, plus shared helpers and dispatch in `monolith.py`. |
+| `dashboard/management/commands/check_labs.py` | Runs and verifies every lab step against a disposable emulator. |
+| `frontend/src/App.tsx` | Routes each service to a page in `frontend/src/pages/`, falling back to `GenericServiceWorkbench`. |
+| `frontend/src/api/client.ts` | Typed wrappers around the JSON endpoints. |
+| `frontend/src/components/` | Shared UI, such as `ConsoleLayout` (the page shell `App.tsx` renders every page in). |
+| `frontend/src/labCurriculum.ts` | Curriculum levels and the lab list shown on `/labs/`. |
+| `dashboard/static/dashboard/dist/` | Built frontend assets, committed to the repo and served by `dashboard/templates/dashboard/console_spa.html`. |
+
+## Adding or improving a service console
+
+1. **Register the service** in `dashboard/services.py` with its title, category, maturity, docs URL, and any interactive actions.
+2. **Add the backend.** Put boto3 logic in `dashboard/<service>_api.py` and JSON endpoints in `dashboard/<service>_views.py`, then route them in `dashboard/urls.py` under `api/<service>/`. Use `dashboard/actions.py` for request parsing and error responses. Every action in the registry needs an endpoint test; `ActionRegistryAuditTests` in `dashboard/tests.py` enforces this.
+3. **Add the frontend (optional).** Services render in `GenericServiceWorkbench` by default. For a dedicated page, add `frontend/src/pages/<Service>Console.tsx`, route it in `App.tsx`, and add its calls to `api/client.ts`. Build it from Cloudscape components, and show results and errors in place with `Alert` and `StatusIndicator`, as the existing pages do.
+4. **Rebuild the assets** with `npm run build` in `frontend/` and commit the updated `dashboard/static/dashboard/dist/`.
+5. **Add tests:** Django tests in `dashboard/tests_<service>_console.py`, and Playwright coverage in `frontend/e2e/dashboards.spec.ts`. The Playwright suite mocks API responses, so cover error and empty states as well as the happy path.
+
+## Adding a workflow lab
+
+Labs are curated, multi-step AWS workflows. The dashboard runs each step through backend code, verifies the live result in Floci, and can reset everything the lab created. The displayed CLI command is what the step teaches; `dashboard/labs/snippets.py` derives the boto3 and Terraform tabs from it.
+
+1. **Write the lab in its service module**, `dashboard/labs/<service>_labs.py`, or create one following an existing module such as `kms_labs.py`. A module owns:
+   - the lab definitions (see `Lab` and `LabStep` in `dashboard/labs/types.py`), collected in `LABS`;
+   - a runner (`_run_<service>_…`) and a verifier (`_verify_…`) for each step;
+   - `run_step(...)`, `status(...)`, and `reset(...)`, which dispatch on `lab_key` and `step_key`.
+2. **Use the shared helpers** in `monolith.py`, such as the `_<service>_client()` functions, `_error_code`, `_json_text`, and `_wait_for_verification`. Get boto3 clients through those helpers rather than calling `FlociClientFactory` directly, so tests can patch one place.
+3. **Register a new service module** in `monolith.py`: add a branch to `labs_for_service`, `run_lab_step`, `lab_status`, and `reset_lab`, add it to the re-export list at the end of the file, and add the service to `LAB_BATCH_ORDER`.
+4. **Add the lab to the curriculum** in `frontend/src/labCurriculum.ts` with the right `stepCount`. The e2e suite fails if the catalog and the curriculum disagree.
+5. **Make it repeatable.** Labs use fixed resource names, so every step must cope with leftovers from an earlier run, and `reset` must remove everything the lab created.
+6. **Test it.** Add unit tests in `dashboard/tests_labs.py`. `LabsRegistryAuditTests` checks that every step has a runner and a status entry. Then run `check_labs` for the service against the disposable emulator (see below).
+
+When a test patches a function that a lab module calls, patch it where it's looked up, for example `patch('dashboard.labs.kms_labs._verify_kms_lab_key')`. `patch('dashboard.labs.FlociClientFactory')` still covers every lab module.
+
+## Testing
+
+| What | Command | Needs Floci? |
+| --- | --- | --- |
+| System checks | `python manage.py check` | No |
+| Unit tests (about 1,100, a few seconds) | `python manage.py test --noinput` | No |
+| Live compatibility tests | `python manage.py test dashboard.integration_tests --noinput` | Yes |
+| Playwright, mocked API | `npm run test:e2e` (in `frontend/`) | Barely; see below |
+| Playwright, live | `npm run test:e2e:live` (in `frontend/`) | Disposable emulator |
+| Lab audit | `python manage.py check_labs --endpoint http://localhost:14566` | Disposable emulator |
+
+In Docker, prefix the Django commands with `docker compose exec -T dashboard`.
+
+**Use the disposable emulator for anything that creates resources.** Labs and live tests use fixed names and will clash with, or clean up, resources in your everyday Floci. Start a throwaway one on port 14566:
 
 ```bash
-node --check dashboard/static/dashboard/*.js
+docker compose -f compose.labs.yml -p flocidashboard-lab-tests up -d --wait
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test FLOCI_AWS_PROFILE='' \
+  python manage.py check_labs --endpoint http://localhost:14566 --service kms
+docker compose -f compose.labs.yml -p flocidashboard-lab-tests down
 ```
 
-### System Integrity Checks
+Some labs (EC2, Lambda, RDS, ECS, EKS) start extra containers and download images. If any are left behind after `down`, remove the `floci-aws-*` containers on the `flocidashboard-lab-tests` network.
 
-```bash
-python3 manage.py check
-```
+Playwright starts its own Django server on port 18000 with a separate SQLite database. It points that server at `http://localhost:4566` unless you set `E2E_FLOCI_ENDPOINT`; set it to `http://localhost:14566` to keep test traffic off your everyday Floci. Set `E2E_PYTHON` if your interpreter isn't `../.venv/bin/python`. Install the browser once with `npx playwright install chromium`.
+
+## Before you open a pull request
+
+- [ ] Unit tests and `python manage.py check` pass.
+- [ ] Frontend changes: `npm run build` passes, the rebuilt `dist/` is committed, and `npm run test:e2e` passes.
+- [ ] Lab changes: `check_labs` passes for the affected service on the disposable emulator.
+- [ ] Emulator integration or SDK changes: `dashboard.integration_tests` passes.
+- [ ] Dependency changes update `requirements.txt` and `requirements.lock` together, or `frontend/package.json` and `package-lock.json` together.
+- [ ] User-visible changes have a line in [`CHANGELOG.md`](./CHANGELOG.md), and docs that describe the changed behavior are updated.
+
+CI (`.github/workflows/test.yml`) runs all of this except the lab audit on every push and pull request, against a Floci service container.

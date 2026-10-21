@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Polished the AWS service consoles, including Route 53, Cognito, CloudTrail investigation workflows, session identity switching, and the AWS CLI console.
+- Lab progress loads much faster: boto3 clients are cached per endpoint and identity, and lab status checks run in parallel (`/api/labs/progress/` from about 35s to under 1s). The labs page shows loading and retryable error states.
+- Fixed Lambda detail pages showing empty versions, aliases, triggers, and function URLs; Lambda labs now wait for asynchronous logs on a cold start; and missing-resource errors return 404 instead of 502.
+- Removed the legacy Django-template UI (templates, per-service JavaScript and CSS, and their routes) and unused frontend API client functions. The React console covers every service.
+- Split the workflow lab code into one `dashboard/labs/<service>_labs.py` module per service; `monolith.py` now holds only shared helpers and dispatch (22,192 to 724 lines). No lab behavior changes.
+- Fixed an ambiguous Playwright locator in the KMS crypto tools test that failed CI.
+- Rewrote `CONTRIBUTING.md` for the current React and per-service lab architecture.
+
 ## 2.0.1 — 2026-10-19
 
 - Added a complete live lab audit command and disposable Floci configuration, plus Playwright coverage for every curriculum lab and real IAM/S3 browser workflows.

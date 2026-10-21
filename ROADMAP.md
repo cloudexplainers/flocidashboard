@@ -49,6 +49,9 @@ Core architecture files:
 
 ## Completed Recently
 
+- **Codebase cleanup**: removed the legacy Django-template UI (templates, per-service JS and CSS, and their routes) now that the React console covers every service, plus unused frontend API client functions.
+- **Lab code split**: moved each service's lab definitions, runners, verifiers, status, and reset out of `dashboard/labs/monolith.py` into `dashboard/labs/<service>_labs.py`; the monolith keeps only shared helpers and dispatch.
+- **Faster lab progress**: cached boto3 clients per endpoint and identity, and parallel lab status checks (`/api/labs/progress/` from about 35s to under 1s).
 - **Multi-SDK Code Tabs & Preference Sync**: Built dynamic code generation across AWS CLI, Python `boto3`, and Terraform HCL for all 63 guided labs with persistent user preference storage.
 - **Automated "Run All Steps" Play-Through**: Added an automated step runner with visual progress tracking, smooth auto-scrolling, speed regulation, and real-time step explanations.
 - **Curriculum Expansion (63 Labs, 349 Steps across 17 Services)**: Added Step Functions (Choice & Parallel workflows), Cognito (User Pools, App Clients, auth), CloudWatch (metrics, alarms, logs), and deepened all 7 EC2 guided compute scenarios into multi-step interactive workflows.
@@ -281,23 +284,7 @@ Why it matters:
 - The registry becomes a trustworthy map of what the UI can really execute.
 - Contributors get a measurable way to improve coverage without guessing.
 
-### 2. Continue Shared Action Loader Migration
-
-Keep moving service consoles toward registry-driven action rows.
-
-Feasible first version:
-
-- Migrate another compact console with several destructive actions, such as Athena or CloudFront.
-- Remove duplicated `ACTION_FALLBACKS`, local action lookup helpers, and label override code.
-- Keep service-specific JavaScript focused on workflow behavior and rendering.
-- Add or adjust JS syntax checks and page smoke tests as needed.
-
-Why it matters:
-
-- Action buttons become registry-driven instead of duplicated per workbench.
-- Future service migrations get smaller and less error-prone.
-
-### 3. Review Workbench Action Placement
+### 2. Review Workbench Action Placement
 
 Revisit existing service workbenches against the resource-scoped action placement rule.
 
@@ -315,7 +302,7 @@ Why it matters:
 - Destructive and identity-changing actions become less ambiguous.
 - The dashboard gains a consistent interaction model across services instead of service-by-service button drift.
 
-### 4. Cloud Control And Unified Resource Discovery
+### 3. Cloud Control And Unified Resource Discovery
 
 Floci 1.5.31 adds Cloud Control `list_resources` plus broader read-only describe/list APIs. The dashboard now has a first read-only Cloud Control page; the next pass should make it easier to compare unified discovery with the service-specific pages.
 
@@ -331,7 +318,7 @@ Why it matters:
 - Cloud Control is a useful bridge for Steampipe, IaC, and generic AWS resource explorers.
 - The new dashboard view can become the comparison point between unified discovery and service-specific workbenches.
 
-### 5. Step Functions Follow-Ups
+### 4. Step Functions Follow-Ups
 
 Keep improving the Step Functions execution and version workbench.
 
@@ -347,7 +334,7 @@ Why it matters:
 
 - Step Functions is a natural workflow debugger for local Lambda and service-integration testing.
 
-### 6. IAM Polish
+### 5. IAM Polish
 
 Keep improving the IAM workbench where it makes local permission failures easier to understand.
 
@@ -363,7 +350,7 @@ Why it matters:
 - IAM is central to local AWS debugging.
 - The workbench should stay focused on identity debugging, not on cloning every IAM console screen.
 
-### 7. S3 Follow-Ups
+### 6. S3 Follow-Ups
 
 Keep improving the existing S3 workbench.
 
@@ -381,9 +368,9 @@ Why it matters:
 - S3 is the reference workbench and likely a high-traffic page.
 - The completed S3 lab sequence now provides a repeatable regression and learning surface for these workflows.
 
-### 8. Workflow Lab Framework
+### 7. Workflow Lab Framework
 
-Continue the local AWS workflow lab system beyond the completed IAM, S3, SQS, SNS, Scheduler, CloudFormation, EC2, Lambda, API Gateway, DynamoDB, KMS, SSM, and Secrets Manager foundations.
+Continue the local AWS workflow lab system beyond the completed foundations: 66 labs across IAM, S3, KMS, SSM, Secrets Manager, Cognito, SQS, SNS, Scheduler, DynamoDB, Lambda, API Gateway, EventBridge, Step Functions, CloudWatch, EC2, RDS, ECS, EKS, and CloudFormation.
 
 Feasible follow-ups:
 
@@ -399,7 +386,7 @@ Why it matters:
 - The curated runner model keeps command execution safe and repeatable.
 - Multi-service labs can turn the dashboard into a practical local integration-learning environment.
 
-### 9. EC2 Follow-Ups
+### 8. EC2 Follow-Ups
 
 Keep improving the new EC2 instance workbench.
 
@@ -416,7 +403,7 @@ Why it matters:
 - EC2 is now a real local compute workflow in Floci.
 - Launch, lifecycle, key import, IMDS, and networking hints make the dashboard a better local debugger than raw inventory alone.
 
-### 10. EventBridge Follow-Ups
+### 9. EventBridge Follow-Ups
 
 Keep improving the new EventBridge event sender.
 
@@ -433,7 +420,7 @@ Why it matters:
 - EventBridge sits between many existing interactive workbenches.
 - Better cross-service links would turn it into a practical event-routing debugger.
 
-### 11. API Gateway Follow-Ups
+### 10. API Gateway Follow-Ups
 
 Keep improving the new API Gateway request workbench.
 
@@ -449,7 +436,7 @@ Why it matters:
 - API Gateway is now the local HTTP front door for Lambda and HTTP proxy workflows.
 - Replay and cross-service links would make it a stronger request debugger.
 
-### 12. Kinesis Follow-Ups
+### 11. Kinesis Follow-Ups
 
 Keep improving the new Kinesis stream workbench.
 
@@ -465,7 +452,7 @@ Why it matters:
 
 - Kinesis now completes the event/data-stream testing loop alongside SQS, SNS, EventBridge, Lambda, and CloudWatch.
 
-### 13. Secrets Manager And SSM Follow-Ups
+### 12. Secrets Manager And SSM Follow-Ups
 
 Keep improving local configuration and secret debugging.
 
@@ -501,40 +488,36 @@ These ideas are still interesting, but they likely need more design, Floci suppo
 This order is intentionally modest and can change:
 
 1. Keep action audit baseline at zero.
-2. Finish shared action loader migration.
-3. Review workbench action placement against the resource-scoped action rule.
-4. Iterate on the Cloud Control and unified resource discovery surface.
-5. Step Functions follow-ups.
-6. IAM polish.
-7. S3 follow-ups.
-8. Split and extend the workflow lab framework beyond the completed foundational sequences.
-9. EC2 follow-ups.
-10. EventBridge follow-ups.
-11. API Gateway follow-ups.
-12. Kinesis follow-ups.
-13. Secrets Manager and SSM follow-ups.
+2. Review workbench action placement against the resource-scoped action rule.
+3. Iterate on the Cloud Control and unified resource discovery surface.
+4. Step Functions follow-ups.
+5. IAM polish.
+6. S3 follow-ups.
+7. Extend the workflow lab framework beyond the completed foundational sequences.
+8. EC2 follow-ups.
+9. EventBridge follow-ups.
+10. API Gateway follow-ups.
+11. Kinesis follow-ups.
+12. Secrets Manager and SSM follow-ups.
 
 ## Contributor Checklist
 
 When adding or improving a service page:
 
 - [ ] Preserve the existing read-only inventory.
-- [ ] Register service metadata in `dashboard/services.py`.
-- [ ] Register action metadata for interactive actions.
+- [ ] Register service and action metadata in `dashboard/services.py`.
 - [ ] Use `dashboard/actions.py` for JSON parsing and normalized errors.
-- [ ] Use shared lower-right toasts through `ServiceConsole.toast()`.
-- [ ] Keep service-specific JS focused on service behavior.
 - [ ] Place resource-scoped buttons with the resource/detail they act on; keep only global page/workbench actions in the toolbar.
 - [ ] Add destructive confirmations for risky actions.
-- [ ] Add tests for registry metadata, service page rendering, and action endpoints.
-- [ ] Run `python3 manage.py test dashboard`.
-- [ ] Run `python3 manage.py check`.
-- [ ] Run `node --check` for changed console JS files.
+- [ ] Add endpoint tests for every registered action, plus Playwright coverage for the page.
+- [ ] Rebuild and commit the frontend assets when the UI changes.
+
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) has the full workflow and the test commands.
 
 ## Open Questions
 
 - Should service docs links and operation counts remain manually maintained in the dashboard registry?
-- How much should `dashboard.js` be reduced in favor of declarative panel configs?
+- Should more dedicated React pages move to declarative, registry-driven action panels like `GenericServiceWorkbench`?
 - Should tutorial definitions live in this repo, Floci docs, or both?
 - Which remaining inventory-only service should become the next interactive workbench?
 - Should the Environment page grow a Docker/runtime lens when Floci exposes stable runtime fields?

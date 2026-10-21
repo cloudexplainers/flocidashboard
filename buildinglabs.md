@@ -2,7 +2,7 @@
 
 ## Current Curriculum Status
 
-The curriculum comprises **63 labs across 17 services (349 total runnable steps)**:
+The curriculum comprises **66 labs across 20 services (365 total runnable steps)**:
 
 - **11 IAM labs** (admin bootstrap, users, policies, access keys, groups, roles, STS session policies, instance profiles, switched dashboard identities, and permission-enforcement checks)
 - **12 S3 labs** (buckets, objects, prefixes, metadata, tags, versioning, presigned URLs, security, encryption, lifecycle retention, CORS, S3-to-SQS notifications, and multipart uploads)
@@ -20,6 +20,9 @@ The curriculum comprises **63 labs across 17 services (349 total runnable steps)
 - **2 Step Functions labs** (State Machine Choice branching workflows and Parallel execution branches)
 - **2 CloudWatch labs** (custom metric filters, CloudWatch Alarms, and Log Group streams)
 - **11 EC2 labs** (public/private VPC routing, stateful security groups, network ACLs, VPC endpoints, guest IMDS inspection, UserData validation, IAM instance roles, web server SG routing, broken route repair, private S3 gateway endpoints, and SSM RunCommand dispatch)
+- **1 RDS lab** (DB instance provisioning, custom parameter groups, endpoints, storage scaling, and reboot recovery)
+- **1 ECS lab** (clusters, task definitions, standalone Fargate tasks, and services)
+- **1 EKS lab** (control planes, EC2 node groups, Fargate profiles, and local kubeconfig)
 - **1 CloudFormation lab** (template validation, change set creation, stack provisioning, and resource lifecycle management)
 - **Multi-SDK Code Tabs**: dynamic code generation across AWS CLI, Python `boto3`, and Terraform HCL for every step card with persistent user preference storage
 - **"Run All Steps" Play-Through Runner**: automated step execution with live progress tracking, auto-scrolling, speed regulation, and contextual explanations
@@ -31,7 +34,7 @@ The curriculum comprises **63 labs across 17 services (349 total runnable steps)
 
 The EventBridge application capstone joins API Gateway, Lambda, a custom event bus, two SQS destinations, a notification Lambda, input transformation, multiple event patterns, resource permissions, correlation logs, and controlled malformed-input, missing-permission, and disabled-rule experiments.
 
-The dashboard also exposes `/labs/`, a registry-driven directory of every service with active labs. The homepage links to it between Environment and Service Matrix.
+The dashboard also exposes `/labs/`, a registry-driven directory of every service with active labs, linked from the console navigation.
 
 The dashboard also exposes `/activity/`, a browser-local recent activity page for replayable or prefillable developer actions from API Gateway, EventBridge, Lambda, and SQS workbenches. Labs should continue deriving progress from live Floci state; use Activity as a companion surface for manual follow-up testing after a lab creates useful resources, not as the source of lab completion.
 
@@ -2220,7 +2223,7 @@ Good next services:
 - EC2 networking: routing, security-group, S3 gateway endpoint, and SQS interface endpoint foundations complete.
 - EventBridge Scheduler: one-time SQS delivery foundation complete.
 - Event-driven Lambda: SQS event source mapping is complete; next practical gaps are S3 object-created notifications to Lambda, EventBridge rules to Lambda or SQS, and EventBridge Pipes source-to-target flows when local support is reliable.
-- RDS: create local DB instance, inspect endpoint, connect instructions, cleanup.
+- RDS, ECS, and EKS: DB instance lifecycle, Fargate microservice, and control-plane/node-group foundations complete.
 - DocumentDB: create cluster/instance, inspect endpoint, cleanup.
 
 The completed Scheduler multi-service lab is:
@@ -2235,15 +2238,15 @@ It proves local scheduling, AWS SDK target wiring, SQS delivery, and dashboard i
 
 Minimum:
 
-- labs page renders the lab title and commands,
-- service page links to labs when labs exist,
+- the lab is listed in `frontend/src/labCurriculum.ts` with the right step count (the Playwright catalog test checks this),
+- `LabsRegistryAuditTests` finds a runner and a status entry for every step,
 - status marks completed steps from live-state verification,
 - run endpoint calls the registered step,
 - step runner calls expected boto3 operation,
 - step runner verifies expected state,
 - reset endpoint calls registered reset,
 - reset tolerates missing resources,
-- static JavaScript syntax passes.
+- `python manage.py check_labs --service <service>` passes against the disposable emulator.
 
 Manual/local verification:
 
