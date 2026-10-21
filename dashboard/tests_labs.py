@@ -6826,7 +6826,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['deleted'])
 
 
-    @patch('dashboard.labs._verify_secretsmanager_secret_exists')
+    @patch('dashboard.labs.secretsmanager_labs._verify_secretsmanager_secret_exists')
     @patch('dashboard.labs.FlociClientFactory')
     def test_secretsmanager_lab_create_secret_writes_initial_json(self, factory_mock, verify_mock):
         secrets = MagicMock()
@@ -6845,7 +6845,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIn('initial-local-password', call['SecretString'])
         self.assertTrue(result['verified'])
 
-    @patch('dashboard.labs._verify_secretsmanager_initial_read')
+    @patch('dashboard.labs.secretsmanager_labs._verify_secretsmanager_initial_read')
     @patch('dashboard.labs.FlociClientFactory')
     def test_secretsmanager_lab_initial_read_records_marker(self, factory_mock, verify_mock):
         cache.clear()
@@ -6863,7 +6863,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         cache.clear()
 
-    @patch('dashboard.labs._verify_secretsmanager_updated_secret')
+    @patch('dashboard.labs.secretsmanager_labs._verify_secretsmanager_updated_secret')
     @patch('dashboard.labs.FlociClientFactory')
     def test_secretsmanager_lab_put_secret_value_writes_rotated_json(self, factory_mock, verify_mock):
         secrets = MagicMock()
@@ -6891,7 +6891,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_secretsmanager_updated_secret',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.secretsmanager_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
