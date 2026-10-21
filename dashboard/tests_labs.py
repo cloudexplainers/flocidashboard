@@ -5956,8 +5956,8 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIsNone(cache.get('floci-lab:lambda:create-invoke-logs:logs'))
 
 
-    @patch('dashboard.labs._verify_apigw_lambda_integration')
-    @patch('dashboard.labs._apigw_lambda_api_id')
+    @patch('dashboard.labs.apigateway_labs._verify_apigw_lambda_integration')
+    @patch('dashboard.labs.apigateway_labs._apigw_lambda_api_id')
     @patch('dashboard.labs.FlociClientFactory')
     def test_apigateway_lab_creates_lambda_proxy_integration(
         self,
@@ -5987,8 +5987,8 @@ class LabsRunnerTests(SimpleTestCase):
         cache.clear()
 
     @override_settings(FLOCI_AWS_ENDPOINT_URL='http://localhost:4566')
-    @patch('dashboard.labs.urlopen')
-    @patch('dashboard.labs._find_apigw_lambda_api')
+    @patch('dashboard.labs.apigateway_labs.urlopen')
+    @patch('dashboard.labs.apigateway_labs._find_apigw_lambda_api')
     def test_apigateway_lab_send_request_records_lambda_echo(
         self,
         api_mock,
@@ -6021,8 +6021,8 @@ class LabsRunnerTests(SimpleTestCase):
         cache.clear()
 
     @patch('dashboard.labs.FlociClientFactory')
-    @patch('dashboard.labs.urlopen')
-    @patch('dashboard.labs._find_apigw_lambda_api')
+    @patch('dashboard.labs.apigateway_labs.urlopen')
+    @patch('dashboard.labs.apigateway_labs._find_apigw_lambda_api')
     def test_apigateway_lab_send_request_falls_back_to_local_endpoint(
         self,
         api_mock,
@@ -6052,9 +6052,9 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         cache.clear()
 
-    @patch('dashboard.labs._apigw_lambda_request_log_verification')
-    @patch('dashboard.labs.urlopen')
-    @patch('dashboard.labs._find_apigw_lambda_api')
+    @patch('dashboard.labs.apigateway_labs._apigw_lambda_request_log_verification')
+    @patch('dashboard.labs.apigateway_labs.urlopen')
+    @patch('dashboard.labs.apigateway_labs._find_apigw_lambda_api')
     def test_apigateway_lab_send_request_accepts_logged_empty_response(
         self,
         api_mock,
@@ -6096,7 +6096,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_apigw_lambda_request',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.apigateway_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
@@ -6109,7 +6109,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(status['steps']['create-route']['verified'])
         self.assertTrue(status['steps']['send-request']['verified'])
 
-    @patch('dashboard.labs._find_apigw_lambda_api')
+    @patch('dashboard.labs.apigateway_labs._find_apigw_lambda_api')
     @patch('dashboard.labs.FlociClientFactory')
     def test_apigateway_lab_reset_deletes_api_lambda_and_cache(
         self,
