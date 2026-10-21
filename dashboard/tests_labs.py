@@ -5088,7 +5088,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertEqual(sqs.delete_queue.call_count, 2)
         self.assertEqual(result['unsubscribed'], 2)
 
-    @patch('dashboard.labs._verify_scheduler_role')
+    @patch('dashboard.labs.scheduler_labs._verify_scheduler_role')
     @patch('dashboard.labs.FlociClientFactory')
     def test_scheduler_lab_creates_trusted_scoped_role(
         self,
@@ -5118,7 +5118,7 @@ class LabsRunnerTests(SimpleTestCase):
         )
         self.assertTrue(role_result['verified'])
 
-    @patch('dashboard.labs._verify_scheduler_role_policy')
+    @patch('dashboard.labs.scheduler_labs._verify_scheduler_role_policy')
     @patch('dashboard.labs.FlociClientFactory')
     def test_scheduler_lab_adds_sqs_send_permission(
         self,
@@ -5145,7 +5145,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIn('lab-scheduled-reports', call['PolicyDocument'])
         self.assertTrue(result['verified'])
 
-    @patch('dashboard.labs._verify_scheduler_schedule')
+    @patch('dashboard.labs.scheduler_labs._verify_scheduler_schedule')
     @patch('dashboard.labs.FlociClientFactory')
     def test_scheduler_lab_creates_one_time_auto_delete_schedule(
         self,
