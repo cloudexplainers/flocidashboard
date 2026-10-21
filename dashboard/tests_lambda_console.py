@@ -45,6 +45,35 @@ class LambdaFunctionsApiTests(SimpleTestCase):
         self.assertEqual(reverse('dashboard:lambda-function-permissions', kwargs={'function_name': 'worker'}), '/api/lambda/functions/worker/permissions/')
         self.assertEqual(reverse('dashboard:lambda-function-tags', kwargs={'function_name': 'worker'}), '/api/lambda/functions/worker/tags/')
 
+    @patch('dashboard.lambda_api._lambda_client')
+    def test_detail_routes_list_versions_aliases_triggers_and_url(self, client_factory):
+        from botocore.exceptions import ClientError
+
+        client = MagicMock()
+        client_factory.return_value = client
+        pages = {
+            'list_versions_by_function': [{'Versions': [{'Version': '$LATEST'}, {'Version': '1'}]}],
+            'list_aliases': [{'Aliases': [{'Name': 'prod'}]}],
+            'list_event_source_mappings': [{'EventSourceMappings': [{'UUID': 'abc'}]}],
+        }
+        client.get_paginator.side_effect = lambda op: MagicMock(paginate=MagicMock(return_value=pages[op]))
+        client.get_function_url_config.side_effect = ClientError(
+            {'Error': {'Code': 'ResourceNotFoundException', 'Message': 'no url'}}, 'GetFunctionUrlConfig')
+
+        def get(name):
+            return self.client.get(reverse(name, kwargs={'function_name': 'worker'}))
+
+        self.assertEqual(get('dashboard:lambda-function-versions').json()['Versions'][1]['Version'], '1')
+        self.assertEqual(get('dashboard:lambda-function-aliases').json()['Aliases'], [{'Name': 'prod'}])
+        self.assertEqual(get('dashboard:lambda-function-mappings').json()['EventSourceMappings'], [{'UUID': 'abc'}])
+        url_response = get('dashboard:lambda-function-url')
+        self.assertEqual(url_response.status_code, 200)
+        self.assertIsNone(url_response.json())
+
+        client.get_function_url_config.side_effect = None
+        client.get_function_url_config.return_value = {'FunctionUrl': 'http://x/', 'ResponseMetadata': {}}
+        self.assertEqual(get('dashboard:lambda-function-url').json(), {'FunctionUrl': 'http://x/'})
+
     @patch('dashboard.lambda_views.create_function')
     def test_create_function_success(self, create_mock):
         create_mock.return_value = {'function_name': 'worker', 'state': 'Active'}

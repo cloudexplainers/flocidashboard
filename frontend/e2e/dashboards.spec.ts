@@ -1,6 +1,14 @@
 import { test, expect, Page } from '@playwright/test';
 import { FLAT_CURRICULUM_LABS } from '../src/labCurriculum';
 
+// Cloudscape re-lays out responsive parts (like the top navigation)
+// asynchronously after a resize, so poll until the layout settles.
+async function expectNoHorizontalOverflow(page: Page) {
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), { timeout: 5000 })
+    .toBe(true);
+}
+
 const serviceKeys = 'acm,apigateway,appconfig,appsync,amazonmq,athena,autoscaling,backup,batch,bcmdataexports,bedrockruntime,cloudfront,cloudmap,cloudcontrol,cloudtrail,cloudformation,cloudwatch,codebuild,codepipeline,codedeploy,config,cognito,costexplorer,cur,dynamodb,docdb,memorydb,ec2,ecr,ecs,emr,eks,elasticache,elasticbeanstalk,elasticloadbalancing,eventbridge,firehose,glue,iam,iot,kafka,kinesis,kms,lambda,neptune,opensearch,pipes,pricing,rds,rdsdata,resourcegroupstagging,route53,s3,s3vectors,scheduler,secretsmanager,ses,sns,sqs,ssm,stepfunctions,textract,transcribe,transfer,wafv2'.split(',');
 async function inventory(page: Page, key: string, data: unknown) {
   await page.route(`**/api/${key}/`, route => route.fulfill({ json: data }));
@@ -572,7 +580,7 @@ test('resource details remain usable with long identifiers on a narrow viewport'
   await page.goto('/acm/');
   await page.getByRole('button', { name: 'example.test', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Resource details', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/resource-details-mobile.png', fullPage: true });
 });
 
@@ -673,7 +681,7 @@ test('EKS networking links open EC2 and node group pages fit narrow viewports', 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/eks/clusters/team%20blue/nodegroups/workers');
   await expect(page.getByRole('heading', { name: 'Node group: workers', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/eks-nodegroup-mobile.png', fullPage: true });
   await page.getByRole('button', { name: 'subnet-team', exact: true }).click();
   await expect(page).toHaveURL(/\/ec2\/subnets$/);
@@ -733,7 +741,7 @@ test('EventBridge pattern builder and routing views remain usable on narrow scre
   await page.getByLabel('Detail type', { exact: true }).fill('Paid');
   await page.getByRole('button', { name: 'Build pattern from fields', exact: true }).click();
   await expect(page.getByLabel('Pattern JSON', { exact: true })).toHaveValue(/custom.checkout/);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/eventbridge-mobile.png', fullPage: true });
 });
 
@@ -762,7 +770,7 @@ test('load balancing normalizes live inventory and scopes target health to the d
   await expect(page.getByText('Target.ResponseCodeMismatch', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/screenshots/elb-target-health.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/elb-target-health-mobile.png', fullPage: true });
 });
 
@@ -794,7 +802,7 @@ test('delivery deep links never silently select a different resource and support
   await inventory(page, 'cloudfront', { distributions: [{ Id: 'other' }] });
   await page.goto('/cloudfront/origins?distribution=missing');
   await expect(page.getByText('Distribution not found in the active account and Region.', { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
 });
 
 test('delivery table selection updates bookmarked resource context', async ({ page }) => {
@@ -1181,7 +1189,7 @@ for (const width of [1440, 390]) {
       await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
       await expect(page.getByRole('tab', { selected: true }).last()).toBeVisible();
       await page.screenshot({ path: `test-results/screenshots/${service}-review-${width}.png`, fullPage: true });
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+      await expectNoHorizontalOverflow(page);
       if (service === 'cognito') {
         await page.getByRole('tab', { name: 'Overview', exact: true }).click();
         await expect(page.getByRole('heading', { name: 'Authentication flow', exact: true })).toBeVisible();
@@ -2744,7 +2752,7 @@ test('EventBridge rule workspace isolates the selected rule and shows actual tar
   await expect(page.getByText('Maximum event age: 60 seconds', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/screenshots/eventbridge-rule-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/eventbridge-rule-mobile.png', fullPage: true });
 });
 
@@ -2819,7 +2827,7 @@ test('AppSync opens a scoped API workspace and preserves it across navigation an
   await page.goto('/appsync/overview?api=orders-api');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('heading', { name: 'GraphQL request flow', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/appsync-overview-mobile.png', fullPage: true });
 });
 
@@ -2955,7 +2963,7 @@ test('CloudFormation stack workspace preserves stack scope and exposes rollback 
   await page.goto('/cloudformation/overview?stack=orders-stack');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('heading', { name: 'Stack overview', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/cloudformation-overview-mobile.png', fullPage: true });
 });
 
@@ -3081,7 +3089,7 @@ test('RDS database workspace preserves resource context and reports real network
   await expect(page.getByLabel('Python Connection Snippet', { exact: true })).toHaveValue(/getpass\("Database password: "\)/);
   await page.screenshot({ path: 'test-results/screenshots/rds-connectivity-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: 'test-results/screenshots/rds-connectivity-mobile.png', fullPage: true });
 });
 

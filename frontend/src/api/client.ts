@@ -1702,8 +1702,10 @@ export async function updateLambdaEnvironmentVariables(functionName: string, var
 
 export async function fetchLambdaAliases(functionName: string): Promise<any[]> {
   try {
-    const res = await executeServiceAction('lambda', 'list_aliases', { function_name: functionName });
-    return res.aliases || res.Aliases || [];
+    const res = await fetch(`/api/lambda/functions/${encodeURIComponent(functionName)}/aliases/`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.Aliases || data.aliases || [];
   } catch {
     return [];
   }
@@ -2248,12 +2250,6 @@ export async function putEcrTagMutability(repositoryName: string, imageTagMutabi
     const data = await res.json().catch(() => ({}));
     throw new Error(data.error || `HTTP ${res.status}`);
   }
-  return await res.json();
-}
-
-export async function fetchEcrLifecyclePolicy(repositoryName: string): Promise<any> {
-  const res = await fetch(`/api/ecr/lifecycle-policy/?repository_name=${encodeURIComponent(repositoryName)}`);
-  if (!res.ok) return null;
   return await res.json();
 }
 
@@ -3033,8 +3029,10 @@ export async function fetchEksKubeconfig(clusterName: string): Promise<any> {
 }
 
 export async function fetchEksTags(resourceArn: string): Promise<any> {
-  const res = await fetch(`/api/eks/tags/list/?resource_arn=${encodeURIComponent(resourceArn)}`, {
-    headers: { 'X-CSRFToken': getCsrfToken() },
+  const res = await fetch('/api/eks/tags/list/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify({ resource_arn: resourceArn }),
   });
   return await res.json();
 }

@@ -198,6 +198,23 @@ class LabsPageTests(SimpleTestCase):
         self.assertIn('activeGuide', source)
         self.assertIn('lab-picker-complete', source)
 
+    def test_wait_for_verification_retries_until_logs_arrive(self):
+        from dashboard import labs as monolith
+
+        results = iter([
+            {'status': 'failed', 'message': 'not yet'},
+            {'status': 'failed', 'message': 'not yet'},
+            {'status': 'passed', 'message': 'found'},
+        ])
+        with patch.object(monolith.time, 'sleep') as sleep_mock:
+            verification = monolith._wait_for_verification(lambda: next(results), timeout_seconds=60)
+        self.assertEqual(verification['status'], 'passed')
+        self.assertEqual(sleep_mock.call_count, 2)
+
+        with patch.object(monolith.time, 'sleep'):
+            failed = monolith._wait_for_verification(lambda: {'status': 'failed', 'message': 'never'}, timeout_seconds=0)
+        self.assertEqual(failed['message'], 'never')
+
     @patch('dashboard.views.all_labs')
     @patch('dashboard.views.lab_status')
     def test_labs_progress_reports_completed_labs_and_steps(self, status_mock, all_labs_mock):

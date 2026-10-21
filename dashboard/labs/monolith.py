@@ -4703,6 +4703,37 @@ def _verify_lambda_sqs_message_sent() -> dict[str, Any]:
     }
 
 
+LAMBDA_LOG_WAIT_SECONDS = 20
+
+
+def _wait_for_verification(verify, timeout_seconds: float = LAMBDA_LOG_WAIT_SECONDS) -> dict[str, Any]:
+    """Re-run a verification until it passes or time runs out.
+
+    Asynchronous Lambda invocations write logs a moment later (longer on a
+    cold start), so log checks that run right after the trigger need to wait.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        verification = verify()
+        if verification.get('status') == 'passed' or time.monotonic() >= deadline:
+            return verification
+        time.sleep(0.5)
+
+
+def _describe_log_streams_if_present(log_group_name: str) -> dict[str, Any]:
+    try:
+        return _logs_client().describe_log_streams(
+            logGroupName=log_group_name,
+            orderBy='LastEventTime',
+            descending=True,
+            limit=10,
+        )
+    except ClientError as exc:
+        if _error_code(exc) == 'ResourceNotFoundException':
+            return {'logStreams': []}
+        raise
+
+
 def _verify_lambda_sqs_logs() -> dict[str, Any]:
     cached = cache.get(LAMBDA_SQS_LOGS_CACHE_KEY)
     if cached:
@@ -13635,25 +13666,15 @@ def _run_lambda_sqs_inspect_logs() -> dict[str, Any]:
         '--log-stream-name <log-stream-name>'
     )
     started = time.perf_counter()
-    try:
-        response = _logs_client().describe_log_streams(
-            logGroupName=LAMBDA_SQS_LOG_GROUP_NAME,
-            orderBy='LastEventTime',
-            descending=True,
-            limit=10,
-        )
-    except ClientError as exc:
-        if _error_code(exc) == 'ResourceNotFoundException':
-            response = {'logStreams': []}
-        else:
-            raise
+    verification = _wait_for_verification(_verify_lambda_sqs_logs)
+    response = _describe_log_streams_if_present(LAMBDA_SQS_LOG_GROUP_NAME)
     return _config_lab_step_result(
         'lambda',
         'sqs-event-source',
         'inspect-logs',
         command,
         response,
-        _verify_lambda_sqs_logs(),
+        verification,
         started,
     )
 
@@ -14306,17 +14327,13 @@ def _run_lambda_dynamodb_inspect_logs() -> dict[str, Any]:
         '--log-stream-name <log-stream-name>'
     )
     started = time.perf_counter()
-    response = _logs_client().describe_log_streams(
-        logGroupName=LAMBDA_DYNAMODB_LOG_GROUP_NAME,
-        orderBy='LastEventTime',
-        descending=True,
-        limit=10,
-    )
+    verification = _wait_for_verification(_verify_lambda_dynamodb_logs)
+    response = _describe_log_streams_if_present(LAMBDA_DYNAMODB_LOG_GROUP_NAME)
     return _lambda_dynamodb_step_result(
         'inspect-logs',
         command,
         response,
-        _verify_lambda_dynamodb_logs(),
+        verification,
         started,
     )
 

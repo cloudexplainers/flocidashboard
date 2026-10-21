@@ -692,6 +692,12 @@ class ActionErrorTests(SimpleTestCase):
         self.assertEqual(error_status(denied), 403)
         self.assertEqual(error_status(throttled), 429)
 
+    def test_no_such_and_does_not_exist_codes_are_not_found(self):
+        for code in ('NoSuchDistribution', 'NoSuchEntity', 'NoSuchHostedZone', 'QueueDoesNotExist'):
+            with self.subTest(code=code):
+                exc = ClientError({'Error': {'Code': code, 'Message': 'Missing'}}, 'GetThing')
+                self.assertEqual(error_status(exc), 404)
+
     def test_client_error_payload_prefers_aws_error_message_and_code(self):
         exc = ClientError({'Error': {'Code': 'ValidationException', 'Message': 'Bad input'}}, 'CreateThing')
 

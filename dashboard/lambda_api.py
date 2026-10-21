@@ -6,6 +6,8 @@ import base64
 import json
 from typing import Any
 
+from botocore.exceptions import ClientError
+
 from .aws import FlociClientFactory, _clean_response
 
 
@@ -116,6 +118,42 @@ def delete_event_source_mapping(uuid: str) -> dict[str, Any]:
     clean_uuid = _required(uuid, 'Mapping UUID')
     response = _lambda_client().delete_event_source_mapping(UUID=clean_uuid)
     return {'uuid': clean_uuid, 'deleted': True, 'response': _clean_response(response)}
+
+
+def _paginate(operation: str, result_key: str, **kwargs) -> list[dict[str, Any]]:
+    client = _lambda_client()
+    items: list[dict[str, Any]] = []
+    for page in client.get_paginator(operation).paginate(**kwargs):
+        items.extend(page.get(result_key, []))
+    return _clean_response(items)
+
+
+def list_versions(function_name: str) -> dict[str, Any]:
+    name = validate_function_name(function_name)
+    return {'Versions': _paginate('list_versions_by_function', 'Versions', FunctionName=name)}
+
+
+def list_aliases(function_name: str) -> dict[str, Any]:
+    name = validate_function_name(function_name)
+    return {'Aliases': _paginate('list_aliases', 'Aliases', FunctionName=name)}
+
+
+def list_event_source_mappings(function_name: str) -> dict[str, Any]:
+    name = validate_function_name(function_name)
+    return {'EventSourceMappings': _paginate('list_event_source_mappings', 'EventSourceMappings', FunctionName=name)}
+
+
+def get_function_url(function_name: str) -> dict[str, Any] | None:
+    """Return the function URL config, or None when the function has no URL."""
+    name = validate_function_name(function_name)
+    try:
+        response = _lambda_client().get_function_url_config(FunctionName=name)
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') == 'ResourceNotFoundException':
+            return None
+        raise
+    response.pop('ResponseMetadata', None)
+    return _clean_response(response)
 
 
 def save_function_url(function_name: str, options: Any, *, update: bool = False) -> dict[str, Any]:

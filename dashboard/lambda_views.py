@@ -8,8 +8,9 @@ from django.views.decorators.http import require_http_methods
 from .actions import handle_action_error, parse_json_body
 from .lambda_api import (
     add_permission, create_function, delete_alias, delete_event_source_mapping,
-    delete_function, delete_function_url, get_event_templates, invoke_function,
-    invoke_function_url, publish_version, remove_permission, save_alias,
+    delete_function, delete_function_url, get_event_templates, get_function_url,
+    invoke_function, invoke_function_url, list_aliases, list_event_source_mappings,
+    list_versions, publish_version, remove_permission, save_alias,
     save_event_source_mapping, save_function_url, set_concurrency,
     update_function_code, update_function_configuration, update_tags,
 )
@@ -62,16 +63,26 @@ def lambda_functions_invoke(request, function_name: str):
         return _error(exc, 'invoke_function')
 
 
-@require_http_methods(['POST'])
+@require_http_methods(['GET', 'POST'])
 def lambda_function_versions(request, function_name: str):
+    if request.method == 'GET':
+        try:
+            return JsonResponse(list_versions(function_name))
+        except Exception as exc:
+            return _error(exc, 'list_versions_by_function')
     try:
         return JsonResponse(publish_version(function_name, description=parse_json_body(request).get('description') or ''))
     except Exception as exc:
         return _error(exc, 'publish_version')
 
 
-@require_http_methods(['POST'])
+@require_http_methods(['GET', 'POST'])
 def lambda_function_aliases(request, function_name: str):
+    if request.method == 'GET':
+        try:
+            return JsonResponse(list_aliases(function_name))
+        except Exception as exc:
+            return _error(exc, 'list_aliases')
     try:
         body = parse_json_body(request)
         return JsonResponse(save_alias(function_name, body.get('name'), body.get('function_version'), description=body.get('description') or '', update=False))
@@ -90,8 +101,13 @@ def lambda_function_alias_detail(request, function_name: str, alias_name: str):
         return _error(exc, 'delete_alias' if request.method == 'DELETE' else 'update_alias')
 
 
-@require_http_methods(['POST'])
+@require_http_methods(['GET', 'POST'])
 def lambda_function_mappings(request, function_name: str):
+    if request.method == 'GET':
+        try:
+            return JsonResponse(list_event_source_mappings(function_name))
+        except Exception as exc:
+            return _error(exc, 'list_event_source_mappings')
     try:
         return JsonResponse(save_event_source_mapping(function_name, parse_json_body(request).get('options')))
     except Exception as exc:
@@ -109,8 +125,14 @@ def lambda_mapping_detail(request, uuid: str):
         return _error(exc, 'delete_event_source_mapping' if request.method == 'DELETE' else 'update_event_source_mapping')
 
 
-@require_http_methods(['POST', 'PUT', 'DELETE'])
+@require_http_methods(['GET', 'POST', 'PUT', 'DELETE'])
 def lambda_function_url(request, function_name: str):
+    if request.method == 'GET':
+        try:
+            # JSON null means "no function URL configured".
+            return JsonResponse(get_function_url(function_name), safe=False)
+        except Exception as exc:
+            return _error(exc, 'get_function_url_config')
     try:
         if request.method == 'DELETE':
             return JsonResponse(delete_function_url(function_name))

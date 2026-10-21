@@ -168,7 +168,15 @@ def error_status(exc: Exception) -> int:
         return 400
     if isinstance(exc, ClientError):
         code = exc.response.get('Error', {}).get('Code')
-        if code in NOT_FOUND_CODES or str(code or '').endswith('NotFound'):
+        code_text = str(code or '')
+        # AWS spells "missing" several ways: NoSuchDistribution, NoSuchEntity,
+        # QueueDoesNotExist, ResourceNotFoundException, ...
+        if (
+            code in NOT_FOUND_CODES
+            or code_text.endswith('NotFound')
+            or code_text.startswith('NoSuch')
+            or code_text.endswith('DoesNotExist')
+        ):
             return 404
         if code in BAD_REQUEST_CODES:
             return 400
