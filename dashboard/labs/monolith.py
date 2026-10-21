@@ -160,17 +160,6 @@ LAMBDA_DYNAMODB_PAYLOAD = {
 LAMBDA_DYNAMODB_PAYLOAD_TEXT = json.dumps(LAMBDA_DYNAMODB_PAYLOAD, separators=(',', ':'))
 LAMBDA_DYNAMODB_INVOKE_CACHE_KEY = 'floci-lab:dynamodb:lambda-writes:invoke'
 LAMBDA_DYNAMODB_LOGS_CACHE_KEY = 'floci-lab:dynamodb:lambda-writes:logs'
-SSM_PARAMETER_NAME = '/floci/lab/app/config'
-SSM_PARAMETER_PATH = '/floci/lab/app/'
-SSM_PARAMETER_VALUE = {
-    'application': 'orders',
-    'environment': 'local',
-    'featureFlags': {
-        'checkout': True,
-        'auditMode': 'verbose',
-    },
-}
-SSM_PARAMETER_VALUE_TEXT = json.dumps(SSM_PARAMETER_VALUE, separators=(',', ':'))
 SECRETS_MANAGER_SECRET_NAME = 'lab/app-credentials'
 SECRETS_MANAGER_INITIAL_SECRET = {
     'username': 'lab-app',
@@ -1180,35 +1169,6 @@ DYNAMODB_LAMBDA_WRITES_LAB = {
             'title': 'Inspect Lambda logs',
             'command': f'aws logs describe-log-streams --log-group-name {LAMBDA_DYNAMODB_LOG_GROUP_NAME}\naws logs get-log-events --log-group-name {LAMBDA_DYNAMODB_LOG_GROUP_NAME} --log-stream-name <log-stream-name>',
             'explanation': 'Verifies that the function logged the order write request ID.',
-        },
-    ],
-}
-
-SSM_PARAMETER_STORE_LAB = {
-    'service': 'ssm',
-    'key': 'parameter-store-config',
-    'title': 'Read app configuration from SSM Parameter Store',
-    'description': 'Store a JSON application configuration parameter, read it back directly, and discover it by path.',
-    'steps': [
-        {
-            'key': 'put-parameter',
-            'title': 'Store application configuration',
-            'command': f'aws ssm put-parameter --name {SSM_PARAMETER_NAME} --type String --value file://app-config.json --description "Floci lab application configuration" --overwrite',
-            'explanation': 'Writes a lab-owned JSON configuration value to Parameter Store with a hierarchical path name.',
-            'artifact_label': 'app-config.json',
-            'artifact': json.dumps(SSM_PARAMETER_VALUE, indent=2),
-        },
-        {
-            'key': 'get-parameter',
-            'title': 'Read the parameter',
-            'command': f'aws ssm get-parameter --name {SSM_PARAMETER_NAME} --with-decryption',
-            'explanation': 'Reads the parameter by exact name and verifies the stored JSON value.',
-        },
-        {
-            'key': 'get-parameters-by-path',
-            'title': 'Discover configuration by path',
-            'command': f'aws ssm get-parameters-by-path --path {SSM_PARAMETER_PATH} --recursive --with-decryption',
-            'explanation': 'Lists parameters under the application path so a local app can load a configuration namespace.',
         },
     ],
 }
@@ -2539,7 +2499,8 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
         from .kms_labs import LABS
         return LABS
     if service_key == 'ssm':
-        return [SSM_PARAMETER_STORE_LAB]
+        from .ssm_labs import LABS
+        return LABS
     if service_key == 'secretsmanager':
         return [SECRETS_MANAGER_SECRET_LIFECYCLE_LAB]
     if service_key == 'stepfunctions':
@@ -4185,57 +4146,6 @@ def _parse_json_text(text: str) -> Any:
         return json.loads(text)
     except (TypeError, json.JSONDecodeError):
         return None
-
-
-def _verify_ssm_parameter() -> dict[str, Any]:
-    try:
-        response = _ssm_client().get_parameter(
-            Name=SSM_PARAMETER_NAME,
-            WithDecryption=True,
-        )
-    except ClientError as exc:
-        return {'status': 'failed', 'message': str(exc)}
-    parameter = response.get('Parameter', {})
-    value = parameter.get('Value') or ''
-    if (
-        parameter.get('Name') == SSM_PARAMETER_NAME
-        and parameter.get('Type') == 'String'
-        and _parse_json_text(value) == SSM_PARAMETER_VALUE
-    ):
-        return {
-            'status': 'passed',
-            'message': f'Parameter {SSM_PARAMETER_NAME} stores the expected JSON app configuration.',
-            'resource': _clean_response(parameter),
-        }
-    return {
-        'status': 'failed',
-        'message': f'Parameter {SSM_PARAMETER_NAME} does not match the expected app configuration.',
-    }
-
-
-def _verify_ssm_parameter_path() -> dict[str, Any]:
-    try:
-        response = _ssm_client().get_parameters_by_path(
-            Path=SSM_PARAMETER_PATH,
-            Recursive=True,
-            WithDecryption=True,
-        )
-    except ClientError as exc:
-        return {'status': 'failed', 'message': str(exc)}
-    for parameter in response.get('Parameters', []):
-        if (
-            parameter.get('Name') == SSM_PARAMETER_NAME
-            and _parse_json_text(parameter.get('Value') or '') == SSM_PARAMETER_VALUE
-        ):
-            return {
-                'status': 'passed',
-                'message': f'Path {SSM_PARAMETER_PATH} returns the lab configuration parameter.',
-                'resource': _clean_response(response),
-            }
-    return {
-        'status': 'failed',
-        'message': f'Path {SSM_PARAMETER_PATH} did not return {SSM_PARAMETER_NAME}.',
-    }
 
 
 def _secret_string_json(response: dict[str, Any]) -> Any:
@@ -6429,14 +6339,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
         from .kms_labs import run_step
         return run_step(service_key, lab_key, step_key)
 
-    if service_key == 'ssm' and lab_key == 'parameter-store-config':
-        runners = {
-            'put-parameter': _run_ssm_put_parameter,
-            'get-parameter': _run_ssm_get_parameter,
-            'get-parameters-by-path': _run_ssm_get_parameters_by_path,
-        }
-        if step_key in runners:
-            return runners[step_key]()
+    if service_key == 'ssm':
+        from .ssm_labs import run_step
+        return run_step(service_key, lab_key, step_key)
 
     if service_key == 'secretsmanager' and lab_key == 'secret-lifecycle':
         runners = {
@@ -7242,21 +7147,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         from .kms_labs import status
         return status(service_key, lab_key)
 
-    if service_key == 'ssm' and lab_key == 'parameter-store-config':
-        parameter_verification = _verify_ssm_parameter()
-        path_verification = _verify_ssm_parameter_path()
-        parameter_verified = parameter_verification.get('status') == 'passed'
-        path_verified = path_verification.get('status') == 'passed'
-        return {
-            'service': service_key,
-            'lab': lab_key,
-            'complete': parameter_verified and path_verified,
-            'steps': {
-                'put-parameter': {'verified': parameter_verified, 'verification': parameter_verification if parameter_verified else None},
-                'get-parameter': {'verified': parameter_verified, 'verification': parameter_verification if parameter_verified else None},
-                'get-parameters-by-path': {'verified': path_verified, 'verification': path_verification if path_verified else None},
-            },
-        }
+    if service_key == 'ssm':
+        from .ssm_labs import status
+        return status(service_key, lab_key)
 
     if service_key == 'secretsmanager' and lab_key == 'secret-lifecycle':
         exists_verification = _verify_secretsmanager_secret_exists()
@@ -8230,8 +8123,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         from .kms_labs import reset
         return reset(service_key, lab_key)
 
-    if service_key == 'ssm' and lab_key == 'parameter-store-config':
-        return _reset_ssm_parameter_store_config()
+    if service_key == 'ssm':
+        from .ssm_labs import reset
+        return reset(service_key, lab_key)
 
     if service_key == 'secretsmanager' and lab_key == 'secret-lifecycle':
         return _reset_secretsmanager_secret_lifecycle()
@@ -10759,64 +10653,6 @@ def _config_lab_step_result(
     }
 
 
-def _run_ssm_put_parameter() -> dict[str, Any]:
-    command = f'aws ssm put-parameter --name {SSM_PARAMETER_NAME} --type String --value file://app-config.json --description "Floci lab application configuration" --overwrite'
-    started = time.perf_counter()
-    response = _ssm_client().put_parameter(
-        Name=SSM_PARAMETER_NAME,
-        Value=SSM_PARAMETER_VALUE_TEXT,
-        Type='String',
-        Description='Floci lab application configuration',
-        Overwrite=True,
-    )
-    return _config_lab_step_result(
-        'ssm',
-        'parameter-store-config',
-        'put-parameter',
-        command,
-        response,
-        _verify_ssm_parameter(),
-        started,
-    )
-
-
-def _run_ssm_get_parameter() -> dict[str, Any]:
-    command = f'aws ssm get-parameter --name {SSM_PARAMETER_NAME} --with-decryption'
-    started = time.perf_counter()
-    response = _ssm_client().get_parameter(
-        Name=SSM_PARAMETER_NAME,
-        WithDecryption=True,
-    )
-    return _config_lab_step_result(
-        'ssm',
-        'parameter-store-config',
-        'get-parameter',
-        command,
-        response,
-        _verify_ssm_parameter(),
-        started,
-    )
-
-
-def _run_ssm_get_parameters_by_path() -> dict[str, Any]:
-    command = f'aws ssm get-parameters-by-path --path {SSM_PARAMETER_PATH} --recursive --with-decryption'
-    started = time.perf_counter()
-    response = _ssm_client().get_parameters_by_path(
-        Path=SSM_PARAMETER_PATH,
-        Recursive=True,
-        WithDecryption=True,
-    )
-    return _config_lab_step_result(
-        'ssm',
-        'parameter-store-config',
-        'get-parameters-by-path',
-        command,
-        response,
-        _verify_ssm_parameter_path(),
-        started,
-    )
-
-
 def _run_secretsmanager_create_secret() -> dict[str, Any]:
     command = f'aws secretsmanager create-secret --name {SECRETS_MANAGER_SECRET_NAME} --description "Floci lab application credentials" --secret-string file://initial-secret.json'
     started = time.perf_counter()
@@ -10906,39 +10742,6 @@ def _run_secretsmanager_describe_secret() -> dict[str, Any]:
         _verify_secretsmanager_secret_exists(),
         started,
     )
-
-
-def _reset_ssm_parameter_store_config() -> dict[str, Any]:
-    command = f'aws ssm delete-parameter --name {SSM_PARAMETER_NAME}'
-    started = time.perf_counter()
-    deleted = False
-    try:
-        _ssm_client().delete_parameter(Name=SSM_PARAMETER_NAME)
-        deleted = True
-        stdout = _json_text({'deleted': True, 'name': SSM_PARAMETER_NAME})
-    except ClientError as exc:
-        if _error_code(exc) not in {'ParameterNotFound'}:
-            raise
-        stdout = _json_text({'deleted': False, 'name': SSM_PARAMETER_NAME})
-    verification = _verify_ssm_parameter()
-    if verification.get('status') == 'failed':
-        verification = {
-            'status': 'passed',
-            'message': f'Parameter {SSM_PARAMETER_NAME} was removed.',
-        }
-    return {
-        'service': 'ssm',
-        'lab': 'parameter-store-config',
-        'command': command,
-        'exit_code': 0,
-        'stdout': stdout,
-        'stderr': '',
-        'json': {'deleted': deleted, 'name': SSM_PARAMETER_NAME},
-        'duration_ms': round((time.perf_counter() - started) * 1000),
-        'reset': True,
-        'deleted': deleted,
-        'verification': verification,
-    }
 
 
 def _reset_secretsmanager_secret_lifecycle() -> dict[str, Any]:
@@ -15421,9 +15224,9 @@ def _reset_iam_access_key_alice() -> dict[str, Any]:
 
 # Service lab modules. Their names stay importable from ``dashboard.labs`` so existing
 # callers and tests keep working.
-from . import sqs_labs, sns_labs, scheduler_labs, kms_labs  # noqa: E402
+from . import sqs_labs, sns_labs, scheduler_labs, kms_labs, ssm_labs  # noqa: E402
 
-for _module in (sqs_labs, sns_labs, scheduler_labs, kms_labs,):
+for _module in (sqs_labs, sns_labs, scheduler_labs, kms_labs, ssm_labs,):
     for _name, _value in vars(_module).items():
         if not _name.startswith('__') and _name not in ('LABS', 'run_step', 'status', 'reset'):
             globals().setdefault(_name, _value)

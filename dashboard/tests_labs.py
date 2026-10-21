@@ -6774,7 +6774,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIsNone(cache.get('floci-lab:kms:crypto:decrypt'))
 
 
-    @patch('dashboard.labs._verify_ssm_parameter')
+    @patch('dashboard.labs.ssm_labs._verify_ssm_parameter')
     @patch('dashboard.labs.FlociClientFactory')
     def test_ssm_lab_put_parameter_writes_json_config(self, factory_mock, verify_mock):
         ssm = MagicMock()
