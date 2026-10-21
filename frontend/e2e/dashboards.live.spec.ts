@@ -198,6 +198,8 @@ test('EKS live cluster and node group pages preserve details, navigation and cle
   let vpc = '';
   let subnet = '';
   let clusterCreated = false;
+  let clusterRequested = false;
+  let bodyPassed = false;
   let nodegroupCreated = false;
   const roles: string[] = [];
   const post = async (path: string, data: any) => {
@@ -230,11 +232,13 @@ test('EKS live cluster and node group pages preserve details, navigation and cle
     await dialog.getByLabel('VPC Subnet IDs (Comma separated)', { exact: true }).fill(subnet);
     await dialog.getByLabel('Security Group IDs (Comma separated)', { exact: true }).fill('');
     const creation = page.waitForResponse(response => response.url().endsWith('/api/eks/clusters/') && response.request().method() === 'POST');
+    clusterRequested = true;
     await dialog.getByRole('button', { name: 'Create Cluster', exact: true }).click();
     const response = await creation;
     const payload = await response.json();
     expect(response.ok(), JSON.stringify(payload)).toBe(true);
     clusterCreated = true;
+    clusterRequested = false;
     expect(payload.status).not.toBe('FAILED');
     await expect(dialog).not.toBeVisible();
     await expect.poll(async () => {
@@ -281,13 +285,37 @@ test('EKS live cluster and node group pages preserve details, navigation and cle
     await page.getByRole('dialog').getByRole('button', { name: 'Confirm Delete', exact: true }).click();
     await expect(page).toHaveURL(/\/eks\/clusters$/);
     clusterCreated = false;
+    bodyPassed = true;
   } finally {
-    const remaining = await (await page.request.get('/api/eks/')).json();
-    if (nodegroupCreated || remaining.nodegroups?.some((node: any) => node.cluster_name === name && node.name === 'workers')) await remove(`/api/eks/clusters/${name}/nodegroups/workers/`);
-    if (clusterCreated || remaining.clusters?.some((cluster: any) => cluster.name === name)) await post('/api/eks/clusters/delete/', { name });
-    for (const role of roles) await remove(`/api/iam/roles/${role}/`);
-    if (subnet) await remove(`/api/ec2/subnets/${subnet}/`);
-    if (vpc) await remove(`/api/ec2/vpcs/${vpc}/`);
+    // Clean up everything, but report cleanup failures without hiding the test's own error.
+    const cleanupErrors: string[] = [];
+    const attempt = async (step: string, action: () => Promise<unknown>) => {
+      try { await action(); } catch (error) { cleanupErrors.push(`${step}: ${error}`); }
+    };
+    const eksState = async () => (await page.request.get('/api/eks/')).json();
+    const clusterListed = async () => (await eksState()).clusters?.some((cluster: any) => cluster.name === name);
+    // A create request that errored can still leave Floci starting the cluster, so give it time to appear.
+    if (clusterRequested) {
+      await attempt('wait for cluster', () => expect.poll(clusterListed, { timeout: 30_000, intervals: [1000, 2000] }).toBe(true));
+    }
+    const remaining = await eksState();
+    if (nodegroupCreated || remaining.nodegroups?.some((node: any) => node.cluster_name === name && node.name === 'workers')) {
+      await attempt('delete node group', () => remove(`/api/eks/clusters/${name}/nodegroups/workers/`));
+    }
+    if (clusterCreated || remaining.clusters?.some((cluster: any) => cluster.name === name)) {
+      await attempt('delete cluster', () => post('/api/eks/clusters/delete/', { name }));
+    }
+    // The cluster's container holds the VPC network until the cluster is gone.
+    await attempt('wait for cluster deletion', () => expect.poll(clusterListed, { timeout: 60_000, intervals: [1000, 2000] }).toBe(false));
+    for (const role of roles) await attempt(`delete role ${role}`, () => remove(`/api/iam/roles/${role}/`));
+    if (subnet) await attempt('delete subnet', () => remove(`/api/ec2/subnets/${subnet}/`));
+    if (vpc) await attempt('delete VPC', () => remove(`/api/ec2/vpcs/${vpc}/`));
+    if (cleanupErrors.length) {
+      const report = `EKS live cleanup problems:\n${cleanupErrors.join('\n')}`;
+      // Throwing here would replace the test's own error, so only fail on cleanup when the body passed.
+      if (bodyPassed) throw new Error(report);
+      console.warn(report);
+    }
   }
 });
 
