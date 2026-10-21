@@ -26,7 +26,9 @@ cd flocidashboard
 docker compose up -d
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Compose starts Floci on port **4566** and the dashboard on **8000**, with persistent volumes and a shared `floci_default` network for spawned containers.
+Open [http://localhost:8000](http://localhost:8000). Compose starts Floci on port **4566** and the dashboard on **8000**, with persistent volumes and a shared `floci_default` network for spawned containers.
+
+If that page shows a different app, another local server is already using port 8000. Stop it, or set `DASHBOARD_PORT` in `.env` and open that port instead.
 
 Copy `.env.example` to `.env` before starting to customize ports, credentials, or emulator settings. Compose currently pulls `floci/floci:latest`, so the running emulator may be newer than the version used for compatibility checks.
 

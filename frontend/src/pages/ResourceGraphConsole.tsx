@@ -55,6 +55,23 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
 
+  // Health comes from the relationships themselves; the API summary mixes
+  // node and edge counts, so it can't be shown as a connection count.
+  const edges = graphData?.edges ?? [];
+  const edgeCount = edges.length;
+  const healthyEdgeCount = edges.filter((edge) => edge.status === 'healthy').length;
+  const brokenEdgeCount = edges.filter((edge) => edge.status === 'broken').length;
+  const topologyHealth: { type: 'success' | 'warning' | 'error' | 'pending'; label: string } =
+    !graphData
+      ? { type: 'pending', label: 'Checking' }
+      : edgeCount === 0
+        ? { type: 'pending', label: 'No relationships' }
+        : healthyEdgeCount === 0
+          ? { type: 'pending', label: 'Not deployed' }
+          : brokenEdgeCount > 0
+            ? { type: 'warning', label: `${brokenEdgeCount} broken` }
+            : { type: 'success', label: 'Spine online' };
+
   const loadGraph = async () => {
     setLoading(true);
     try {
@@ -139,21 +156,21 @@ export const ResourceGraphConsole: React.FC<ResourceGraphConsoleProps> = ({ onNa
             </Box>
           </Box>
           <Box padding="m" textAlign="center">
-            <Box variant="awsui-key-label">Active Relationships</Box>
+            <Box variant="awsui-key-label">Relationships</Box>
             <Box variant="h1" color="text-status-info">
-              {graphData?.edges?.length ?? 0}
+              {edgeCount}
             </Box>
           </Box>
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Healthy Connections</Box>
-            <Box variant="h1" color="text-status-success">
-              {graphData?.summary?.healthy ?? 0}
+            <Box variant="h1" color={healthyEdgeCount > 0 ? 'text-status-success' : 'text-status-inactive'}>
+              {healthyEdgeCount}
             </Box>
           </Box>
           <Box padding="m" textAlign="center">
             <Box variant="awsui-key-label">Topology Health</Box>
             <Box variant="h2" color="text-status-info">
-              <StatusIndicator type="success">Spine Online</StatusIndicator>
+              <StatusIndicator type={topologyHealth.type}>{topologyHealth.label}</StatusIndicator>
             </Box>
           </Box>
         </Grid>

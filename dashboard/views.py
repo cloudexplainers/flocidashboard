@@ -1,3 +1,5 @@
+import contextvars
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from hashlib import sha256
 from pathlib import Path
@@ -95,6 +97,7 @@ HOME_SERVICE_ORDER = (
 HOME_SERVICE_RANK = {key: index for index, key in enumerate(HOME_SERVICE_ORDER)}
 LABS_PROGRESS_CACHE_KEY = 'dashboard:labs-progress'
 LABS_PROGRESS_CACHE_SECONDS = 15
+LABS_PROGRESS_WORKERS = 8
 
 
 def selected_service_keys(request) -> Optional[set[str]]:
@@ -174,8 +177,18 @@ def _labs_progress_snapshot():
     progress_errors = []
     lab_progress = []
 
-    for lab in all_labs():
-        progress = _lab_progress(lab)
+    labs = list(all_labs())
+    # Each lab check is a handful of network calls to Floci, so check labs in
+    # parallel. Copy the request context so endpoint and identity overrides
+    # (ContextVars) apply inside the worker threads too.
+    with ThreadPoolExecutor(max_workers=LABS_PROGRESS_WORKERS) as pool:
+        futures = [
+            pool.submit(contextvars.copy_context().run, _lab_progress, lab)
+            for lab in labs
+        ]
+        results = [future.result() for future in futures]
+
+    for lab, progress in zip(labs, results):
         total_labs += 1
         total_steps += progress['total_steps']
         completed_labs += 1 if progress['complete'] else 0

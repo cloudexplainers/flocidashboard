@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import threading
 from contextvars import ContextVar
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -23,6 +24,9 @@ from django.core.cache import cache
 RUNTIME_ENDPOINT_SESSION_KEY = 'floci_runtime_endpoint_url'
 RUNTIME_IDENTITY_SESSION_KEY = 'floci_identity'
 IAM_BOUNDARY_CACHE_KEY = 'dashboard:iam-permissions-boundaries'
+_CLIENT_CACHE: dict[tuple, Any] = {}
+_CLIENT_CACHE_LOCK = threading.Lock()
+_CLIENT_CACHE_MAX = 512
 _runtime_endpoint_override: ContextVar[str | None] = ContextVar(
     'floci_runtime_endpoint_override',
     default=None,
@@ -192,6 +196,31 @@ class FlociClientFactory:
             )
 
     def client(self, service_name: str):
+        # Building a boto3 session and client costs ~30ms, and lab progress
+        # alone needs hundreds. Clients are thread-safe, so reuse one per
+        # endpoint/region/credential combination. boto3.Session is part of the
+        # key so tests that patch it never receive a stale cached client.
+        cache_key = (
+            boto3.Session,
+            service_name,
+            self.endpoint_url,
+            self.region,
+            self.profile,
+            self.access_key_id,
+            self.secret_access_key,
+            self.session_token,
+        )
+        with _CLIENT_CACHE_LOCK:
+            cached = _CLIENT_CACHE.get(cache_key)
+            if cached is not None:
+                return cached
+            client = self._build_client(service_name)
+            if len(_CLIENT_CACHE) >= _CLIENT_CACHE_MAX:
+                _CLIENT_CACHE.clear()
+            _CLIENT_CACHE[cache_key] = client
+            return client
+
+    def _build_client(self, service_name: str):
         try:
             session = boto3.Session(
                 profile_name=self.profile,

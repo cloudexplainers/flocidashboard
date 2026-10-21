@@ -18,32 +18,26 @@ import { fetchLabsCatalog, fetchLabsProgress, fetchLabStatus, runLabStep, resetL
 import { LabDefinition, LabStep } from '../types';
 import { CodeSnippet } from '../components/CodeSnippet';
 import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, getCurriculumItem, getLevelForLab } from '../labCurriculum';
+import { LabCompletionMap, readLabCompletion, writeLabCompletion } from '../labCompletion';
 
 export const LabsConsole: React.FC = () => {
   const [allLabsList, setAllLabsList] = useState<LabDefinition[]>([]);
-  const [completedLabsMap, setCompletedLabsMap] = useState<Record<string, boolean>>(() => {
-    try {
-      const saved = localStorage.getItem('floci_completed_labs');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const [completedLabsMap, setCompletedLabsMap] = useState<LabCompletionMap>(readLabCompletion);
+
+  // Persist completion and let the sidebar know whenever it changes.
+  useEffect(() => {
+    writeLabCompletion(completedLabsMap);
+  }, [completedLabsMap]);
 
   const saveCompletedLabState = (service: string, key: string, isComplete: boolean) => {
     setCompletedLabsMap((prev) => {
-      const next = { ...prev, [`${service}:${key}`]: isComplete };
-      try {
-        localStorage.setItem('floci_completed_labs', JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
+      return { ...prev, [`${service}:${key}`]: isComplete };
     });
   };
 
   const [activeLab, setActiveLab] = useState<LabDefinition | null>(null);
   const [loading, setLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [labError, setLabError] = useState<string | null>(null);
   const [filterText, setFilterText] = useState('');
@@ -80,6 +74,7 @@ export const LabsConsole: React.FC = () => {
 
   const loadCatalog = async () => {
     setLoading(true);
+    setCatalogError(null);
     try {
       const data = await fetchLabsCatalog();
       const flattened = (data.services || []).flatMap((s) => s.labs);
@@ -106,16 +101,12 @@ export const LabsConsole: React.FC = () => {
               map[`${l.service}:${labKey}`] = Boolean(l.complete);
             }
           });
-          try {
-            localStorage.setItem('floci_completed_labs', JSON.stringify(map));
-          } catch {
-            // ignore
-          }
           return map;
         });
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      setCatalogError(err?.message || 'Could not load the lab catalog.');
     } finally {
       setLoading(false);
     }
@@ -325,9 +316,6 @@ export const LabsConsole: React.FC = () => {
     setResetResultMessage(null);
     try {
       const res = await resetAllLabs();
-      try {
-        localStorage.removeItem('floci_completed_labs');
-      } catch {}
       setCompletedLabsMap({});
       setResetResultMessage({
         type: 'success',
@@ -672,7 +660,10 @@ export const LabsConsole: React.FC = () => {
                 {
                   id: 'steps',
                   header: 'Runnable Steps',
-                  content: (item) => `${item.step_count || item.steps?.length || 1} steps (CLI / Boto3 / Terraform)`,
+                  content: (item) => {
+                    const count = item.step_count || item.steps?.length || 1;
+                    return `${count} ${count === 1 ? 'step' : 'steps'} (CLI / Boto3 / Terraform)`;
+                  },
                 },
                 {
                   id: 'action',
@@ -692,12 +683,22 @@ export const LabsConsole: React.FC = () => {
               ],
             }}
             items={filteredLabs}
+            loading={loading && allLabsList.length === 0}
+            loadingText="Loading lab curriculum"
             cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 3 }]}
             empty={
-              <Box textAlign="center" color="inherit">
-                <b>No matching labs found</b>
-                <p>Try searching for a different keyword or level filter.</p>
-              </Box>
+              catalogError ? (
+                <Box textAlign="center" color="inherit">
+                  <b>Lab catalog unavailable</b>
+                  <p>{catalogError}</p>
+                  <Button onClick={loadCatalog}>Retry</Button>
+                </Box>
+              ) : (
+                <Box textAlign="center" color="inherit">
+                  <b>No matching labs found</b>
+                  <p>Try searching for a different keyword or level filter.</p>
+                </Box>
+              )
             }
           />
         </SpaceBetween>

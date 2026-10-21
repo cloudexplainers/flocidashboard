@@ -221,16 +221,18 @@ class LabsPageTests(SimpleTestCase):
                 ],
             },
         ]
-        status_mock.side_effect = [
-            {
+        statuses = {
+            'create-user-alice': {
                 'complete': True,
                 'steps': {
                     'create-user': {'verified': True},
                     'attach-policy': {'verified': True},
                 },
             },
-            {'complete': False, 'steps': {}},
-        ]
+            'create-bucket': {'complete': False, 'steps': {}},
+        }
+        # Labs are checked in parallel, so answer by lab rather than call order.
+        status_mock.side_effect = lambda service, lab_key: statuses[lab_key]
 
         response = self.client.get(reverse('dashboard:labs-progress'))
         payload = response.json()
@@ -241,6 +243,40 @@ class LabsPageTests(SimpleTestCase):
         self.assertEqual(payload['completed_step_count'], 2)
         self.assertEqual(payload['total_step_count'], 3)
         self.assertFalse(payload['cached'])
+
+    @patch('dashboard.views.all_labs')
+    @patch('dashboard.views.lab_status')
+    def test_labs_progress_keeps_lab_order_and_request_endpoint_in_workers(self, status_mock, all_labs_mock):
+        import threading
+        import time
+
+        from .aws import reset_runtime_endpoint_override, runtime_endpoint_override, set_runtime_endpoint_override
+        from .views import _labs_progress_snapshot
+
+        all_labs_mock.return_value = [
+            {'service': 's3', 'key': f'lab-{index}', 'title': f'Lab {index}', 'steps': [{'key': 'one'}]}
+            for index in range(12)
+        ]
+        seen = []
+
+        def status(service, lab_key):
+            # Finish early labs last so out-of-order completion would show up.
+            time.sleep(0.01 * (12 - int(lab_key.split('-')[1])) / 12)
+            seen.append((threading.get_ident(), runtime_endpoint_override()))
+            return {'complete': lab_key == 'lab-3', 'steps': {'one': {'verified': lab_key == 'lab-3'}}}
+
+        status_mock.side_effect = status
+        token = set_runtime_endpoint_override('http://alternate.localhost.floci.io:4566')
+        try:
+            snapshot = _labs_progress_snapshot()
+        finally:
+            reset_runtime_endpoint_override(token)
+
+        self.assertEqual([lab['key'] for lab in snapshot['labs']], [f'lab-{index}' for index in range(12)])
+        self.assertEqual(snapshot['completed_lab_count'], 1)
+        self.assertTrue(snapshot['labs'][3]['complete'])
+        self.assertEqual({endpoint for _, endpoint in seen}, {'http://alternate.localhost.floci.io:4566'})
+        self.assertGreater(len({thread for thread, _ in seen}), 1)
 
     @patch('dashboard.views.FlociClientFactory')
     @patch('dashboard.views.all_labs')

@@ -1483,6 +1483,24 @@ class ResourceLoaderFilterTests(SimpleTestCase):
 
 
 class FlociClientFactoryTests(SimpleTestCase):
+    def test_clients_are_reused_per_endpoint_and_identity(self):
+        env = {'AWS_ACCESS_KEY_ID': 'test', 'AWS_SECRET_ACCESS_KEY': 'test'}
+        with patch.dict(os.environ, env, clear=True):
+            first = FlociClientFactory().client('sqs')
+            again = FlociClientFactory().client('sqs')
+            other_service = FlociClientFactory().client('sns')
+            other_endpoint = FlociClientFactory('http://alternate.localhost.floci.io:4566').client('sqs')
+            other_identity = FlociClientFactory(identity={
+                'access_key_id': 'AKIDALICE',
+                'secret_access_key': 'alice-secret',
+            }).client('sqs')
+
+        self.assertIs(first, again)
+        self.assertIsNot(first, other_service)
+        self.assertIsNot(first, other_endpoint)
+        self.assertIsNot(first, other_identity)
+        self.assertEqual(other_identity._request_signer._credentials.access_key, 'AKIDALICE')
+
     def test_credential_context_reports_environment_credentials(self):
         with patch.dict(os.environ, {
             'AWS_ACCESS_KEY_ID': 'test',

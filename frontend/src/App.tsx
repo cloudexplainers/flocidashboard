@@ -33,6 +33,8 @@ import { AthenaConsole } from './pages/AthenaConsole';
 import { AppSyncConsole } from './pages/AppSyncConsole';
 import { SESConsole } from './pages/SESConsole';
 import { LabsConsole } from './pages/LabsConsole';
+import { useLabCompletion } from './labCompletion';
+import Icon from '@cloudscape-design/components/icon';
 import { InspectorConsole } from './pages/InspectorConsole';
 import { SettingsConsole } from './pages/SettingsConsole';
 import { EnvironmentConsole } from './pages/EnvironmentConsole';
@@ -63,6 +65,7 @@ function parseUrlPath(): { mainView: string; subTab?: string; fullView: string }
 export const App: React.FC = () => {
   const initial = parseUrlPath();
   const { identity } = useSession();
+  const labCompletion = useLabCompletion();
   const [services, setServices] = useState<ServiceDefinition[]>([]);
   const [currentView, setCurrentView] = useState<string>(initial.mainView);
   const [activeSubView, setActiveSubView] = useState<string>(initial.fullView);
@@ -702,6 +705,11 @@ export const App: React.FC = () => {
               type: 'link' as const,
               text: `#${lab.id}. [${lab.service.toUpperCase()}] ${lab.title}`,
               href: `labs?service=${lab.service}&lab=${lab.key}`,
+              info: labCompletion[`${lab.service}:${lab.key}`] ? (
+                <span title="Completed" aria-label="Completed">
+                  <Icon name="status-positive" variant="success" />
+                </span>
+              ) : undefined,
             })),
           })),
           { type: 'divider' as const },
