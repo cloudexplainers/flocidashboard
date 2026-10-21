@@ -25,7 +25,6 @@ from .monolith import (
     _lambda_client,
     _logs_client,
     _parse_json_text,
-    _run_iam_create_role,
     _secret_string_json,
     _secretsmanager_client,
     _sqs_client,
@@ -33,6 +32,9 @@ from .monolith import (
     _ssm_client,
     _verify_role,
     _wait_for_verification,
+)
+from .iam_labs import (
+    _run_iam_create_role,
 )
 
 

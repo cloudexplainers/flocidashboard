@@ -17,7 +17,7 @@ from .monolith import (
     AWS_REGION,
     _apigatewayv2_client,
     _error_code,
-    _floci_endpoint_url,
+    _floci_client_factory,
     _iam_client,
     _ignore_missing,
     _ignore_missing_codes,
@@ -489,7 +489,7 @@ def _apigw_lambda_request_url() -> str:
     api_id = _apigw_lambda_api_id()
     stage_name = APIGW_LAMBDA_STAGE_NAME
     return (
-        f'{_floci_endpoint_url().rstrip("/")}/restapis/{api_id}/'
+        f'{_floci_client_factory().endpoint_url.rstrip("/")}/restapis/{api_id}/'
         f'{stage_name}/_user_request_{APIGW_LAMBDA_PATH}'
     )
 

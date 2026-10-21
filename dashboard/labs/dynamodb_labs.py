@@ -22,9 +22,11 @@ from .monolith import (
     _json_text,
     _lambda_client,
     _logs_client,
-    _run_iam_create_role,
     _verify_role,
     _wait_for_verification,
+)
+from .iam_labs import (
+    _run_iam_create_role,
 )
 from .lambda_labs import (
     LAMBDA_HANDLER,
