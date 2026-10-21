@@ -2212,7 +2212,7 @@ class LabsRunnerTests(SimpleTestCase):
         )
         self.assertTrue(result['verified'])
 
-    @patch('dashboard.labs._redeem_s3_presigned_url')
+    @patch('dashboard.labs.s3_labs._redeem_s3_presigned_url')
     @patch('dashboard.labs.FlociClientFactory')
     def test_s3_presigned_lab_generates_and_redeems_url(self, factory_mock, redeem_mock):
         s3 = MagicMock()
@@ -2239,7 +2239,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIn('signature=sample', result['stdout'])
         self.assertIn('Temporary access with an S3 presigned URL.', result['stdout'])
 
-    @patch('dashboard.labs._redeem_s3_presigned_url')
+    @patch('dashboard.labs.s3_labs._redeem_s3_presigned_url')
     @patch('dashboard.labs.FlociClientFactory')
     def test_s3_presigned_lab_status_requires_successful_http_get(self, factory_mock, redeem_mock):
         s3 = MagicMock()
