@@ -5916,7 +5916,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_lambda_logs',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.lambda_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
@@ -6372,7 +6372,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIsNone(cache.get('floci-lab:dynamodb:lambda-writes:logs'))
 
 
-    @patch('dashboard.labs._verify_lambda_config_function')
+    @patch('dashboard.labs.lambda_labs._verify_lambda_config_function')
     @patch('dashboard.labs.FlociClientFactory')
     def test_lambda_runtime_config_lab_create_function_packages_reader_with_env(
         self,
@@ -6445,7 +6445,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_lambda_config_logs',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.lambda_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
@@ -6495,7 +6495,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIsNone(cache.get('floci-lab:lambda:runtime-config:logs'))
 
 
-    @patch('dashboard.labs._verify_lambda_sqs_function')
+    @patch('dashboard.labs.lambda_labs._verify_lambda_sqs_function')
     @patch('dashboard.labs.FlociClientFactory')
     def test_lambda_sqs_lab_create_function_packages_sqs_handler(
         self,
@@ -6521,8 +6521,8 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIn('processed sqs event', source)
         self.assertTrue(result['verified'])
 
-    @patch('dashboard.labs._verify_lambda_sqs_event_source_mapping')
-    @patch('dashboard.labs._find_lambda_sqs_event_source_mapping')
+    @patch('dashboard.labs.lambda_labs._verify_lambda_sqs_event_source_mapping')
+    @patch('dashboard.labs.lambda_labs._find_lambda_sqs_event_source_mapping')
     @patch('dashboard.labs.FlociClientFactory')
     def test_lambda_sqs_lab_creates_event_source_mapping(
         self,
@@ -6553,7 +6553,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertEqual(cache.get('floci-lab:lambda:sqs-event-source:mapping'), 'mapping-123')
         cache.clear()
 
-    @patch('dashboard.labs._verify_lambda_sqs_message_sent')
+    @patch('dashboard.labs.lambda_labs._verify_lambda_sqs_message_sent')
     @patch('dashboard.labs.FlociClientFactory')
     def test_lambda_sqs_lab_send_message_records_marker(
         self,
@@ -6590,7 +6590,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_lambda_sqs_logs',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.lambda_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
@@ -6603,7 +6603,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(status['steps']['send-message']['verified'])
         self.assertTrue(status['steps']['inspect-logs']['verified'])
 
-    @patch('dashboard.labs._find_lambda_sqs_event_source_mapping')
+    @patch('dashboard.labs.lambda_labs._find_lambda_sqs_event_source_mapping')
     @patch('dashboard.labs.FlociClientFactory')
     def test_lambda_sqs_lab_reset_deletes_mapping_function_queue_and_cache(
         self,

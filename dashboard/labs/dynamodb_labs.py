@@ -13,9 +13,6 @@ from dashboard.aws import _clean_response
 from .monolith import (
     AWS_ACCOUNT_ID,
     AWS_REGION,
-    LAMBDA_HANDLER,
-    LAMBDA_LAB_TRUST_POLICY,
-    LAMBDA_RUNTIME,
     _describe_log_streams_if_present,
     _dynamodb_client,
     _error_code,
@@ -24,12 +21,17 @@ from .monolith import (
     _ignore_missing_codes,
     _json_text,
     _lambda_client,
-    _lambda_function_zip_bytes,
-    _lambda_payload_json,
     _logs_client,
     _run_iam_create_role,
     _verify_role,
     _wait_for_verification,
+)
+from .lambda_labs import (
+    LAMBDA_HANDLER,
+    LAMBDA_LAB_TRUST_POLICY,
+    LAMBDA_RUNTIME,
+    _lambda_function_zip_bytes,
+    _lambda_payload_json,
 )
 
 
