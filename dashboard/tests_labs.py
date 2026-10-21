@@ -5321,8 +5321,8 @@ class LabsRunnerTests(SimpleTestCase):
         )
         self.assertTrue(result['verified'])
 
-    @patch('dashboard.labs._verify_cloudformation_stack')
-    @patch('dashboard.labs._wait_for_cloudformation_status')
+    @patch('dashboard.labs.cloudformation_labs._verify_cloudformation_stack')
+    @patch('dashboard.labs.cloudformation_labs._wait_for_cloudformation_status')
     @patch('dashboard.labs.FlociClientFactory')
     def test_cloudformation_lab_creates_stack_and_waits_for_completion(
         self,
@@ -5392,7 +5392,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         self.assertEqual(len(result['json']['StackResources']), 2)
 
-    @patch('dashboard.labs._verify_cloudformation_deleted')
+    @patch('dashboard.labs.cloudformation_labs._verify_cloudformation_deleted')
     @patch('dashboard.labs.FlociClientFactory')
     def test_cloudformation_lab_deletes_stack_after_inspection(
         self,
@@ -5439,7 +5439,7 @@ class LabsRunnerTests(SimpleTestCase):
         cache.set('floci-lab:cloudformation:s3-sqs:created', True)
         cache.set('floci-lab:cloudformation:s3-sqs:inspected', True)
         with patch(
-            'dashboard.labs._verify_cloudformation_deleted',
+            'dashboard.labs.cloudformation_labs._verify_cloudformation_deleted',
             return_value={'status': 'passed', 'message': 'deleted'},
         ):
             from .labs import lab_status
