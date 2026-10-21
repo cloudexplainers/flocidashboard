@@ -6151,7 +6151,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIsNone(cache.get('floci-lab:apigateway:lambda-request:api-id'))
 
 
-    @patch('dashboard.labs._verify_dynamodb_table_exists')
+    @patch('dashboard.labs.dynamodb_labs._verify_dynamodb_table_exists')
     @patch('dashboard.labs.FlociClientFactory')
     def test_dynamodb_lab_create_table_uses_on_demand_table_with_customer_index(
         self,
@@ -6172,7 +6172,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertEqual(call['GlobalSecondaryIndexes'][0]['IndexName'], 'CustomerIdIndex')
         self.assertTrue(result['verified'])
 
-    @patch('dashboard.labs._verify_dynamodb_order_updated')
+    @patch('dashboard.labs.dynamodb_labs._verify_dynamodb_order_updated')
     @patch('dashboard.labs.FlociClientFactory')
     def test_dynamodb_lab_update_item_sets_paid_status_and_records_marker(
         self,
@@ -6199,7 +6199,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(cache.get('floci-lab:dynamodb:crud-query:update-item'))
         cache.clear()
 
-    @patch('dashboard.labs._verify_dynamodb_customer_query')
+    @patch('dashboard.labs.dynamodb_labs._verify_dynamodb_customer_query')
     @patch('dashboard.labs.FlociClientFactory')
     def test_dynamodb_lab_queries_customer_index_and_records_marker(
         self,
@@ -6231,7 +6231,7 @@ class LabsRunnerTests(SimpleTestCase):
         cache.set('floci-lab:dynamodb:crud-query:delete-table', True)
         with ExitStack() as stack:
             stack.enter_context(patch(
-                'dashboard.labs._verify_dynamodb_table_deleted',
+                'dashboard.labs.dynamodb_labs._verify_dynamodb_table_deleted',
                 return_value=passed,
             ))
             from .labs import lab_status
@@ -6264,7 +6264,7 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertIsNone(cache.get('floci-lab:dynamodb:crud-query:delete-table'))
 
 
-    @patch('dashboard.labs._verify_lambda_dynamodb_function')
+    @patch('dashboard.labs.dynamodb_labs._verify_lambda_dynamodb_function')
     @patch('dashboard.labs.FlociClientFactory')
     def test_dynamodb_lambda_lab_create_function_packages_writer_with_table_env(
         self,
@@ -6325,7 +6325,7 @@ class LabsRunnerTests(SimpleTestCase):
                 '_verify_lambda_dynamodb_logs',
             ):
                 stack.enter_context(patch(
-                    f'dashboard.labs.{verifier}',
+                    f'dashboard.labs.dynamodb_labs.{verifier}',
                     return_value=passed,
                 ))
             from .labs import lab_status
