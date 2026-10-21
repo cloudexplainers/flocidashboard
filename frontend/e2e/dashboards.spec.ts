@@ -1361,7 +1361,7 @@ test('KMS crypto tools use backend response fields, mask data keys and clear res
   await page.getByRole('button', { name: 'Encrypt', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Ciphertext (Base64)', exact: true })).toHaveValue('ZW5jcnlwdGVk');
   await page.getByRole('button', { name: 'Decrypt', exact: true }).click();
-  await expect(page.locator('span').getByText('Hello KMS', { exact: true })).toBeVisible();
+  await expect(page.getByText('Hello KMS', { exact: true }).and(page.locator('span'))).toBeVisible();
   expect(requests[1]).toEqual({ action: 'decrypt', ciphertext_blob: 'ZW5jcnlwdGVk' });
   await page.getByRole('button', { name: 'Generate data key', exact: true }).click();
   await expect(page.getByText('Hidden', { exact: true })).toBeVisible();
