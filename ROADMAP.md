@@ -387,7 +387,6 @@ Continue the local AWS workflow lab system beyond the completed IAM, S3, SQS, SN
 
 Feasible follow-ups:
 
-- Continue extracting service-specific lab code out of `dashboard/labs/monolith.py`; the package shell, typed definitions, registry facade, runner facade, and first service definition facades are in place.
 - Continue the new serverless application spine with S3 object-created notifications to Lambda, EventBridge rules to Lambda or SQS, and EventBridge Pipes source-to-target flows where local support is reliable.
 - Continue networking labs with multi-AZ interface endpoints, endpoint policy variations, or hybrid connectivity when local support makes them useful.
 - Add “View in dashboard” links after verified steps.

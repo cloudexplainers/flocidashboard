@@ -393,70 +393,35 @@ Reset responses should be similarly consistent:
 
 ## Recommended Code Structure
 
-The lab implementation has moved from the original single `dashboard/labs.py` module into a `dashboard/labs/` package. The package keeps the public `dashboard.labs` import path stable while service code is extracted incrementally.
+The lab implementation has moved from the original single `dashboard/labs.py` module into a `dashboard/labs/` package. The package keeps the public `dashboard.labs` import path stable.
 
 Current state:
 
 ```text
 dashboard/labs/
   __init__.py
-    compatibility export for the historical dashboard.labs API
+    compatibility export: dashboard.labs is the monolith module object
   monolith.py
-    temporary home for existing service definitions, runners, verification, and reset helpers
+    labs_for_service(...), get_lab(...), next_lab_batch(...), LAB_BATCH_ORDER
+    run_lab_step(...), lab_status(...), reset_lab(...) dispatch to service modules
+    shared helpers (boto3 clients, _json_text, _error_code, _verify_role, ...)
+    re-exports every service module name so dashboard.labs.<name> keeps working
+  <service>_labs.py
+    one module per service (iam, s3, sqs, sns, scheduler, kms, ssm,
+    secretsmanager, dynamodb, lambda, apigateway, ec2, cloudformation,
+    stepfunctions, cognito, cloudwatch, rds, ecs, eks) with LABS,
+    step runners, verifiers, run_step(...), status(...), and reset(...)
+  eventbridge_application.py, ec2_guided.py
+    EventBridge application spine and guided EC2 labs
   registry.py
-    labs_for_service(...)
-    get_lab(...)
-    next_lab_batch(...)
-    all_labs(...)
+    all_labs(...) plus registry re-exports
   runner.py
-    run_lab_step(...)
-    lab_status(...)
-    reset_lab(...)
+    run_lab_step(...), lab_status(...), reset_lab(...) facade
   types.py
     typed dictionaries for Lab, LabStep, StepResult, ResetResult, and verification payloads
-  iam.py, s3.py, sqs.py, lambda_labs.py
-    first service definition facades
 ```
 
-The remaining cleanup is to move service-specific implementation out of `monolith.py` into focused modules. Keep those migrations mechanical and covered by the existing tests.
-
-Target structure:
-
-```text
-dashboard/
-  labs/
-    __init__.py
-    registry.py
-    runner.py
-    types.py
-    iam.py
-    s3.py
-    sqs.py
-    lambda_labs.py
-    ...
-```
-
-Suggested responsibilities:
-
-```text
-types.py
-  Dataclasses or typed dictionaries for Lab, LabStep, StepResult, LabStatus.
-
-registry.py
-  labs_for_service(service_key)
-  get_lab(service_key, lab_key)
-
-runner.py
-  run_lab_step(service_key, lab_key, step_key)
-  reset_lab(service_key, lab_key)
-  common response formatting helpers
-
-iam.py
-  IAM lab definitions
-  IAM step actions
-  IAM verification helpers
-  IAM reset helpers
-```
+When a test patches a function that a service module calls, patch it where it is looked up, for example `patch('dashboard.labs.kms_labs._verify_kms_lab_key')`. Boto3 clients come from the monolith helpers, so `patch('dashboard.labs.FlociClientFactory')` still covers every service module.
 
 Keep service-specific implementation in service files. Keep generic lab routing and response formatting in common files.
 
@@ -2302,7 +2267,7 @@ Phase 2: Lab framework
 - Introduce typed lab definitions. Complete for shared payload shapes.
 - Centralize registry and runner facades. Complete.
 - Keep the existing route/template API stable while moving internals. Complete.
-- Move service-specific definitions, runners, status, and reset helpers out of `monolith.py` incrementally.
+- Move service-specific definitions, runners, status, and reset helpers out of `monolith.py`. Complete.
 
 Phase 3: Multi-step IAM labs
 

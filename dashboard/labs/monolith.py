@@ -1,24 +1,26 @@
-"""Curated local AWS workflow labs."""
+"""Shared helpers and the dispatch facade for the local AWS workflow labs.
+
+Each service's lab definitions, step runners, verifiers, status, and reset
+live in ``<service>_labs.py`` (plus a few older modules such as
+``stepfunctions_labs.py``). This module keeps the lab registry, the
+``run_lab_step``/``lab_status``/``reset_lab`` dispatchers, and the helpers
+those modules share.
+"""
 
 from __future__ import annotations
 
 import json
-import zipfile
-import base64
-from io import BytesIO
 import time
-from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
 from botocore.exceptions import ClientError
-from django.core.cache import cache
 
 from ..aws import FlociClientFactory, _clean_response
 
 AWS_ACCOUNT_ID = '000000000000'
 AWS_REGION = 'us-east-1'
+
+
 def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'iam':
         from .iam_labs import LABS
@@ -399,6 +401,40 @@ def _sqs_queue_url(queue_name: str) -> str:
     return _sqs_client().get_queue_url(QueueName=queue_name)['QueueUrl']
 
 
+def _config_lab_step_result(
+    service: str,
+    lab: str,
+    step_key: str,
+    command: str,
+    response: dict[str, Any],
+    verification: dict[str, Any],
+    started: float,
+) -> dict[str, Any]:
+    return {
+        'service': service,
+        'lab': lab,
+        'step': step_key,
+        'command': command,
+        'exit_code': 0,
+        'stdout': _json_text(response),
+        'stderr': '',
+        'json': _clean_response(response),
+        'duration_ms': round((time.perf_counter() - started) * 1000),
+        'verified': verification.get('status') == 'passed',
+        'verification': verification,
+    }
+
+
+def _ignore_missing_codes(action, missing_codes: set[str]) -> bool:
+    try:
+        action()
+        return True
+    except ClientError as exc:
+        if _error_code(exc) in missing_codes:
+            return False
+        raise
+
+
 def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
     if service_key == 'eventbridge' and lab_key == 'application-spine':
         from .eventbridge_application import run_step
@@ -647,45 +683,41 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
     raise ValueError('Lab reset not found')
 
 
-def _config_lab_step_result(
-    service: str,
-    lab: str,
-    step_key: str,
-    command: str,
-    response: dict[str, Any],
-    verification: dict[str, Any],
-    started: float,
-) -> dict[str, Any]:
-    return {
-        'service': service,
-        'lab': lab,
-        'step': step_key,
-        'command': command,
-        'exit_code': 0,
-        'stdout': _json_text(response),
-        'stderr': '',
-        'json': _clean_response(response),
-        'duration_ms': round((time.perf_counter() - started) * 1000),
-        'verified': verification.get('status') == 'passed',
-        'verification': verification,
-    }
+# Service lab modules. Their names stay importable from ``dashboard.labs`` so
+# existing callers and tests keep working.
+from . import (  # noqa: E402
+    sqs_labs,
+    sns_labs,
+    scheduler_labs,
+    kms_labs,
+    ssm_labs,
+    secretsmanager_labs,
+    dynamodb_labs,
+    apigateway_labs,
+    lambda_labs,
+    s3_labs,
+    iam_labs,
+    ec2_labs,
+    cloudformation_labs,
+)
 
+_SERVICE_LAB_MODULES = (
+    sqs_labs,
+    sns_labs,
+    scheduler_labs,
+    kms_labs,
+    ssm_labs,
+    secretsmanager_labs,
+    dynamodb_labs,
+    apigateway_labs,
+    lambda_labs,
+    s3_labs,
+    iam_labs,
+    ec2_labs,
+    cloudformation_labs,
+)
 
-def _ignore_missing_codes(action, missing_codes: set[str]) -> bool:
-    try:
-        action()
-        return True
-    except ClientError as exc:
-        if _error_code(exc) in missing_codes:
-            return False
-        raise
-
-
-# Service lab modules. Their names stay importable from ``dashboard.labs`` so existing
-# callers and tests keep working.
-from . import sqs_labs, sns_labs, scheduler_labs, kms_labs, ssm_labs, secretsmanager_labs, dynamodb_labs, apigateway_labs, lambda_labs, s3_labs, iam_labs, ec2_labs, cloudformation_labs  # noqa: E402
-
-for _module in (sqs_labs, sns_labs, scheduler_labs, kms_labs, ssm_labs, secretsmanager_labs, dynamodb_labs, apigateway_labs, lambda_labs, s3_labs, iam_labs, ec2_labs, cloudformation_labs,):
+for _module in _SERVICE_LAB_MODULES:
     for _name, _value in vars(_module).items():
         if not _name.startswith('__') and _name not in ('LABS', 'run_step', 'status', 'reset'):
             globals().setdefault(_name, _value)
