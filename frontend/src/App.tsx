@@ -1,47 +1,12 @@
-import { CloudTrailConsole } from './pages/CloudTrailConsole';
 import { parseEksRoute, eksClusterPath } from './pages/eksResources';
 import { parseEcsRoute, clusterPath, servicePath } from './pages/ecsResources';
 import { useSession } from './components/SessionContext';
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { TopNav } from './components/TopNav';
 import { ConsoleLayout } from './components/ConsoleLayout';
 import { ConsoleHome } from './pages/ConsoleHome';
-import { S3Console } from './pages/S3Console';
-import { EC2Console } from './pages/EC2Console';
-import { IAMConsole } from './pages/IAMConsole';
-import { DynamoDBConsole } from './pages/DynamoDBConsole';
-import { LambdaConsole } from './pages/LambdaConsole';
-import { SQSConsole } from './pages/SQSConsole';
-import { SNSConsole } from './pages/SNSConsole';
-import { RDSConsole } from './pages/RDSConsole';
-import { KMSConsole } from './pages/KMSConsole';
-import { SecretsManagerConsole } from './pages/SecretsManagerConsole';
-import { CloudFormationConsole } from './pages/CloudFormationConsole';
-import { Route53Console } from './pages/Route53Console';
-import { EventBridgeConsole } from './pages/EventBridgeConsole';
-import { CloudWatchConsole } from './pages/CloudWatchConsole';
-import { StepFunctionsConsole } from './pages/StepFunctionsConsole';
-import { CognitoConsole } from './pages/CognitoConsole';
-import { ApiGatewayConsole } from './pages/ApiGatewayConsole';
-import { SSMConsole } from './pages/SSMConsole';
-import { ECSConsole } from './pages/ECSConsole';
-import { EKSConsole } from './pages/EKSConsole';
-import { ECRConsole } from './pages/ECRConsole';
-import { CloudFrontConsole } from './pages/CloudFrontConsole';
-import { ELBv2Console } from './pages/ELBv2Console';
-import { AthenaConsole } from './pages/AthenaConsole';
-import { AppSyncConsole } from './pages/AppSyncConsole';
-import { SESConsole } from './pages/SESConsole';
-import { LabsConsole } from './pages/LabsConsole';
 import { useLabCompletion } from './labCompletion';
 import Icon from '@cloudscape-design/components/icon';
-import { InspectorConsole } from './pages/InspectorConsole';
-import { SettingsConsole } from './pages/SettingsConsole';
-import { EnvironmentConsole } from './pages/EnvironmentConsole';
-import { ActivityConsole } from './pages/ActivityConsole';
-import { CliConsole } from './pages/CliConsole';
-import { ResourceGraphConsole } from './pages/ResourceGraphConsole';
-import { GenericServiceWorkbench } from './pages/GenericServiceWorkbench';
 import { AwsServiceIcon } from './components/AwsServiceIcons';
 import { FavoritesBar } from './components/FavoritesBar';
 import { fetchServices } from './api/client';
@@ -51,6 +16,46 @@ import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import Button from '@cloudscape-design/components/button';
+import Box from '@cloudscape-design/components/box';
+import StatusIndicator from '@cloudscape-design/components/status-indicator';
+
+// Each console page loads on first visit, so the initial bundle only carries
+// the shell (navigation, layout, home page).
+const CloudTrailConsole = lazy(() => import('./pages/CloudTrailConsole').then((module) => ({ default: module.CloudTrailConsole })));
+const S3Console = lazy(() => import('./pages/S3Console').then((module) => ({ default: module.S3Console })));
+const EC2Console = lazy(() => import('./pages/EC2Console').then((module) => ({ default: module.EC2Console })));
+const IAMConsole = lazy(() => import('./pages/IAMConsole').then((module) => ({ default: module.IAMConsole })));
+const DynamoDBConsole = lazy(() => import('./pages/DynamoDBConsole').then((module) => ({ default: module.DynamoDBConsole })));
+const LambdaConsole = lazy(() => import('./pages/LambdaConsole').then((module) => ({ default: module.LambdaConsole })));
+const SQSConsole = lazy(() => import('./pages/SQSConsole').then((module) => ({ default: module.SQSConsole })));
+const SNSConsole = lazy(() => import('./pages/SNSConsole').then((module) => ({ default: module.SNSConsole })));
+const RDSConsole = lazy(() => import('./pages/RDSConsole').then((module) => ({ default: module.RDSConsole })));
+const KMSConsole = lazy(() => import('./pages/KMSConsole').then((module) => ({ default: module.KMSConsole })));
+const SecretsManagerConsole = lazy(() => import('./pages/SecretsManagerConsole').then((module) => ({ default: module.SecretsManagerConsole })));
+const CloudFormationConsole = lazy(() => import('./pages/CloudFormationConsole').then((module) => ({ default: module.CloudFormationConsole })));
+const Route53Console = lazy(() => import('./pages/Route53Console').then((module) => ({ default: module.Route53Console })));
+const EventBridgeConsole = lazy(() => import('./pages/EventBridgeConsole').then((module) => ({ default: module.EventBridgeConsole })));
+const CloudWatchConsole = lazy(() => import('./pages/CloudWatchConsole').then((module) => ({ default: module.CloudWatchConsole })));
+const StepFunctionsConsole = lazy(() => import('./pages/StepFunctionsConsole').then((module) => ({ default: module.StepFunctionsConsole })));
+const CognitoConsole = lazy(() => import('./pages/CognitoConsole').then((module) => ({ default: module.CognitoConsole })));
+const ApiGatewayConsole = lazy(() => import('./pages/ApiGatewayConsole').then((module) => ({ default: module.ApiGatewayConsole })));
+const SSMConsole = lazy(() => import('./pages/SSMConsole').then((module) => ({ default: module.SSMConsole })));
+const ECSConsole = lazy(() => import('./pages/ECSConsole').then((module) => ({ default: module.ECSConsole })));
+const EKSConsole = lazy(() => import('./pages/EKSConsole').then((module) => ({ default: module.EKSConsole })));
+const ECRConsole = lazy(() => import('./pages/ECRConsole').then((module) => ({ default: module.ECRConsole })));
+const CloudFrontConsole = lazy(() => import('./pages/CloudFrontConsole').then((module) => ({ default: module.CloudFrontConsole })));
+const ELBv2Console = lazy(() => import('./pages/ELBv2Console').then((module) => ({ default: module.ELBv2Console })));
+const AthenaConsole = lazy(() => import('./pages/AthenaConsole').then((module) => ({ default: module.AthenaConsole })));
+const AppSyncConsole = lazy(() => import('./pages/AppSyncConsole').then((module) => ({ default: module.AppSyncConsole })));
+const SESConsole = lazy(() => import('./pages/SESConsole').then((module) => ({ default: module.SESConsole })));
+const LabsConsole = lazy(() => import('./pages/LabsConsole').then((module) => ({ default: module.LabsConsole })));
+const InspectorConsole = lazy(() => import('./pages/InspectorConsole').then((module) => ({ default: module.InspectorConsole })));
+const SettingsConsole = lazy(() => import('./pages/SettingsConsole').then((module) => ({ default: module.SettingsConsole })));
+const EnvironmentConsole = lazy(() => import('./pages/EnvironmentConsole').then((module) => ({ default: module.EnvironmentConsole })));
+const ActivityConsole = lazy(() => import('./pages/ActivityConsole').then((module) => ({ default: module.ActivityConsole })));
+const CliConsole = lazy(() => import('./pages/CliConsole').then((module) => ({ default: module.CliConsole })));
+const ResourceGraphConsole = lazy(() => import('./pages/ResourceGraphConsole').then((module) => ({ default: module.ResourceGraphConsole })));
+const GenericServiceWorkbench = lazy(() => import('./pages/GenericServiceWorkbench').then((module) => ({ default: module.GenericServiceWorkbench })));
 
 function parseUrlPath(): { mainView: string; subTab?: string; fullView: string } {
   const path = window.location.pathname.replace(/^\/app(?:\/|$)/, '').replace(/^\//, '').replace(/\/$/, '');
@@ -1049,7 +1054,15 @@ export const App: React.FC = () => {
         activeSideNavHref={activeSubView}
         onSideNavFollow={(href) => navigateTo(href)}
       >
-        {renderContent()}
+        <Suspense
+          fallback={
+            <Box padding="l" textAlign="center">
+              <StatusIndicator type="loading">Loading console</StatusIndicator>
+            </Box>
+          }
+        >
+          {renderContent()}
+        </Suspense>
       </ConsoleLayout>
     </div>
   );
