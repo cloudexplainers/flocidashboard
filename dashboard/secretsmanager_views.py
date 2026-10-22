@@ -40,7 +40,7 @@ def secretsmanager_secret_value(request, secret_id: str):
             return JsonResponse(put_secret_value(secret_id, body.get('value')))
         return JsonResponse(delete_secret(
             secret_id,
-            recovery_window_days=body.get('recovery_window_days') or 7,
+            recovery_window_days=body.get('recovery_window_days') or 30,
             force_delete_without_recovery=bool(body.get('force_delete_without_recovery')),
         ))
     except Exception as exc:

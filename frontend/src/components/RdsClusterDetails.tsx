@@ -9,7 +9,7 @@ import Box from "@cloudscape-design/components/box";
 import {
   RdsCluster,
   RdsInstance,
-  rdsStatus,
+  rdsStatus, rdsStatusLabel, rdsEngineLabel,
   rdsBoolean,
   rdsTime,
   clusterMembers,
@@ -48,11 +48,11 @@ export function RdsClusterDetails({
                     label: "Status",
                     value: (
                       <StatusIndicator type={rdsStatus(cluster.status)}>
-                        {cluster.status || "Not reported"}
+                        {rdsStatusLabel(cluster.status)}
                       </StatusIndicator>
                     ),
                   },
-                  { label: "Engine", value: cluster.engine || "Not reported" },
+                  { label: "Engine", value: rdsEngineLabel(cluster.engine) },
                   {
                     label: "Engine version",
                     value: cluster.engine_version ?? "Not reported",

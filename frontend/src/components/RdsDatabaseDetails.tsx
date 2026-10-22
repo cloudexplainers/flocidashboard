@@ -12,7 +12,7 @@ import { CodeSnippet } from "./CodeSnippet";
 import {
   RdsInstance,
   RdsCluster,
-  rdsStatus,
+  rdsStatus, rdsStatusLabel, rdsEngineLabel,
   rdsBoolean,
   rdsTime,
   rdsConnection,
@@ -55,11 +55,11 @@ export function RdsDatabaseDetails({
                     label: "Status",
                     value: (
                       <StatusIndicator type={rdsStatus(db.status)}>
-                        {db.status || "Not reported"}
+                        {rdsStatusLabel(db.status)}
                       </StatusIndicator>
                     ),
                   },
-                  { label: "Engine", value: db.engine || "Not reported" },
+                  { label: "Engine", value: rdsEngineLabel(db.engine) },
                   {
                     label: "Engine version",
                     value: present(db.engine_version),

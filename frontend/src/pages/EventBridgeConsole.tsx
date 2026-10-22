@@ -911,7 +911,7 @@ const EventBridgeWorkspace: React.FC<Props> = ({
                                   },
                                   {
                                     label: "Description",
-                                    value: activeRule.Description || "N/A",
+                                    value: activeRule.Description || "-",
                                   },
                                 ]}
                               />

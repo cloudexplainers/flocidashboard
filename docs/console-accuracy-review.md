@@ -184,3 +184,84 @@ Already accurate: REST and HTTP APIs, routes/resources, integrations, stages and
 Left as is:
 - Creating routes, integrations, authorizers and stages is not in this console (create API only); usage plans, API keys and custom domains are listed in the inventory but have no pages.
 
+## RDS
+
+Already sound: instances, clusters and parameter groups come from the API, credentials are never pre-filled, and backend errors stay in the dialog.
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | Deleting an instance or cluster defaulted to "Skip final snapshot". The console defaults to creating a final snapshot (named `<id>-final-snapshot`) and asks you to type "delete me". | Fixed for instances and clusters. |
+| Low | Status and engine showed raw API values (`available`, `aurora-postgresql`). | Fixed: "Available", "Aurora PostgreSQL", "PostgreSQL" and so on, in the list and detail pages. |
+
+Left as is:
+- Final snapshot creation on delete was checked against the API contract and tests, not against a live Floci instance, to avoid destroying the lab databases.
+- Snapshots, automated backups, read replicas and Performance Insights are not in this console.
+
+## ECS
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | Container instances showed an invented EC2 instance ID (`i-0abcd1234ef567890`) when none was reported, and "Agent connected: Connected" for every instance. | Fixed: real `ec2InstanceId` and `agentConnected`, or "-". |
+| High | Every cluster and service showed a green "ACTIVE" status (hard-coded success), and missing service/task counts fell back to account-wide totals. | Fixed: real status with matching indicator (Active, Provisioning, Draining, Inactive), real counts or "-". |
+| Medium | Missing values were invented: desired/running count 1, launch type FARGATE, task CPU/memory 256/512, revision 1, family "default-task", compatibilities FARGATE+EC2. | Removed. |
+| Medium | Stop task and deregister task definition had no confirmation. | Fixed. |
+
+## EKS
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | Create cluster, node group and Fargate profile forms were pre-filled with role ARNs, subnet IDs and security group IDs that do not exist (`subnet-01234567`, `eks-cluster-role`). Submitting them as-is failed or created resources pointing at nothing. | Fixed: fields start empty with those values as placeholders. |
+| Low | A Fargate profile with no selectors showed namespace "default". | Shows "-". |
+
+## Cognito
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | Delete user ignored HTTP errors, and had no confirmation. | Fixed. |
+| Medium | Creating an identity pool posted to a non-existent route. | Fixed (see Cross-cutting). |
+
+Left as is:
+- Test passwords and the `developer-alice` username are pre-filled in the user and sign-in forms for convenience. They are clearly sample values in a local learning tool.
+
+## Elastic Load Balancing
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | Register targets was pre-filled with a fake instance ID (`i-0123456789abcdef0`). | Fixed: empty, with the example as a placeholder. |
+| Medium | Delete listener had no confirmation. | Fixed. |
+
+## Secrets Manager
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | Delete secret defaulted to a 7-day recovery window (UI, view and API helper). The AWS default and console default is 30 days. | Fixed in all three. The force-delete option is labeled as API/CLI-only, since the console always schedules deletion. |
+
+## Generic service workbench
+
+Used by services without a dedicated page. All 539 action definitions in `services.py` were checked: each path resolves to a Django route, and each route allows the action's HTTP method.
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | Delete-kind actions not marked `destructive` ran without confirmation. | Fixed: any delete or destructive action asks first. |
+| Low | The header said "Local AWS workbench", which read like a console page. | Now says it is the generic workbench for services without a dedicated console. |
+
+## Settings and other dashboard pages
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | The Settings connection test always showed "Health Status: Healthy", even when `/_floci/health` failed, and fell back to account `000000000000` and `arn:aws:iam::000000000000:root` when the identity could not be resolved. | Fixed: shows the real health result and error, and says when the identity is only a local hint. |
+
+Console Home, Activity, Environment, CLI, Inspector, Labs and Resource Graph are dashboard tools rather than AWS consoles. Their health and status values come from real checks (Resource Graph marks a connection healthy when both resources exist).
+
+## SES
+
+Already careful: identity status comes from the inventory, never from a successful verification request.
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | Floci verifies identities immediately, which differs from AWS (email identities stay Pending until the link is opened; domains until DNS records are published). The console did not say so. | Fixed: the verification message explains the difference. |
+
+## EventBridge
+
+Already accurate (rules, buses, targets and the pattern tester use real data). One "N/A" placeholder for a missing rule description now shows "-".
+

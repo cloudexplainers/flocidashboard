@@ -92,7 +92,7 @@ export const SESConsole: React.FC<SESConsoleProps> = ({
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState<{
-    type: "success" | "error";
+    type: "success" | "error" | "info";
     text: string;
   } | null>(null);
   const [form, setForm] = useState<
@@ -213,6 +213,13 @@ export const SESConsole: React.FC<SESConsoleProps> = ({
         await loadData();
         navigate("details", name);
         // Identity state comes from inventory, never from a successful verification request.
+        setMessage({
+          type: "info",
+          text:
+            identityType === "Email address"
+              ? `Verification requested for ${name}. Floci marks identities verified immediately; in AWS the status stays Pending until someone opens the link sent to the address.`
+              : `Verification requested for ${name}. Floci marks identities verified immediately; in AWS the status stays Pending until the TXT (or DKIM CNAME) records are published in DNS.`,
+        });
       } else if (form === "template") {
         await createSesTemplate(formName.trim(), subject, html, text);
         setForm(null);

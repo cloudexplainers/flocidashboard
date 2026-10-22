@@ -32,6 +32,16 @@ import {
   updateEcsContainerInstanceState,
 } from '../api/client';
 
+/** ECS status values (ACTIVE, PROVISIONING, DRAINING, INACTIVE, RUNNING, STOPPED, ...) as console status indicators. */
+const ecsStatusType = (status?: string): 'success' | 'stopped' | 'in-progress' | 'error' | 'info' => {
+  if (!status) return 'info';
+  if (['ACTIVE', 'RUNNING'].includes(status)) return 'success';
+  if (['STOPPED', 'INACTIVE', 'DEPROVISIONING'].includes(status)) return 'stopped';
+  if (['FAILED'].includes(status)) return 'error';
+  return 'in-progress';
+};
+const titleStatus = (status?: string) => (status ? status.charAt(0) + status.slice(1).toLowerCase() : '-');
+
 interface ECSConsoleProps {
   activeTab?: string;
   resourcePath?: string;
@@ -234,6 +244,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
   };
 
   const handleDeregisterTaskDef = async (arnOrName: string) => {
+    if (!confirm(`Deregister ${arnOrName.split('/').pop()}? It becomes INACTIVE: existing tasks and services keep running, but it can't be used for new ones.`)) return;
     try {
       await deregisterEcsTaskDefinition(arnOrName);
       setActionMessage({ type: 'success', text: `Task definition deregistered.` });
@@ -266,6 +277,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
   const handleStopTask = async (taskArn: string, cluster = activeClusterName) => {
     const targetCluster = cluster || activeClusterName;
     if (!targetCluster || !taskArn) return;
+    if (!confirm(`Stop task ${taskArn.split('/').pop()}? The task's containers receive SIGTERM, then SIGKILL after the stop timeout.`)) return;
     try {
       await stopEcsTask(targetCluster, taskArn);
       setActionMessage({ type: 'success', text: 'Task stop requested.' });
@@ -421,7 +433,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                     columnDefinitions={[
                       {
                         id: 'name',
-                        header: 'Cluster Name',
+                        header: 'Cluster',
                         cell: (item: any) => (
                           <Button variant="inline-link" onClick={() => { setSelectedClusters([item]); navigate(clusterPath(item.clusterName)); }}>
                             <strong>{item.clusterName || item.cluster_name}</strong>
@@ -432,19 +444,19 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                       {
                         id: 'status',
                         header: 'Status',
-                        cell: (item: any) => <StatusIndicator type="success">{item.status || 'ACTIVE'}</StatusIndicator>,
+                        cell: (item: any) => <StatusIndicator type={ecsStatusType(item.status)}>{titleStatus(item.status)}</StatusIndicator>,
                         width: 140,
                       },
                       {
                         id: 'services',
                         header: 'Services',
-                        cell: (item: any) => item.activeServicesCount ?? (data.services || []).length,
+                        cell: (item: any) => item.activeServicesCount ?? '-',
                         width: 120,
                       },
                       {
                         id: 'tasks',
-                        header: 'Running Tasks',
-                        cell: (item: any) => item.runningTasksCount ?? (data.tasks || []).length,
+                        header: 'Running tasks',
+                        cell: (item: any) => item.runningTasksCount ?? '-',
                         width: 130,
                       },
                       {
@@ -494,30 +506,30 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                   columnDefinitions={[
                     {
                       id: 'serviceName',
-                      header: 'Service Name',
+                      header: 'Service name',
                       cell: (item: any) => <Button variant="inline-link" onClick={() => navigate(servicePath(activeClusterName, item.serviceName || item.service_name))}>{item.serviceName || item.service_name}</Button>,
                     },
                     {
                       id: 'status',
                       header: 'Status',
-                      cell: (item: any) => <StatusIndicator type="success">{item.status || 'ACTIVE'}</StatusIndicator>,
+                      cell: (item: any) => <StatusIndicator type={ecsStatusType(item.status)}>{titleStatus(item.status)}</StatusIndicator>,
                       width: 130,
                     },
                     {
                       id: 'taskDef',
-                      header: 'Task Definition',
+                      header: 'Task definition',
                       cell: (item: any) => <code>{item.taskDefinition || item.task_definition}</code>,
                     },
                     {
                       id: 'tasks',
-                      header: 'Desired / Running',
-                      cell: (item: any) => `${item.desiredCount ?? 1} / ${item.runningCount ?? item.desiredCount ?? 1}`,
+                      header: 'Desired / running tasks',
+                      cell: (item: any) => `${item.desiredCount ?? '-'} / ${item.runningCount ?? '-'}`,
                       width: 160,
                     },
                     {
                       id: 'launchType',
-                      header: 'Launch Type',
-                      cell: (item: any) => <Badge color="blue">{item.launchType || 'FARGATE'}</Badge>,
+                      header: 'Launch type',
+                      cell: (item: any) => item.launchType || (item.capacityProviderStrategy?.length ? 'Capacity provider' : '-'),
                       width: 140,
                     },
                     {
@@ -579,22 +591,22 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                     },
                     {
                       id: 'status',
-                      header: 'Last Status',
+                      header: 'Last status',
                       cell: (item: any) => {
-                        const st = item.lastStatus || item.status || 'RUNNING';
-                        return <StatusIndicator type={st === 'RUNNING' ? 'success' : 'stopped'}>{st}</StatusIndicator>;
+                        const st = item.lastStatus || item.status;
+                        return <StatusIndicator type={ecsStatusType(st)}>{titleStatus(st)}</StatusIndicator>;
                       },
                       width: 140,
                     },
                     {
                       id: 'taskDef',
-                      header: 'Task Definition',
+                      header: 'Task definition',
                       cell: (item: any) => <code>{item.taskDefinitionArn || item.task_definition}</code>,
                     },
                     {
                       id: 'cpu',
-                      header: 'CPU / Memory',
-                      cell: (item: any) => `${item.cpu || '256'} / ${item.memory || '512MB'}`,
+                      header: 'CPU / memory',
+                      cell: (item: any) => `${item.cpu ?? '-'} / ${item.memory ?? '-'}`,
                       width: 140,
                     },
                     {
@@ -636,13 +648,13 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                   columnDefinitions={[
                     {
                       id: 'family',
-                      header: 'Task Definition Family',
-                      cell: (item: any) => <strong>{item.family || item.taskDefinitionArn?.split('/')[1] || 'default-task'}</strong>,
+                      header: 'Task definition',
+                      cell: (item: any) => <strong>{item.family || item.taskDefinitionArn?.split('/')[1]?.split(':')[0] || '-'}</strong>,
                     },
                     {
                       id: 'revision',
                       header: 'Revision',
-                      cell: (item: any) => <Badge color="grey">{`v${item.revision || 1}`}</Badge>,
+                      cell: (item: any) => item.revision ?? '-',
                       width: 110,
                     },
                     {
@@ -650,7 +662,7 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                       header: 'Compatibilities',
                       cell: (item: any) => (
                         <SpaceBetween direction="horizontal" size="xs">
-                          {(item.compatibilities || ['FARGATE', 'EC2']).map((c: string) => (
+                          {(item.requiresCompatibilities || item.compatibilities || []).map((c: string) => (
                             <Badge key={c} color="blue">{c}</Badge>
                           ))}
                         </SpaceBetween>
@@ -659,8 +671,8 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                     },
                     {
                       id: 'specs',
-                      header: 'CPU / RAM',
-                      cell: (item: any) => `${item.cpu || '256'} / ${item.memory || '512MB'}`,
+                      header: 'CPU / memory',
+                      cell: (item: any) => `${item.cpu ?? '-'} / ${item.memory ?? '-'}`,
                       width: 140,
                     },
                     {
@@ -692,25 +704,25 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                   columnDefinitions={[
                     {
                       id: 'arn',
-                      header: 'Container Instance ARN',
+                      header: 'Container instance',
                       cell: (item: any) => <code>{item.containerInstanceArn || item.container_instance_arn}</code>,
                     },
                     {
                       id: 'ec2Id',
-                      header: 'EC2 Instance ID',
-                      cell: (item: any) => item.ec2InstanceId || 'i-0abcd1234ef567890',
+                      header: 'EC2 instance',
+                      cell: (item: any) => item.ec2InstanceId || '-',
                       width: 180,
                     },
                     {
                       id: 'agent',
-                      header: 'Agent Connected',
-                      cell: () => <StatusIndicator type="success">Connected</StatusIndicator>,
+                      header: 'Agent connected',
+                      cell: (item: any) => (item.agentConnected === true ? <StatusIndicator type="success">True</StatusIndicator> : item.agentConnected === false ? <StatusIndicator type="error">False</StatusIndicator> : '-'),
                       width: 160,
                     },
                     {
                       id: 'status',
                       header: 'State',
-                      cell: (item: any) => <Badge color={item.status === 'DRAINING' ? 'red' : 'green'}>{item.status || 'ACTIVE'}</Badge>,
+                      cell: (item: any) => <StatusIndicator type={ecsStatusType(item.status)}>{titleStatus(item.status)}</StatusIndicator>,
                       width: 130,
                     },
                     {
@@ -718,7 +730,8 @@ export const ECSConsole: React.FC<ECSConsoleProps> = ({ activeTab, onTabChange, 
                       header: 'Actions',
                       cell: (item: any) => (
                         <Button
-                          onClick={() => handleToggleInstanceState(item.containerInstanceArn, item.status || 'ACTIVE')}
+                          disabled={!item.status}
+                          onClick={() => handleToggleInstanceState(item.containerInstanceArn, item.status)}
                         >
                           {item.status === 'DRAINING' ? 'Set Active' : 'Drain'}
                         </Button>

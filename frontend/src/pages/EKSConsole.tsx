@@ -83,10 +83,10 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange, 
   // Create Cluster Modal
   const [createClusterOpen, setCreateClusterOpen] = useState(false);
   const [clusterName, setClusterName] = useState('');
-  const [clusterRoleArn, setClusterRoleArn] = useState('arn:aws:iam::000000000000:role/eks-cluster-role');
+  const [clusterRoleArn, setClusterRoleArn] = useState('');
   const [clusterVersion, setClusterVersion] = useState(K8S_VERSIONS[0]);
-  const [subnetIds, setSubnetIds] = useState('subnet-01234567,subnet-89abcdef');
-  const [securityGroupIds, setSecurityGroupIds] = useState('sg-01234567');
+  const [subnetIds, setSubnetIds] = useState('');
+  const [securityGroupIds, setSecurityGroupIds] = useState('');
   const [creatingCluster, setCreatingCluster] = useState(false);
 
   // Delete Cluster Modal
@@ -96,8 +96,8 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange, 
   // Create Node Group Modal
   const [createNodegroupOpen, setCreateNodegroupOpen] = useState(false);
   const [nodegroupName, setNodegroupName] = useState('');
-  const [nodeRoleArn, setNodeRoleArn] = useState('arn:aws:iam::000000000000:role/eks-node-role');
-  const [ngSubnets, setNgSubnets] = useState('subnet-01234567,subnet-89abcdef');
+  const [nodeRoleArn, setNodeRoleArn] = useState('');
+  const [ngSubnets, setNgSubnets] = useState('');
   const [minSize, setMinSize] = useState('1');
   const [maxSize, setMaxSize] = useState('4');
   const [desiredSize, setDesiredSize] = useState('2');
@@ -107,9 +107,9 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange, 
   // Create Fargate Profile Modal
   const [createFargateOpen, setCreateFargateOpen] = useState(false);
   const [fargateProfileName, setFargateProfileName] = useState('');
-  const [fargatePodRole, setFargatePodRole] = useState('arn:aws:iam::000000000000:role/eks-fargate-pod-role');
+  const [fargatePodRole, setFargatePodRole] = useState('');
   const [fargateNamespace, setFargateNamespace] = useState('default');
-  const [fargateSubnets, setFargateSubnets] = useState('subnet-01234567');
+  const [fargateSubnets, setFargateSubnets] = useState('');
   const [creatingFargate, setCreatingFargate] = useState(false);
 
   // Kubeconfig Modal / Inspector State
@@ -561,7 +561,7 @@ export const EKSConsole: React.FC<EKSConsoleProps> = ({ activeTab, onTabChange, 
                           id: 'selectors',
                           header: 'Selectors (Namespace)',
                           cell: (fp: any) =>
-                            fp.selectors?.map((s: any) => s.namespace).join(', ') || 'default',
+                            fp.selectors?.map((s: any) => s.namespace).join(', ') || '-',
                         },
                         {
                           id: 'action',

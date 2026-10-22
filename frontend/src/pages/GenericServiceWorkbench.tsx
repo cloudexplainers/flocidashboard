@@ -94,7 +94,8 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
   };
 
   const executeAction = async (action: ServiceAction) => {
-    if (action.safety === 'destructive' && !pendingAction) {
+    // Confirm destructive and delete operations, as the AWS console does.
+    if ((action.safety === 'destructive' || action.kind === 'delete') && !pendingAction) {
       setPendingAction(action);
       return;
     }
@@ -233,7 +234,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <Badge color="blue">{service.key.toUpperCase()}</Badge>
               <span>{service.title}</span>
-              <StatusIndicator type="info">Local AWS workbench</StatusIndicator>
+              <StatusIndicator type="info">Generic workbench (no dedicated console page)</StatusIndicator>
             </div>
           </Header>
         }
@@ -424,7 +425,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
       <Modal
         visible={Boolean(pendingAction)}
         onDismiss={() => setPendingAction(null)}
-        header={`Confirm Destructive Operation: ${pendingAction?.label}`}
+        header={`${pendingAction?.label}?`}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
@@ -440,14 +441,14 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
                   }
                 }}
               >
-                Confirm & Execute
+                {pendingAction?.label || 'Confirm'}
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <Alert type="warning">
-          <strong>Warning: </strong> {pendingAction?.confirm || `Are you sure you want to execute ${pendingAction?.label}? This operation is marked as destructive.`}
+          {pendingAction?.confirm || `${pendingAction?.label} can't be undone.`}
         </Alert>
       </Modal>
     </SpaceBetween>

@@ -186,6 +186,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
 
   const handleDeleteUser = async (uName: string) => {
     if (!activePoolId || !uName) return;
+    if (!confirm(`Delete user ${uName}? The user can no longer sign in, and this can't be undone.`)) return;
     try {
       await deleteCognitoUser(activePoolId, uName);
       setActionMessage({ type: 'success', text: `User "${uName}" deleted.` });

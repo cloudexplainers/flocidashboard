@@ -4,6 +4,8 @@ import { RdsClusterDetails } from "../components/RdsClusterDetails";
 import {
   rdsInventory,
   rdsStatus,
+  rdsStatusLabel,
+  rdsEngineLabel,
   rdsEndpoint,
   RdsInstance,
   RdsCluster,
@@ -111,6 +113,7 @@ const RdsWorkspace: React.FC<Props> = ({
   const [applyImmediately, setApplyImmediately] = useState(true);
   const [skipFinalSnapshot, setSkipFinalSnapshot] = useState(true);
   const [finalSnapshotId, setFinalSnapshotId] = useState("");
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [deleteResource, setDeleteResource] = useState<{
     kind: "cluster" | "group";
     name: string;
@@ -198,33 +201,45 @@ const RdsWorkspace: React.FC<Props> = ({
     setModifyInstanceOpen(true);
   };
   const prepareDeleteInstance = () => {
-    setSkipFinalSnapshot(true);
-    setFinalSnapshotId("");
+    // The console creates a final snapshot by default, named after the instance.
+    setSkipFinalSnapshot(false);
+    setFinalSnapshotId(activeInstance ? `${activeInstance.name}-final-snapshot` : "");
+    setDeleteConfirmText("");
     setActionAlert(null);
     setDeleteInstanceOpen(true);
   };
   const prepareDeleteResource = (kind: "cluster" | "group", name: string) => {
-    setSkipFinalSnapshot(true);
-    setFinalSnapshotId("");
+    setSkipFinalSnapshot(kind !== "cluster");
+    setFinalSnapshotId(kind === "cluster" ? `${name}-final-snapshot` : "");
+    setDeleteConfirmText("");
     setActionAlert(null);
     setDeleteResource({ kind, name });
   };
   const snapshotFields = (
     <SpaceBetween size="m">
       <Checkbox
-        checked={skipFinalSnapshot}
-        onChange={({ detail }) => setSkipFinalSnapshot(detail.checked)}
+        checked={!skipFinalSnapshot}
+        onChange={({ detail }) => setSkipFinalSnapshot(!detail.checked)}
+        description="Creates a manual DB snapshot of all data before deletion. Without it, the data can't be recovered."
       >
-        Skip final snapshot
+        Create final snapshot
       </Checkbox>
       {!skipFinalSnapshot && (
-        <FormField label="Final snapshot identifier">
+        <FormField label="Final snapshot name">
           <Input
             value={finalSnapshotId}
             onChange={({ detail }) => setFinalSnapshotId(detail.value)}
           />
         </FormField>
       )}
+      <FormField label={<>To confirm deletion, type <i>delete me</i> into the field.</>}>
+        <Input
+          ariaLabel="Confirmation text"
+          value={deleteConfirmText}
+          placeholder="delete me"
+          onChange={({ detail }) => setDeleteConfirmText(detail.value)}
+        />
+      </FormField>
     </SpaceBetween>
   );
 
@@ -688,7 +703,7 @@ const RdsWorkspace: React.FC<Props> = ({
                         header: "Status",
                         cell: (item) => (
                           <StatusIndicator type={rdsStatus(item.status)}>
-                            {item.status || "Not reported"}
+                            {rdsStatusLabel(item.status)}
                           </StatusIndicator>
                         ),
                       },
@@ -696,9 +711,7 @@ const RdsWorkspace: React.FC<Props> = ({
                         id: "engine",
                         header: "Engine",
                         cell: (item) => (
-                          <Badge color="blue">
-                            {item.engine || "Not reported"}
-                          </Badge>
+                          <span>{rdsEngineLabel(item.engine)}</span>
                         ),
                       },
                       {
@@ -708,7 +721,7 @@ const RdsWorkspace: React.FC<Props> = ({
                       },
                       {
                         id: "endpoint",
-                        header: "Endpoint & Port",
+                        header: "Endpoint and port",
                         cell: (item) => (
                           <code>
                             {rdsEndpoint(item.connect_host, item.connect_port)}
@@ -810,7 +823,7 @@ const RdsWorkspace: React.FC<Props> = ({
                         header: "Status",
                         cell: (c) => (
                           <StatusIndicator type={rdsStatus(c.status)}>
-                            {c.status || "Not reported"}
+                            {rdsStatusLabel(c.status)}
                           </StatusIndicator>
                         ),
                       },
@@ -818,14 +831,12 @@ const RdsWorkspace: React.FC<Props> = ({
                         id: "engine",
                         header: "Engine",
                         cell: (c) => (
-                          <Badge color="blue">
-                            {c.engine || "Not reported"}
-                          </Badge>
+                          <span>{rdsEngineLabel(c.engine)}</span>
                         ),
                       },
                       {
                         id: "endpoint",
-                        header: "Cluster Endpoint",
+                        header: "Cluster endpoint",
                         cell: (c) => (
                           <code>{rdsEndpoint(c.endpoint, c.port)}</code>
                         ),
@@ -1171,7 +1182,7 @@ const RdsWorkspace: React.FC<Props> = ({
       <Modal
         visible={deleteInstanceOpen}
         onDismiss={() => !deleting && setDeleteInstanceOpen(false)}
-        header={`Delete Database: ${activeInstance?.name}`}
+        header={`Delete ${activeInstance?.name} instance?`}
         closeAriaLabel="Close modal"
         footer={
           <Box float="right">
@@ -1184,7 +1195,7 @@ const RdsWorkspace: React.FC<Props> = ({
               </Button>
               <Button
                 variant="primary"
-                disabled={!skipFinalSnapshot && !finalSnapshotId.trim()}
+                disabled={(!skipFinalSnapshot && !finalSnapshotId.trim()) || deleteConfirmText !== "delete me"}
                 onClick={handleDeleteInstance}
                 loading={deleting}
               >
@@ -1198,10 +1209,8 @@ const RdsWorkspace: React.FC<Props> = ({
           {deleteInstanceOpen && actionAlert?.type === "error" && (
             <Alert type="error">{actionAlert.message}</Alert>
           )}
-          <Alert type="error" header="Permanent Deletion">
-            Are you sure you want to delete database instance{" "}
-            <strong>{activeInstance?.name}</strong>? Storage and data will be
-            removed.
+          <Alert type="warning">
+            Deleting <strong>{activeInstance?.name}</strong> removes its storage. Automated backups are deleted with the instance; only a final snapshot keeps the data.
           </Alert>
           {snapshotFields}
         </SpaceBetween>
@@ -1358,8 +1367,7 @@ const RdsWorkspace: React.FC<Props> = ({
                 variant="primary"
                 disabled={
                   deleteResource?.kind === "cluster" &&
-                  !skipFinalSnapshot &&
-                  !finalSnapshotId.trim()
+                  ((!skipFinalSnapshot && !finalSnapshotId.trim()) || deleteConfirmText !== "delete me")
                 }
                 loading={resourceDeleting}
                 onClick={handleDeleteResource}

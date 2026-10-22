@@ -713,11 +713,7 @@ export async function initiateCognitoAuth(clientId: string, username: string, pa
 }
 
 export async function deleteCognitoUser(userPoolId: string, username: string): Promise<any> {
-  const res = await fetch(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/${encodeURIComponent(username)}/`, { method: 'DELETE', errorMessage: 'Failed to delete user' });
 }
 
 // API Gateway Deepening APIs

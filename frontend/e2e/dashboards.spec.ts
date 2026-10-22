@@ -2079,7 +2079,7 @@ test('Secrets Manager schedules recoverable deletion and can cancel deletion', a
   await expect(dialog.getByRole('checkbox')).not.toBeChecked();
   await dialog.getByRole('button', { name: 'Schedule deletion', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  expect(requests).toEqual([{ recovery_window_days: 7, force_delete_without_recovery: false }]);
+  expect(requests).toEqual([{ recovery_window_days: 30, force_delete_without_recovery: false }]);
   await page.getByRole('button', { name: polishedSecret.name, exact: true }).click();
   await expect(page.getByRole('button', { name: 'Retrieve secret value', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Cancel deletion', exact: true }).click();
@@ -3160,9 +3160,12 @@ test('RDS modification preserves deferred timing and deletion requires explicit 
   expect(modified).toMatchObject({ db_instance_class: 'db.r6g.xlarge', apply_immediately: false });
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   expect(deleted).toBeUndefined();
-  await modal.getByRole('checkbox', { name: 'Skip final snapshot', exact: true }).uncheck();
+  await expect(modal.getByRole('checkbox', { name: 'Create final snapshot', exact: true })).toBeChecked();
+  await expect(modal.getByLabel('Final snapshot name', { exact: true })).toHaveValue('orders-writer-final-snapshot');
+  await modal.getByLabel('Final snapshot name', { exact: true }).fill('');
+  await modal.getByLabel('Confirmation text').fill('delete me');
   await expect(modal.getByRole('button', { name: 'Delete database', exact: true })).toBeDisabled();
-  await modal.getByLabel('Final snapshot identifier', { exact: true }).fill('orders-final');
+  await modal.getByLabel('Final snapshot name', { exact: true }).fill('orders-final');
   await modal.getByRole('button', { name: 'Delete database', exact: true }).click();
   await expect(modal.getByText('Deletion protection is enabled', { exact: true })).toBeVisible();
   expect(deleted).toMatchObject({ skip_final_snapshot: false, final_snapshot_identifier: 'orders-final' });
@@ -3176,6 +3179,9 @@ test('RDS cluster and parameter group deletions confirm first and surface backen
   await page.getByRole('button', { name: 'Delete cluster', exact: true }).click();
   expect(deleted).toBeUndefined();
   const modal = page.getByRole('dialog');
+  await expect(modal.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await modal.getByRole('checkbox', { name: 'Create final snapshot', exact: true }).uncheck();
+  await modal.getByLabel('Confirmation text').fill('delete me');
   await modal.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(modal.getByText('Cluster still has members', { exact: true })).toBeVisible();
   expect(deleted.skip_final_snapshot).toBe(true);

@@ -115,7 +115,7 @@ const SecretWorkspace: React.FC<Props> = ({
   const [busy, setBusy] = useState(false);
   const [modalError, setModalError] = useState("");
   const [forceDelete, setForceDelete] = useState(false);
-  const [recovery, setRecovery] = useState("7");
+  const [recovery, setRecovery] = useState("30");
   const mounted = useRef(true);
   const loadSequence = useRef(0);
   const valueSequence = useRef(0);
@@ -189,7 +189,7 @@ const SecretWorkspace: React.FC<Props> = ({
     setDraft("");
     setModalError("");
     setForceDelete(false);
-    setRecovery("7");
+    setRecovery("30");
     setModal(kind);
   };
   const run = async (
@@ -959,14 +959,15 @@ const SecretWorkspace: React.FC<Props> = ({
           <Checkbox
             checked={forceDelete}
             onChange={({ detail }) => setForceDelete(detail.checked)}
+            description="ForceDeleteWithoutRecovery. Available in the API and CLI only; the AWS console always schedules deletion."
           >
             Permanently delete without recovery
           </Checkbox>
           {!forceDelete && (
-            <FormField label="Recovery window">
+            <FormField label="Waiting period (in days)" description="Enter a number from 7 to 30. The AWS default is 30.">
               <Select
                 selectedOption={{ label: `${recovery} days`, value: recovery }}
-                options={["7", "14", "30"].map((days) => ({
+                options={["7", "14", "21", "30"].map((days) => ({
                   label: `${days} days`,
                   value: days,
                 }))}

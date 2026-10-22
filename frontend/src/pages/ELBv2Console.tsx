@@ -78,7 +78,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
 
   // Register Targets Modal
   const [registerTargetOpen, setRegisterTargetOpen] = useState(false);
-  const [targetId, setTargetId] = useState('i-0123456789abcdef0');
+  const [targetId, setTargetId] = useState('');
   const [targetPort, setTargetPort] = useState('80');
   const [registeringTarget, setRegisteringTarget] = useState(false);
 
@@ -259,6 +259,7 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
   };
 
   const handleDeleteListener = async (arn: string) => {
+    if (!confirm('Delete this listener? The load balancer stops accepting traffic on its port.')) return;
     try {
       await deleteElbv2Listener(arn);
       setActionMessage({ type: 'success', text: 'Listener deleted.' });

@@ -191,8 +191,8 @@ export const SettingsConsole: React.FC = () => {
             <Container
               header={
                 <Header variant="h3">
-                  <StatusIndicator type={testResult.identity_resolved !== false ? 'success' : 'warning'}>
-                    Connection Test Results
+                  <StatusIndicator type={!testResult.health?.ok ? 'error' : testResult.identity_resolved === true ? 'success' : 'warning'}>
+                    Connection test results
                   </StatusIndicator>
                 </Header>
               }
@@ -202,9 +202,10 @@ export const SettingsConsole: React.FC = () => {
                 items={[
                   { label: 'Endpoint Tested', value: testResult.endpoint_url },
                   { label: 'Target Region', value: testResult.region },
-                  { label: 'Health Status', value: <Badge color="green">Healthy</Badge> },
-                  { label: 'Resolved Account ID', value: testResult.identity?.Account || '000000000000' },
-                  { label: 'Resolved Caller ARN', value: testResult.identity?.Arn || 'arn:aws:iam::000000000000:root' },
+                  { label: 'Health status', value: testResult.health?.ok ? <StatusIndicator type="success">Healthy</StatusIndicator> : <StatusIndicator type="error">{testResult.health?.error || 'Unreachable'}</StatusIndicator> },
+                  { label: 'Resolved account ID', value: testResult.identity?.Account || (testResult.identity_error ? `Not resolved: ${testResult.identity_error}` : '-') },
+                  { label: 'Resolved caller ARN', value: testResult.identity?.Arn || '-' },
+                  ...(testResult.identity_resolved === false ? [{ label: 'Identity source', value: 'Local hint only. sts:GetCallerIdentity failed, so the account and ARN above are not confirmed.' }] : []),
                 ]}
               />
             </Container>

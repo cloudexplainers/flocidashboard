@@ -199,3 +199,32 @@ export function rdsConnection(db: RdsInstance) {
     python: `from getpass import getpass\nimport ${postgres ? "psycopg2" : "pymysql"}\n\nconnection = ${postgres ? "psycopg2" : "pymysql"}.connect(\n    ${args}\n)`,
   };
 }
+
+/** Status as the RDS console shows it: "available" -> "Available", "backing-up" -> "Backing-up". */
+export function rdsStatusLabel(status?: string): string {
+  if (!status) return "Not reported";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+const RDS_ENGINE_LABELS: Record<string, string> = {
+  postgres: "PostgreSQL",
+  mysql: "MySQL",
+  mariadb: "MariaDB",
+  "aurora-postgresql": "Aurora PostgreSQL",
+  "aurora-mysql": "Aurora MySQL",
+  aurora: "Aurora MySQL",
+  "oracle-ee": "Oracle Enterprise Edition",
+  "oracle-se2": "Oracle Standard Edition Two",
+  "sqlserver-ex": "SQL Server Express Edition",
+  "sqlserver-se": "SQL Server Standard Edition",
+  "sqlserver-ee": "SQL Server Enterprise Edition",
+  "sqlserver-web": "SQL Server Web Edition",
+  "neptune": "Neptune",
+  "docdb": "DocumentDB",
+};
+
+/** Engine names as the RDS console lists them (the API returns engine identifiers such as aurora-postgresql). */
+export function rdsEngineLabel(engine?: string): string {
+  if (!engine) return "Not reported";
+  return RDS_ENGINE_LABELS[engine] || engine;
+}

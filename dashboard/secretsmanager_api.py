@@ -121,7 +121,7 @@ def get_secret_value(secret_id: str, *, version_id: str = '', version_stage: str
 def delete_secret(
     secret_id: str,
     *,
-    recovery_window_days: Any = 7,
+    recovery_window_days: Any = 30,
     force_delete_without_recovery: bool = False,
 ) -> dict[str, Any]:
     clean_id = _clean_required(secret_id, 'Secret ID')
@@ -130,7 +130,7 @@ def delete_secret(
         kwargs['ForceDeleteWithoutRecovery'] = True
     else:
         try:
-            window = int(recovery_window_days or 7)
+            window = int(recovery_window_days or 30)
         except (TypeError, ValueError) as exc:
             raise ValueError('Recovery window days must be a number') from exc
         kwargs['RecoveryWindowInDays'] = max(7, min(window, 30))
