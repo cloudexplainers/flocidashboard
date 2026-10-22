@@ -589,63 +589,6 @@ def wafv2_inventory() -> dict[str, Any]:
     }
 
 
-def memorydb_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    memorydb = factory.client('memorydb')
-    operations = set(memorydb.meta.service_model.operation_names)
-
-    clusters = _safe_value(lambda: _operation_items(memorydb, 'describe_clusters', 'Clusters'), []) if 'DescribeClusters' in operations else []
-    users = _safe_value(lambda: _operation_items(memorydb, 'describe_users', 'Users'), []) if 'DescribeUsers' in operations else []
-    acls = _safe_value(lambda: _operation_items(memorydb, 'describe_acls', 'ACLs'), []) if 'DescribeACLs' in operations else []
-    subnet_groups = _safe_value(lambda: _operation_items(memorydb, 'describe_subnet_groups', 'SubnetGroups'), []) if 'DescribeSubnetGroups' in operations else []
-    parameter_groups = _safe_value(lambda: _operation_items(memorydb, 'describe_parameter_groups', 'ParameterGroups'), []) if 'DescribeParameterGroups' in operations else []
-    snapshots = _safe_value(lambda: _operation_items(memorydb, 'describe_snapshots', 'Snapshots'), []) if 'DescribeSnapshots' in operations else []
-
-    return {
-        'summary': {
-            'clusters': len(clusters),
-            'users': len(users),
-            'acls': len(acls),
-            'subnet_groups': len(subnet_groups),
-            'parameter_groups': len(parameter_groups),
-            'snapshots': len(snapshots),
-            'available_sdk_operations': len(operations),
-        },
-        'clusters': _clean_response(clusters),
-        'users': _clean_response(users),
-        'acls': _clean_response(acls),
-        'subnet_groups': _clean_response(subnet_groups),
-        'parameter_groups': _clean_response(parameter_groups),
-        'snapshots': _clean_response(snapshots),
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'CreateCluster',
-                'DescribeClusters',
-                'DeleteCluster',
-                'CreateUser',
-                'DescribeUsers',
-                'CreateACL',
-                'DescribeACLs',
-                'CreateSubnetGroup',
-                'DescribeSubnetGroups',
-                'DescribeParameterGroups',
-                'DescribeSnapshots',
-                'TagResource',
-                'UntagResource',
-                'ListTags',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.27 adds Amazon MemoryDB service emulation with mock mode.',
-            'Floci 1.5.28 models MemoryDB authentication through ACLs and users.',
-            'This read-only inspector focuses on cluster, user, ACL, subnet group, parameter group, and snapshot inventory.',
-        ],
-    }
-
-
 def s3vectors_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     s3vectors = factory.client('s3vectors')
@@ -3325,45 +3268,6 @@ def list_rdsdata_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ]
 
 
-def list_memorydb_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    memorydb = factory.client('memorydb')
-    operations = set(memorydb.meta.service_model.operation_names)
-    resources: list[dict[str, Any]] = []
-
-    if 'DescribeClusters' in operations:
-        resources.extend(
-            {
-                'type': 'cluster',
-                'name': cluster.get('Name'),
-                'arn': cluster.get('ARN'),
-                'status': cluster.get('Status'),
-            }
-            for cluster in _safe_value(lambda: _operation_items(memorydb, 'describe_clusters', 'Clusters'), [])
-        )
-    if 'DescribeUsers' in operations:
-        resources.extend(
-            {
-                'type': 'user',
-                'name': user.get('Name'),
-                'arn': user.get('ARN'),
-                'status': user.get('Status'),
-            }
-            for user in _safe_value(lambda: _operation_items(memorydb, 'describe_users', 'Users'), [])
-        )
-    if 'DescribeACLs' in operations:
-        resources.extend(
-            {
-                'type': 'acl',
-                'name': acl.get('Name'),
-                'arn': acl.get('ARN'),
-                'status': acl.get('Status'),
-            }
-            for acl in _safe_value(lambda: _operation_items(memorydb, 'describe_acls', 'ACLs'), [])
-        )
-
-    return resources
-
-
 def list_s3vectors_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     s3vectors = factory.client('s3vectors')
     operations = set(s3vectors.meta.service_model.operation_names)
@@ -3557,7 +3461,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('costexplorer-resources', 'Cost Explorer resources', costexplorer.list_costexplorer_resources),
         ('cur-resources', 'Cost and Usage Reports', cur.list_cur_resources),
         ('bcmdataexports-resources', 'BCM Data Exports', bcmdataexports.list_bcmdataexports_resources),
-        ('memorydb-resources', 'MemoryDB resources', list_memorydb_resources),
+        ('memorydb-resources', 'MemoryDB resources', memorydb.list_memorydb_resources),
         ('neptune-resources', 'Neptune resources', list_neptune_resources),
         ('resourcegroupstagging-resources', 'Resource Groups Tagging resources', list_resourcegroupstagging_resources),
         ('ssm-resources', 'SSM resources', list_ssm_resources),
@@ -3656,6 +3560,7 @@ from . import (  # noqa: E402
     kinesis,
     kms,
     lambda_,
+    memorydb,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -3701,4 +3606,5 @@ from .kafka import kafka_inventory  # noqa: E402
 from .kinesis import kinesis_inventory  # noqa: E402
 from .kms import kms_inventory  # noqa: E402
 from .lambda_ import lambda_inventory  # noqa: E402
+from .memorydb import memorydb_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
