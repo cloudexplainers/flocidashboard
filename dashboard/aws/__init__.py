@@ -817,7 +817,7 @@ def create_s3_bucket(name: str, region: str | None = None) -> dict[str, Any]:
 
 
 def s3_inventory() -> dict[str, Any]:
-    from .s3_api import s3_inventory_summary
+    from ..s3_api import s3_inventory_summary
 
     return s3_inventory_summary()
 
@@ -4180,7 +4180,7 @@ def appconfig_inventory() -> dict[str, Any]:
 
 
 def appsync_inventory() -> dict[str, Any]:
-    from .appsync_schema import read_sdl, resolver_type_names
+    from ..appsync_schema import read_sdl, resolver_type_names
 
     appsync = FlociClientFactory().client('appsync')
     apis = _safe_value(lambda: _operation_items(appsync, 'list_graphql_apis', 'graphqlApis'), [])
