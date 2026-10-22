@@ -876,6 +876,16 @@ export async function deleteSqsQueue(queueName: string): Promise<any> {
   return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/`, { method: 'DELETE', errorMessage: 'Failed to delete queue' });
 }
 
+/** SetQueueAttributes. An empty RedrivePolicy removes the dead-letter queue. */
+export async function setSqsQueueAttributes(queueName: string, attributes: Record<string, string>): Promise<any> {
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/attributes/`, { method: 'POST', json: { attributes }, errorMessage: 'Failed to update queue' });
+}
+
+/** StartMessageMoveTask from a dead-letter queue. */
+export async function startSqsRedrive(queueName: string, payload: { source_arn?: string; destination_arn?: string; max_number_of_messages_per_second?: number }): Promise<any> {
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/redrive/`, { method: 'POST', json: payload, errorMessage: 'Failed to start DLQ redrive' });
+}
+
 export async function purgeSqsQueue(queueName: string): Promise<any> {
   return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/purge/`, { method: 'POST', errorMessage: 'Failed to purge queue' });
 }

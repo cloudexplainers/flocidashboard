@@ -22,6 +22,7 @@ import Grid from '@cloudscape-design/components/grid';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
 import Tiles from '@cloudscape-design/components/tiles';
 import ConfirmActionModal from '../components/ConfirmActionModal';
+import { SqsQueueEditor, SqsRedriveModal } from '../components/SqsQueueEditor';
 import { formatAwsDate } from '../format';
 import {
   fetchServiceInventory,
@@ -135,6 +136,8 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
 
   const selectionGeneration = useRef(0);
   const activeQueue = selectedItems[0] || null;
+  const [editOpen, setEditOpen] = useState(false);
+  const [redriveOpen, setRedriveOpen] = useState(false);
 
   useEffect(() => { setActiveTabId(resourceTab); }, [resourceTab]);
   useEffect(() => {
@@ -485,7 +488,11 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
               variant="h2"
               description={`URL: ${activeQueue.QueueUrl}`}
               actions={
-                <Badge color={activeQueue.Type === 'FIFO' ? 'blue' : 'grey'}>{activeQueue.Type}</Badge>
+                <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+                  <Badge color={activeQueue.Type === 'FIFO' ? 'blue' : 'grey'}>{activeQueue.Type}</Badge>
+                  {Boolean(activeQueue.DeadLetterSourceQueues?.length) && <Button onClick={() => setRedriveOpen(true)}>Start DLQ redrive</Button>}
+                  <Button onClick={() => setEditOpen(true)}>Edit</Button>
+                </SpaceBetween>
               }
             >
               Queue: {activeQueue.QueueName}
@@ -735,6 +742,15 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
             ]}
           />
         </Container>
+      )}
+
+      {activeQueue && (
+        <>
+          <SqsQueueEditor queue={activeQueue} queues={queues} visible={editOpen} onDismiss={() => setEditOpen(false)}
+            onSaved={message => { setEditOpen(false); setActionAlert({ type: 'success', message }); loadData(); }} />
+          <SqsRedriveModal queue={activeQueue} queues={queues} visible={redriveOpen} onDismiss={() => setRedriveOpen(false)}
+            onStarted={message => { setRedriveOpen(false); setActionAlert({ type: 'success', message }); loadData(); }} />
+        </>
       )}
 
       {/* Message Inspection Drawer / Modal */}

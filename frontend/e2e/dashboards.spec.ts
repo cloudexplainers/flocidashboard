@@ -942,6 +942,38 @@ test('Lambda rejects invalid test events before invoking', async ({ page }) => {
 });
 
 const messagingQueueArn = 'arn:aws:sqs:eu-west-1:123456789012:orders-dead';
+test('SQS edit queue sends only changed attributes and DLQ redrive starts from the DLQ', async ({ page }) => {
+  const deadArn = 'arn:aws:sqs:eu-west-1:123456789012:orders-dead';
+  await inventory(page, 'sqs', { queues: [
+    { name: 'orders', arn: 'arn:aws:sqs:eu-west-1:123456789012:orders', attributes: { QueueArn: 'arn:aws:sqs:eu-west-1:123456789012:orders', VisibilityTimeout: '30', MessageRetentionPeriod: '345600', DelaySeconds: '0', MaximumMessageSize: '262144', ReceiveMessageWaitTimeSeconds: '0' } },
+    { name: 'orders-dead', arn: deadArn, attributes: { QueueArn: deadArn, VisibilityTimeout: '30' }, dead_letter_source_queues: ['http://local/orders'] },
+    { name: 'events.fifo', arn: 'arn:aws:sqs:eu-west-1:123456789012:events.fifo', attributes: { QueueArn: 'arn:aws:sqs:eu-west-1:123456789012:events.fifo', FifoQueue: 'true' } },
+  ] });
+  let attributes: any = null;
+  let redrive: any = null;
+  await page.route('**/api/sqs/queues/orders/attributes/', route => { attributes = route.request().postDataJSON(); return route.fulfill({ json: { updated: true } }); });
+  await page.route('**/api/sqs/queues/orders-dead/redrive/', route => { redrive = route.request().postDataJSON(); return route.fulfill({ json: { TaskHandle: 'task-1' } }); });
+  await page.goto('/sqs/attributes?queue=orders');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit orders' });
+  await dialog.getByLabel('Visibility timeout (seconds)', { exact: true }).fill('50000');
+  await expect(dialog.getByText('Enter a whole number from 0 to 43200.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await dialog.getByLabel('Visibility timeout (seconds)', { exact: true }).fill('60');
+  await dialog.getByText('Enabled', { exact: true }).click();
+  await dialog.getByRole('button', { name: /Queue ARN|Dead-letter queue/ }).click();
+  await expect(page.getByRole('option', { name: /events\.fifo/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /orders-dead/ }).click();
+  await dialog.getByLabel('Maximum receives', { exact: true }).fill('5');
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => attributes).toEqual({ attributes: { VisibilityTimeout: '60', RedrivePolicy: JSON.stringify({ deadLetterTargetArn: deadArn, maxReceiveCount: 5 }) } });
+  await expect(page.getByText('Queue "orders" updated.', { exact: true })).toBeVisible();
+  await page.goto('/sqs/attributes?queue=orders-dead');
+  await page.getByRole('button', { name: 'Start DLQ redrive', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Start DLQ redrive' }).getByRole('button', { name: 'DLQ redrive', exact: true }).click();
+  await expect.poll(() => redrive).toEqual({ source_arn: deadArn });
+});
+
 const messagingTopicArn = 'arn:aws:sns:eu-west-1:123456789012:orders-events';
 test('SQS delivery overview links dead-letter queues and retains resource context', async ({ page }) => {
   await inventory(page, 'sqs', { queues: [
