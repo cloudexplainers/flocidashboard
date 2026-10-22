@@ -2563,90 +2563,6 @@ def cloudwatch_inventory() -> dict[str, Any]:
     }
 
 
-def _cloudtrail_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
-    try:
-        return _clean_response(loader())
-    except ClientError as exc:
-        if _error_code(exc) in empty_codes:
-            return None
-        return {'error': str(exc)}
-    except (AttributeError, BotoCoreError, KeyError, ValueError, json.JSONDecodeError) as exc:
-        return {'error': str(exc)}
-
-
-def cloudtrail_inventory() -> dict[str, Any]:
-    cloudtrail = FlociClientFactory().client('cloudtrail')
-    operations = set(cloudtrail.meta.service_model.operation_names)
-    trail_summaries = cloudtrail.describe_trails(includeShadowTrails=False).get('trailList', [])
-
-    def trail_name(trail: dict[str, Any]) -> str | None:
-        return trail.get('Name') or trail.get('TrailARN') or trail.get('TrailArn')
-
-    def trail_arn(trail: dict[str, Any]) -> str | None:
-        return trail.get('TrailARN') or trail.get('TrailArn')
-
-    def trail_detail(trail: dict[str, Any]) -> dict[str, Any]:
-        name = trail_name(trail)
-        arn = trail_arn(trail)
-        described = trail
-        clean_name = described.get('Name') or name
-        clean_arn = trail_arn(described) or arn
-        status = _cloudtrail_optional(
-            lambda: cloudtrail.get_trail_status(Name=clean_arn or clean_name),
-            {'TrailNotFoundException'},
-        ) if (clean_arn or clean_name) and 'GetTrailStatus' in operations else None
-
-        return {
-            'name': clean_name,
-            'arn': clean_arn,
-            's3_bucket_name': described.get('S3BucketName'),
-            'include_global_service_events': described.get('IncludeGlobalServiceEvents'),
-            'is_multi_region_trail': described.get('IsMultiRegionTrail'),
-            'home_region': described.get('HomeRegion'),
-            'is_organization_trail': described.get('IsOrganizationTrail'),
-            'status': status if isinstance(status, dict) and not status.get('error') else None,
-            'status_details': status if isinstance(status, dict) and status.get('error') else None,
-        }
-
-    trails = [trail_detail(trail) for trail in trail_summaries]
-    lookup_events = _cloudtrail_optional(
-        lambda: _operation_items(cloudtrail, 'lookup_events', 'Events'),
-        {'InvalidLookupAttributesException'},
-    ) if 'LookupEvents' in operations else []
-
-    return {
-        'summary': {
-            'trails': len(trails),
-            'logging': sum(1 for trail in trails if (trail.get('status') or {}).get('IsLogging')),
-            'multi_region_trails': sum(1 for trail in trails if trail.get('is_multi_region_trail')),
-            'lookup_events': len(lookup_events) if isinstance(lookup_events, list) else 0,
-        },
-        'trails': trails,
-        'lookup_events': lookup_events,
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'CreateTrail',
-                'DeleteTrail',
-                'DescribeTrails',
-                'GetTrailStatus',
-                'StartLogging',
-                'StopLogging',
-                'PutEventSelectors',
-                'LookupEvents',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.24 adds CloudTrail trail lifecycle support for local audit-log workflows.',
-            'Floci 1.5.30 allows empty LookupEvents responses so observability pipelines can poll safely before events exist.',
-            'Floci persists trail configuration and logging state but does not record live API activity into trails.',
-            'PutEventSelectors is accepted by Floci but selector payloads are not stored, so the dashboard does not expose that no-op control.',
-        ],
-    }
-
-
 def config_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     config = factory.client('config')
@@ -7220,31 +7136,6 @@ def list_ses_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     return resources
 
 
-def list_cloudtrail_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    cloudtrail = factory.client('cloudtrail')
-    operations = set(cloudtrail.meta.service_model.operation_names)
-    trails = _safe_value(
-        lambda: _operation_items(cloudtrail, 'list_trails', 'Trails'),
-        [],
-    ) if 'ListTrails' in operations else []
-    if not trails and 'DescribeTrails' in operations:
-        trails = _safe_value(
-            lambda: cloudtrail.describe_trails(includeShadowTrails=False).get('trailList', []),
-            [],
-        )
-
-    return [
-        {
-            'type': 'trail',
-            'name': trail.get('Name') or trail.get('TrailARN') or trail.get('TrailArn'),
-            'arn': trail.get('TrailARN') or trail.get('TrailArn'),
-            'home_region': trail.get('HomeRegion'),
-            's3_bucket_name': trail.get('S3BucketName'),
-        }
-        for trail in trails
-    ]
-
-
 def list_ecr_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ecr = factory.client('ecr')
     resources = [
@@ -8792,7 +8683,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('bedrockruntime-resources', 'Bedrock Runtime operations', bedrockruntime.list_bedrockruntime_resources),
         ('cloudfront-resources', 'CloudFront resources', cloudfront.list_cloudfront_resources),
         ('cloudmap-resources', 'Cloud Map resources', cloudmap.list_cloudmap_resources),
-        ('cloudtrail-resources', 'CloudTrail trails', list_cloudtrail_resources),
+        ('cloudtrail-resources', 'CloudTrail trails', cloudtrail.list_cloudtrail_resources),
         ('codebuild-resources', 'CodeBuild resources', list_codebuild_resources),
         ('codepipeline-resources', 'CodePipeline resources', list_codepipeline_resources),
         ('codedeploy-resources', 'CodeDeploy resources', list_codedeploy_resources),
@@ -8882,6 +8773,7 @@ from . import (  # noqa: E402
     cloudformation,
     cloudfront,
     cloudmap,
+    cloudtrail,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -8899,4 +8791,5 @@ from .cloudcontrol import cloudcontrol_inventory  # noqa: E402
 from .cloudformation import cloudformation_inventory  # noqa: E402
 from .cloudfront import cloudfront_inventory  # noqa: E402
 from .cloudmap import cloudmap_inventory  # noqa: E402
+from .cloudtrail import cloudtrail_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
