@@ -801,100 +801,6 @@ def sqs_inventory() -> dict[str, Any]:
     }
 
 
-def _secrets_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
-    try:
-        return _clean_response(loader())
-    except ClientError as exc:
-        if _error_code(exc) in empty_codes:
-            return None
-        return {'error': str(exc)}
-    except (BotoCoreError, ValueError, json.JSONDecodeError) as exc:
-        return {'error': str(exc)}
-
-
-def secretsmanager_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    client = factory.client('secretsmanager')
-    secrets = _paginate(client, 'list_secrets', 'SecretList', IncludePlannedDeletion=True)
-
-    def secret_detail(secret: dict[str, Any]) -> dict[str, Any]:
-        secret_id = secret.get('ARN') or secret.get('Name')
-        description = _secrets_optional(
-            lambda: client.describe_secret(SecretId=secret_id),
-            {'ResourceNotFoundException'},
-        )
-        metadata = description if isinstance(description, dict) and not description.get('error') else secret
-        versions = _secrets_optional(
-            lambda: _paginate(client, 'list_secret_version_ids', 'Versions', SecretId=secret_id),
-            {'ResourceNotFoundException'},
-        )
-        return {
-            'name': metadata.get('Name'),
-            'arn': metadata.get('ARN'),
-            'description': metadata.get('Description'),
-            'kms_key_id': metadata.get('KmsKeyId'),
-            'created': metadata.get('CreatedDate'),
-            'last_changed': metadata.get('LastChangedDate'),
-            'last_accessed': metadata.get('LastAccessedDate'),
-            'last_rotated': metadata.get('LastRotatedDate'),
-            'next_rotation': metadata.get('NextRotationDate'),
-            'deleted': metadata.get('DeletedDate'),
-            'rotation_enabled': metadata.get('RotationEnabled'),
-            'rotation_lambda_arn': metadata.get('RotationLambdaARN'),
-            'rotation_rules': metadata.get('RotationRules'),
-            'version_ids_to_stages': metadata.get('VersionIdsToStages'),
-            'tags': metadata.get('Tags', []),
-            'versions': versions,
-        }
-
-    if len(secrets) > 1:
-        with ThreadPoolExecutor(max_workers=min(8, len(secrets))) as executor:
-            detailed_secrets = list(executor.map(secret_detail, secrets))
-    else:
-        detailed_secrets = [secret_detail(secret) for secret in secrets]
-
-    return {
-        'summary': {
-            'secrets': len(detailed_secrets),
-            'scheduled_for_deletion': sum(1 for secret in detailed_secrets if secret.get('deleted')),
-            'rotation_enabled': sum(1 for secret in detailed_secrets if secret.get('rotation_enabled')),
-            'versions': sum(
-                len(secret.get('versions') or [])
-                for secret in detailed_secrets
-                if isinstance(secret.get('versions'), list)
-            ),
-        },
-        'secrets': detailed_secrets,
-        'supported': [
-            'CreateSecret',
-            'GetSecretValue',
-            'PutSecretValue',
-            'UpdateSecret',
-            'DescribeSecret',
-            'ListSecrets',
-            'DeleteSecret',
-            'RotateSecret',
-            'ListSecretVersionIds',
-            'RestoreSecret',
-            'UpdateSecretVersionStage',
-            'GetRandomPassword',
-            'TagResource',
-            'UntagResource',
-            'BatchGetSecretValue',
-        ],
-        'configuration': {
-            'default_recovery_window_days': 30,
-            'protocol': 'JSON 1.1, X-Amz-Target: secretsmanager.*',
-            'value_display': 'Secret values are retrieved only on explicit request.',
-        },
-        'notes': [
-            'Floci 1.5.31 supports filters and pagination in BatchGetSecretValue.',
-            'Floci 1.5.27 implements automatic secret rotation lifecycle behavior.',
-            'Floci 1.5.28 registers AWSPENDING before invoking the rotation Lambda.',
-        ],
-    }
-
-
 def ssm_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     ssm = factory.client('ssm')
@@ -1994,16 +1900,6 @@ def list_stepfunctions_resources(factory: FlociClientFactory) -> list[dict[str, 
     return resources
 
 
-def list_secrets(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    return [
-        {
-            'name': secret.get('Name'),
-            'arn': secret.get('ARN'),
-        }
-        for secret in factory.client('secretsmanager').get_paginator('list_secrets').paginate().build_full_result().get('SecretList', [])
-    ]
-
-
 def list_ssm_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ssm = factory.client('ssm')
     resources = [
@@ -2276,7 +2172,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('wafv2-resources', 'WAF v2 resources', list_wafv2_resources),
         ('lambda-functions', 'Lambda functions', lambda_.list_lambda_functions),
         ('kms-keys', 'KMS keys', kms.list_kms_keys),
-        ('secrets', 'Secrets Manager secrets', list_secrets),
+        ('secrets', 'Secrets Manager secrets', secretsmanager.list_secrets),
         ('log-groups', 'CloudWatch log groups', cloudwatch.list_log_groups),
         ('cloudwatch-metrics', 'CloudWatch metrics and alarms', cloudwatch.list_cloudwatch_metrics),
         ('cognito-resources', 'Cognito resources', cognito.list_cognito_resources),
@@ -2357,6 +2253,7 @@ from . import (  # noqa: E402
     s3,
     s3vectors,
     scheduler,
+    secretsmanager,
 )
 from .acm import acm_inventory  # noqa: E402
 from .amazonmq import amazonmq_inventory  # noqa: E402
@@ -2413,3 +2310,4 @@ from .route53 import route53_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
 from .s3vectors import s3vectors_inventory  # noqa: E402
 from .scheduler import scheduler_inventory  # noqa: E402
+from .secretsmanager import secretsmanager_inventory  # noqa: E402
