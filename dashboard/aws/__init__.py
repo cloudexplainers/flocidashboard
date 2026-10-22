@@ -7,6 +7,7 @@ import threading
 from contextvars import ContextVar
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from datetime import date, timedelta
 from urllib.error import URLError
 from urllib.parse import urlparse
@@ -9347,2217 +9348,2282 @@ def glue_inventory() -> dict[str, Any]:
     }
 
 
-def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]:
-    factory = FlociClientFactory()
+def list_iam_users(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'name': user.get('UserName'),
+            'arn': user.get('Arn'),
+            'created': user.get('CreateDate'),
+        }
+        for user in factory.client('iam').get_paginator('list_users').paginate().build_full_result().get('Users', [])
+    ]
 
-    def iam_users() -> list[dict[str, Any]]:
-        return [
-            {
-                'name': user.get('UserName'),
-                'arn': user.get('Arn'),
-                'created': user.get('CreateDate'),
-            }
-            for user in factory.client('iam').get_paginator('list_users').paginate().build_full_result().get('Users', [])
-        ]
 
-    def iam_roles() -> list[dict[str, Any]]:
-        return [
-            {
-                'name': role.get('RoleName'),
-                'arn': role.get('Arn'),
-                'created': role.get('CreateDate'),
-            }
-            for role in factory.client('iam').get_paginator('list_roles').paginate().build_full_result().get('Roles', [])
-        ]
+def list_iam_roles(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'name': role.get('RoleName'),
+            'arn': role.get('Arn'),
+            'created': role.get('CreateDate'),
+        }
+        for role in factory.client('iam').get_paginator('list_roles').paginate().build_full_result().get('Roles', [])
+    ]
 
-    def s3_buckets() -> list[dict[str, Any]]:
-        return [
-            {
-                'name': bucket.get('Name'),
-                'created': bucket.get('CreationDate'),
-            }
-            for bucket in factory.client('s3').list_buckets().get('Buckets', [])
-        ]
 
-    def sqs_queues() -> list[dict[str, Any]]:
-        urls = factory.client('sqs').list_queues().get('QueueUrls', [])
-        return _string_items(urls, 'url')
+def list_s3_buckets(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'name': bucket.get('Name'),
+            'created': bucket.get('CreationDate'),
+        }
+        for bucket in factory.client('s3').list_buckets().get('Buckets', [])
+    ]
 
-    def dynamodb_tables() -> list[dict[str, Any]]:
-        names = factory.client('dynamodb').get_paginator('list_tables').paginate().build_full_result().get('TableNames', [])
-        return _string_items(names, 'name')
 
-    def sns_topics() -> list[dict[str, Any]]:
-        return [
-            {'arn': topic.get('TopicArn')}
-            for topic in factory.client('sns').get_paginator('list_topics').paginate().build_full_result().get('Topics', [])
-        ]
+def list_sqs_queues(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    urls = factory.client('sqs').list_queues().get('QueueUrls', [])
+    return _string_items(urls, 'url')
 
-    def ses_resources() -> list[dict[str, Any]]:
-        ses = factory.client('ses')
-        resources = [
-            {'type': 'identity', 'name': identity}
-            for identity in _safe_value(lambda: _paginate(ses, 'list_identities', 'Identities'), [])
-        ]
+
+def list_dynamodb_tables(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    names = factory.client('dynamodb').get_paginator('list_tables').paginate().build_full_result().get('TableNames', [])
+    return _string_items(names, 'name')
+
+
+def list_sns_topics(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {'arn': topic.get('TopicArn')}
+        for topic in factory.client('sns').get_paginator('list_topics').paginate().build_full_result().get('Topics', [])
+    ]
+
+
+def list_ses_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    ses = factory.client('ses')
+    resources = [
+        {'type': 'identity', 'name': identity}
+        for identity in _safe_value(lambda: _paginate(ses, 'list_identities', 'Identities'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'template',
+            'name': template.get('Name'),
+        }
+        for template in _safe_value(lambda: _paginate(ses, 'list_templates', 'TemplatesMetadata'), [])
+    )
+    mailbox = _ses_mailbox(factory)
+    if isinstance(mailbox, list):
         resources.extend(
             {
-                'type': 'template',
-                'name': template.get('Name'),
+                'type': 'captured_message',
+                'id': message.get('id') or message.get('Id') or message.get('messageId') or message.get('MessageId'),
             }
-            for template in _safe_value(lambda: _paginate(ses, 'list_templates', 'TemplatesMetadata'), [])
+            for message in mailbox
+            if isinstance(message, dict)
         )
-        mailbox = _ses_mailbox(factory)
-        if isinstance(mailbox, list):
+    elif isinstance(mailbox, dict):
+        messages = mailbox.get('messages') or mailbox.get('Messages') or mailbox.get('items') or mailbox.get('Items') or []
+        if isinstance(messages, list):
             resources.extend(
                 {
                     'type': 'captured_message',
                     'id': message.get('id') or message.get('Id') or message.get('messageId') or message.get('MessageId'),
                 }
-                for message in mailbox
+                for message in messages
                 if isinstance(message, dict)
             )
-        elif isinstance(mailbox, dict):
-            messages = mailbox.get('messages') or mailbox.get('Messages') or mailbox.get('items') or mailbox.get('Items') or []
-            if isinstance(messages, list):
-                resources.extend(
-                    {
-                        'type': 'captured_message',
-                        'id': message.get('id') or message.get('Id') or message.get('messageId') or message.get('MessageId'),
-                    }
-                    for message in messages
-                    if isinstance(message, dict)
-                )
-        return resources
+    return resources
 
-    def cloudfront_resources() -> list[dict[str, Any]]:
-        cloudfront = factory.client('cloudfront')
-        operations = set(cloudfront.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
 
-        if 'ListDistributions' in operations:
-            resources.extend(
-                {
-                    'type': 'distribution',
-                    'id': distribution.get('Id'),
-                    'arn': distribution.get('ARN'),
-                    'domain_name': distribution.get('DomainName'),
-                    'status': distribution.get('Status'),
-                    'enabled': distribution.get('Enabled'),
-                }
-                for distribution in _safe_value(
-                    lambda: _nested_operation_items(cloudfront, 'list_distributions', 'DistributionList'),
-                    [],
-                )
-            )
+def list_cloudfront_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    cloudfront = factory.client('cloudfront')
+    operations = set(cloudfront.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
 
-        if 'ListCachePolicies' in operations:
-            resources.extend(
-                {
-                    'type': 'cache_policy',
-                    'id': (policy.get('CachePolicy') or {}).get('Id'),
-                    'name': ((policy.get('CachePolicy') or {}).get('CachePolicyConfig') or {}).get('Name'),
-                    'policy_type': policy.get('Type'),
-                }
-                for policy in _safe_value(
-                    lambda: _nested_operation_items(cloudfront, 'list_cache_policies', 'CachePolicyList'),
-                    [],
-                )
-            )
-
-        if 'ListOriginRequestPolicies' in operations:
-            resources.extend(
-                {
-                    'type': 'origin_request_policy',
-                    'id': (policy.get('OriginRequestPolicy') or {}).get('Id'),
-                    'name': ((policy.get('OriginRequestPolicy') or {}).get('OriginRequestPolicyConfig') or {}).get('Name'),
-                    'policy_type': policy.get('Type'),
-                }
-                for policy in _safe_value(
-                    lambda: _nested_operation_items(cloudfront, 'list_origin_request_policies', 'OriginRequestPolicyList'),
-                    [],
-                )
-            )
-
-        return resources
-
-    def cloudmap_resources() -> list[dict[str, Any]]:
-        discovery = factory.client('servicediscovery')
-        operations = set(discovery.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        namespaces = _safe_value(
-            lambda: _operation_items(discovery, 'list_namespaces', 'Namespaces'),
-            [],
-        ) if 'ListNamespaces' in operations else []
-        services = _safe_value(
-            lambda: _operation_items(discovery, 'list_services', 'Services'),
-            [],
-        ) if 'ListServices' in operations else []
-
+    if 'ListDistributions' in operations:
         resources.extend(
             {
-                'type': 'namespace',
-                'id': namespace.get('Id'),
-                'name': namespace.get('Name'),
-                'arn': namespace.get('Arn'),
-                'namespace_type': namespace.get('Type'),
+                'type': 'distribution',
+                'id': distribution.get('Id'),
+                'arn': distribution.get('ARN'),
+                'domain_name': distribution.get('DomainName'),
+                'status': distribution.get('Status'),
+                'enabled': distribution.get('Enabled'),
             }
-            for namespace in namespaces
-        )
-        resources.extend(
-            {
-                'type': 'service',
-                'id': service.get('Id'),
-                'name': service.get('Name'),
-                'arn': service.get('Arn'),
-                'namespace_id': service.get('NamespaceId'),
-            }
-            for service in services
-        )
-        for service in services:
-            service_id = service.get('Id')
-            if not service_id or 'ListInstances' not in operations:
-                continue
-            resources.extend(
-                {
-                    'type': 'instance',
-                    'id': instance.get('Id'),
-                    'service_id': service_id,
-                    'attributes': instance.get('Attributes'),
-                }
-                for instance in _safe_value(
-                    lambda service_id=service_id: _operation_items(
-                        discovery,
-                        'list_instances',
-                        'Instances',
-                        ServiceId=service_id,
-                    ),
-                    [],
-                )
-            )
-
-        return resources
-
-    def cloudtrail_resources() -> list[dict[str, Any]]:
-        cloudtrail = factory.client('cloudtrail')
-        operations = set(cloudtrail.meta.service_model.operation_names)
-        trails = _safe_value(
-            lambda: _operation_items(cloudtrail, 'list_trails', 'Trails'),
-            [],
-        ) if 'ListTrails' in operations else []
-        if not trails and 'DescribeTrails' in operations:
-            trails = _safe_value(
-                lambda: cloudtrail.describe_trails(includeShadowTrails=False).get('trailList', []),
+            for distribution in _safe_value(
+                lambda: _nested_operation_items(cloudfront, 'list_distributions', 'DistributionList'),
                 [],
             )
-
-        return [
-            {
-                'type': 'trail',
-                'name': trail.get('Name') or trail.get('TrailARN') or trail.get('TrailArn'),
-                'arn': trail.get('TrailARN') or trail.get('TrailArn'),
-                'home_region': trail.get('HomeRegion'),
-                's3_bucket_name': trail.get('S3BucketName'),
-            }
-            for trail in trails
-        ]
-
-    def cloudformation_resources() -> list[dict[str, Any]]:
-        cloudformation = factory.client('cloudformation')
-        resources = [
-            {
-                'type': 'stack',
-                'name': stack.get('StackName'),
-                'id': stack.get('StackId'),
-                'status': stack.get('StackStatus'),
-            }
-            for stack in _safe_value(lambda: _paginate(cloudformation, 'list_stacks', 'StackSummaries'), [])
-        ]
-        stack_sets = _cloudformation_optional(
-            lambda: _paginate(cloudformation, 'list_stack_sets', 'Summaries'),
-            {'ValidationError'},
         )
-        if isinstance(stack_sets, list):
-            resources.extend(
-                {
-                    'type': 'stack_set',
-                    'name': stack_set.get('StackSetName'),
-                    'id': stack_set.get('StackSetId'),
-                    'status': stack_set.get('Status'),
-                }
-                for stack_set in stack_sets
-            )
-        return resources
 
-    def ecr_resources() -> list[dict[str, Any]]:
-        ecr = factory.client('ecr')
-        resources = [
+    if 'ListCachePolicies' in operations:
+        resources.extend(
             {
-                'type': 'repository',
-                'name': repository.get('repositoryName'),
-                'arn': repository.get('repositoryArn'),
-                'uri': repository.get('repositoryUri'),
+                'type': 'cache_policy',
+                'id': (policy.get('CachePolicy') or {}).get('Id'),
+                'name': ((policy.get('CachePolicy') or {}).get('CachePolicyConfig') or {}).get('Name'),
+                'policy_type': policy.get('Type'),
             }
-            for repository in _safe_value(lambda: _paginate(ecr, 'describe_repositories', 'repositories'), [])
-        ]
-
-        for repository in list(resources):
-            name = repository.get('name')
-            resources.extend(
-                {
-                    'type': 'image',
-                    'repository': name,
-                    'tag': image.get('imageTag'),
-                    'digest': image.get('imageDigest'),
-                }
-                for image in _safe_value(lambda name=name: _paginate(ecr, 'list_images', 'imageIds', repositoryName=name), [])
+            for policy in _safe_value(
+                lambda: _nested_operation_items(cloudfront, 'list_cache_policies', 'CachePolicyList'),
+                [],
             )
+        )
 
-        return resources
+    if 'ListOriginRequestPolicies' in operations:
+        resources.extend(
+            {
+                'type': 'origin_request_policy',
+                'id': (policy.get('OriginRequestPolicy') or {}).get('Id'),
+                'name': ((policy.get('OriginRequestPolicy') or {}).get('OriginRequestPolicyConfig') or {}).get('Name'),
+                'policy_type': policy.get('Type'),
+            }
+            for policy in _safe_value(
+                lambda: _nested_operation_items(cloudfront, 'list_origin_request_policies', 'OriginRequestPolicyList'),
+                [],
+            )
+        )
 
-    def rds_resources() -> list[dict[str, Any]]:
-        rds = factory.client('rds')
-        resources = [
+    return resources
+
+
+def list_cloudmap_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    discovery = factory.client('servicediscovery')
+    operations = set(discovery.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    namespaces = _safe_value(
+        lambda: _operation_items(discovery, 'list_namespaces', 'Namespaces'),
+        [],
+    ) if 'ListNamespaces' in operations else []
+    services = _safe_value(
+        lambda: _operation_items(discovery, 'list_services', 'Services'),
+        [],
+    ) if 'ListServices' in operations else []
+
+    resources.extend(
+        {
+            'type': 'namespace',
+            'id': namespace.get('Id'),
+            'name': namespace.get('Name'),
+            'arn': namespace.get('Arn'),
+            'namespace_type': namespace.get('Type'),
+        }
+        for namespace in namespaces
+    )
+    resources.extend(
+        {
+            'type': 'service',
+            'id': service.get('Id'),
+            'name': service.get('Name'),
+            'arn': service.get('Arn'),
+            'namespace_id': service.get('NamespaceId'),
+        }
+        for service in services
+    )
+    for service in services:
+        service_id = service.get('Id')
+        if not service_id or 'ListInstances' not in operations:
+            continue
+        resources.extend(
             {
                 'type': 'instance',
-                'name': instance.get('DBInstanceIdentifier'),
-                'arn': instance.get('DBInstanceArn'),
-                'status': instance.get('DBInstanceStatus'),
-                'endpoint': instance.get('Endpoint'),
+                'id': instance.get('Id'),
+                'service_id': service_id,
+                'attributes': instance.get('Attributes'),
             }
-            for instance in _safe_value(lambda: _paginate(rds, 'describe_db_instances', 'DBInstances'), [])
-        ]
-        resources.extend(
-            {
-                'type': 'cluster',
-                'name': cluster.get('DBClusterIdentifier'),
-                'arn': cluster.get('DBClusterArn'),
-                'status': cluster.get('Status'),
-            }
-            for cluster in _safe_value(lambda: _paginate(rds, 'describe_db_clusters', 'DBClusters'), [])
-        )
-        resources.extend(
-            {
-                'type': 'parameter_group',
-                'name': group.get('DBParameterGroupName'),
-                'arn': group.get('DBParameterGroupArn'),
-            }
-            for group in _safe_value(lambda: _paginate(rds, 'describe_db_parameter_groups', 'DBParameterGroups'), [])
-        )
-        return resources
-
-    def acm_resources() -> list[dict[str, Any]]:
-        return [
-            {
-                'type': 'certificate',
-                'arn': certificate.get('CertificateArn'),
-                'domain': certificate.get('DomainName'),
-                'status': certificate.get('Status'),
-                'key_algorithm': certificate.get('KeyAlgorithm'),
-            }
-            for certificate in _safe_value(lambda: _paginate(factory.client('acm'), 'list_certificates', 'CertificateSummaryList'), [])
-        ]
-
-    def stepfunctions_resources() -> list[dict[str, Any]]:
-        stepfunctions = factory.client('stepfunctions')
-        resources = [
-            {
-                'type': 'state_machine',
-                'name': machine.get('name'),
-                'arn': machine.get('stateMachineArn'),
-                'type_name': machine.get('type'),
-            }
-            for machine in _safe_value(lambda: _paginate(stepfunctions, 'list_state_machines', 'stateMachines'), [])
-        ]
-        for machine in list(resources):
-            arn = machine.get('arn')
-            resources.extend(
-                {
-                    'type': 'execution',
-                    'state_machine': arn,
-                    'name': execution.get('name'),
-                    'arn': execution.get('executionArn'),
-                    'status': execution.get('status'),
-                }
-                for execution in _safe_value(
-                    lambda arn=arn: _paginate(stepfunctions, 'list_executions', 'executions', stateMachineArn=arn),
-                    [],
-                )
+            for instance in _safe_value(
+                lambda service_id=service_id: _operation_items(
+                    discovery,
+                    'list_instances',
+                    'Instances',
+                    ServiceId=service_id,
+                ),
+                [],
             )
-        return resources
+        )
 
-    def scheduler_resources() -> list[dict[str, Any]]:
-        scheduler = factory.client('scheduler')
-        resources = [
-            {
-                'type': 'schedule_group',
-                'name': group.get('Name'),
-                'arn': group.get('Arn'),
-                'state': group.get('State'),
-            }
-            for group in _safe_value(lambda: _paginate(scheduler, 'list_schedule_groups', 'ScheduleGroups'), [])
-        ]
+    return resources
+
+
+def list_cloudtrail_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    cloudtrail = factory.client('cloudtrail')
+    operations = set(cloudtrail.meta.service_model.operation_names)
+    trails = _safe_value(
+        lambda: _operation_items(cloudtrail, 'list_trails', 'Trails'),
+        [],
+    ) if 'ListTrails' in operations else []
+    if not trails and 'DescribeTrails' in operations:
+        trails = _safe_value(
+            lambda: cloudtrail.describe_trails(includeShadowTrails=False).get('trailList', []),
+            [],
+        )
+
+    return [
+        {
+            'type': 'trail',
+            'name': trail.get('Name') or trail.get('TrailARN') or trail.get('TrailArn'),
+            'arn': trail.get('TrailARN') or trail.get('TrailArn'),
+            'home_region': trail.get('HomeRegion'),
+            's3_bucket_name': trail.get('S3BucketName'),
+        }
+        for trail in trails
+    ]
+
+
+def list_cloudformation_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    cloudformation = factory.client('cloudformation')
+    resources = [
+        {
+            'type': 'stack',
+            'name': stack.get('StackName'),
+            'id': stack.get('StackId'),
+            'status': stack.get('StackStatus'),
+        }
+        for stack in _safe_value(lambda: _paginate(cloudformation, 'list_stacks', 'StackSummaries'), [])
+    ]
+    stack_sets = _cloudformation_optional(
+        lambda: _paginate(cloudformation, 'list_stack_sets', 'Summaries'),
+        {'ValidationError'},
+    )
+    if isinstance(stack_sets, list):
         resources.extend(
             {
-                'type': 'schedule',
-                'name': schedule.get('Name'),
-                'arn': schedule.get('Arn'),
-                'group': schedule.get('GroupName'),
-                'state': schedule.get('State'),
-                'expression': schedule.get('ScheduleExpression'),
+                'type': 'stack_set',
+                'name': stack_set.get('StackSetName'),
+                'id': stack_set.get('StackSetId'),
+                'status': stack_set.get('Status'),
             }
-            for schedule in _safe_value(lambda: _paginate(scheduler, 'list_schedules', 'Schedules'), [])
+            for stack_set in stack_sets
         )
-        return resources
+    return resources
 
-    def glue_resources() -> list[dict[str, Any]]:
-        glue = factory.client('glue')
-        resources = [
+
+def list_ecr_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    ecr = factory.client('ecr')
+    resources = [
+        {
+            'type': 'repository',
+            'name': repository.get('repositoryName'),
+            'arn': repository.get('repositoryArn'),
+            'uri': repository.get('repositoryUri'),
+        }
+        for repository in _safe_value(lambda: _paginate(ecr, 'describe_repositories', 'repositories'), [])
+    ]
+
+    for repository in list(resources):
+        name = repository.get('name')
+        resources.extend(
             {
-                'type': 'database',
-                'name': database.get('Name'),
+                'type': 'image',
+                'repository': name,
+                'tag': image.get('imageTag'),
+                'digest': image.get('imageDigest'),
             }
-            for database in _safe_value(lambda: _paginate(glue, 'get_databases', 'DatabaseList'), [])
-        ]
-        for database in list(resources):
-            database_name = database.get('name')
-            tables = _safe_value(lambda database_name=database_name: _paginate(glue, 'get_tables', 'TableList', DatabaseName=database_name), [])
-            resources.extend(
-                {
-                    'type': 'table',
-                    'database': database_name,
-                    'name': table.get('Name'),
-                    'location': (table.get('StorageDescriptor') or {}).get('Location'),
-                }
-                for table in tables
+            for image in _safe_value(lambda name=name: _paginate(ecr, 'list_images', 'imageIds', repositoryName=name), [])
+        )
+
+    return resources
+
+
+def list_rds_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    rds = factory.client('rds')
+    resources = [
+        {
+            'type': 'instance',
+            'name': instance.get('DBInstanceIdentifier'),
+            'arn': instance.get('DBInstanceArn'),
+            'status': instance.get('DBInstanceStatus'),
+            'endpoint': instance.get('Endpoint'),
+        }
+        for instance in _safe_value(lambda: _paginate(rds, 'describe_db_instances', 'DBInstances'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'cluster',
+            'name': cluster.get('DBClusterIdentifier'),
+            'arn': cluster.get('DBClusterArn'),
+            'status': cluster.get('Status'),
+        }
+        for cluster in _safe_value(lambda: _paginate(rds, 'describe_db_clusters', 'DBClusters'), [])
+    )
+    resources.extend(
+        {
+            'type': 'parameter_group',
+            'name': group.get('DBParameterGroupName'),
+            'arn': group.get('DBParameterGroupArn'),
+        }
+        for group in _safe_value(lambda: _paginate(rds, 'describe_db_parameter_groups', 'DBParameterGroups'), [])
+    )
+    return resources
+
+
+def list_acm_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'type': 'certificate',
+            'arn': certificate.get('CertificateArn'),
+            'domain': certificate.get('DomainName'),
+            'status': certificate.get('Status'),
+            'key_algorithm': certificate.get('KeyAlgorithm'),
+        }
+        for certificate in _safe_value(lambda: _paginate(factory.client('acm'), 'list_certificates', 'CertificateSummaryList'), [])
+    ]
+
+
+def list_stepfunctions_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    stepfunctions = factory.client('stepfunctions')
+    resources = [
+        {
+            'type': 'state_machine',
+            'name': machine.get('name'),
+            'arn': machine.get('stateMachineArn'),
+            'type_name': machine.get('type'),
+        }
+        for machine in _safe_value(lambda: _paginate(stepfunctions, 'list_state_machines', 'stateMachines'), [])
+    ]
+    for machine in list(resources):
+        arn = machine.get('arn')
+        resources.extend(
+            {
+                'type': 'execution',
+                'state_machine': arn,
+                'name': execution.get('name'),
+                'arn': execution.get('executionArn'),
+                'status': execution.get('status'),
+            }
+            for execution in _safe_value(
+                lambda arn=arn: _paginate(stepfunctions, 'list_executions', 'executions', stateMachineArn=arn),
+                [],
             )
-            for table in tables:
-                table_name = table.get('Name')
-                resources.extend(
-                    {
-                        'type': 'partition',
-                        'database': database_name,
-                        'table': table_name,
-                        'values': partition.get('Values'),
-                    }
-                    for partition in _safe_value(
-                        lambda database_name=database_name, table_name=table_name: _paginate(
-                            glue,
-                            'get_partitions',
-                            'Partitions',
-                            DatabaseName=database_name,
-                            TableName=table_name,
-                        ),
-                        [],
-                    )
-                )
+        )
+    return resources
+
+
+def list_scheduler_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    scheduler = factory.client('scheduler')
+    resources = [
+        {
+            'type': 'schedule_group',
+            'name': group.get('Name'),
+            'arn': group.get('Arn'),
+            'state': group.get('State'),
+        }
+        for group in _safe_value(lambda: _paginate(scheduler, 'list_schedule_groups', 'ScheduleGroups'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'schedule',
+            'name': schedule.get('Name'),
+            'arn': schedule.get('Arn'),
+            'group': schedule.get('GroupName'),
+            'state': schedule.get('State'),
+            'expression': schedule.get('ScheduleExpression'),
+        }
+        for schedule in _safe_value(lambda: _paginate(scheduler, 'list_schedules', 'Schedules'), [])
+    )
+    return resources
+
+
+def list_glue_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    glue = factory.client('glue')
+    resources = [
+        {
+            'type': 'database',
+            'name': database.get('Name'),
+        }
+        for database in _safe_value(lambda: _paginate(glue, 'get_databases', 'DatabaseList'), [])
+    ]
+    for database in list(resources):
+        database_name = database.get('name')
+        tables = _safe_value(lambda database_name=database_name: _paginate(glue, 'get_tables', 'TableList', DatabaseName=database_name), [])
+        resources.extend(
+            {
+                'type': 'table',
+                'database': database_name,
+                'name': table.get('Name'),
+                'location': (table.get('StorageDescriptor') or {}).get('Location'),
+            }
+            for table in tables
+        )
+        for table in tables:
+            table_name = table.get('Name')
             resources.extend(
                 {
-                    'type': 'user_defined_function',
+                    'type': 'partition',
                     'database': database_name,
-                    'name': function.get('FunctionName'),
-                    'class_name': function.get('ClassName'),
+                    'table': table_name,
+                    'values': partition.get('Values'),
                 }
-                for function in _safe_value(
-                    lambda database_name=database_name: _paginate(
+                for partition in _safe_value(
+                    lambda database_name=database_name, table_name=table_name: _paginate(
                         glue,
-                        'get_user_defined_functions',
-                        'UserDefinedFunctions',
+                        'get_partitions',
+                        'Partitions',
                         DatabaseName=database_name,
-                        Pattern='*',
+                        TableName=table_name,
                     ),
                     [],
                 )
             )
-        return resources
-
-    def lambda_functions() -> list[dict[str, Any]]:
-        return [
+        resources.extend(
             {
+                'type': 'user_defined_function',
+                'database': database_name,
                 'name': function.get('FunctionName'),
-                'runtime': function.get('Runtime'),
-                'arn': function.get('FunctionArn'),
+                'class_name': function.get('ClassName'),
             }
-            for function in factory.client('lambda').get_paginator('list_functions').paginate().build_full_result().get('Functions', [])
-        ]
-
-    def kms_keys() -> list[dict[str, Any]]:
-        return [
-            {
-                'id': key.get('KeyId'),
-                'arn': key.get('KeyArn'),
-            }
-            for key in factory.client('kms').get_paginator('list_keys').paginate().build_full_result().get('Keys', [])
-        ]
-
-    def secrets() -> list[dict[str, Any]]:
-        return [
-            {
-                'name': secret.get('Name'),
-                'arn': secret.get('ARN'),
-            }
-            for secret in factory.client('secretsmanager').get_paginator('list_secrets').paginate().build_full_result().get('SecretList', [])
-        ]
-
-    def log_groups() -> list[dict[str, Any]]:
-        return [
-            {
-                'name': group.get('logGroupName'),
-                'arn': group.get('arn'),
-                'retention': group.get('retentionInDays'),
-            }
-            for group in factory.client('logs').get_paginator('describe_log_groups').paginate().build_full_result().get('logGroups', [])
-        ]
-
-    def cloudwatch_metrics() -> list[dict[str, Any]]:
-        cloudwatch = factory.client('cloudwatch')
-        resources = [
-            {
-                'type': 'metric',
-                'namespace': metric.get('Namespace'),
-                'name': metric.get('MetricName'),
-                'dimensions': metric.get('Dimensions'),
-            }
-            for metric in _safe_value(lambda: _paginate(cloudwatch, 'list_metrics', 'Metrics'), [])
-        ]
-        resources.extend(
-            {
-                'type': 'alarm',
-                'name': alarm.get('AlarmName'),
-                'arn': alarm.get('AlarmArn'),
-                'state': alarm.get('StateValue'),
-            }
-            for alarm in _safe_value(lambda: _paginate(cloudwatch, 'describe_alarms', 'MetricAlarms'), [])
-        )
-        return resources
-
-    def config_resources() -> list[dict[str, Any]]:
-        config = factory.client('config')
-        operations = set(config.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'DescribeConfigurationRecorders' in operations:
-            resources.extend(
-                {
-                    'type': 'configuration_recorder',
-                    'name': recorder.get('name'),
-                    'role_arn': recorder.get('roleARN'),
-                }
-                for recorder in _safe_value(
-                    lambda: _operation_items(config, 'describe_configuration_recorders', 'ConfigurationRecorders'),
-                    [],
-                )
-            )
-
-        if 'DescribeConfigRules' in operations:
-            resources.extend(
-                {
-                    'type': 'config_rule',
-                    'name': rule.get('ConfigRuleName'),
-                    'arn': rule.get('ConfigRuleArn'),
-                    'state': rule.get('ConfigRuleState'),
-                }
-                for rule in _safe_value(
-                    lambda: _operation_items(config, 'describe_config_rules', 'ConfigRules'),
-                    [],
-                )
-            )
-
-        if 'DescribeConformancePacks' in operations:
-            resources.extend(
-                {
-                    'type': 'conformance_pack',
-                    'name': pack.get('ConformancePackName'),
-                    'arn': pack.get('ConformancePackArn'),
-                }
-                for pack in _safe_value(
-                    lambda: _operation_items(config, 'describe_conformance_packs', 'ConformancePackDetails'),
-                    [],
-                )
-            )
-
-        return resources
-
-    def cognito_resources() -> list[dict[str, Any]]:
-        cognito = factory.client('cognito-idp')
-        resources: list[dict[str, Any]] = []
-        pools = _safe_value(lambda: cognito.list_user_pools(MaxResults=60).get('UserPools', []), [])
-
-        for pool in pools:
-            pool_id = pool.get('Id')
-            resources.append({
-                'type': 'user_pool',
-                'id': pool_id,
-                'name': pool.get('Name'),
-            })
-            resources.extend(
-                {
-                    'type': 'user_pool_client',
-                    'pool_id': pool_id,
-                    'id': client.get('ClientId'),
-                    'name': client.get('ClientName'),
-                }
-                for client in _safe_value(lambda pool_id=pool_id: cognito.list_user_pool_clients(UserPoolId=pool_id, MaxResults=60).get('UserPoolClients', []), [])
-            )
-            resources.extend(
-                {
-                    'type': 'user',
-                    'pool_id': pool_id,
-                    'name': user.get('Username'),
-                    'status': user.get('UserStatus'),
-                }
-                for user in _safe_value(lambda pool_id=pool_id: cognito.list_users(UserPoolId=pool_id, Limit=60).get('Users', []), [])
-            )
-            resources.extend(
-                {
-                    'type': 'group',
-                    'pool_id': pool_id,
-                    'name': group.get('GroupName'),
-                }
-                for group in _safe_value(lambda pool_id=pool_id: cognito.list_groups(UserPoolId=pool_id, Limit=60).get('Groups', []), [])
-            )
-
-        return resources
-
-    def eventbridge_resources() -> list[dict[str, Any]]:
-        events = factory.client('events')
-        resources: list[dict[str, Any]] = []
-        buses = _safe_value(lambda: _paginate(events, 'list_event_buses', 'EventBuses'), [])
-
-        if not buses:
-            buses = [{'Name': 'default'}]
-
-        for bus in buses:
-            name = bus.get('Name') or 'default'
-            resources.append({
-                'type': 'event_bus',
-                'name': name,
-                'arn': bus.get('Arn'),
-            })
-            rules = _safe_value(lambda name=name: _paginate(events, 'list_rules', 'Rules', EventBusName=name), [])
-            resources.extend(
-                {
-                    'type': 'rule',
-                    'event_bus': name,
-                    'name': rule.get('Name'),
-                    'arn': rule.get('Arn'),
-                    'state': rule.get('State'),
-                }
-                for rule in rules
-            )
-            for rule in rules:
-                rule_name = rule.get('Name')
-                resources.extend(
-                    {
-                        'type': 'target',
-                        'event_bus': name,
-                        'rule': rule_name,
-                        'id': target.get('Id'),
-                        'arn': target.get('Arn'),
-                    }
-                    for target in _safe_value(
-                        lambda name=name, rule_name=rule_name: _paginate(
-                            events,
-                            'list_targets_by_rule',
-                            'Targets',
-                            Rule=rule_name,
-                            EventBusName=name,
-                        ),
-                        [],
-                    )
-                )
-
-        return resources
-
-    def apigateway_apis() -> list[dict[str, Any]]:
-        apigateway = factory.client('apigateway')
-        apigatewayv2 = factory.client('apigatewayv2')
-        apis = [
-            {
-                'type': 'REST',
-                'id': api.get('id'),
-                'name': api.get('name'),
-            }
-            for api in _safe_value(lambda: _paginate(apigateway, 'get_rest_apis', 'items'), [])
-        ]
-        apis.extend(
-            {
-                'type': api.get('ProtocolType') or 'HTTP',
-                'id': api.get('ApiId'),
-                'name': api.get('Name'),
-            }
-            for api in _safe_value(lambda: _paginate(apigatewayv2, 'get_apis', 'Items'), [])
-        )
-        return apis
-
-    def ecs_resources() -> list[dict[str, Any]]:
-        ecs = factory.client('ecs')
-        resources: list[dict[str, Any]] = []
-        clusters = _safe_value(lambda: _paginate(ecs, 'list_clusters', 'clusterArns'), [])
-        task_definitions = _safe_value(lambda: _paginate(ecs, 'list_task_definitions', 'taskDefinitionArns'), [])
-        resources.extend({'type': 'cluster', 'arn': arn} for arn in clusters)
-        resources.extend({'type': 'task_definition', 'arn': arn} for arn in task_definitions)
-
-        for cluster in clusters:
-            tasks = _safe_value(lambda cluster=cluster: _paginate(ecs, 'list_tasks', 'taskArns', cluster=cluster), [])
-            services = _safe_value(lambda cluster=cluster: _paginate(ecs, 'list_services', 'serviceArns', cluster=cluster), [])
-            container_instances = _safe_value(lambda cluster=cluster: _paginate(ecs, 'list_container_instances', 'containerInstanceArns', cluster=cluster), [])
-            resources.extend({'type': 'task', 'cluster': cluster, 'arn': arn} for arn in tasks)
-            resources.extend({'type': 'service', 'cluster': cluster, 'arn': arn} for arn in services)
-            resources.extend({'type': 'container_instance', 'cluster': cluster, 'arn': arn} for arn in container_instances)
-
-        return resources
-
-    def appconfig_resources() -> list[dict[str, Any]]:
-        appconfig = factory.client('appconfig')
-        resources: list[dict[str, Any]] = []
-        applications = _safe_value(lambda: _paginate(appconfig, 'list_applications', 'Items'), [])
-
-        for application in applications:
-            application_id = application.get('Id')
-            resources.append({
-                'type': 'application',
-                'id': application_id,
-                'name': application.get('Name'),
-            })
-
-            environments = _safe_value(
-                lambda application_id=application_id: _paginate(
-                    appconfig,
-                    'list_environments',
-                    'Items',
-                    ApplicationId=application_id,
+            for function in _safe_value(
+                lambda database_name=database_name: _paginate(
+                    glue,
+                    'get_user_defined_functions',
+                    'UserDefinedFunctions',
+                    DatabaseName=database_name,
+                    Pattern='*',
                 ),
                 [],
             )
-            resources.extend(
-                {
-                    'type': 'environment',
-                    'application_id': application_id,
-                    'id': environment.get('Id'),
-                    'name': environment.get('Name'),
-                    'state': environment.get('State'),
-                }
-                for environment in environments
-            )
+        )
+    return resources
 
-            profiles = _safe_value(
-                lambda application_id=application_id: _paginate(
-                    appconfig,
-                    'list_configuration_profiles',
-                    'Items',
-                    ApplicationId=application_id,
-                ),
+
+def list_lambda_functions(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'name': function.get('FunctionName'),
+            'runtime': function.get('Runtime'),
+            'arn': function.get('FunctionArn'),
+        }
+        for function in factory.client('lambda').get_paginator('list_functions').paginate().build_full_result().get('Functions', [])
+    ]
+
+
+def list_kms_keys(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'id': key.get('KeyId'),
+            'arn': key.get('KeyArn'),
+        }
+        for key in factory.client('kms').get_paginator('list_keys').paginate().build_full_result().get('Keys', [])
+    ]
+
+
+def list_secrets(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'name': secret.get('Name'),
+            'arn': secret.get('ARN'),
+        }
+        for secret in factory.client('secretsmanager').get_paginator('list_secrets').paginate().build_full_result().get('SecretList', [])
+    ]
+
+
+def list_log_groups(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'name': group.get('logGroupName'),
+            'arn': group.get('arn'),
+            'retention': group.get('retentionInDays'),
+        }
+        for group in factory.client('logs').get_paginator('describe_log_groups').paginate().build_full_result().get('logGroups', [])
+    ]
+
+
+def list_cloudwatch_metrics(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    cloudwatch = factory.client('cloudwatch')
+    resources = [
+        {
+            'type': 'metric',
+            'namespace': metric.get('Namespace'),
+            'name': metric.get('MetricName'),
+            'dimensions': metric.get('Dimensions'),
+        }
+        for metric in _safe_value(lambda: _paginate(cloudwatch, 'list_metrics', 'Metrics'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'alarm',
+            'name': alarm.get('AlarmName'),
+            'arn': alarm.get('AlarmArn'),
+            'state': alarm.get('StateValue'),
+        }
+        for alarm in _safe_value(lambda: _paginate(cloudwatch, 'describe_alarms', 'MetricAlarms'), [])
+    )
+    return resources
+
+
+def list_config_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    config = factory.client('config')
+    operations = set(config.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'DescribeConfigurationRecorders' in operations:
+        resources.extend(
+            {
+                'type': 'configuration_recorder',
+                'name': recorder.get('name'),
+                'role_arn': recorder.get('roleARN'),
+            }
+            for recorder in _safe_value(
+                lambda: _operation_items(config, 'describe_configuration_recorders', 'ConfigurationRecorders'),
                 [],
             )
-            resources.extend(
-                {
-                    'type': 'configuration_profile',
-                    'application_id': application_id,
-                    'id': profile.get('Id'),
-                    'name': profile.get('Name'),
-                    'location_uri': profile.get('LocationUri'),
-                }
-                for profile in profiles
-            )
+        )
 
-            for profile in profiles:
-                profile_id = profile.get('Id')
-                resources.extend(
-                    {
-                        'type': 'hosted_configuration_version',
-                        'application_id': application_id,
-                        'configuration_profile_id': profile_id,
-                        'version_number': version.get('VersionNumber'),
-                        'content_type': version.get('ContentType'),
-                    }
-                    for version in _safe_value(
-                        lambda application_id=application_id, profile_id=profile_id: _paginate(
-                            appconfig,
-                            'list_hosted_configuration_versions',
-                            'Items',
-                            ApplicationId=application_id,
-                            ConfigurationProfileId=profile_id,
-                        ),
-                        [],
-                    )
-                )
-
-            for environment in environments:
-                environment_id = environment.get('Id')
-                resources.extend(
-                    {
-                        'type': 'deployment',
-                        'application_id': application_id,
-                        'environment_id': environment_id,
-                        'deployment_number': deployment.get('DeploymentNumber'),
-                        'state': deployment.get('State'),
-                    }
-                    for deployment in _safe_value(
-                        lambda application_id=application_id, environment_id=environment_id: _paginate(
-                            appconfig,
-                            'list_deployments',
-                            'Items',
-                            ApplicationId=application_id,
-                            EnvironmentId=environment_id,
-                        ),
-                        [],
-                    )
-                )
-
+    if 'DescribeConfigRules' in operations:
         resources.extend(
             {
-                'type': 'deployment_strategy',
-                'id': strategy.get('Id'),
-                'name': strategy.get('Name'),
+                'type': 'config_rule',
+                'name': rule.get('ConfigRuleName'),
+                'arn': rule.get('ConfigRuleArn'),
+                'state': rule.get('ConfigRuleState'),
             }
-            for strategy in _safe_value(lambda: _paginate(appconfig, 'list_deployment_strategies', 'Items'), [])
-        )
-        return resources
-
-    def appsync_resources() -> list[dict[str, Any]]:
-        appsync = factory.client('appsync')
-        resources: list[dict[str, Any]] = []
-        apis = _safe_value(lambda: _operation_items(appsync, 'list_graphql_apis', 'graphqlApis'), [])
-
-        for api in apis:
-            api_id = api.get('apiId')
-            resources.append({
-                'type': 'graphql_api',
-                'id': api_id,
-                'name': api.get('name'),
-                'arn': api.get('arn'),
-            })
-            for result_key, operation, resource_type in (
-                ('apiKeys', 'list_api_keys', 'api_key'),
-                ('dataSources', 'list_data_sources', 'data_source'),
-                ('functions', 'list_functions', 'function'),
-            ):
-                resources.extend(
-                    {
-                        **_clean_response(item),
-                        'type': resource_type,
-                        'api_id': api_id,
-                        **({'source_type': item.get('type')} if resource_type == 'data_source' else {}),
-                    }
-                    for item in _safe_value(
-                        lambda operation=operation, result_key=result_key: _operation_items(
-                            appsync,
-                            operation,
-                            result_key,
-                            apiId=api_id,
-                        ),
-                        [],
-                    )
-                )
-            types = _safe_value(
-                lambda: _operation_items(appsync, 'list_types', 'types', apiId=api_id, format='SDL'),
+            for rule in _safe_value(
+                lambda: _operation_items(config, 'describe_config_rules', 'ConfigRules'),
                 [],
             )
-            resources.extend(
-                {
-                    **_clean_response(type_item),
-                    'type': 'type',
-                    'api_id': api_id,
-                }
-                for type_item in types
-            )
-            resources.extend(
-                {
-                    **_clean_response(resolver),
-                    'type': 'resolver',
-                    'api_id': api_id,
-                    'type_name': type_item.get('name'),
-                }
-                for type_item in types
-                if type_item.get('name')
-                for resolver in _safe_value(
-                    lambda type_name=type_item.get('name'): _operation_items(
-                        appsync,
-                        'list_resolvers',
-                        'resolvers',
-                        apiId=api_id,
-                        typeName=type_name,
-                    ),
-                    [],
-                )
-            )
+        )
 
-        return resources
-
-    def bedrockruntime_resources() -> list[dict[str, Any]]:
-        return [
-            {
-                'type': 'operation',
-                'name': 'Converse',
-                'endpoint': '/model/{modelId}/converse',
-                'status': 'supported',
-            },
-            {
-                'type': 'operation',
-                'name': 'InvokeModel',
-                'endpoint': '/model/{modelId}/invoke',
-                'status': 'supported',
-            },
-            {
-                'type': 'operation',
-                'name': 'ConverseStream',
-                'endpoint': '/model/{modelId}/converse-stream',
-                'status': 'unsupported',
-            },
-            {
-                'type': 'operation',
-                'name': 'InvokeModelWithResponseStream',
-                'endpoint': '/model/{modelId}/invoke-with-response-stream',
-                'status': 'unsupported',
-            },
-        ]
-
-    def codebuild_resources() -> list[dict[str, Any]]:
-        codebuild = factory.client('codebuild')
-        resources: list[dict[str, Any]] = []
-        project_names = _safe_value(lambda: _paginate(codebuild, 'list_projects', 'projects'), [])
-        build_ids = _safe_value(lambda: _paginate(codebuild, 'list_builds', 'ids'), [])
-        report_group_arns = _safe_value(lambda: _paginate(codebuild, 'list_report_groups', 'reportGroups'), [])
-        report_arns = _safe_value(lambda: _paginate(codebuild, 'list_reports', 'reports'), [])
-        source_credentials = _safe_value(lambda: codebuild.list_source_credentials().get('sourceCredentialsInfos', []), [])
-
+    if 'DescribeConformancePacks' in operations:
         resources.extend(
             {
-                'type': 'project',
-                'name': name,
+                'type': 'conformance_pack',
+                'name': pack.get('ConformancePackName'),
+                'arn': pack.get('ConformancePackArn'),
             }
-            for name in project_names
-        )
-        resources.extend(
-            {
-                'type': 'build',
-                'id': build_id,
-            }
-            for build_id in build_ids
-        )
-        resources.extend(
-            {
-                'type': 'report_group',
-                'arn': arn,
-            }
-            for arn in report_group_arns
-        )
-        resources.extend(
-            {
-                'type': 'report',
-                'arn': arn,
-            }
-            for arn in report_arns
-        )
-        resources.extend(
-            {
-                'type': 'source_credential',
-                'server_type': credential.get('serverType'),
-                'auth_type': credential.get('authType'),
-                'arn': credential.get('arn'),
-            }
-            for credential in source_credentials
-        )
-        return resources
-
-    def codedeploy_resources() -> list[dict[str, Any]]:
-        codedeploy = factory.client('codedeploy')
-        resources: list[dict[str, Any]] = []
-        application_names = _safe_value(lambda: _paginate(codedeploy, 'list_applications', 'applications'), [])
-        deployment_config_names = _safe_value(lambda: _paginate(codedeploy, 'list_deployment_configs', 'deploymentConfigsList'), [])
-        on_prem_instance_names = _safe_value(lambda: _paginate(codedeploy, 'list_on_premises_instances', 'instanceNames'), [])
-
-        for application_name in application_names:
-            resources.append({
-                'type': 'application',
-                'name': application_name,
-            })
-            group_names = _safe_value(
-                lambda application_name=application_name: _paginate(
-                    codedeploy,
-                    'list_deployment_groups',
-                    'deploymentGroups',
-                    applicationName=application_name,
-                ),
+            for pack in _safe_value(
+                lambda: _operation_items(config, 'describe_conformance_packs', 'ConformancePackDetails'),
                 [],
             )
-            resources.extend(
-                {
-                    'type': 'deployment_group',
-                    'application_name': application_name,
-                    'name': group_name,
-                }
-                for group_name in group_names
-            )
-            deployment_ids = _safe_value(
-                lambda application_name=application_name: _paginate(
-                    codedeploy,
-                    'list_deployments',
-                    'deployments',
-                    applicationName=application_name,
-                ),
-                [],
-            )
-            resources.extend(
-                {
-                    'type': 'deployment',
-                    'application_name': application_name,
-                    'id': deployment_id,
-                }
-                for deployment_id in deployment_ids
-            )
+        )
 
-        resources.extend(
-            {
-                'type': 'deployment_config',
-                'name': name,
-            }
-            for name in deployment_config_names
-        )
-        resources.extend(
-            {
-                'type': 'on_prem_instance',
-                'name': name,
-            }
-            for name in on_prem_instance_names
-        )
-        return resources
+    return resources
 
-    def eks_resources() -> list[dict[str, Any]]:
-        eks = factory.client('eks')
-        resources: list[dict[str, Any]] = []
-        cluster_names = _safe_value(lambda: _paginate(eks, 'list_clusters', 'clusters'), [])
 
-        for cluster_name in cluster_names:
-            resources.append({
-                'type': 'cluster',
-                'name': cluster_name,
-            })
-            resources.extend(
-                {
-                    'type': 'nodegroup',
-                    'cluster': cluster_name,
-                    'name': nodegroup,
-                }
-                for nodegroup in _safe_value(
-                    lambda cluster_name=cluster_name: _paginate(eks, 'list_nodegroups', 'nodegroups', clusterName=cluster_name),
-                    [],
-                )
-            )
-            resources.extend(
-                {
-                    'type': 'fargate_profile',
-                    'cluster': cluster_name,
-                    'name': profile,
-                }
-                for profile in _safe_value(
-                    lambda cluster_name=cluster_name: _paginate(eks, 'list_fargate_profiles', 'fargateProfileNames', clusterName=cluster_name),
-                    [],
-                )
-            )
-            resources.extend(
-                {
-                    'type': 'addon',
-                    'cluster': cluster_name,
-                    'name': addon,
-                }
-                for addon in _safe_value(
-                    lambda cluster_name=cluster_name: _paginate(eks, 'list_addons', 'addons', clusterName=cluster_name),
-                    [],
-                )
-            )
-            resources.extend(
-                {
-                    'type': 'identity_provider_config',
-                    'cluster': cluster_name,
-                    'name': config.get('name'),
-                    'provider_type': config.get('type'),
-                }
-                for config in _safe_value(
-                    lambda cluster_name=cluster_name: _paginate(
-                        eks,
-                        'list_identity_provider_configs',
-                        'identityProviderConfigs',
-                        clusterName=cluster_name,
-                    ),
-                    [],
-                )
-                if isinstance(config, dict)
-            )
-            resources.extend(
-                {
-                    'type': 'access_entry',
-                    'cluster': cluster_name,
-                    'principal_arn': principal,
-                }
-                for principal in _safe_value(
-                    lambda cluster_name=cluster_name: _paginate(eks, 'list_access_entries', 'accessEntries', clusterName=cluster_name),
-                    [],
-                )
-            )
+def list_cognito_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    cognito = factory.client('cognito-idp')
+    resources: list[dict[str, Any]] = []
+    pools = _safe_value(lambda: cognito.list_user_pools(MaxResults=60).get('UserPools', []), [])
 
-        return resources
-
-    def elasticache_resources() -> list[dict[str, Any]]:
-        elasticache = factory.client('elasticache')
-        resources: list[dict[str, Any]] = []
+    for pool in pools:
+        pool_id = pool.get('Id')
+        resources.append({
+            'type': 'user_pool',
+            'id': pool_id,
+            'name': pool.get('Name'),
+        })
         resources.extend(
             {
-                'type': 'cache_cluster',
-                'name': cluster.get('CacheClusterId'),
-                'engine': cluster.get('Engine'),
-                'status': cluster.get('CacheClusterStatus'),
+                'type': 'user_pool_client',
+                'pool_id': pool_id,
+                'id': client.get('ClientId'),
+                'name': client.get('ClientName'),
             }
-            for cluster in _safe_value(lambda: _paginate(elasticache, 'describe_cache_clusters', 'CacheClusters'), [])
-        )
-        resources.extend(
-            {
-                'type': 'replication_group',
-                'name': group.get('ReplicationGroupId'),
-                'status': group.get('Status'),
-            }
-            for group in _safe_value(lambda: _paginate(elasticache, 'describe_replication_groups', 'ReplicationGroups'), [])
-        )
-        resources.extend(
-            {
-                'type': 'serverless_cache',
-                'name': cache.get('ServerlessCacheName'),
-                'engine': cache.get('Engine'),
-                'status': cache.get('Status'),
-            }
-            for cache in _safe_value(lambda: _paginate(elasticache, 'describe_serverless_caches', 'ServerlessCaches'), [])
-        )
-        resources.extend(
-            {
-                'type': 'subnet_group',
-                'name': group.get('CacheSubnetGroupName'),
-            }
-            for group in _safe_value(lambda: _paginate(elasticache, 'describe_cache_subnet_groups', 'CacheSubnetGroups'), [])
-        )
-        resources.extend(
-            {
-                'type': 'parameter_group',
-                'name': group.get('CacheParameterGroupName'),
-            }
-            for group in _safe_value(lambda: _paginate(elasticache, 'describe_cache_parameter_groups', 'CacheParameterGroups'), [])
-        )
-        resources.extend(
-            {
-                'type': 'snapshot',
-                'name': snapshot.get('SnapshotName'),
-                'status': snapshot.get('SnapshotStatus'),
-            }
-            for snapshot in _safe_value(lambda: _paginate(elasticache, 'describe_snapshots', 'Snapshots'), [])
+            for client in _safe_value(lambda pool_id=pool_id: cognito.list_user_pool_clients(UserPoolId=pool_id, MaxResults=60).get('UserPoolClients', []), [])
         )
         resources.extend(
             {
                 'type': 'user',
-                'name': user.get('UserName') or user.get('UserId'),
-                'id': user.get('UserId'),
+                'pool_id': pool_id,
+                'name': user.get('Username'),
+                'status': user.get('UserStatus'),
             }
-            for user in _safe_value(lambda: _paginate(elasticache, 'describe_users', 'Users'), [])
+            for user in _safe_value(lambda pool_id=pool_id: cognito.list_users(UserPoolId=pool_id, Limit=60).get('Users', []), [])
         )
         resources.extend(
             {
-                'type': 'user_group',
-                'name': group.get('UserGroupId'),
-                'status': group.get('Status'),
+                'type': 'group',
+                'pool_id': pool_id,
+                'name': group.get('GroupName'),
             }
-            for group in _safe_value(lambda: _paginate(elasticache, 'describe_user_groups', 'UserGroups'), [])
+            for group in _safe_value(lambda pool_id=pool_id: cognito.list_groups(UserPoolId=pool_id, Limit=60).get('Groups', []), [])
         )
-        return resources
 
-    def elasticloadbalancing_resources() -> list[dict[str, Any]]:
-        elbv2 = factory.client('elbv2')
-        elb = factory.client('elb')
-        resources: list[dict[str, Any]] = []
-        v2_load_balancers = _safe_value(lambda: _paginate(elbv2, 'describe_load_balancers', 'LoadBalancers'), [])
-        target_groups = _safe_value(lambda: _paginate(elbv2, 'describe_target_groups', 'TargetGroups'), [])
-        classic_load_balancers = _safe_value(lambda: _paginate(elb, 'describe_load_balancers', 'LoadBalancerDescriptions'), [])
+    return resources
 
+
+def list_eventbridge_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    events = factory.client('events')
+    resources: list[dict[str, Any]] = []
+    buses = _safe_value(lambda: _paginate(events, 'list_event_buses', 'EventBuses'), [])
+
+    if not buses:
+        buses = [{'Name': 'default'}]
+
+    for bus in buses:
+        name = bus.get('Name') or 'default'
+        resources.append({
+            'type': 'event_bus',
+            'name': name,
+            'arn': bus.get('Arn'),
+        })
+        rules = _safe_value(lambda name=name: _paginate(events, 'list_rules', 'Rules', EventBusName=name), [])
         resources.extend(
             {
-                'type': 'v2_load_balancer',
-                'name': load_balancer.get('LoadBalancerName'),
-                'arn': load_balancer.get('LoadBalancerArn'),
-                'dns_name': load_balancer.get('DNSName'),
-                'state': load_balancer.get('State'),
+                'type': 'rule',
+                'event_bus': name,
+                'name': rule.get('Name'),
+                'arn': rule.get('Arn'),
+                'state': rule.get('State'),
             }
-            for load_balancer in v2_load_balancers
+            for rule in rules
         )
-        for load_balancer in v2_load_balancers:
-            arn = load_balancer.get('LoadBalancerArn')
+        for rule in rules:
+            rule_name = rule.get('Name')
             resources.extend(
                 {
-                    'type': 'listener',
-                    'load_balancer': load_balancer.get('LoadBalancerName'),
-                    'arn': listener.get('ListenerArn'),
-                    'protocol': listener.get('Protocol'),
-                    'port': listener.get('Port'),
+                    'type': 'target',
+                    'event_bus': name,
+                    'rule': rule_name,
+                    'id': target.get('Id'),
+                    'arn': target.get('Arn'),
                 }
-                for listener in _safe_value(
-                    lambda arn=arn: _paginate(elbv2, 'describe_listeners', 'Listeners', LoadBalancerArn=arn),
+                for target in _safe_value(
+                    lambda name=name, rule_name=rule_name: _paginate(
+                        events,
+                        'list_targets_by_rule',
+                        'Targets',
+                        Rule=rule_name,
+                        EventBusName=name,
+                    ),
                     [],
                 )
             )
-        resources.extend(
-            {
-                'type': 'target_group',
-                'name': group.get('TargetGroupName'),
-                'arn': group.get('TargetGroupArn'),
-                'protocol': group.get('Protocol'),
-                'port': group.get('Port'),
-            }
-            for group in target_groups
-        )
-        resources.extend(
-            {
-                'type': 'classic_load_balancer',
-                'name': load_balancer.get('LoadBalancerName'),
-                'dns_name': load_balancer.get('DNSName'),
-                'scheme': load_balancer.get('Scheme'),
-            }
-            for load_balancer in classic_load_balancers
-        )
-        return resources
 
-    def firehose_resources() -> list[dict[str, Any]]:
-        firehose = factory.client('firehose')
-        stream_names = _safe_value(lambda: _paginate(firehose, 'list_delivery_streams', 'DeliveryStreamNames'), [])
-        resources: list[dict[str, Any]] = []
+    return resources
 
-        for name in stream_names:
-            description = _safe_value(
-                lambda name=name: firehose.describe_delivery_stream(DeliveryStreamName=name).get('DeliveryStreamDescription', {}),
-                {},
-            )
-            resources.append({
-                'type': 'delivery_stream',
-                'name': name,
-                'arn': description.get('DeliveryStreamARN'),
-                'status': description.get('DeliveryStreamStatus'),
-                'stream_type': description.get('DeliveryStreamType'),
-            })
-            resources.extend(
-                {
-                    'type': 'destination',
-                    'delivery_stream': name,
-                    'id': destination.get('DestinationId'),
-                }
-                for destination in description.get('Destinations', [])
-            )
 
-        return resources
+def list_apigateway_apis(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    apigateway = factory.client('apigateway')
+    apigatewayv2 = factory.client('apigatewayv2')
+    apis = [
+        {
+            'type': 'REST',
+            'id': api.get('id'),
+            'name': api.get('name'),
+        }
+        for api in _safe_value(lambda: _paginate(apigateway, 'get_rest_apis', 'items'), [])
+    ]
+    apis.extend(
+        {
+            'type': api.get('ProtocolType') or 'HTTP',
+            'id': api.get('ApiId'),
+            'name': api.get('Name'),
+        }
+        for api in _safe_value(lambda: _paginate(apigatewayv2, 'get_apis', 'Items'), [])
+    )
+    return apis
 
-    def kinesis_resources() -> list[dict[str, Any]]:
-        kinesis = factory.client('kinesis')
-        stream_names = _safe_value(lambda: _paginate(kinesis, 'list_streams', 'StreamNames'), [])
-        resources: list[dict[str, Any]] = []
 
-        for name in stream_names:
-            summary = _safe_value(
-                lambda name=name: kinesis.describe_stream_summary(StreamName=name).get('StreamDescriptionSummary', {}),
-                {},
-            )
-            stream_arn = summary.get('StreamARN')
-            resources.append({
-                'type': 'stream',
-                'name': name,
-                'arn': stream_arn,
-                'status': summary.get('StreamStatus'),
-                'open_shard_count': summary.get('OpenShardCount'),
-            })
-            resources.extend(
-                {
-                    'type': 'shard',
-                    'stream': name,
-                    'id': shard.get('ShardId'),
-                }
-                for shard in _safe_value(
-                    lambda name=name: _paginate(kinesis, 'list_shards', 'Shards', StreamName=name),
-                    [],
-                )
-            )
-            if stream_arn:
-                resources.extend(
-                    {
-                        'type': 'consumer',
-                        'stream': name,
-                        'name': consumer.get('ConsumerName'),
-                        'arn': consumer.get('ConsumerARN'),
-                        'status': consumer.get('ConsumerStatus'),
-                    }
-                    for consumer in _safe_value(
-                        lambda stream_arn=stream_arn: _paginate(kinesis, 'list_stream_consumers', 'Consumers', StreamARN=stream_arn),
-                        [],
-                    )
-                )
+def list_ecs_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    ecs = factory.client('ecs')
+    resources: list[dict[str, Any]] = []
+    clusters = _safe_value(lambda: _paginate(ecs, 'list_clusters', 'clusterArns'), [])
+    task_definitions = _safe_value(lambda: _paginate(ecs, 'list_task_definitions', 'taskDefinitionArns'), [])
+    resources.extend({'type': 'cluster', 'arn': arn} for arn in clusters)
+    resources.extend({'type': 'task_definition', 'arn': arn} for arn in task_definitions)
 
-        return resources
+    for cluster in clusters:
+        tasks = _safe_value(lambda cluster=cluster: _paginate(ecs, 'list_tasks', 'taskArns', cluster=cluster), [])
+        services = _safe_value(lambda cluster=cluster: _paginate(ecs, 'list_services', 'serviceArns', cluster=cluster), [])
+        container_instances = _safe_value(lambda cluster=cluster: _paginate(ecs, 'list_container_instances', 'containerInstanceArns', cluster=cluster), [])
+        resources.extend({'type': 'task', 'cluster': cluster, 'arn': arn} for arn in tasks)
+        resources.extend({'type': 'service', 'cluster': cluster, 'arn': arn} for arn in services)
+        resources.extend({'type': 'container_instance', 'cluster': cluster, 'arn': arn} for arn in container_instances)
 
-    def kafka_resources() -> list[dict[str, Any]]:
-        kafka = factory.client('kafka')
-        resources: list[dict[str, Any]] = []
-        clusters = _safe_value(lambda: _paginate(kafka, 'list_clusters_v2', 'ClusterInfoList'), [])
-        if not clusters:
-            clusters = _safe_value(lambda: _paginate(kafka, 'list_clusters', 'ClusterInfoList'), [])
+    return resources
 
-        for cluster in clusters:
-            arn = cluster.get('ClusterArn') or cluster.get('Provisioned', {}).get('ClusterArn') or cluster.get('Serverless', {}).get('ClusterArn')
-            name = cluster.get('ClusterName') or cluster.get('Provisioned', {}).get('ClusterName') or cluster.get('Serverless', {}).get('ClusterName')
-            resources.append({
-                'type': 'cluster',
-                'name': name,
-                'arn': arn,
-                'state': cluster.get('State'),
-                'cluster_type': cluster.get('ClusterType'),
-            })
-            if arn:
-                resources.extend(
-                    {
-                        'type': 'node',
-                        'cluster': name,
-                        'arn': node.get('NodeARN'),
-                        'node_type': node.get('NodeType'),
-                    }
-                    for node in _safe_value(lambda arn=arn: _paginate(kafka, 'list_nodes', 'NodeInfoList', ClusterArn=arn), [])
-                )
-                resources.extend(
-                    {
-                        'type': 'operation',
-                        'cluster': name,
-                        'arn': operation.get('ClusterOperationArn'),
-                        'operation_type': operation.get('OperationType'),
-                        'state': operation.get('OperationState'),
-                    }
-                    for operation in _safe_value(lambda arn=arn: _paginate(kafka, 'list_cluster_operations', 'ClusterOperationInfoList', ClusterArn=arn), [])
-                )
 
-        resources.extend(
-            {
-                'type': 'configuration',
-                'name': configuration.get('Name'),
-                'arn': configuration.get('Arn'),
-                'state': configuration.get('State'),
-            }
-            for configuration in _safe_value(lambda: _paginate(kafka, 'list_configurations', 'Configurations'), [])
-        )
-        return resources
+def list_appconfig_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    appconfig = factory.client('appconfig')
+    resources: list[dict[str, Any]] = []
+    applications = _safe_value(lambda: _paginate(appconfig, 'list_applications', 'Items'), [])
 
-    def opensearch_resources() -> list[dict[str, Any]]:
-        opensearch = factory.client('opensearch')
-        resources: list[dict[str, Any]] = []
-        domain_names = _safe_value(lambda: opensearch.list_domain_names().get('DomainNames', []), [])
-        names = [domain.get('DomainName') for domain in domain_names if domain.get('DomainName')]
-        for chunk in _chunks(names, 5):
-            resources.extend(
-                {
-                    'type': 'domain',
-                    'name': domain.get('DomainName'),
-                    'arn': domain.get('ARN') or domain.get('DomainArn'),
-                    'engine_version': domain.get('EngineVersion') or domain.get('ElasticsearchVersion'),
-                    'processing': domain.get('Processing'),
-                    'endpoint': domain.get('Endpoint'),
-                }
-                for domain in _safe_value(lambda chunk=chunk: opensearch.describe_domains(DomainNames=chunk).get('DomainStatusList', []), [])
-            )
+    for application in applications:
+        application_id = application.get('Id')
+        resources.append({
+            'type': 'application',
+            'id': application_id,
+            'name': application.get('Name'),
+        })
 
-        resources.extend(
-            {
-                'type': 'package',
-                'name': package.get('PackageName'),
-                'id': package.get('PackageID'),
-                'status': package.get('PackageStatus'),
-                'package_type': package.get('PackageType'),
-            }
-            for package in _safe_value(lambda: _paginate(opensearch, 'describe_packages', 'PackageDetailsList'), [])
-        )
-        resources.extend(
-            {
-                'type': 'vpc_endpoint',
-                'name': endpoint.get('VpcEndpointId'),
-                'id': endpoint.get('VpcEndpointId'),
-                'domain_arn': endpoint.get('DomainArn'),
-                'status': endpoint.get('Status'),
-            }
-            for endpoint in _safe_value(lambda: _paginate(opensearch, 'list_vpc_endpoints', 'VpcEndpointSummaryList'), [])
-        )
-        return resources
-
-    def pipes_resources() -> list[dict[str, Any]]:
-        pipes = factory.client('pipes')
-        return [
-            {
-                'type': 'pipe',
-                'name': pipe.get('Name'),
-                'arn': pipe.get('Arn'),
-                'desired_state': pipe.get('DesiredState'),
-                'current_state': pipe.get('CurrentState'),
-                'source': pipe.get('Source'),
-                'target': pipe.get('Target'),
-            }
-            for pipe in _safe_value(lambda: _paginate(pipes, 'list_pipes', 'Pipes'), [])
-        ]
-
-    def resourcegroupstagging_resources() -> list[dict[str, Any]]:
-        tagging = factory.client('resourcegroupstaggingapi')
-        return [
-            {
-                'type': 'tagged_resource',
-                'name': mapping.get('ResourceARN'),
-                'arn': mapping.get('ResourceARN'),
-                'tag_count': len(mapping.get('Tags', [])),
-                'tags': mapping.get('Tags', []),
-                'compliance_details': mapping.get('ComplianceDetails'),
-            }
-            for mapping in _safe_value(
-                lambda: _paginate(tagging, 'get_resources', 'ResourceTagMappingList', IncludeComplianceDetails=True),
-                [],
-            )
-        ]
-
-    def ssm_resources() -> list[dict[str, Any]]:
-        ssm = factory.client('ssm')
-        resources = [
-            {
-                'type': 'parameter',
-                'name': parameter.get('Name'),
-                'parameter_type': parameter.get('Type'),
-                'tier': parameter.get('Tier'),
-                'version': parameter.get('Version'),
-            }
-            for parameter in _safe_value(lambda: _paginate(ssm, 'describe_parameters', 'Parameters'), [])
-        ]
-        resources.extend(
-            {
-                'type': 'document',
-                'name': document.get('Name'),
-                'owner': document.get('Owner'),
-                'document_type': document.get('DocumentType'),
-                'document_version': document.get('DocumentVersion'),
-            }
-            for document in _safe_value(lambda: _paginate(ssm, 'list_documents', 'DocumentIdentifiers'), [])
-        )
-        resources.extend(
-            {
-                'type': 'managed_instance',
-                'id': instance.get('InstanceId'),
-                'name': instance.get('Name') or instance.get('InstanceId'),
-                'ping_status': instance.get('PingStatus'),
-                'platform_type': instance.get('PlatformType'),
-            }
-            for instance in _safe_value(lambda: _paginate(ssm, 'describe_instance_information', 'InstanceInformationList'), [])
-        )
-        return resources
-
-    def athena_resources() -> list[dict[str, Any]]:
-        athena = factory.client('athena')
-        resources = [
-            {
-                'type': 'workgroup',
-                'name': workgroup.get('Name'),
-                'state': workgroup.get('State'),
-            }
-            for workgroup in _safe_value(lambda: _paginate(athena, 'list_work_groups', 'WorkGroups'), [])
-        ]
-        resources.extend(
-            {
-                'type': 'query_execution',
-                'id': query_id,
-            }
-            for query_id in _safe_value(lambda: _paginate(athena, 'list_query_executions', 'QueryExecutionIds'), [])
-        )
-        return resources
-
-    def autoscaling_resources() -> list[dict[str, Any]]:
-        autoscaling = factory.client('autoscaling')
-        resources: list[dict[str, Any]] = []
-        groups = _safe_value(
-            lambda: _paginate(autoscaling, 'describe_auto_scaling_groups', 'AutoScalingGroups'),
+        environments = _safe_value(
+            lambda application_id=application_id: _paginate(
+                appconfig,
+                'list_environments',
+                'Items',
+                ApplicationId=application_id,
+            ),
             [],
         )
         resources.extend(
             {
-                'type': 'auto_scaling_group',
-                'name': group.get('AutoScalingGroupName'),
-                'arn': group.get('AutoScalingGroupARN'),
-                'desired_capacity': group.get('DesiredCapacity'),
-                'min_size': group.get('MinSize'),
-                'max_size': group.get('MaxSize'),
-                'instance_count': len(group.get('Instances', [])),
+                'type': 'environment',
+                'application_id': application_id,
+                'id': environment.get('Id'),
+                'name': environment.get('Name'),
+                'state': environment.get('State'),
             }
-            for group in groups
+            for environment in environments
+        )
+
+        profiles = _safe_value(
+            lambda application_id=application_id: _paginate(
+                appconfig,
+                'list_configuration_profiles',
+                'Items',
+                ApplicationId=application_id,
+            ),
+            [],
         )
         resources.extend(
             {
-                'type': 'launch_configuration',
-                'name': configuration.get('LaunchConfigurationName'),
-                'arn': configuration.get('LaunchConfigurationARN'),
-                'image_id': configuration.get('ImageId'),
-                'instance_type': configuration.get('InstanceType'),
+                'type': 'configuration_profile',
+                'application_id': application_id,
+                'id': profile.get('Id'),
+                'name': profile.get('Name'),
+                'location_uri': profile.get('LocationUri'),
             }
-            for configuration in _safe_value(
-                lambda: _paginate(autoscaling, 'describe_launch_configurations', 'LaunchConfigurations'),
-                [],
+            for profile in profiles
+        )
+
+        for profile in profiles:
+            profile_id = profile.get('Id')
+            resources.extend(
+                {
+                    'type': 'hosted_configuration_version',
+                    'application_id': application_id,
+                    'configuration_profile_id': profile_id,
+                    'version_number': version.get('VersionNumber'),
+                    'content_type': version.get('ContentType'),
+                }
+                for version in _safe_value(
+                    lambda application_id=application_id, profile_id=profile_id: _paginate(
+                        appconfig,
+                        'list_hosted_configuration_versions',
+                        'Items',
+                        ApplicationId=application_id,
+                        ConfigurationProfileId=profile_id,
+                    ),
+                    [],
+                )
             )
-        )
-        resources.extend(
-            {
-                'type': 'scaling_policy',
-                'name': policy.get('PolicyName'),
-                'arn': policy.get('PolicyARN'),
-                'group': policy.get('AutoScalingGroupName'),
-                'policy_type': policy.get('PolicyType'),
-            }
-            for policy in _safe_value(
-                lambda: _paginate(autoscaling, 'describe_policies', 'ScalingPolicies'),
-                [],
+
+        for environment in environments:
+            environment_id = environment.get('Id')
+            resources.extend(
+                {
+                    'type': 'deployment',
+                    'application_id': application_id,
+                    'environment_id': environment_id,
+                    'deployment_number': deployment.get('DeploymentNumber'),
+                    'state': deployment.get('State'),
+                }
+                for deployment in _safe_value(
+                    lambda application_id=application_id, environment_id=environment_id: _paginate(
+                        appconfig,
+                        'list_deployments',
+                        'Items',
+                        ApplicationId=application_id,
+                        EnvironmentId=environment_id,
+                    ),
+                    [],
+                )
             )
-        )
-        resources.extend(
-            {
-                'type': 'scheduled_action',
-                'name': action.get('ScheduledActionName'),
-                'arn': action.get('ScheduledActionARN'),
-                'group': action.get('AutoScalingGroupName'),
-                'recurrence': action.get('Recurrence'),
-            }
-            for action in _safe_value(
-                lambda: _paginate(autoscaling, 'describe_scheduled_actions', 'ScheduledUpdateGroupActions'),
-                [],
-            )
-        )
-        return resources
 
-    def backup_resources() -> list[dict[str, Any]]:
-        backup = factory.client('backup')
-        resources = [
-            {
-                'type': 'backup_vault',
-                'name': vault.get('BackupVaultName'),
-                'arn': vault.get('BackupVaultArn'),
-                'recovery_points': vault.get('NumberOfRecoveryPoints'),
-            }
-            for vault in _safe_value(lambda: _paginate(backup, 'list_backup_vaults', 'BackupVaultList'), [])
-        ]
-        resources.extend(
-            {
-                'type': 'backup_plan',
-                'name': plan.get('BackupPlanName'),
-                'arn': plan.get('BackupPlanArn'),
-                'id': plan.get('BackupPlanId'),
-                'version_id': plan.get('VersionId'),
-            }
-            for plan in _safe_value(lambda: _paginate(backup, 'list_backup_plans', 'BackupPlansList'), [])
-        )
-        resources.extend(
-            {
-                'type': 'protected_resource',
-                'name': resource.get('ResourceName') or resource.get('ResourceArn'),
-                'arn': resource.get('ResourceArn'),
-                'resource_type': resource.get('ResourceType'),
-                'last_backup_time': resource.get('LastBackupTime'),
-            }
-            for resource in _safe_value(lambda: _paginate(backup, 'list_protected_resources', 'Results'), [])
-        )
-        return resources
-
-    def route53_resources() -> list[dict[str, Any]]:
-        route53 = factory.client('route53')
-        resources = [
-            {
-                'type': 'hosted_zone',
-                'name': zone.get('Name'),
-                'id': zone.get('Id'),
-                'private_zone': zone.get('Config', {}).get('PrivateZone'),
-                'record_sets': zone.get('ResourceRecordSetCount'),
-            }
-            for zone in _safe_value(lambda: _paginate(route53, 'list_hosted_zones', 'HostedZones'), [])
-        ]
-        resources.extend(
-            {
-                'type': 'health_check',
-                'name': check.get('Id'),
-                'id': check.get('Id'),
-                'health_check_version': check.get('HealthCheckVersion'),
-                'config': check.get('HealthCheckConfig'),
-            }
-            for check in _safe_value(lambda: _paginate(route53, 'list_health_checks', 'HealthChecks'), [])
-        )
-        resources.extend(
-            {
-                'type': 'traffic_policy',
-                'name': policy.get('Name'),
-                'id': policy.get('Id'),
-                'policy_type': policy.get('Type'),
-                'latest_version': policy.get('LatestVersion'),
-            }
-            for policy in _safe_value(lambda: route53.list_traffic_policies().get('TrafficPolicySummaries', []), [])
-        )
-        return resources
-
-    def transfer_resources() -> list[dict[str, Any]]:
-        transfer = factory.client('transfer')
-        resources = [
-            {
-                'type': 'server',
-                'name': server.get('ServerId'),
-                'arn': server.get('Arn'),
-                'state': server.get('State'),
-                'endpoint_type': server.get('EndpointType'),
-            }
-            for server in _safe_value(lambda: _paginate(transfer, 'list_servers', 'Servers'), [])
-        ]
-        resources.extend(
-            {
-                'type': 'workflow',
-                'name': workflow.get('WorkflowId'),
-                'arn': workflow.get('Arn'),
-                'description': workflow.get('Description'),
-            }
-            for workflow in _safe_value(lambda: _paginate(transfer, 'list_workflows', 'Workflows'), [])
-        )
-        resources.extend(
-            {
-                'type': 'profile',
-                'name': profile.get('ProfileId'),
-                'arn': profile.get('Arn'),
-                'profile_type': profile.get('ProfileType'),
-            }
-            for profile in _safe_value(lambda: _paginate(transfer, 'list_profiles', 'Profiles'), [])
-        )
-        resources.extend(
-            {
-                'type': 'connector',
-                'name': connector.get('ConnectorId'),
-                'arn': connector.get('Arn'),
-                'url': connector.get('Url'),
-            }
-            for connector in _safe_value(lambda: _paginate(transfer, 'list_connectors', 'Connectors'), [])
-        )
-        return resources
-
-    def pricing_resources() -> list[dict[str, Any]]:
-        pricing = factory.client('pricing')
-        operations = set(pricing.meta.service_model.operation_names)
-
-        if 'DescribeServices' not in operations:
-            return []
-
-        return [
-            {
-                'type': 'pricing_service',
-                'name': service.get('ServiceCode'),
-                'attribute_count': len(service.get('AttributeNames', [])),
-            }
-            for service in _safe_value(lambda: _paginate(pricing, 'describe_services', 'Services'), [])
-        ]
-
-    def costexplorer_resources() -> list[dict[str, Any]]:
-        ce = factory.client('ce')
-        operations = set(ce.meta.service_model.operation_names)
-        today = date.today()
-        time_period = {
-            'Start': today.replace(day=1).isoformat(),
-            'End': (today + timedelta(days=1)).isoformat(),
+    resources.extend(
+        {
+            'type': 'deployment_strategy',
+            'id': strategy.get('Id'),
+            'name': strategy.get('Name'),
         }
-        resources: list[dict[str, Any]] = []
+        for strategy in _safe_value(lambda: _paginate(appconfig, 'list_deployment_strategies', 'Items'), [])
+    )
+    return resources
 
-        if 'GetDimensionValues' in operations:
-            for dimension in ['SERVICE', 'REGION']:
-                resources.extend(
-                    {
-                        'type': 'cost_dimension',
-                        'name': value.get('Value'),
-                        'dimension': dimension,
-                        'attributes': value.get('Attributes'),
-                    }
-                    for value in _safe_value(
-                        lambda dimension=dimension: _paginate(
-                            ce,
-                            'get_dimension_values',
-                            'DimensionValues',
-                            TimePeriod=time_period,
-                            Dimension=dimension,
-                        ),
-                        [],
-                    )
-                )
 
-        if 'GetCostCategories' in operations:
+def list_appsync_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    appsync = factory.client('appsync')
+    resources: list[dict[str, Any]] = []
+    apis = _safe_value(lambda: _operation_items(appsync, 'list_graphql_apis', 'graphqlApis'), [])
+
+    for api in apis:
+        api_id = api.get('apiId')
+        resources.append({
+            'type': 'graphql_api',
+            'id': api_id,
+            'name': api.get('name'),
+            'arn': api.get('arn'),
+        })
+        for result_key, operation, resource_type in (
+            ('apiKeys', 'list_api_keys', 'api_key'),
+            ('dataSources', 'list_data_sources', 'data_source'),
+            ('functions', 'list_functions', 'function'),
+        ):
             resources.extend(
                 {
-                    'type': 'cost_category',
-                    'name': category,
+                    **_clean_response(item),
+                    'type': resource_type,
+                    'api_id': api_id,
+                    **({'source_type': item.get('type')} if resource_type == 'data_source' else {}),
                 }
-                for category in _safe_value(
-                    lambda: _paginate(ce, 'get_cost_categories', 'CostCategoryNames', TimePeriod=time_period),
+                for item in _safe_value(
+                    lambda operation=operation, result_key=result_key: _operation_items(
+                        appsync,
+                        operation,
+                        result_key,
+                        apiId=api_id,
+                    ),
                     [],
                 )
             )
-
-        return resources
-
-    def cur_resources() -> list[dict[str, Any]]:
-        cur = factory.client('cur')
-        operations = set(cur.meta.service_model.operation_names)
-
-        if 'DescribeReportDefinitions' not in operations:
-            return []
-
-        return [
+        types = _safe_value(
+            lambda: _operation_items(appsync, 'list_types', 'types', apiId=api_id, format='SDL'),
+            [],
+        )
+        resources.extend(
             {
-                'type': 'report_definition',
-                'name': report.get('ReportName'),
-                's3_bucket': report.get('S3Bucket'),
-                'time_unit': report.get('TimeUnit'),
+                **_clean_response(type_item),
+                'type': 'type',
+                'api_id': api_id,
             }
-            for report in _safe_value(
-                lambda: _operation_items(cur, 'describe_report_definitions', 'ReportDefinitions'),
+            for type_item in types
+        )
+        resources.extend(
+            {
+                **_clean_response(resolver),
+                'type': 'resolver',
+                'api_id': api_id,
+                'type_name': type_item.get('name'),
+            }
+            for type_item in types
+            if type_item.get('name')
+            for resolver in _safe_value(
+                lambda type_name=type_item.get('name'): _operation_items(
+                    appsync,
+                    'list_resolvers',
+                    'resolvers',
+                    apiId=api_id,
+                    typeName=type_name,
+                ),
                 [],
             )
-        ]
+        )
 
-    def bcmdataexports_resources() -> list[dict[str, Any]]:
-        exports = factory.client('bcm-data-exports')
-        operations = set(exports.meta.service_model.operation_names)
+    return resources
 
-        if 'ListExports' not in operations:
-            return []
 
-        return [
+def list_bedrockruntime_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    return [
+        {
+            'type': 'operation',
+            'name': 'Converse',
+            'endpoint': '/model/{modelId}/converse',
+            'status': 'supported',
+        },
+        {
+            'type': 'operation',
+            'name': 'InvokeModel',
+            'endpoint': '/model/{modelId}/invoke',
+            'status': 'supported',
+        },
+        {
+            'type': 'operation',
+            'name': 'ConverseStream',
+            'endpoint': '/model/{modelId}/converse-stream',
+            'status': 'unsupported',
+        },
+        {
+            'type': 'operation',
+            'name': 'InvokeModelWithResponseStream',
+            'endpoint': '/model/{modelId}/invoke-with-response-stream',
+            'status': 'unsupported',
+        },
+    ]
+
+
+def list_codebuild_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    codebuild = factory.client('codebuild')
+    resources: list[dict[str, Any]] = []
+    project_names = _safe_value(lambda: _paginate(codebuild, 'list_projects', 'projects'), [])
+    build_ids = _safe_value(lambda: _paginate(codebuild, 'list_builds', 'ids'), [])
+    report_group_arns = _safe_value(lambda: _paginate(codebuild, 'list_report_groups', 'reportGroups'), [])
+    report_arns = _safe_value(lambda: _paginate(codebuild, 'list_reports', 'reports'), [])
+    source_credentials = _safe_value(lambda: codebuild.list_source_credentials().get('sourceCredentialsInfos', []), [])
+
+    resources.extend(
+        {
+            'type': 'project',
+            'name': name,
+        }
+        for name in project_names
+    )
+    resources.extend(
+        {
+            'type': 'build',
+            'id': build_id,
+        }
+        for build_id in build_ids
+    )
+    resources.extend(
+        {
+            'type': 'report_group',
+            'arn': arn,
+        }
+        for arn in report_group_arns
+    )
+    resources.extend(
+        {
+            'type': 'report',
+            'arn': arn,
+        }
+        for arn in report_arns
+    )
+    resources.extend(
+        {
+            'type': 'source_credential',
+            'server_type': credential.get('serverType'),
+            'auth_type': credential.get('authType'),
+            'arn': credential.get('arn'),
+        }
+        for credential in source_credentials
+    )
+    return resources
+
+
+def list_codedeploy_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    codedeploy = factory.client('codedeploy')
+    resources: list[dict[str, Any]] = []
+    application_names = _safe_value(lambda: _paginate(codedeploy, 'list_applications', 'applications'), [])
+    deployment_config_names = _safe_value(lambda: _paginate(codedeploy, 'list_deployment_configs', 'deploymentConfigsList'), [])
+    on_prem_instance_names = _safe_value(lambda: _paginate(codedeploy, 'list_on_premises_instances', 'instanceNames'), [])
+
+    for application_name in application_names:
+        resources.append({
+            'type': 'application',
+            'name': application_name,
+        })
+        group_names = _safe_value(
+            lambda application_name=application_name: _paginate(
+                codedeploy,
+                'list_deployment_groups',
+                'deploymentGroups',
+                applicationName=application_name,
+            ),
+            [],
+        )
+        resources.extend(
             {
-                'type': 'export',
-                'name': export.get('Name') or export.get('ExportArn') or export.get('Arn'),
-                'arn': export.get('ExportArn') or export.get('Arn'),
-                'status': export.get('Status'),
+                'type': 'deployment_group',
+                'application_name': application_name,
+                'name': group_name,
             }
-            for export in _safe_value(lambda: _operation_items(exports, 'list_exports', 'Exports'), [])
+            for group_name in group_names
+        )
+        deployment_ids = _safe_value(
+            lambda application_name=application_name: _paginate(
+                codedeploy,
+                'list_deployments',
+                'deployments',
+                applicationName=application_name,
+            ),
+            [],
+        )
+        resources.extend(
+            {
+                'type': 'deployment',
+                'application_name': application_name,
+                'id': deployment_id,
+            }
+            for deployment_id in deployment_ids
+        )
+
+    resources.extend(
+        {
+            'type': 'deployment_config',
+            'name': name,
+        }
+        for name in deployment_config_names
+    )
+    resources.extend(
+        {
+            'type': 'on_prem_instance',
+            'name': name,
+        }
+        for name in on_prem_instance_names
+    )
+    return resources
+
+
+def list_eks_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    eks = factory.client('eks')
+    resources: list[dict[str, Any]] = []
+    cluster_names = _safe_value(lambda: _paginate(eks, 'list_clusters', 'clusters'), [])
+
+    for cluster_name in cluster_names:
+        resources.append({
+            'type': 'cluster',
+            'name': cluster_name,
+        })
+        resources.extend(
+            {
+                'type': 'nodegroup',
+                'cluster': cluster_name,
+                'name': nodegroup,
+            }
+            for nodegroup in _safe_value(
+                lambda cluster_name=cluster_name: _paginate(eks, 'list_nodegroups', 'nodegroups', clusterName=cluster_name),
+                [],
+            )
+        )
+        resources.extend(
+            {
+                'type': 'fargate_profile',
+                'cluster': cluster_name,
+                'name': profile,
+            }
+            for profile in _safe_value(
+                lambda cluster_name=cluster_name: _paginate(eks, 'list_fargate_profiles', 'fargateProfileNames', clusterName=cluster_name),
+                [],
+            )
+        )
+        resources.extend(
+            {
+                'type': 'addon',
+                'cluster': cluster_name,
+                'name': addon,
+            }
+            for addon in _safe_value(
+                lambda cluster_name=cluster_name: _paginate(eks, 'list_addons', 'addons', clusterName=cluster_name),
+                [],
+            )
+        )
+        resources.extend(
+            {
+                'type': 'identity_provider_config',
+                'cluster': cluster_name,
+                'name': config.get('name'),
+                'provider_type': config.get('type'),
+            }
+            for config in _safe_value(
+                lambda cluster_name=cluster_name: _paginate(
+                    eks,
+                    'list_identity_provider_configs',
+                    'identityProviderConfigs',
+                    clusterName=cluster_name,
+                ),
+                [],
+            )
+            if isinstance(config, dict)
+        )
+        resources.extend(
+            {
+                'type': 'access_entry',
+                'cluster': cluster_name,
+                'principal_arn': principal,
+            }
+            for principal in _safe_value(
+                lambda cluster_name=cluster_name: _paginate(eks, 'list_access_entries', 'accessEntries', clusterName=cluster_name),
+                [],
+            )
+        )
+
+    return resources
+
+
+def list_elasticache_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    elasticache = factory.client('elasticache')
+    resources: list[dict[str, Any]] = []
+    resources.extend(
+        {
+            'type': 'cache_cluster',
+            'name': cluster.get('CacheClusterId'),
+            'engine': cluster.get('Engine'),
+            'status': cluster.get('CacheClusterStatus'),
+        }
+        for cluster in _safe_value(lambda: _paginate(elasticache, 'describe_cache_clusters', 'CacheClusters'), [])
+    )
+    resources.extend(
+        {
+            'type': 'replication_group',
+            'name': group.get('ReplicationGroupId'),
+            'status': group.get('Status'),
+        }
+        for group in _safe_value(lambda: _paginate(elasticache, 'describe_replication_groups', 'ReplicationGroups'), [])
+    )
+    resources.extend(
+        {
+            'type': 'serverless_cache',
+            'name': cache.get('ServerlessCacheName'),
+            'engine': cache.get('Engine'),
+            'status': cache.get('Status'),
+        }
+        for cache in _safe_value(lambda: _paginate(elasticache, 'describe_serverless_caches', 'ServerlessCaches'), [])
+    )
+    resources.extend(
+        {
+            'type': 'subnet_group',
+            'name': group.get('CacheSubnetGroupName'),
+        }
+        for group in _safe_value(lambda: _paginate(elasticache, 'describe_cache_subnet_groups', 'CacheSubnetGroups'), [])
+    )
+    resources.extend(
+        {
+            'type': 'parameter_group',
+            'name': group.get('CacheParameterGroupName'),
+        }
+        for group in _safe_value(lambda: _paginate(elasticache, 'describe_cache_parameter_groups', 'CacheParameterGroups'), [])
+    )
+    resources.extend(
+        {
+            'type': 'snapshot',
+            'name': snapshot.get('SnapshotName'),
+            'status': snapshot.get('SnapshotStatus'),
+        }
+        for snapshot in _safe_value(lambda: _paginate(elasticache, 'describe_snapshots', 'Snapshots'), [])
+    )
+    resources.extend(
+        {
+            'type': 'user',
+            'name': user.get('UserName') or user.get('UserId'),
+            'id': user.get('UserId'),
+        }
+        for user in _safe_value(lambda: _paginate(elasticache, 'describe_users', 'Users'), [])
+    )
+    resources.extend(
+        {
+            'type': 'user_group',
+            'name': group.get('UserGroupId'),
+            'status': group.get('Status'),
+        }
+        for group in _safe_value(lambda: _paginate(elasticache, 'describe_user_groups', 'UserGroups'), [])
+    )
+    return resources
+
+
+def list_elasticloadbalancing_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    elbv2 = factory.client('elbv2')
+    elb = factory.client('elb')
+    resources: list[dict[str, Any]] = []
+    v2_load_balancers = _safe_value(lambda: _paginate(elbv2, 'describe_load_balancers', 'LoadBalancers'), [])
+    target_groups = _safe_value(lambda: _paginate(elbv2, 'describe_target_groups', 'TargetGroups'), [])
+    classic_load_balancers = _safe_value(lambda: _paginate(elb, 'describe_load_balancers', 'LoadBalancerDescriptions'), [])
+
+    resources.extend(
+        {
+            'type': 'v2_load_balancer',
+            'name': load_balancer.get('LoadBalancerName'),
+            'arn': load_balancer.get('LoadBalancerArn'),
+            'dns_name': load_balancer.get('DNSName'),
+            'state': load_balancer.get('State'),
+        }
+        for load_balancer in v2_load_balancers
+    )
+    for load_balancer in v2_load_balancers:
+        arn = load_balancer.get('LoadBalancerArn')
+        resources.extend(
+            {
+                'type': 'listener',
+                'load_balancer': load_balancer.get('LoadBalancerName'),
+                'arn': listener.get('ListenerArn'),
+                'protocol': listener.get('Protocol'),
+                'port': listener.get('Port'),
+            }
+            for listener in _safe_value(
+                lambda arn=arn: _paginate(elbv2, 'describe_listeners', 'Listeners', LoadBalancerArn=arn),
+                [],
+            )
+        )
+    resources.extend(
+        {
+            'type': 'target_group',
+            'name': group.get('TargetGroupName'),
+            'arn': group.get('TargetGroupArn'),
+            'protocol': group.get('Protocol'),
+            'port': group.get('Port'),
+        }
+        for group in target_groups
+    )
+    resources.extend(
+        {
+            'type': 'classic_load_balancer',
+            'name': load_balancer.get('LoadBalancerName'),
+            'dns_name': load_balancer.get('DNSName'),
+            'scheme': load_balancer.get('Scheme'),
+        }
+        for load_balancer in classic_load_balancers
+    )
+    return resources
+
+
+def list_firehose_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    firehose = factory.client('firehose')
+    stream_names = _safe_value(lambda: _paginate(firehose, 'list_delivery_streams', 'DeliveryStreamNames'), [])
+    resources: list[dict[str, Any]] = []
+
+    for name in stream_names:
+        description = _safe_value(
+            lambda name=name: firehose.describe_delivery_stream(DeliveryStreamName=name).get('DeliveryStreamDescription', {}),
+            {},
+        )
+        resources.append({
+            'type': 'delivery_stream',
+            'name': name,
+            'arn': description.get('DeliveryStreamARN'),
+            'status': description.get('DeliveryStreamStatus'),
+            'stream_type': description.get('DeliveryStreamType'),
+        })
+        resources.extend(
+            {
+                'type': 'destination',
+                'delivery_stream': name,
+                'id': destination.get('DestinationId'),
+            }
+            for destination in description.get('Destinations', [])
+        )
+
+    return resources
+
+
+def list_kinesis_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    kinesis = factory.client('kinesis')
+    stream_names = _safe_value(lambda: _paginate(kinesis, 'list_streams', 'StreamNames'), [])
+    resources: list[dict[str, Any]] = []
+
+    for name in stream_names:
+        summary = _safe_value(
+            lambda name=name: kinesis.describe_stream_summary(StreamName=name).get('StreamDescriptionSummary', {}),
+            {},
+        )
+        stream_arn = summary.get('StreamARN')
+        resources.append({
+            'type': 'stream',
+            'name': name,
+            'arn': stream_arn,
+            'status': summary.get('StreamStatus'),
+            'open_shard_count': summary.get('OpenShardCount'),
+        })
+        resources.extend(
+            {
+                'type': 'shard',
+                'stream': name,
+                'id': shard.get('ShardId'),
+            }
+            for shard in _safe_value(
+                lambda name=name: _paginate(kinesis, 'list_shards', 'Shards', StreamName=name),
+                [],
+            )
+        )
+        if stream_arn:
+            resources.extend(
+                {
+                    'type': 'consumer',
+                    'stream': name,
+                    'name': consumer.get('ConsumerName'),
+                    'arn': consumer.get('ConsumerARN'),
+                    'status': consumer.get('ConsumerStatus'),
+                }
+                for consumer in _safe_value(
+                    lambda stream_arn=stream_arn: _paginate(kinesis, 'list_stream_consumers', 'Consumers', StreamARN=stream_arn),
+                    [],
+                )
+            )
+
+    return resources
+
+
+def list_kafka_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    kafka = factory.client('kafka')
+    resources: list[dict[str, Any]] = []
+    clusters = _safe_value(lambda: _paginate(kafka, 'list_clusters_v2', 'ClusterInfoList'), [])
+    if not clusters:
+        clusters = _safe_value(lambda: _paginate(kafka, 'list_clusters', 'ClusterInfoList'), [])
+
+    for cluster in clusters:
+        arn = cluster.get('ClusterArn') or cluster.get('Provisioned', {}).get('ClusterArn') or cluster.get('Serverless', {}).get('ClusterArn')
+        name = cluster.get('ClusterName') or cluster.get('Provisioned', {}).get('ClusterName') or cluster.get('Serverless', {}).get('ClusterName')
+        resources.append({
+            'type': 'cluster',
+            'name': name,
+            'arn': arn,
+            'state': cluster.get('State'),
+            'cluster_type': cluster.get('ClusterType'),
+        })
+        if arn:
+            resources.extend(
+                {
+                    'type': 'node',
+                    'cluster': name,
+                    'arn': node.get('NodeARN'),
+                    'node_type': node.get('NodeType'),
+                }
+                for node in _safe_value(lambda arn=arn: _paginate(kafka, 'list_nodes', 'NodeInfoList', ClusterArn=arn), [])
+            )
+            resources.extend(
+                {
+                    'type': 'operation',
+                    'cluster': name,
+                    'arn': operation.get('ClusterOperationArn'),
+                    'operation_type': operation.get('OperationType'),
+                    'state': operation.get('OperationState'),
+                }
+                for operation in _safe_value(lambda arn=arn: _paginate(kafka, 'list_cluster_operations', 'ClusterOperationInfoList', ClusterArn=arn), [])
+            )
+
+    resources.extend(
+        {
+            'type': 'configuration',
+            'name': configuration.get('Name'),
+            'arn': configuration.get('Arn'),
+            'state': configuration.get('State'),
+        }
+        for configuration in _safe_value(lambda: _paginate(kafka, 'list_configurations', 'Configurations'), [])
+    )
+    return resources
+
+
+def list_opensearch_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    opensearch = factory.client('opensearch')
+    resources: list[dict[str, Any]] = []
+    domain_names = _safe_value(lambda: opensearch.list_domain_names().get('DomainNames', []), [])
+    names = [domain.get('DomainName') for domain in domain_names if domain.get('DomainName')]
+    for chunk in _chunks(names, 5):
+        resources.extend(
+            {
+                'type': 'domain',
+                'name': domain.get('DomainName'),
+                'arn': domain.get('ARN') or domain.get('DomainArn'),
+                'engine_version': domain.get('EngineVersion') or domain.get('ElasticsearchVersion'),
+                'processing': domain.get('Processing'),
+                'endpoint': domain.get('Endpoint'),
+            }
+            for domain in _safe_value(lambda chunk=chunk: opensearch.describe_domains(DomainNames=chunk).get('DomainStatusList', []), [])
+        )
+
+    resources.extend(
+        {
+            'type': 'package',
+            'name': package.get('PackageName'),
+            'id': package.get('PackageID'),
+            'status': package.get('PackageStatus'),
+            'package_type': package.get('PackageType'),
+        }
+        for package in _safe_value(lambda: _paginate(opensearch, 'describe_packages', 'PackageDetailsList'), [])
+    )
+    resources.extend(
+        {
+            'type': 'vpc_endpoint',
+            'name': endpoint.get('VpcEndpointId'),
+            'id': endpoint.get('VpcEndpointId'),
+            'domain_arn': endpoint.get('DomainArn'),
+            'status': endpoint.get('Status'),
+        }
+        for endpoint in _safe_value(lambda: _paginate(opensearch, 'list_vpc_endpoints', 'VpcEndpointSummaryList'), [])
+    )
+    return resources
+
+
+def list_pipes_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    pipes = factory.client('pipes')
+    return [
+        {
+            'type': 'pipe',
+            'name': pipe.get('Name'),
+            'arn': pipe.get('Arn'),
+            'desired_state': pipe.get('DesiredState'),
+            'current_state': pipe.get('CurrentState'),
+            'source': pipe.get('Source'),
+            'target': pipe.get('Target'),
+        }
+        for pipe in _safe_value(lambda: _paginate(pipes, 'list_pipes', 'Pipes'), [])
+    ]
+
+
+def list_resourcegroupstagging_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    tagging = factory.client('resourcegroupstaggingapi')
+    return [
+        {
+            'type': 'tagged_resource',
+            'name': mapping.get('ResourceARN'),
+            'arn': mapping.get('ResourceARN'),
+            'tag_count': len(mapping.get('Tags', [])),
+            'tags': mapping.get('Tags', []),
+            'compliance_details': mapping.get('ComplianceDetails'),
+        }
+        for mapping in _safe_value(
+            lambda: _paginate(tagging, 'get_resources', 'ResourceTagMappingList', IncludeComplianceDetails=True),
+            [],
+        )
+    ]
+
+
+def list_ssm_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    ssm = factory.client('ssm')
+    resources = [
+        {
+            'type': 'parameter',
+            'name': parameter.get('Name'),
+            'parameter_type': parameter.get('Type'),
+            'tier': parameter.get('Tier'),
+            'version': parameter.get('Version'),
+        }
+        for parameter in _safe_value(lambda: _paginate(ssm, 'describe_parameters', 'Parameters'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'document',
+            'name': document.get('Name'),
+            'owner': document.get('Owner'),
+            'document_type': document.get('DocumentType'),
+            'document_version': document.get('DocumentVersion'),
+        }
+        for document in _safe_value(lambda: _paginate(ssm, 'list_documents', 'DocumentIdentifiers'), [])
+    )
+    resources.extend(
+        {
+            'type': 'managed_instance',
+            'id': instance.get('InstanceId'),
+            'name': instance.get('Name') or instance.get('InstanceId'),
+            'ping_status': instance.get('PingStatus'),
+            'platform_type': instance.get('PlatformType'),
+        }
+        for instance in _safe_value(lambda: _paginate(ssm, 'describe_instance_information', 'InstanceInformationList'), [])
+    )
+    return resources
+
+
+def list_athena_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    athena = factory.client('athena')
+    resources = [
+        {
+            'type': 'workgroup',
+            'name': workgroup.get('Name'),
+            'state': workgroup.get('State'),
+        }
+        for workgroup in _safe_value(lambda: _paginate(athena, 'list_work_groups', 'WorkGroups'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'query_execution',
+            'id': query_id,
+        }
+        for query_id in _safe_value(lambda: _paginate(athena, 'list_query_executions', 'QueryExecutionIds'), [])
+    )
+    return resources
+
+
+def list_autoscaling_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    autoscaling = factory.client('autoscaling')
+    resources: list[dict[str, Any]] = []
+    groups = _safe_value(
+        lambda: _paginate(autoscaling, 'describe_auto_scaling_groups', 'AutoScalingGroups'),
+        [],
+    )
+    resources.extend(
+        {
+            'type': 'auto_scaling_group',
+            'name': group.get('AutoScalingGroupName'),
+            'arn': group.get('AutoScalingGroupARN'),
+            'desired_capacity': group.get('DesiredCapacity'),
+            'min_size': group.get('MinSize'),
+            'max_size': group.get('MaxSize'),
+            'instance_count': len(group.get('Instances', [])),
+        }
+        for group in groups
+    )
+    resources.extend(
+        {
+            'type': 'launch_configuration',
+            'name': configuration.get('LaunchConfigurationName'),
+            'arn': configuration.get('LaunchConfigurationARN'),
+            'image_id': configuration.get('ImageId'),
+            'instance_type': configuration.get('InstanceType'),
+        }
+        for configuration in _safe_value(
+            lambda: _paginate(autoscaling, 'describe_launch_configurations', 'LaunchConfigurations'),
+            [],
+        )
+    )
+    resources.extend(
+        {
+            'type': 'scaling_policy',
+            'name': policy.get('PolicyName'),
+            'arn': policy.get('PolicyARN'),
+            'group': policy.get('AutoScalingGroupName'),
+            'policy_type': policy.get('PolicyType'),
+        }
+        for policy in _safe_value(
+            lambda: _paginate(autoscaling, 'describe_policies', 'ScalingPolicies'),
+            [],
+        )
+    )
+    resources.extend(
+        {
+            'type': 'scheduled_action',
+            'name': action.get('ScheduledActionName'),
+            'arn': action.get('ScheduledActionARN'),
+            'group': action.get('AutoScalingGroupName'),
+            'recurrence': action.get('Recurrence'),
+        }
+        for action in _safe_value(
+            lambda: _paginate(autoscaling, 'describe_scheduled_actions', 'ScheduledUpdateGroupActions'),
+            [],
+        )
+    )
+    return resources
+
+
+def list_backup_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    backup = factory.client('backup')
+    resources = [
+        {
+            'type': 'backup_vault',
+            'name': vault.get('BackupVaultName'),
+            'arn': vault.get('BackupVaultArn'),
+            'recovery_points': vault.get('NumberOfRecoveryPoints'),
+        }
+        for vault in _safe_value(lambda: _paginate(backup, 'list_backup_vaults', 'BackupVaultList'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'backup_plan',
+            'name': plan.get('BackupPlanName'),
+            'arn': plan.get('BackupPlanArn'),
+            'id': plan.get('BackupPlanId'),
+            'version_id': plan.get('VersionId'),
+        }
+        for plan in _safe_value(lambda: _paginate(backup, 'list_backup_plans', 'BackupPlansList'), [])
+    )
+    resources.extend(
+        {
+            'type': 'protected_resource',
+            'name': resource.get('ResourceName') or resource.get('ResourceArn'),
+            'arn': resource.get('ResourceArn'),
+            'resource_type': resource.get('ResourceType'),
+            'last_backup_time': resource.get('LastBackupTime'),
+        }
+        for resource in _safe_value(lambda: _paginate(backup, 'list_protected_resources', 'Results'), [])
+    )
+    return resources
+
+
+def list_route53_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    route53 = factory.client('route53')
+    resources = [
+        {
+            'type': 'hosted_zone',
+            'name': zone.get('Name'),
+            'id': zone.get('Id'),
+            'private_zone': zone.get('Config', {}).get('PrivateZone'),
+            'record_sets': zone.get('ResourceRecordSetCount'),
+        }
+        for zone in _safe_value(lambda: _paginate(route53, 'list_hosted_zones', 'HostedZones'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'health_check',
+            'name': check.get('Id'),
+            'id': check.get('Id'),
+            'health_check_version': check.get('HealthCheckVersion'),
+            'config': check.get('HealthCheckConfig'),
+        }
+        for check in _safe_value(lambda: _paginate(route53, 'list_health_checks', 'HealthChecks'), [])
+    )
+    resources.extend(
+        {
+            'type': 'traffic_policy',
+            'name': policy.get('Name'),
+            'id': policy.get('Id'),
+            'policy_type': policy.get('Type'),
+            'latest_version': policy.get('LatestVersion'),
+        }
+        for policy in _safe_value(lambda: route53.list_traffic_policies().get('TrafficPolicySummaries', []), [])
+    )
+    return resources
+
+
+def list_transfer_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    transfer = factory.client('transfer')
+    resources = [
+        {
+            'type': 'server',
+            'name': server.get('ServerId'),
+            'arn': server.get('Arn'),
+            'state': server.get('State'),
+            'endpoint_type': server.get('EndpointType'),
+        }
+        for server in _safe_value(lambda: _paginate(transfer, 'list_servers', 'Servers'), [])
+    ]
+    resources.extend(
+        {
+            'type': 'workflow',
+            'name': workflow.get('WorkflowId'),
+            'arn': workflow.get('Arn'),
+            'description': workflow.get('Description'),
+        }
+        for workflow in _safe_value(lambda: _paginate(transfer, 'list_workflows', 'Workflows'), [])
+    )
+    resources.extend(
+        {
+            'type': 'profile',
+            'name': profile.get('ProfileId'),
+            'arn': profile.get('Arn'),
+            'profile_type': profile.get('ProfileType'),
+        }
+        for profile in _safe_value(lambda: _paginate(transfer, 'list_profiles', 'Profiles'), [])
+    )
+    resources.extend(
+        {
+            'type': 'connector',
+            'name': connector.get('ConnectorId'),
+            'arn': connector.get('Arn'),
+            'url': connector.get('Url'),
+        }
+        for connector in _safe_value(lambda: _paginate(transfer, 'list_connectors', 'Connectors'), [])
+    )
+    return resources
+
+
+def list_pricing_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    pricing = factory.client('pricing')
+    operations = set(pricing.meta.service_model.operation_names)
+
+    if 'DescribeServices' not in operations:
+        return []
+
+    return [
+        {
+            'type': 'pricing_service',
+            'name': service.get('ServiceCode'),
+            'attribute_count': len(service.get('AttributeNames', [])),
+        }
+        for service in _safe_value(lambda: _paginate(pricing, 'describe_services', 'Services'), [])
+    ]
+
+
+def list_costexplorer_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    ce = factory.client('ce')
+    operations = set(ce.meta.service_model.operation_names)
+    today = date.today()
+    time_period = {
+        'Start': today.replace(day=1).isoformat(),
+        'End': (today + timedelta(days=1)).isoformat(),
+    }
+    resources: list[dict[str, Any]] = []
+
+    if 'GetDimensionValues' in operations:
+        for dimension in ['SERVICE', 'REGION']:
+            resources.extend(
+                {
+                    'type': 'cost_dimension',
+                    'name': value.get('Value'),
+                    'dimension': dimension,
+                    'attributes': value.get('Attributes'),
+                }
+                for value in _safe_value(
+                    lambda dimension=dimension: _paginate(
+                        ce,
+                        'get_dimension_values',
+                        'DimensionValues',
+                        TimePeriod=time_period,
+                        Dimension=dimension,
+                    ),
+                    [],
+                )
+            )
+
+    if 'GetCostCategories' in operations:
+        resources.extend(
+            {
+                'type': 'cost_category',
+                'name': category,
+            }
+            for category in _safe_value(
+                lambda: _paginate(ce, 'get_cost_categories', 'CostCategoryNames', TimePeriod=time_period),
+                [],
+            )
+        )
+
+    return resources
+
+
+def list_cur_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    cur = factory.client('cur')
+    operations = set(cur.meta.service_model.operation_names)
+
+    if 'DescribeReportDefinitions' not in operations:
+        return []
+
+    return [
+        {
+            'type': 'report_definition',
+            'name': report.get('ReportName'),
+            's3_bucket': report.get('S3Bucket'),
+            'time_unit': report.get('TimeUnit'),
+        }
+        for report in _safe_value(
+            lambda: _operation_items(cur, 'describe_report_definitions', 'ReportDefinitions'),
+            [],
+        )
+    ]
+
+
+def list_bcmdataexports_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    exports = factory.client('bcm-data-exports')
+    operations = set(exports.meta.service_model.operation_names)
+
+    if 'ListExports' not in operations:
+        return []
+
+    return [
+        {
+            'type': 'export',
+            'name': export.get('Name') or export.get('ExportArn') or export.get('Arn'),
+            'arn': export.get('ExportArn') or export.get('Arn'),
+            'status': export.get('Status'),
+        }
+        for export in _safe_value(lambda: _operation_items(exports, 'list_exports', 'Exports'), [])
+    ]
+
+
+def list_batch_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    batch = factory.client('batch')
+    operations = set(batch.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'DescribeComputeEnvironments' in operations:
+        resources.extend(
+            {
+                'type': 'compute_environment',
+                'name': environment.get('computeEnvironmentName'),
+                'arn': environment.get('computeEnvironmentArn'),
+                'state': environment.get('state'),
+                'status': environment.get('status'),
+            }
+            for environment in _safe_value(
+                lambda: _operation_items(batch, 'describe_compute_environments', 'computeEnvironments'),
+                [],
+            )
+        )
+
+    if 'DescribeJobQueues' in operations:
+        resources.extend(
+            {
+                'type': 'job_queue',
+                'name': queue.get('jobQueueName'),
+                'arn': queue.get('jobQueueArn'),
+                'state': queue.get('state'),
+                'status': queue.get('status'),
+            }
+            for queue in _safe_value(lambda: _operation_items(batch, 'describe_job_queues', 'jobQueues'), [])
+        )
+
+    if 'DescribeJobDefinitions' in operations:
+        resources.extend(
+            {
+                'type': 'job_definition',
+                'name': definition.get('jobDefinitionName'),
+                'arn': definition.get('jobDefinitionArn'),
+                'status': definition.get('status'),
+            }
+            for definition in _safe_value(
+                lambda: _operation_items(batch, 'describe_job_definitions', 'jobDefinitions', status='ACTIVE'),
+                [],
+            )
+        )
+
+    return resources
+
+
+def list_emr_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    emr = factory.client('emr')
+    operations = set(emr.meta.service_model.operation_names)
+    if 'ListClusters' not in operations:
+        return []
+
+    return [
+        {
+            'type': 'cluster',
+            'name': cluster.get('Name') or cluster.get('Id'),
+            'id': cluster.get('Id'),
+            'state': (cluster.get('Status') or {}).get('State'),
+        }
+        for cluster in _safe_value(lambda: _operation_items(emr, 'list_clusters', 'Clusters'), [])
+    ]
+
+
+def list_wafv2_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    wafv2 = factory.client('wafv2')
+    operations = set(wafv2.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    for scope in ['REGIONAL', 'CLOUDFRONT']:
+        if 'ListWebACLs' in operations:
+            resources.extend(
+                {
+                    'type': 'web_acl',
+                    'name': acl.get('Name'),
+                    'id': acl.get('Id'),
+                    'arn': acl.get('ARN'),
+                    'scope': scope,
+                }
+                for acl in _safe_value(
+                    lambda scope=scope: _operation_items(wafv2, 'list_web_acls', 'WebACLs', Scope=scope),
+                    [],
+                )
+            )
+        if 'ListRuleGroups' in operations:
+            resources.extend(
+                {
+                    'type': 'rule_group',
+                    'name': group.get('Name'),
+                    'id': group.get('Id'),
+                    'arn': group.get('ARN'),
+                    'scope': scope,
+                }
+                for group in _safe_value(
+                    lambda scope=scope: _operation_items(wafv2, 'list_rule_groups', 'RuleGroups', Scope=scope),
+                    [],
+                )
+            )
+
+    return resources
+
+
+def list_rdsdata_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    operations = set(factory.client('rds-data').meta.service_model.operation_names)
+    return [
+        {
+            'type': 'operation',
+            'name': operation,
+            'status': 'supported',
+        }
+        for operation in [
+            'ExecuteStatement',
+            'BatchExecuteStatement',
+            'BeginTransaction',
+            'CommitTransaction',
+            'RollbackTransaction',
         ]
+        if operation in operations
+    ]
 
-    def batch_resources() -> list[dict[str, Any]]:
-        batch = factory.client('batch')
-        operations = set(batch.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
 
-        if 'DescribeComputeEnvironments' in operations:
-            resources.extend(
-                {
-                    'type': 'compute_environment',
-                    'name': environment.get('computeEnvironmentName'),
-                    'arn': environment.get('computeEnvironmentArn'),
-                    'state': environment.get('state'),
-                    'status': environment.get('status'),
-                }
-                for environment in _safe_value(
-                    lambda: _operation_items(batch, 'describe_compute_environments', 'computeEnvironments'),
-                    [],
-                )
-            )
+def list_memorydb_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    memorydb = factory.client('memorydb')
+    operations = set(memorydb.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
 
-        if 'DescribeJobQueues' in operations:
-            resources.extend(
-                {
-                    'type': 'job_queue',
-                    'name': queue.get('jobQueueName'),
-                    'arn': queue.get('jobQueueArn'),
-                    'state': queue.get('state'),
-                    'status': queue.get('status'),
-                }
-                for queue in _safe_value(lambda: _operation_items(batch, 'describe_job_queues', 'jobQueues'), [])
-            )
-
-        if 'DescribeJobDefinitions' in operations:
-            resources.extend(
-                {
-                    'type': 'job_definition',
-                    'name': definition.get('jobDefinitionName'),
-                    'arn': definition.get('jobDefinitionArn'),
-                    'status': definition.get('status'),
-                }
-                for definition in _safe_value(
-                    lambda: _operation_items(batch, 'describe_job_definitions', 'jobDefinitions', status='ACTIVE'),
-                    [],
-                )
-            )
-
-        return resources
-
-    def emr_resources() -> list[dict[str, Any]]:
-        emr = factory.client('emr')
-        operations = set(emr.meta.service_model.operation_names)
-        if 'ListClusters' not in operations:
-            return []
-
-        return [
+    if 'DescribeClusters' in operations:
+        resources.extend(
             {
                 'type': 'cluster',
-                'name': cluster.get('Name') or cluster.get('Id'),
-                'id': cluster.get('Id'),
-                'state': (cluster.get('Status') or {}).get('State'),
+                'name': cluster.get('Name'),
+                'arn': cluster.get('ARN'),
+                'status': cluster.get('Status'),
             }
-            for cluster in _safe_value(lambda: _operation_items(emr, 'list_clusters', 'Clusters'), [])
-        ]
-
-    def wafv2_resources() -> list[dict[str, Any]]:
-        wafv2 = factory.client('wafv2')
-        operations = set(wafv2.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        for scope in ['REGIONAL', 'CLOUDFRONT']:
-            if 'ListWebACLs' in operations:
-                resources.extend(
-                    {
-                        'type': 'web_acl',
-                        'name': acl.get('Name'),
-                        'id': acl.get('Id'),
-                        'arn': acl.get('ARN'),
-                        'scope': scope,
-                    }
-                    for acl in _safe_value(
-                        lambda scope=scope: _operation_items(wafv2, 'list_web_acls', 'WebACLs', Scope=scope),
-                        [],
-                    )
-                )
-            if 'ListRuleGroups' in operations:
-                resources.extend(
-                    {
-                        'type': 'rule_group',
-                        'name': group.get('Name'),
-                        'id': group.get('Id'),
-                        'arn': group.get('ARN'),
-                        'scope': scope,
-                    }
-                    for group in _safe_value(
-                        lambda scope=scope: _operation_items(wafv2, 'list_rule_groups', 'RuleGroups', Scope=scope),
-                        [],
-                    )
-                )
-
-        return resources
-
-    def rdsdata_resources() -> list[dict[str, Any]]:
-        operations = set(factory.client('rds-data').meta.service_model.operation_names)
-        return [
-            {
-                'type': 'operation',
-                'name': operation,
-                'status': 'supported',
-            }
-            for operation in [
-                'ExecuteStatement',
-                'BatchExecuteStatement',
-                'BeginTransaction',
-                'CommitTransaction',
-                'RollbackTransaction',
-            ]
-            if operation in operations
-        ]
-
-    def memorydb_resources() -> list[dict[str, Any]]:
-        memorydb = factory.client('memorydb')
-        operations = set(memorydb.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'DescribeClusters' in operations:
-            resources.extend(
-                {
-                    'type': 'cluster',
-                    'name': cluster.get('Name'),
-                    'arn': cluster.get('ARN'),
-                    'status': cluster.get('Status'),
-                }
-                for cluster in _safe_value(lambda: _operation_items(memorydb, 'describe_clusters', 'Clusters'), [])
-            )
-        if 'DescribeUsers' in operations:
-            resources.extend(
-                {
-                    'type': 'user',
-                    'name': user.get('Name'),
-                    'arn': user.get('ARN'),
-                    'status': user.get('Status'),
-                }
-                for user in _safe_value(lambda: _operation_items(memorydb, 'describe_users', 'Users'), [])
-            )
-        if 'DescribeACLs' in operations:
-            resources.extend(
-                {
-                    'type': 'acl',
-                    'name': acl.get('Name'),
-                    'arn': acl.get('ARN'),
-                    'status': acl.get('Status'),
-                }
-                for acl in _safe_value(lambda: _operation_items(memorydb, 'describe_acls', 'ACLs'), [])
-            )
-
-        return resources
-
-    def codepipeline_resources() -> list[dict[str, Any]]:
-        codepipeline = factory.client('codepipeline')
-        operations = set(codepipeline.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'ListPipelines' in operations:
-            resources.extend(
-                {
-                    'type': 'pipeline',
-                    'name': pipeline.get('name'),
-                    'version': pipeline.get('version'),
-                }
-                for pipeline in _safe_value(lambda: _operation_items(codepipeline, 'list_pipelines', 'pipelines'), [])
-            )
-        if 'ListWebhooks' in operations:
-            resources.extend(
-                {
-                    'type': 'webhook',
-                    'name': webhook.get('name'),
-                    'arn': webhook.get('arn'),
-                }
-                for webhook in _safe_value(lambda: _operation_items(codepipeline, 'list_webhooks', 'webhooks'), [])
-            )
-
-        return resources
-
-    def s3vectors_resources() -> list[dict[str, Any]]:
-        s3vectors = factory.client('s3vectors')
-        operations = set(s3vectors.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'ListVectorBuckets' in operations:
-            buckets = _safe_value(lambda: _operation_items(s3vectors, 'list_vector_buckets', 'vectorBuckets'), [])
-            resources.extend(
-                {
-                    'type': 'vector_bucket',
-                    'name': bucket.get('vectorBucketName') or bucket.get('name'),
-                    'arn': bucket.get('vectorBucketArn'),
-                }
-                for bucket in buckets
-            )
-            if 'ListIndexes' in operations:
-                for bucket in buckets[:50]:
-                    bucket_name = bucket.get('vectorBucketName') or bucket.get('name')
-                    if not bucket_name:
-                        continue
-                    resources.extend(
-                        {
-                            'type': 'index',
-                            'name': index.get('indexName'),
-                            'vector_bucket': bucket_name,
-                            'arn': index.get('indexArn'),
-                        }
-                        for index in _safe_value(
-                            lambda bucket_name=bucket_name: _operation_items(s3vectors, 'list_indexes', 'indexes', vectorBucketName=bucket_name),
-                            [],
-                        )
-                    )
-
-        return resources
-
-    def iot_resources() -> list[dict[str, Any]]:
-        iot = factory.client('iot')
-        operations = set(iot.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'ListThings' in operations:
-            resources.extend(
-                {
-                    'type': 'thing',
-                    'name': thing.get('thingName'),
-                    'arn': thing.get('thingArn'),
-                    'thing_type': thing.get('thingTypeName'),
-                }
-                for thing in _safe_value(lambda: _operation_items(iot, 'list_things', 'things'), [])
-            )
-        if 'ListPolicies' in operations:
-            resources.extend(
-                {
-                    'type': 'policy',
-                    'name': policy.get('policyName'),
-                    'arn': policy.get('policyArn'),
-                }
-                for policy in _safe_value(lambda: _operation_items(iot, 'list_policies', 'policies'), [])
-            )
-        if 'ListCertificates' in operations:
-            resources.extend(
-                {
-                    'type': 'certificate',
-                    'id': certificate.get('certificateId'),
-                    'arn': certificate.get('certificateArn'),
-                    'status': certificate.get('status'),
-                }
-                for certificate in _safe_value(lambda: _operation_items(iot, 'list_certificates', 'certificates'), [])
-            )
-
-        return resources
-
-    def elasticbeanstalk_resources() -> list[dict[str, Any]]:
-        beanstalk = factory.client('elasticbeanstalk')
-        operations = set(beanstalk.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'DescribeApplications' in operations:
-            resources.extend(
-                {
-                    'type': 'application',
-                    'name': application.get('ApplicationName'),
-                    'arn': application.get('ApplicationArn'),
-                }
-                for application in _safe_value(lambda: _operation_items(beanstalk, 'describe_applications', 'Applications'), [])
-            )
-        if 'DescribeEnvironments' in operations:
-            resources.extend(
-                {
-                    'type': 'environment',
-                    'name': environment.get('EnvironmentName'),
-                    'id': environment.get('EnvironmentId'),
-                    'arn': environment.get('EnvironmentArn'),
-                    'status': environment.get('Status'),
-                }
-                for environment in _safe_value(lambda: _operation_items(beanstalk, 'describe_environments', 'Environments'), [])
-            )
-
-        return resources
-
-    def neptune_resources() -> list[dict[str, Any]]:
-        neptune = factory.client('neptune')
-        operations = set(neptune.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'DescribeDBClusters' in operations:
-            resources.extend(
-                {
-                    'type': 'db_cluster',
-                    'name': cluster.get('DBClusterIdentifier'),
-                    'arn': cluster.get('DBClusterArn'),
-                    'status': cluster.get('Status'),
-                }
-                for cluster in _safe_value(lambda: _operation_items(neptune, 'describe_db_clusters', 'DBClusters'), [])
-            )
-
-        if 'DescribeDBInstances' in operations:
-            resources.extend(
-                {
-                    'type': 'db_instance',
-                    'name': instance.get('DBInstanceIdentifier'),
-                    'arn': instance.get('DBInstanceArn'),
-                    'status': instance.get('DBInstanceStatus'),
-                }
-                for instance in _safe_value(lambda: _operation_items(neptune, 'describe_db_instances', 'DBInstances'), [])
-            )
-
-        return resources
-
-    def docdb_resources() -> list[dict[str, Any]]:
-        docdb = factory.client('docdb')
-        operations = set(docdb.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'DescribeDBClusters' in operations:
-            resources.extend(
-                {
-                    'type': 'db_cluster',
-                    'name': cluster.get('DBClusterIdentifier'),
-                    'arn': cluster.get('DBClusterArn'),
-                    'status': cluster.get('Status'),
-                }
-                for cluster in _safe_value(lambda: _operation_items(docdb, 'describe_db_clusters', 'DBClusters'), [])
-            )
-
-        if 'DescribeDBInstances' in operations:
-            resources.extend(
-                {
-                    'type': 'db_instance',
-                    'name': instance.get('DBInstanceIdentifier'),
-                    'arn': instance.get('DBInstanceArn'),
-                    'status': instance.get('DBInstanceStatus'),
-                }
-                for instance in _safe_value(lambda: _operation_items(docdb, 'describe_db_instances', 'DBInstances'), [])
-            )
-
-        return resources
-
-    def transcribe_resources() -> list[dict[str, Any]]:
-        transcribe = factory.client('transcribe')
-        operations = set(transcribe.meta.service_model.operation_names)
-        resources: list[dict[str, Any]] = []
-
-        if 'ListTranscriptionJobs' in operations:
-            resources.extend(
-                {
-                    'type': 'transcription_job',
-                    'name': job.get('TranscriptionJobName'),
-                    'status': job.get('TranscriptionJobStatus'),
-                    'language_code': job.get('LanguageCode'),
-                }
-                for job in _safe_value(
-                    lambda: _paginate(transcribe, 'list_transcription_jobs', 'TranscriptionJobSummaries'),
-                    [],
-                )
-            )
-
-        if 'ListVocabularies' in operations:
-            resources.extend(
-                {
-                    'type': 'vocabulary',
-                    'name': vocabulary.get('VocabularyName'),
-                    'state': vocabulary.get('VocabularyState'),
-                    'language_code': vocabulary.get('LanguageCode'),
-                }
-                for vocabulary in _safe_value(lambda: _paginate(transcribe, 'list_vocabularies', 'Vocabularies'), [])
-            )
-
-        if 'ListVocabularyFilters' in operations:
-            resources.extend(
-                {
-                    'type': 'vocabulary_filter',
-                    'name': vocabulary_filter.get('VocabularyFilterName'),
-                    'language_code': vocabulary_filter.get('LanguageCode'),
-                }
-                for vocabulary_filter in _safe_value(
-                    lambda: _paginate(transcribe, 'list_vocabulary_filters', 'VocabularyFilters'),
-                    [],
-                )
-            )
-
-        return resources
-
-    def textract_resources() -> list[dict[str, Any]]:
-        textract = factory.client('textract')
-        operations = set(textract.meta.service_model.operation_names)
-
-        if 'ListAdapters' not in operations:
-            return []
-
-        adapters = [
-            {
-                'type': 'adapter',
-                'name': adapter.get('AdapterName') or adapter.get('AdapterId'),
-                'id': adapter.get('AdapterId'),
-                'arn': adapter.get('AdapterArn'),
-                'feature_types': adapter.get('FeatureTypes'),
-            }
-            for adapter in _safe_value(lambda: _paginate(textract, 'list_adapters', 'Adapters'), [])
-        ]
-        resources = list(adapters)
-
-        if 'ListAdapterVersions' in operations:
-            for adapter in adapters:
-                adapter_id = adapter.get('id')
-                if not adapter_id:
-                    continue
-
-                resources.extend(
-                    {
-                        'type': 'adapter_version',
-                        'name': f'{adapter.get("name") or adapter_id}:{version.get("AdapterVersion")}',
-                        'id': adapter_id,
-                        'adapter_version': version.get('AdapterVersion'),
-                        'status': version.get('Status'),
-                    }
-                    for version in _safe_value(
-                        lambda adapter_id=adapter_id: _paginate(
-                            textract,
-                            'list_adapter_versions',
-                            'AdapterVersions',
-                            AdapterId=adapter_id,
-                        ),
-                        [],
-                    )
-                )
-
-        return resources
-
-    def ec2_resources() -> list[dict[str, Any]]:
-        ec2 = factory.client('ec2')
-        resources: list[dict[str, Any]] = []
-        reservations = _safe_value(lambda: ec2.describe_instances().get('Reservations', []), [])
+            for cluster in _safe_value(lambda: _operation_items(memorydb, 'describe_clusters', 'Clusters'), [])
+        )
+    if 'DescribeUsers' in operations:
         resources.extend(
             {
-                'type': 'instance',
-                'id': instance.get('InstanceId'),
-                'state': instance.get('State', {}).get('Name'),
+                'type': 'user',
+                'name': user.get('Name'),
+                'arn': user.get('ARN'),
+                'status': user.get('Status'),
             }
-            for reservation in reservations
-            for instance in reservation.get('Instances', [])
+            for user in _safe_value(lambda: _operation_items(memorydb, 'describe_users', 'Users'), [])
         )
-        resources.extend({'type': 'vpc', 'id': item.get('VpcId')} for item in _safe_value(lambda: ec2.describe_vpcs().get('Vpcs', []), []))
-        resources.extend({'type': 'subnet', 'id': item.get('SubnetId')} for item in _safe_value(lambda: ec2.describe_subnets().get('Subnets', []), []))
-        resources.extend({'type': 'security_group', 'id': item.get('GroupId')} for item in _safe_value(lambda: ec2.describe_security_groups().get('SecurityGroups', []), []))
-        resources.extend({'type': 'internet_gateway', 'id': item.get('InternetGatewayId')} for item in _safe_value(lambda: ec2.describe_internet_gateways().get('InternetGateways', []), []))
-        resources.extend({'type': 'route_table', 'id': item.get('RouteTableId')} for item in _safe_value(lambda: ec2.describe_route_tables().get('RouteTables', []), []))
-        resources.extend({'type': 'network_acl', 'id': item.get('NetworkAclId')} for item in _safe_value(lambda: ec2.describe_network_acls().get('NetworkAcls', []), []))
-        resources.extend({'type': 'vpc_endpoint', 'id': item.get('VpcEndpointId')} for item in _safe_value(lambda: _paginate(ec2, 'describe_vpc_endpoints', 'VpcEndpoints'), []))
-        resources.extend({'type': 'elastic_ip', 'id': item.get('AllocationId') or item.get('PublicIp')} for item in _safe_value(lambda: ec2.describe_addresses().get('Addresses', []), []))
-        resources.extend({'type': 'key_pair', 'id': item.get('KeyName')} for item in _safe_value(lambda: ec2.describe_key_pairs().get('KeyPairs', []), []))
-        return resources
+    if 'DescribeACLs' in operations:
+        resources.extend(
+            {
+                'type': 'acl',
+                'name': acl.get('Name'),
+                'arn': acl.get('ARN'),
+                'status': acl.get('Status'),
+            }
+            for acl in _safe_value(lambda: _operation_items(memorydb, 'describe_acls', 'ACLs'), [])
+        )
 
-    resource_loaders: list[tuple[str, str, Callable[[], list[dict[str, Any]]]]] = [
-        ('acm-certificates', 'ACM certificates', acm_resources),
-        ('apigateway-apis', 'API Gateway APIs', apigateway_apis),
-        ('appconfig-resources', 'AppConfig resources', appconfig_resources),
-        ('appsync-resources', 'AppSync resources', appsync_resources),
-        ('athena-resources', 'Athena resources', athena_resources),
-        ('autoscaling-resources', 'Auto Scaling resources', autoscaling_resources),
-        ('backup-resources', 'Backup resources', backup_resources),
-        ('batch-resources', 'AWS Batch resources', batch_resources),
-        ('bedrockruntime-resources', 'Bedrock Runtime operations', bedrockruntime_resources),
-        ('cloudfront-resources', 'CloudFront resources', cloudfront_resources),
-        ('cloudmap-resources', 'Cloud Map resources', cloudmap_resources),
-        ('cloudtrail-resources', 'CloudTrail trails', cloudtrail_resources),
-        ('codebuild-resources', 'CodeBuild resources', codebuild_resources),
-        ('codepipeline-resources', 'CodePipeline resources', codepipeline_resources),
-        ('codedeploy-resources', 'CodeDeploy resources', codedeploy_resources),
-        ('config-resources', 'AWS Config resources', config_resources),
-        ('eks-resources', 'EKS resources', eks_resources),
-        ('elasticache-resources', 'ElastiCache resources', elasticache_resources),
-        ('elasticbeanstalk-resources', 'Elastic Beanstalk resources', elasticbeanstalk_resources),
-        ('elasticloadbalancing-resources', 'Elastic Load Balancing resources', elasticloadbalancing_resources),
-        ('emr-resources', 'EMR resources', emr_resources),
-        ('firehose-resources', 'Data Firehose resources', firehose_resources),
-        ('kinesis-resources', 'Kinesis resources', kinesis_resources),
-        ('kafka-resources', 'MSK / Kafka resources', kafka_resources),
-        ('opensearch-resources', 'OpenSearch resources', opensearch_resources),
-        ('pipes-resources', 'EventBridge Pipes resources', pipes_resources),
-        ('pricing-resources', 'AWS Price List resources', pricing_resources),
-        ('costexplorer-resources', 'Cost Explorer resources', costexplorer_resources),
-        ('cur-resources', 'Cost and Usage Reports', cur_resources),
-        ('bcmdataexports-resources', 'BCM Data Exports', bcmdataexports_resources),
-        ('memorydb-resources', 'MemoryDB resources', memorydb_resources),
-        ('neptune-resources', 'Neptune resources', neptune_resources),
-        ('resourcegroupstagging-resources', 'Resource Groups Tagging resources', resourcegroupstagging_resources),
-        ('ssm-resources', 'SSM resources', ssm_resources),
-        ('cloudformation-resources', 'CloudFormation resources', cloudformation_resources),
-        ('ecr-resources', 'ECR resources', ecr_resources),
-        ('glue-resources', 'Glue resources', glue_resources),
-        ('rds-resources', 'RDS resources', rds_resources),
-        ('rdsdata-resources', 'RDS Data API operations', rdsdata_resources),
-        ('route53-resources', 'Route 53 resources', route53_resources),
-        ('iam-users', 'IAM users', iam_users),
-        ('iam-roles', 'IAM roles', iam_roles),
-        ('iot-resources', 'IoT Core resources', iot_resources),
-        ('ec2-resources', 'EC2 resources', ec2_resources),
-        ('ecs-resources', 'ECS resources', ecs_resources),
-        ('s3-buckets', 'S3 buckets', s3_buckets),
-        ('s3vectors-resources', 'S3 Vectors resources', s3vectors_resources),
-        ('sqs-queues', 'SQS queues', sqs_queues),
-        ('dynamodb-tables', 'DynamoDB tables', dynamodb_tables),
-        ('docdb-resources', 'DocumentDB resources', docdb_resources),
-        ('sns-topics', 'SNS topics', sns_topics),
-        ('ses-resources', 'SES resources', ses_resources),
-        ('scheduler-resources', 'EventBridge Scheduler resources', scheduler_resources),
-        ('stepfunctions-resources', 'Step Functions resources', stepfunctions_resources),
-        ('textract-resources', 'Textract resources', textract_resources),
-        ('transcribe-resources', 'Transcribe resources', transcribe_resources),
-        ('transfer-resources', 'Transfer Family resources', transfer_resources),
-        ('wafv2-resources', 'WAF v2 resources', wafv2_resources),
-        ('lambda-functions', 'Lambda functions', lambda_functions),
-        ('kms-keys', 'KMS keys', kms_keys),
-        ('secrets', 'Secrets Manager secrets', secrets),
-        ('log-groups', 'CloudWatch log groups', log_groups),
-        ('cloudwatch-metrics', 'CloudWatch metrics and alarms', cloudwatch_metrics),
-        ('cognito-resources', 'Cognito resources', cognito_resources),
-        ('eventbridge-resources', 'EventBridge resources', eventbridge_resources),
+    return resources
+
+
+def list_codepipeline_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    codepipeline = factory.client('codepipeline')
+    operations = set(codepipeline.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'ListPipelines' in operations:
+        resources.extend(
+            {
+                'type': 'pipeline',
+                'name': pipeline.get('name'),
+                'version': pipeline.get('version'),
+            }
+            for pipeline in _safe_value(lambda: _operation_items(codepipeline, 'list_pipelines', 'pipelines'), [])
+        )
+    if 'ListWebhooks' in operations:
+        resources.extend(
+            {
+                'type': 'webhook',
+                'name': webhook.get('name'),
+                'arn': webhook.get('arn'),
+            }
+            for webhook in _safe_value(lambda: _operation_items(codepipeline, 'list_webhooks', 'webhooks'), [])
+        )
+
+    return resources
+
+
+def list_s3vectors_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    s3vectors = factory.client('s3vectors')
+    operations = set(s3vectors.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'ListVectorBuckets' in operations:
+        buckets = _safe_value(lambda: _operation_items(s3vectors, 'list_vector_buckets', 'vectorBuckets'), [])
+        resources.extend(
+            {
+                'type': 'vector_bucket',
+                'name': bucket.get('vectorBucketName') or bucket.get('name'),
+                'arn': bucket.get('vectorBucketArn'),
+            }
+            for bucket in buckets
+        )
+        if 'ListIndexes' in operations:
+            for bucket in buckets[:50]:
+                bucket_name = bucket.get('vectorBucketName') or bucket.get('name')
+                if not bucket_name:
+                    continue
+                resources.extend(
+                    {
+                        'type': 'index',
+                        'name': index.get('indexName'),
+                        'vector_bucket': bucket_name,
+                        'arn': index.get('indexArn'),
+                    }
+                    for index in _safe_value(
+                        lambda bucket_name=bucket_name: _operation_items(s3vectors, 'list_indexes', 'indexes', vectorBucketName=bucket_name),
+                        [],
+                    )
+                )
+
+    return resources
+
+
+def list_iot_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    iot = factory.client('iot')
+    operations = set(iot.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'ListThings' in operations:
+        resources.extend(
+            {
+                'type': 'thing',
+                'name': thing.get('thingName'),
+                'arn': thing.get('thingArn'),
+                'thing_type': thing.get('thingTypeName'),
+            }
+            for thing in _safe_value(lambda: _operation_items(iot, 'list_things', 'things'), [])
+        )
+    if 'ListPolicies' in operations:
+        resources.extend(
+            {
+                'type': 'policy',
+                'name': policy.get('policyName'),
+                'arn': policy.get('policyArn'),
+            }
+            for policy in _safe_value(lambda: _operation_items(iot, 'list_policies', 'policies'), [])
+        )
+    if 'ListCertificates' in operations:
+        resources.extend(
+            {
+                'type': 'certificate',
+                'id': certificate.get('certificateId'),
+                'arn': certificate.get('certificateArn'),
+                'status': certificate.get('status'),
+            }
+            for certificate in _safe_value(lambda: _operation_items(iot, 'list_certificates', 'certificates'), [])
+        )
+
+    return resources
+
+
+def list_elasticbeanstalk_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    beanstalk = factory.client('elasticbeanstalk')
+    operations = set(beanstalk.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'DescribeApplications' in operations:
+        resources.extend(
+            {
+                'type': 'application',
+                'name': application.get('ApplicationName'),
+                'arn': application.get('ApplicationArn'),
+            }
+            for application in _safe_value(lambda: _operation_items(beanstalk, 'describe_applications', 'Applications'), [])
+        )
+    if 'DescribeEnvironments' in operations:
+        resources.extend(
+            {
+                'type': 'environment',
+                'name': environment.get('EnvironmentName'),
+                'id': environment.get('EnvironmentId'),
+                'arn': environment.get('EnvironmentArn'),
+                'status': environment.get('Status'),
+            }
+            for environment in _safe_value(lambda: _operation_items(beanstalk, 'describe_environments', 'Environments'), [])
+        )
+
+    return resources
+
+
+def list_neptune_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    neptune = factory.client('neptune')
+    operations = set(neptune.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'DescribeDBClusters' in operations:
+        resources.extend(
+            {
+                'type': 'db_cluster',
+                'name': cluster.get('DBClusterIdentifier'),
+                'arn': cluster.get('DBClusterArn'),
+                'status': cluster.get('Status'),
+            }
+            for cluster in _safe_value(lambda: _operation_items(neptune, 'describe_db_clusters', 'DBClusters'), [])
+        )
+
+    if 'DescribeDBInstances' in operations:
+        resources.extend(
+            {
+                'type': 'db_instance',
+                'name': instance.get('DBInstanceIdentifier'),
+                'arn': instance.get('DBInstanceArn'),
+                'status': instance.get('DBInstanceStatus'),
+            }
+            for instance in _safe_value(lambda: _operation_items(neptune, 'describe_db_instances', 'DBInstances'), [])
+        )
+
+    return resources
+
+
+def list_docdb_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    docdb = factory.client('docdb')
+    operations = set(docdb.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'DescribeDBClusters' in operations:
+        resources.extend(
+            {
+                'type': 'db_cluster',
+                'name': cluster.get('DBClusterIdentifier'),
+                'arn': cluster.get('DBClusterArn'),
+                'status': cluster.get('Status'),
+            }
+            for cluster in _safe_value(lambda: _operation_items(docdb, 'describe_db_clusters', 'DBClusters'), [])
+        )
+
+    if 'DescribeDBInstances' in operations:
+        resources.extend(
+            {
+                'type': 'db_instance',
+                'name': instance.get('DBInstanceIdentifier'),
+                'arn': instance.get('DBInstanceArn'),
+                'status': instance.get('DBInstanceStatus'),
+            }
+            for instance in _safe_value(lambda: _operation_items(docdb, 'describe_db_instances', 'DBInstances'), [])
+        )
+
+    return resources
+
+
+def list_transcribe_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    transcribe = factory.client('transcribe')
+    operations = set(transcribe.meta.service_model.operation_names)
+    resources: list[dict[str, Any]] = []
+
+    if 'ListTranscriptionJobs' in operations:
+        resources.extend(
+            {
+                'type': 'transcription_job',
+                'name': job.get('TranscriptionJobName'),
+                'status': job.get('TranscriptionJobStatus'),
+                'language_code': job.get('LanguageCode'),
+            }
+            for job in _safe_value(
+                lambda: _paginate(transcribe, 'list_transcription_jobs', 'TranscriptionJobSummaries'),
+                [],
+            )
+        )
+
+    if 'ListVocabularies' in operations:
+        resources.extend(
+            {
+                'type': 'vocabulary',
+                'name': vocabulary.get('VocabularyName'),
+                'state': vocabulary.get('VocabularyState'),
+                'language_code': vocabulary.get('LanguageCode'),
+            }
+            for vocabulary in _safe_value(lambda: _paginate(transcribe, 'list_vocabularies', 'Vocabularies'), [])
+        )
+
+    if 'ListVocabularyFilters' in operations:
+        resources.extend(
+            {
+                'type': 'vocabulary_filter',
+                'name': vocabulary_filter.get('VocabularyFilterName'),
+                'language_code': vocabulary_filter.get('LanguageCode'),
+            }
+            for vocabulary_filter in _safe_value(
+                lambda: _paginate(transcribe, 'list_vocabulary_filters', 'VocabularyFilters'),
+                [],
+            )
+        )
+
+    return resources
+
+
+def list_textract_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    textract = factory.client('textract')
+    operations = set(textract.meta.service_model.operation_names)
+
+    if 'ListAdapters' not in operations:
+        return []
+
+    adapters = [
+        {
+            'type': 'adapter',
+            'name': adapter.get('AdapterName') or adapter.get('AdapterId'),
+            'id': adapter.get('AdapterId'),
+            'arn': adapter.get('AdapterArn'),
+            'feature_types': adapter.get('FeatureTypes'),
+        }
+        for adapter in _safe_value(lambda: _paginate(textract, 'list_adapters', 'Adapters'), [])
+    ]
+    resources = list(adapters)
+
+    if 'ListAdapterVersions' in operations:
+        for adapter in adapters:
+            adapter_id = adapter.get('id')
+            if not adapter_id:
+                continue
+
+            resources.extend(
+                {
+                    'type': 'adapter_version',
+                    'name': f'{adapter.get("name") or adapter_id}:{version.get("AdapterVersion")}',
+                    'id': adapter_id,
+                    'adapter_version': version.get('AdapterVersion'),
+                    'status': version.get('Status'),
+                }
+                for version in _safe_value(
+                    lambda adapter_id=adapter_id: _paginate(
+                        textract,
+                        'list_adapter_versions',
+                        'AdapterVersions',
+                        AdapterId=adapter_id,
+                    ),
+                    [],
+                )
+            )
+
+    return resources
+
+
+def list_ec2_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
+    ec2 = factory.client('ec2')
+    resources: list[dict[str, Any]] = []
+    reservations = _safe_value(lambda: ec2.describe_instances().get('Reservations', []), [])
+    resources.extend(
+        {
+            'type': 'instance',
+            'id': instance.get('InstanceId'),
+            'state': instance.get('State', {}).get('Name'),
+        }
+        for reservation in reservations
+        for instance in reservation.get('Instances', [])
+    )
+    resources.extend({'type': 'vpc', 'id': item.get('VpcId')} for item in _safe_value(lambda: ec2.describe_vpcs().get('Vpcs', []), []))
+    resources.extend({'type': 'subnet', 'id': item.get('SubnetId')} for item in _safe_value(lambda: ec2.describe_subnets().get('Subnets', []), []))
+    resources.extend({'type': 'security_group', 'id': item.get('GroupId')} for item in _safe_value(lambda: ec2.describe_security_groups().get('SecurityGroups', []), []))
+    resources.extend({'type': 'internet_gateway', 'id': item.get('InternetGatewayId')} for item in _safe_value(lambda: ec2.describe_internet_gateways().get('InternetGateways', []), []))
+    resources.extend({'type': 'route_table', 'id': item.get('RouteTableId')} for item in _safe_value(lambda: ec2.describe_route_tables().get('RouteTables', []), []))
+    resources.extend({'type': 'network_acl', 'id': item.get('NetworkAclId')} for item in _safe_value(lambda: ec2.describe_network_acls().get('NetworkAcls', []), []))
+    resources.extend({'type': 'vpc_endpoint', 'id': item.get('VpcEndpointId')} for item in _safe_value(lambda: _paginate(ec2, 'describe_vpc_endpoints', 'VpcEndpoints'), []))
+    resources.extend({'type': 'elastic_ip', 'id': item.get('AllocationId') or item.get('PublicIp')} for item in _safe_value(lambda: ec2.describe_addresses().get('Addresses', []), []))
+    resources.extend({'type': 'key_pair', 'id': item.get('KeyName')} for item in _safe_value(lambda: ec2.describe_key_pairs().get('KeyPairs', []), []))
+    return resources
+
+
+def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]:
+    factory = FlociClientFactory()
+
+    resource_loaders: list[tuple[str, str, Callable[[FlociClientFactory], list[dict[str, Any]]]]] = [
+        ('acm-certificates', 'ACM certificates', list_acm_resources),
+        ('apigateway-apis', 'API Gateway APIs', list_apigateway_apis),
+        ('appconfig-resources', 'AppConfig resources', list_appconfig_resources),
+        ('appsync-resources', 'AppSync resources', list_appsync_resources),
+        ('athena-resources', 'Athena resources', list_athena_resources),
+        ('autoscaling-resources', 'Auto Scaling resources', list_autoscaling_resources),
+        ('backup-resources', 'Backup resources', list_backup_resources),
+        ('batch-resources', 'AWS Batch resources', list_batch_resources),
+        ('bedrockruntime-resources', 'Bedrock Runtime operations', list_bedrockruntime_resources),
+        ('cloudfront-resources', 'CloudFront resources', list_cloudfront_resources),
+        ('cloudmap-resources', 'Cloud Map resources', list_cloudmap_resources),
+        ('cloudtrail-resources', 'CloudTrail trails', list_cloudtrail_resources),
+        ('codebuild-resources', 'CodeBuild resources', list_codebuild_resources),
+        ('codepipeline-resources', 'CodePipeline resources', list_codepipeline_resources),
+        ('codedeploy-resources', 'CodeDeploy resources', list_codedeploy_resources),
+        ('config-resources', 'AWS Config resources', list_config_resources),
+        ('eks-resources', 'EKS resources', list_eks_resources),
+        ('elasticache-resources', 'ElastiCache resources', list_elasticache_resources),
+        ('elasticbeanstalk-resources', 'Elastic Beanstalk resources', list_elasticbeanstalk_resources),
+        ('elasticloadbalancing-resources', 'Elastic Load Balancing resources', list_elasticloadbalancing_resources),
+        ('emr-resources', 'EMR resources', list_emr_resources),
+        ('firehose-resources', 'Data Firehose resources', list_firehose_resources),
+        ('kinesis-resources', 'Kinesis resources', list_kinesis_resources),
+        ('kafka-resources', 'MSK / Kafka resources', list_kafka_resources),
+        ('opensearch-resources', 'OpenSearch resources', list_opensearch_resources),
+        ('pipes-resources', 'EventBridge Pipes resources', list_pipes_resources),
+        ('pricing-resources', 'AWS Price List resources', list_pricing_resources),
+        ('costexplorer-resources', 'Cost Explorer resources', list_costexplorer_resources),
+        ('cur-resources', 'Cost and Usage Reports', list_cur_resources),
+        ('bcmdataexports-resources', 'BCM Data Exports', list_bcmdataexports_resources),
+        ('memorydb-resources', 'MemoryDB resources', list_memorydb_resources),
+        ('neptune-resources', 'Neptune resources', list_neptune_resources),
+        ('resourcegroupstagging-resources', 'Resource Groups Tagging resources', list_resourcegroupstagging_resources),
+        ('ssm-resources', 'SSM resources', list_ssm_resources),
+        ('cloudformation-resources', 'CloudFormation resources', list_cloudformation_resources),
+        ('ecr-resources', 'ECR resources', list_ecr_resources),
+        ('glue-resources', 'Glue resources', list_glue_resources),
+        ('rds-resources', 'RDS resources', list_rds_resources),
+        ('rdsdata-resources', 'RDS Data API operations', list_rdsdata_resources),
+        ('route53-resources', 'Route 53 resources', list_route53_resources),
+        ('iam-users', 'IAM users', list_iam_users),
+        ('iam-roles', 'IAM roles', list_iam_roles),
+        ('iot-resources', 'IoT Core resources', list_iot_resources),
+        ('ec2-resources', 'EC2 resources', list_ec2_resources),
+        ('ecs-resources', 'ECS resources', list_ecs_resources),
+        ('s3-buckets', 'S3 buckets', list_s3_buckets),
+        ('s3vectors-resources', 'S3 Vectors resources', list_s3vectors_resources),
+        ('sqs-queues', 'SQS queues', list_sqs_queues),
+        ('dynamodb-tables', 'DynamoDB tables', list_dynamodb_tables),
+        ('docdb-resources', 'DocumentDB resources', list_docdb_resources),
+        ('sns-topics', 'SNS topics', list_sns_topics),
+        ('ses-resources', 'SES resources', list_ses_resources),
+        ('scheduler-resources', 'EventBridge Scheduler resources', list_scheduler_resources),
+        ('stepfunctions-resources', 'Step Functions resources', list_stepfunctions_resources),
+        ('textract-resources', 'Textract resources', list_textract_resources),
+        ('transcribe-resources', 'Transcribe resources', list_transcribe_resources),
+        ('transfer-resources', 'Transfer Family resources', list_transfer_resources),
+        ('wafv2-resources', 'WAF v2 resources', list_wafv2_resources),
+        ('lambda-functions', 'Lambda functions', list_lambda_functions),
+        ('kms-keys', 'KMS keys', list_kms_keys),
+        ('secrets', 'Secrets Manager secrets', list_secrets),
+        ('log-groups', 'CloudWatch log groups', list_log_groups),
+        ('cloudwatch-metrics', 'CloudWatch metrics and alarms', list_cloudwatch_metrics),
+        ('cognito-resources', 'Cognito resources', list_cognito_resources),
+        ('eventbridge-resources', 'EventBridge resources', list_eventbridge_resources),
     ]
 
     if service_keys is not None:
@@ -11572,6 +11638,6 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
 
     with ThreadPoolExecutor(max_workers=min(12, len(resource_loaders))) as executor:
         return list(executor.map(
-            lambda args: _resource(*args),
+            lambda args: _resource(args[0], args[1], partial(args[2], factory)),
             resource_loaders,
         ))
