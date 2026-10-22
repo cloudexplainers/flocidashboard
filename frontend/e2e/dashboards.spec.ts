@@ -2991,14 +2991,14 @@ test('CloudFormation proposed change sets send edited templates, preserved param
   let submitted: any;
   await page.route('**/api/cloudformation/change-sets/', route => { submitted = route.request().postDataJSON(); return route.fulfill({ json: { change_set_name: 'next' } }); });
   await page.goto('/cloudformation/overview?stack=orders-stack');
-  await page.getByRole('button', { name: 'Create Change Set', exact: true }).click();
+  await page.getByRole('button', { name: 'Create change set', exact: true }).click();
   const modal = page.getByRole('dialog');
   await expect(modal.getByLabel('Parameters (JSON)', { exact: true })).toHaveValue(/"UsePreviousValue": true/);
   await expect(modal.getByLabel('Proposed template (YAML or JSON)', { exact: true })).toHaveValue(/OrdersQueue/);
   const proposed = JSON.stringify({ ...cfnTemplate, Description: 'Proposed queue change' });
   await modal.getByLabel('Proposed template (YAML or JSON)', { exact: true }).fill(proposed);
-  await modal.getByLabel('Change Set Name', { exact: true }).fill('next');
-  await modal.getByRole('button', { name: 'Create Change Set', exact: true }).click();
+  await modal.getByLabel('Change set name', { exact: true }).fill('next');
+  await modal.getByRole('button', { name: 'Create change set', exact: true }).click();
   await expect(modal).not.toBeVisible();
   expect(submitted).toMatchObject({ stack_name: 'orders-stack', change_set_name: 'next', template_body: proposed, parameters: [{ ParameterKey: 'Retention', UsePreviousValue: true }], capabilities: [], change_set_type: 'UPDATE' });
   await expect(page).toHaveURL(/change_sets\?stack=orders-stack&changeSet=next$/);
@@ -3050,7 +3050,7 @@ test('CloudFormation template validation uses returned metadata and expires when
   await page.route('**/api/cloudformation/templates/validate/', route => route.fulfill({ json: { validation: { Description: 'Validated queue template', Parameters: [{ ParameterKey: 'Retention' }], Capabilities: ['CAPABILITY_IAM'] } } }));
   await page.route('**/api/cloudformation/stacks/', route => { submitted = route.request().postDataJSON(); return route.fulfill({ json: { stack_id: 'new-stack-id' } }); });
   await page.goto('/cloudformation/');
-  await page.getByRole('button', { name: 'Create Stack', exact: true }).click();
+  await page.getByRole('button', { name: 'Create stack', exact: true }).click();
   const modal = page.getByRole('dialog');
   await expect(modal.getByLabel('Template Body (YAML or JSON)', { exact: true })).toHaveValue('');
   await modal.getByLabel('Template Body (YAML or JSON)', { exact: true }).fill(JSON.stringify(cfnTemplate));
@@ -3059,7 +3059,7 @@ test('CloudFormation template validation uses returned metadata and expires when
   await expect(modal.getByText('CAPABILITY_IAM', { exact: true })).toBeVisible();
   await modal.getByLabel('Template Body (YAML or JSON)', { exact: true }).fill(JSON.stringify({ ...cfnTemplate, Description: 'New revision' }));
   await expect(modal.getByText('Validated queue template', { exact: true })).toHaveCount(0);
-  await modal.getByLabel('Stack Name', { exact: true }).fill('new-stack');
+  await modal.getByLabel('Stack name', { exact: true }).fill('new-stack');
   await modal.getByLabel('Parameters (JSON)', { exact: true }).fill('{"Retention":0}');
   await modal.getByRole('button', { name: 'Deploy Stack', exact: true }).click();
   await expect(modal).not.toBeVisible();

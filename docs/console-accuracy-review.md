@@ -265,3 +265,28 @@ Already careful: identity status comes from the inventory, never from a successf
 
 Already accurate (rules, buses, targets and the pattern tester use real data). One "N/A" placeholder for a missing rule description now shows "-".
 
+## Step Functions
+
+Already accurate: definitions, executions, history and the activity workers come from the API.
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Low | State machine type showed the raw enum (`STANDARD`) and the list lacked the console's "Creation date" column. | Fixed: "Standard" / "Express" and Creation date. |
+
+## CloudFormation
+
+Already accurate: stacks, events, resources, outputs and change sets come from the API, and failed change sets can't be executed.
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Low | Labels used Title Case ("Create Stack", "Created Time", "Confirm Delete"). | Fixed to console wording. Stack statuses stay as the raw enum (`CREATE_COMPLETE`), which is also how the CloudFormation console shows them. |
+
+## Consoles reviewed with no changes needed
+
+These were checked for invented values, unchecked errors, missing confirmations and wording. Each reads its values from the API and confirms destructive actions:
+
+- **KMS**: key state, rotation, aliases, grants and policies are real; disable and revoke confirm. Left: no "Schedule key deletion" action (7–30 day waiting period), so keys can't be deleted from this console.
+- **SSM Parameter Store**: SecureString values stay hidden until you choose "Reveal decrypted value", as in AWS.
+- **ECR**: repositories, images, tag mutability and lifecycle policies are real.
+- **Route 53**, **CloudFront**, **AppSync**, **Athena** and **CloudTrail**: data comes from the API; failed reads are shown as errors rather than empty or invented data.
+

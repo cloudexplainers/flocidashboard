@@ -479,7 +479,7 @@ const StackWorkspace: React.FC<Props> = ({
             </Button>
             {activeStack && (
               <Button onClick={() => prepareEdit(true)}>
-                Create Change Set
+                Create change set
               </Button>
             )}
             {activeStack && (
@@ -487,7 +487,7 @@ const StackWorkspace: React.FC<Props> = ({
             )}
             {activeStack && (
               <Button onClick={() => setDeleteModalOpen(true)}>
-                Delete Stack
+                Delete
               </Button>
             )}
             {!requested && (
@@ -501,7 +501,7 @@ const StackWorkspace: React.FC<Props> = ({
                   setCreateModalOpen(true);
                 }}
               >
-                Create Stack
+                Create stack
               </Button>
             )}
           </SpaceBetween>
@@ -578,7 +578,7 @@ const StackWorkspace: React.FC<Props> = ({
             },
             {
               id: "created",
-              header: "Created Time",
+              header: "Created time",
               cell: (item) => (
                 <span style={{ color: "#879596", fontSize: "12px" }}>
                   {cfnTime(item.CreationTime)}
@@ -620,7 +620,7 @@ const StackWorkspace: React.FC<Props> = ({
                   variant="primary"
                   onClick={() => setCreateModalOpen(true)}
                 >
-                  Create Stack
+                  Create stack
                 </Button>
               </SpaceBetween>
             </Box>
@@ -875,17 +875,17 @@ const StackWorkspace: React.FC<Props> = ({
                               iconName="add-plus"
                               onClick={() => prepareEdit(true)}
                             >
-                              Create Change Set
+                              Create change set
                             </Button>
                           }
                         >
-                          Change Sets
+                          Change sets
                         </Header>
                       }
                       columnDefinitions={[
                         {
                           id: "name",
-                          header: "Change Set Name",
+                          header: "Change set name",
                           cell: (cs: any) => (
                             <Button
                               variant="inline-link"
@@ -1075,7 +1075,7 @@ const StackWorkspace: React.FC<Props> = ({
             Load example template
           </Button>
           <FormField
-            label="Stack Name"
+            label="Stack name"
             description="Unique alphanumeric identifier for the CloudFormation stack."
           >
             <Input
@@ -1177,7 +1177,7 @@ const StackWorkspace: React.FC<Props> = ({
       <Modal
         visible={changeSetModalOpen}
         onDismiss={() => !creatingChangeSet && setChangeSetModalOpen(false)}
-        header={`Create Change Set for ${activeStack?.StackName}`}
+        header={`Create change set for ${activeStack?.StackName}`}
         size="large"
         footer={
           <Box float="right">
@@ -1196,14 +1196,14 @@ const StackWorkspace: React.FC<Props> = ({
                 loading={creatingChangeSet}
                 onClick={handleCreateChangeSet}
               >
-                Create Change Set
+                Create change set
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="m">
-          <FormField label="Change Set Name">
+          <FormField label="Change set name">
             <Input
               value={changeSetName}
               onChange={({ detail }) => setChangeSetName(detail.value)}
@@ -1281,7 +1281,7 @@ const StackWorkspace: React.FC<Props> = ({
       <Modal
         visible={deleteModalOpen}
         onDismiss={() => !deleting && setDeleteModalOpen(false)}
-        header={`Delete Stack: ${activeStack?.StackName}`}
+        header={`Delete stack ${activeStack?.StackName}?`}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
@@ -1293,7 +1293,7 @@ const StackWorkspace: React.FC<Props> = ({
                 loading={deleting}
                 onClick={handleDeleteStack}
               >
-                Confirm Delete
+                Delete
               </Button>
             </SpaceBetween>
           </Box>

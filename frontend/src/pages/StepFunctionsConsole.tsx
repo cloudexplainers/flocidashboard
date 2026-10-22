@@ -17,7 +17,6 @@ import Textarea from "@cloudscape-design/components/textarea";
 import Select from "@cloudscape-design/components/select";
 import Modal from "@cloudscape-design/components/modal";
 import Box from "@cloudscape-design/components/box";
-import Badge from "@cloudscape-design/components/badge";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Alert from "@cloudscape-design/components/alert";
 import TextFilter from "@cloudscape-design/components/text-filter";
@@ -596,15 +595,19 @@ const StepWorkspace: React.FC<StepFunctionsConsoleProps> = ({
                           {
                             id: "type",
                             header: "Type",
-                            cell: (item: any) => (
-                              <Badge color="blue">{item.Type}</Badge>
-                            ),
+                            cell: (item: any) =>
+                              item.Type === "STANDARD" ? "Standard" : item.Type === "EXPRESS" ? "Express" : item.Type,
                             width: 130,
                           },
                           {
                             id: "arn",
                             header: "ARN",
                             cell: (item: any) => <code>{item.Arn}</code>,
+                          },
+                          {
+                            id: "created",
+                            header: "Creation date",
+                            cell: (item: any) => executionDate(item.CreationDate),
                           },
                         ]}
                         items={filteredMachines}
