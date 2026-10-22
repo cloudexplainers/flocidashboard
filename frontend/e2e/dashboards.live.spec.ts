@@ -491,7 +491,7 @@ test('S3 and Lambda live resource links preserve emulator resource selection', a
     run(`s3.create_bucket(Bucket='${bucket}')\nbuf=io.BytesIO()\nwith zipfile.ZipFile(buf,'w') as z: z.writestr('worker.py','def handler(event, context): return event')\nlam.create_function(FunctionName='${fn}',Runtime='python3.12',Handler='worker.handler',Role='arn:aws:iam::000000000000:role/lambda-basic-execution',Code={'ZipFile':buf.getvalue()},MemorySize=256,Timeout=12)`);
     await page.goto(`/s3/objects?bucket=${bucket}`);
     await expect(page.getByRole('heading', { name: `Bucket: ${bucket}`, exact: true })).toBeVisible();
-    await page.getByRole('tab', { name: 'Properties & Hosting', exact: true }).click();
+    await page.getByRole('tab', { name: 'Properties', exact: true }).click();
     await page.reload();
     await expect(page.getByRole('heading', { name: `Bucket: ${bucket}`, exact: true })).toBeVisible();
     await page.goto(`/lambda/code?function=${fn}`);

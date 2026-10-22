@@ -425,39 +425,72 @@ export async function executeServiceAction(
   return data;
 }
 
-// S3 Deepening APIs
-export async function fetchS3Objects(bucketName: string, prefix: string = ''): Promise<{ contents: any[]; folders: any[]; count: number }> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/?prefix=${encodeURIComponent(prefix)}&delimiter=`);
-    if (!res.ok) return { contents: [], folders: [], count: 0 };
-    return await res.json();
-  } catch (err) {
-    console.error('Failed to fetch S3 objects:', err);
-    return { contents: [], folders: [], count: 0 };
+// S3 console APIs. Each helper mirrors one S3 API call through /api/s3/buckets/.
+const s3Bucket = (name: string) => `/api/s3/buckets/${encodeURIComponent(name)}`;
+
+export interface S3ObjectListing {
+  prefix: string;
+  folders: Array<{ prefix: string; name: string }>;
+  objects: Array<{ key: string; name: string; size: number | null; etag?: string; last_modified?: string; storage_class?: string }>;
+  is_truncated: boolean;
+  key_count: number;
+}
+
+/** ListObjectsV2 with Delimiter "/" so prefixes show as folders, like the S3 console. */
+export async function fetchS3Objects(bucketName: string, prefix: string = ''): Promise<S3ObjectListing> {
+  const params = new URLSearchParams({ prefix, delimiter: '/', max_keys: '1000' });
+  return requestJson(`${s3Bucket(bucketName)}/objects/?${params}`, { errorMessage: 'Failed to list objects' });
+}
+
+export async function createS3Bucket(name: string, region?: string): Promise<any> {
+  return requestJson('/api/s3/buckets/', { method: 'POST', json: { name, region }, errorMessage: 'Failed to create bucket' });
+}
+
+export async function deleteS3Bucket(name: string): Promise<any> {
+  return requestJson(`${s3Bucket(name)}/`, { method: 'DELETE', errorMessage: 'Failed to delete bucket' });
+}
+
+export async function emptyS3Bucket(name: string): Promise<{ deleted_count: number }> {
+  return requestJson(`${s3Bucket(name)}/empty/`, { method: 'POST', errorMessage: 'Failed to empty bucket' });
+}
+
+export async function uploadS3Object(bucketName: string, key: string, content: { file?: File; text?: string; contentType?: string }): Promise<any> {
+  if (content.file) {
+    const form = new FormData();
+    form.append('key', key);
+    form.append('file', content.file);
+    const res = await fetch(`${s3Bucket(bucketName)}/objects/`, { method: 'POST', headers: { 'X-CSRFToken': getCsrfToken() }, body: form });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error) throw new Error(data.error || `Upload failed with HTTP ${res.status}`);
+    return data;
   }
+  return requestJson(`${s3Bucket(bucketName)}/objects/`, {
+    method: 'POST',
+    json: { key, body: content.text || '', content_type: content.contentType || undefined },
+    errorMessage: 'Failed to upload object',
+  });
+}
+
+export function s3DownloadUrl(bucketName: string, key: string): string {
+  return `${s3Bucket(bucketName)}/objects/download/?${new URLSearchParams({ key })}`;
 }
 
 export async function presignS3Object(bucketName: string, key: string, expiresIn: number = 3600): Promise<{ url: string; expires_in: number }> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/presign/`, {
+  return requestJson(`${s3Bucket(bucketName)}/objects/presign/`, {
     method: 'POST',
     json: { key, expires_in: expiresIn },
     errorMessage: `Failed to generate presigned URL`,
   });
 }
 
-export async function fetchS3Website(bucketName: string): Promise<any> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/website/`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.configuration || null;
-  } catch {
-    return null;
-  }
+/** GetBucketWebsite plus the website endpoint Floci serves it on (null when hosting is disabled). */
+export async function fetchS3Website(bucketName: string): Promise<{ configuration: any | null; endpoint: string | null }> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/website/`, { errorMessage: 'Failed to read website configuration' });
+  return { configuration: data.configuration || null, endpoint: data.endpoint || null };
 }
 
 export async function putS3Website(bucketName: string, config: { IndexDocument: { Suffix: string }; ErrorDocument?: { Key: string } }): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/website/`, {
+  return requestJson(`${s3Bucket(bucketName)}/website/`, {
     method: 'PUT',
     json: { configuration: config },
     errorMessage: `Failed to update website configuration`,
@@ -465,25 +498,17 @@ export async function putS3Website(bucketName: string, config: { IndexDocument: 
 }
 
 export async function deleteS3Website(bucketName: string): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/website/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`${s3Bucket(bucketName)}/website/`, { method: 'DELETE', errorMessage: 'Failed to disable website hosting' });
 }
 
 export async function fetchS3Notifications(bucketName: string): Promise<any> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/notifications/`);
-    if (!res.ok) return {};
-    return await res.json();
-  } catch {
-    return {};
-  }
+  const data = await requestJson(`${s3Bucket(bucketName)}/notifications/`, { errorMessage: 'Failed to read event notifications' });
+  const { ResponseMetadata: _ignored, ...config } = data || {};
+  return config;
 }
 
 export async function putS3Notifications(bucketName: string, config: any): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/notifications/`, {
+  return requestJson(`${s3Bucket(bucketName)}/notifications/`, {
     method: 'PUT',
     json: config,
     errorMessage: `Failed to update notifications`,
@@ -491,16 +516,11 @@ export async function putS3Notifications(bucketName: string, config: any): Promi
 }
 
 export async function deleteS3Object(bucketName: string, key: string): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ keys: [{ Key: key }] }),
-  });
-  return await res.json();
+  return requestJson(`${s3Bucket(bucketName)}/objects/`, { method: 'DELETE', json: { keys: [{ key }] }, errorMessage: 'Failed to delete object' });
 }
 
 export async function createS3Folder(bucketName: string, folder: string): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/folders/`, {
+  return requestJson(`${s3Bucket(bucketName)}/folders/`, {
     method: 'PUT',
     json: { folder },
     errorMessage: `Failed to create folder`,
@@ -1002,124 +1022,112 @@ export async function deleteRdsParameterGroup(name: string): Promise<any> {
   return requestJson(`/api/rds/parameter-groups/${encodeURIComponent(name)}/`, { method: 'DELETE', errorMessage: 'RDS operation failed' });
 }
 
-// S3 Deepening APIs (Permissions & Properties)
+// S3 bucket permissions and properties
+/** GetBucketPolicy. Returns the policy as formatted JSON, or '' when the bucket has none. */
 export async function fetchS3BucketPolicy(bucketName: string): Promise<string> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/policy/`);
-    if (!res.ok) return '';
-    const data = await res.json();
-    return data.policy || (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
-  } catch {
-    return '';
-  }
+  const data = await requestJson(`${s3Bucket(bucketName)}/policy/`, { errorMessage: 'Failed to read bucket policy' });
+  return data.policy ? JSON.stringify(data.policy, null, 2) : '';
 }
 
 export async function putS3BucketPolicy(bucketName: string, policy: string): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/policy/`, {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(policy);
+  } catch {
+    throw new Error('Policy is not valid JSON.');
+  }
+  return requestJson(`${s3Bucket(bucketName)}/policy/`, {
     method: 'PUT',
-    json: { policy },
+    json: { policy: parsed },
     errorMessage: 'Failed to update bucket policy',
   });
 }
 
 export async function deleteS3BucketPolicy(bucketName: string): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/policy/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`${s3Bucket(bucketName)}/policy/`, { method: 'DELETE', errorMessage: 'Failed to delete bucket policy' });
 }
 
-export async function fetchS3BucketCors(bucketName: string): Promise<any> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/cors/`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
+/** GetBucketCors. Returns the CORSRules array, empty when no configuration exists. */
+export async function fetchS3BucketCors(bucketName: string): Promise<any[]> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/cors/`, { errorMessage: 'Failed to read CORS configuration' });
+  return Array.isArray(data.rules) ? data.rules : [];
 }
 
-export async function putS3BucketCors(bucketName: string, corsRules: any): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/cors/`, {
+export async function putS3BucketCors(bucketName: string, corsRules: unknown): Promise<any> {
+  if (!Array.isArray(corsRules)) throw new Error('CORS configuration must be a JSON array of rules.');
+  return requestJson(`${s3Bucket(bucketName)}/cors/`, {
     method: 'PUT',
-    json: { cors_configuration: corsRules },
+    json: { rules: corsRules },
     errorMessage: 'Failed to update CORS',
   });
 }
 
 export async function deleteS3BucketCors(bucketName: string): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/cors/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`${s3Bucket(bucketName)}/cors/`, { method: 'DELETE', errorMessage: 'Failed to delete CORS configuration' });
 }
 
-export async function fetchS3BucketVersioning(bucketName: string): Promise<{ status: string }> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/versioning/`);
-    if (!res.ok) return { status: 'Suspended' };
-    const data = await res.json();
-    return { status: data.Status || data.status || 'Suspended' };
-  } catch {
-    return { status: 'Suspended' };
-  }
+/** GetBucketVersioning. A bucket that has never had versioning enabled has no Status, which the console shows as Disabled. */
+export async function fetchS3BucketVersioning(bucketName: string): Promise<{ status: 'Enabled' | 'Suspended' | 'Disabled'; mfaDelete?: string }> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/versioning/`, { errorMessage: 'Failed to read versioning' });
+  return { status: data.Status || 'Disabled', mfaDelete: data.MFADelete };
 }
 
 export async function putS3BucketVersioning(bucketName: string, status: 'Enabled' | 'Suspended'): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/versioning/`, {
+  return requestJson(`${s3Bucket(bucketName)}/versioning/`, {
     method: 'PUT',
     json: { status },
     errorMessage: 'Failed to update versioning',
   });
 }
 
-export async function fetchS3BucketPublicAccessBlock(bucketName: string): Promise<any> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/public-access-block/`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
+export interface S3PublicAccessBlock {
+  BlockPublicAcls?: boolean;
+  IgnorePublicAcls?: boolean;
+  BlockPublicPolicy?: boolean;
+  RestrictPublicBuckets?: boolean;
 }
 
-export async function putS3BucketPublicAccessBlock(bucketName: string, config: any): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/public-access-block/`, {
+/** GetPublicAccessBlock. Returns null when the bucket has no configuration (every setting off). */
+export async function fetchS3BucketPublicAccessBlock(bucketName: string): Promise<S3PublicAccessBlock | null> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/public-access-block/`, { errorMessage: 'Failed to read Block Public Access' });
+  return data.configuration || null;
+}
+
+export async function putS3BucketPublicAccessBlock(bucketName: string, config: S3PublicAccessBlock): Promise<any> {
+  return requestJson(`${s3Bucket(bucketName)}/public-access-block/`, {
     method: 'PUT',
-    json: config,
+    json: { configuration: config },
     errorMessage: 'Failed to update public access block',
   });
 }
 
-export async function fetchS3ObjectTags(bucketName: string, key: string): Promise<any[]> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/tags/?key=${encodeURIComponent(key)}`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.tags || data.TagSet || [];
-  } catch {
-    return [];
-  }
+/** GetBucketEncryption. Returns null when no default encryption configuration exists. */
+export async function fetchS3BucketEncryption(bucketName: string): Promise<any | null> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/encryption/`, { errorMessage: 'Failed to read default encryption' });
+  return data.configuration || null;
+}
+
+export async function fetchS3BucketTags(bucketName: string): Promise<Array<{ Key: string; Value: string }>> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/tags/`, { errorMessage: 'Failed to read bucket tags' });
+  return data.tags || [];
+}
+
+export async function fetchS3ObjectTags(bucketName: string, key: string): Promise<Array<{ Key: string; Value: string }>> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/objects/tags/?${new URLSearchParams({ key })}`, { errorMessage: 'Failed to read object tags' });
+  return data.tags || [];
 }
 
 export async function putS3ObjectTags(bucketName: string, key: string, tags: Array<{ Key: string; Value: string }>): Promise<any> {
-  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/tags/`, {
+  return requestJson(`${s3Bucket(bucketName)}/objects/tags/`, {
     method: 'PUT',
     json: { key, tags },
     errorMessage: 'Failed to update object tags',
   });
 }
 
-export async function fetchS3ObjectHead(bucketName: string, key: string): Promise<any> {
-  try {
-    const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/head/?key=${encodeURIComponent(key)}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
+/** HeadObject, returned with the backend's snake_case field names. */
+export async function fetchS3ObjectHead(bucketName: string, key: string): Promise<{ content_type?: string; content_length?: number; etag?: string; last_modified?: string; storage_class?: string; metadata?: Record<string, string>; versioning?: string } | null> {
+  return requestJson(`${s3Bucket(bucketName)}/objects/head/?${new URLSearchParams({ key })}`, { errorMessage: 'Failed to read object metadata' });
 }
 
 // CloudFormation Operational APIs

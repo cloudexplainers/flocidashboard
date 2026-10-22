@@ -278,3 +278,42 @@ class S3ObjectApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['deleted'])
         delete_mock.assert_called_once_with('my-bucket')
+
+
+class S3ConsoleAccuracyTests(SimpleTestCase):
+    @patch('dashboard.s3_views.delete_s3_policy')
+    def test_delete_bucket_policy(self, delete_mock):
+        delete_mock.return_value = {'deleted': True}
+
+        response = self.client.delete(reverse('dashboard:s3-bucket-policy', args=['demo-bucket']))
+
+        self.assertEqual(response.status_code, 200)
+        delete_mock.assert_called_once_with('demo-bucket')
+
+    @patch.dict('os.environ', {'FLOCI_PUBLIC_ENDPOINT_URL': 'http://localhost:4566'})
+    def test_website_endpoint_uses_public_host_and_region(self):
+        from .s3_api import s3_website_endpoint
+
+        self.assertEqual(
+            s3_website_endpoint('site', 'eu-west-1'),
+            'http://site.s3-website-eu-west-1.localhost:4566',
+        )
+
+    @patch('dashboard.s3_views.get_s3_website_with_endpoint')
+    def test_website_get_returns_endpoint(self, get_mock):
+        get_mock.return_value = {'configuration': {'IndexDocument': {'Suffix': 'index.html'}}, 'endpoint': 'http://x'}
+
+        response = self.client.get(reverse('dashboard:s3-bucket-website', args=['demo-bucket']))
+
+        self.assertEqual(response.json()['endpoint'], 'http://x')
+
+    @patch.dict('os.environ', {'FLOCI_PUBLIC_ENDPOINT_URL': 'http://localhost:4566'})
+    @patch('dashboard.s3_api.FlociClientFactory')
+    def test_presign_signs_against_public_endpoint(self, factory_mock):
+        from .s3_api import presign_s3_object
+
+        factory_mock.return_value.client.return_value.generate_presigned_url.return_value = 'http://localhost:4566/b/k?sig'
+
+        presign_s3_object('b', 'k')
+
+        factory_mock.assert_called_with(endpoint_url='http://localhost:4566')

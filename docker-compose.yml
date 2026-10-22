@@ -35,6 +35,8 @@ services:
       FLOCI_DASHBOARD_DB: /app/data/db.sqlite3
       FLOCI_AWS_ENDPOINT_URL: http://floci:4566
       AWS_ENDPOINT_URL: http://floci:4566
+      # Host-side Floci URL for links opened in the browser (presigned URLs, website endpoints).
+      FLOCI_PUBLIC_ENDPOINT_URL: http://localhost:${FLOCI_PORT:-4566}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}

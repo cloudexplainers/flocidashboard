@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
+from urllib.parse import urlparse
 
 from botocore.exceptions import ClientError
 
@@ -25,6 +27,24 @@ def _bucket_encryption(s3, bucket: str) -> dict[str, Any]:
 
 def _s3_client():
     return FlociClientFactory().client('s3')
+
+
+def public_endpoint_url() -> str:
+    """The Floci URL a browser can reach.
+
+    Inside Docker the dashboard talks to http://floci:4566, which the host's browser
+    cannot resolve. FLOCI_PUBLIC_ENDPOINT_URL names the host-side URL for links the
+    console hands to the browser (presigned URLs, website endpoints).
+    """
+    return (os.getenv('FLOCI_PUBLIC_ENDPOINT_URL') or FlociClientFactory().endpoint_url).rstrip('/')
+
+
+def s3_website_endpoint(bucket: str, region: str | None) -> str:
+    """Website endpoint in the AWS shape http://<bucket>.s3-website-<region>.<host>, served by Floci."""
+    parsed = urlparse(public_endpoint_url())
+    host = parsed.hostname or 'localhost'
+    port = f':{parsed.port}' if parsed.port else ''
+    return f'http://{bucket}.s3-website-{region or "us-east-1"}.{host}{port}'
 
 
 def client_error_payload(exc: Exception) -> dict[str, Any]:
@@ -461,7 +481,8 @@ def put_s3_object_tags(
 
 
 def presign_s3_object(bucket: str, key: str, version_id: str | None = None, expires_in: int = 3600) -> str:
-    s3 = _s3_client()
+    # Sign against the browser-reachable host: the Host header is part of the signature.
+    s3 = FlociClientFactory(endpoint_url=public_endpoint_url()).client('s3')
     params: dict[str, Any] = {'Bucket': bucket, 'Key': key}
     if version_id:
         params['VersionId'] = version_id
@@ -501,6 +522,11 @@ def get_s3_policy(bucket: str) -> dict[str, Any] | None:
 def put_s3_policy(bucket: str, policy: dict[str, Any]) -> dict[str, Any]:
     _s3_client().put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
     return policy
+
+
+def delete_s3_policy(bucket: str) -> dict[str, bool]:
+    _s3_client().delete_bucket_policy(Bucket=bucket)
+    return {'deleted': True}
 
 
 def get_s3_cors(bucket: str) -> list[dict[str, Any]]:
@@ -611,6 +637,18 @@ def get_s3_website(bucket: str) -> dict[str, Any] | None:
         lambda: _s3_client().get_bucket_website(Bucket=bucket),
         {'NoSuchWebsiteConfiguration', 'NoSuchBucket'},
     )
+
+
+def get_s3_website_with_endpoint(bucket: str) -> dict[str, Any]:
+    s3 = _s3_client()
+    configuration = get_s3_website(bucket)
+    if isinstance(configuration, dict):
+        configuration = {k: v for k, v in configuration.items() if k != 'ResponseMetadata'}
+    region = _s3_optional(lambda: _s3_bucket_location(s3, bucket), {'NoSuchBucket'})
+    return {
+        'configuration': configuration,
+        'endpoint': s3_website_endpoint(bucket, region if isinstance(region, str) else None) if configuration else None,
+    }
 
 
 def put_s3_website(bucket: str, config: dict[str, Any]) -> dict[str, Any]:

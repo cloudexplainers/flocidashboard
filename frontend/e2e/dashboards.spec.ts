@@ -824,7 +824,7 @@ test('S3 bucket links preserve selection across tabs and reload without claiming
   await page.goto('/s3/objects?bucket=photos+%26+reports');
   await expect(page.getByRole('heading', { name: 'Bucket: photos & reports', exact: true })).toBeVisible();
   await expect(page.getByText('Bucket and objects not public', { exact: true })).toHaveCount(0);
-  await page.getByRole('tab', { name: 'Permissions & Policy', exact: true }).click();
+  await page.getByRole('tab', { name: 'Permissions', exact: true }).click();
   await expect(page).toHaveURL(/s3\/permissions\?bucket=photos\+%26\+reports/);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Bucket: photos & reports', exact: true })).toBeVisible();

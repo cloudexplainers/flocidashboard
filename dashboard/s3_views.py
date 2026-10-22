@@ -28,6 +28,8 @@ from .s3_api import (
     get_s3_notifications,
     get_s3_object_tags,
     get_s3_policy,
+    get_s3_website_with_endpoint,
+    delete_s3_policy,
     get_s3_public_access_block,
     get_s3_versioning,
     get_s3_website,
@@ -365,7 +367,7 @@ def s3_bucket_versioning(request, bucket_name: str):
         return _handle_s3(exc)
 
 
-@require_http_methods(['GET', 'PUT'])
+@require_http_methods(['GET', 'PUT', 'DELETE'])
 def s3_bucket_policy(request, bucket_name: str):
     err = _validate_bucket(bucket_name)
     if err:
@@ -374,6 +376,11 @@ def s3_bucket_policy(request, bucket_name: str):
         try:
             policy = get_s3_policy(bucket_name)
             return JsonResponse({'policy': policy})
+        except Exception as exc:
+            return _handle_s3(exc)
+    if request.method == 'DELETE':
+        try:
+            return JsonResponse(delete_s3_policy(bucket_name))
         except Exception as exc:
             return _handle_s3(exc)
     try:
@@ -520,7 +527,7 @@ def s3_bucket_website(request, bucket_name: str):
         return _json_error(err)
     if request.method == 'GET':
         try:
-            return JsonResponse({'configuration': get_s3_website(bucket_name)})
+            return JsonResponse(get_s3_website_with_endpoint(bucket_name))
         except Exception as exc:
             return _handle_s3(exc)
     if request.method == 'DELETE':
