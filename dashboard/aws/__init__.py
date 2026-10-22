@@ -876,51 +876,6 @@ def wafv2_inventory() -> dict[str, Any]:
     }
 
 
-def docdb_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    docdb = factory.client('docdb')
-    operations = set(docdb.meta.service_model.operation_names)
-
-    clusters = _safe_value(
-        lambda: _operation_items(docdb, 'describe_db_clusters', 'DBClusters'),
-        [],
-    ) if 'DescribeDBClusters' in operations else []
-    instances = _safe_value(
-        lambda: _operation_items(docdb, 'describe_db_instances', 'DBInstances'),
-        [],
-    ) if 'DescribeDBInstances' in operations else []
-
-    return {
-        'summary': {
-            'clusters': len(clusters),
-            'instances': len(instances),
-            'available_sdk_operations': len(operations),
-        },
-        'clusters': _clean_response(clusters),
-        'instances': _clean_response(instances),
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'CreateDBCluster',
-                'DescribeDBClusters',
-                'DeleteDBCluster',
-                'CreateDBInstance',
-                'DescribeDBInstances',
-                'DeleteDBInstance',
-                'ListTagsForResource',
-                'AddTagsToResource',
-                'RemoveTagsFromResource',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.26 adds Amazon DocumentDB service emulation with cluster and instance lifecycle APIs.',
-            'DocumentDB can run in mock mode or start a MongoDB-compatible data container for created clusters.',
-        ],
-    }
-
-
 def memorydb_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     memorydb = factory.client('memorydb')
@@ -7131,36 +7086,6 @@ def list_neptune_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     return resources
 
 
-def list_docdb_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    docdb = factory.client('docdb')
-    operations = set(docdb.meta.service_model.operation_names)
-    resources: list[dict[str, Any]] = []
-
-    if 'DescribeDBClusters' in operations:
-        resources.extend(
-            {
-                'type': 'db_cluster',
-                'name': cluster.get('DBClusterIdentifier'),
-                'arn': cluster.get('DBClusterArn'),
-                'status': cluster.get('Status'),
-            }
-            for cluster in _safe_value(lambda: _operation_items(docdb, 'describe_db_clusters', 'DBClusters'), [])
-        )
-
-    if 'DescribeDBInstances' in operations:
-        resources.extend(
-            {
-                'type': 'db_instance',
-                'name': instance.get('DBInstanceIdentifier'),
-                'arn': instance.get('DBInstanceArn'),
-                'status': instance.get('DBInstanceStatus'),
-            }
-            for instance in _safe_value(lambda: _operation_items(docdb, 'describe_db_instances', 'DBInstances'), [])
-        )
-
-    return resources
-
-
 def list_transcribe_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     transcribe = factory.client('transcribe')
     operations = set(transcribe.meta.service_model.operation_names)
@@ -7332,7 +7257,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('s3vectors-resources', 'S3 Vectors resources', list_s3vectors_resources),
         ('sqs-queues', 'SQS queues', list_sqs_queues),
         ('dynamodb-tables', 'DynamoDB tables', list_dynamodb_tables),
-        ('docdb-resources', 'DocumentDB resources', list_docdb_resources),
+        ('docdb-resources', 'DocumentDB resources', docdb.list_docdb_resources),
         ('sns-topics', 'SNS topics', list_sns_topics),
         ('ses-resources', 'SES resources', list_ses_resources),
         ('scheduler-resources', 'EventBridge Scheduler resources', list_scheduler_resources),
@@ -7393,6 +7318,7 @@ from . import (  # noqa: E402
     config,
     costexplorer,
     cur,
+    docdb,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -7419,4 +7345,5 @@ from .cognito import cognito_inventory  # noqa: E402
 from .config import config_inventory  # noqa: E402
 from .costexplorer import costexplorer_inventory  # noqa: E402
 from .cur import cur_inventory  # noqa: E402
+from .docdb import docdb_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
