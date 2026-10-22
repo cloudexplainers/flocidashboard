@@ -49,6 +49,11 @@ jobs:
         env:
           E2E_PYTHON: python
           E2E_FLOCI_ENDPOINT: http://localhost:4566
+      # Floci downloads the k3s image inside the first EKS create request and can drop
+      # that connection, failing the EKS live test's first attempt. This is the image
+      # Floci uses for the console's default Kubernetes 1.30; update the tag if Floci
+      # changes it (its log says "Starting k3s container ... using image ...").
+      - run: docker pull -q rancher/k3s:v1.30.10-k3s1
       - run: npm run test:e2e:live
         working-directory: frontend
         env:
