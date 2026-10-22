@@ -735,94 +735,6 @@ def _error_code(exc: Exception) -> Optional[str]:
     return None
 
 
-def _s3_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
-    try:
-        return _clean_response(loader())
-    except ClientError as exc:
-        if _error_code(exc) in empty_codes:
-            return None
-        return {'error': str(exc)}
-    except (BotoCoreError, ValueError, json.JSONDecodeError) as exc:
-        return {'error': str(exc)}
-
-
-def _s3_bucket_location(s3, bucket: str) -> str:
-    response = s3.get_bucket_location(Bucket=bucket)
-    return response.get('LocationConstraint') or 'us-east-1'
-
-
-def _s3_bucket_objects(s3, bucket: str) -> list[dict[str, Any]]:
-    objects = _safe_value(
-        lambda: _paginate(s3, 'list_objects_v2', 'Contents', Bucket=bucket),
-        [],
-    )
-
-    return [
-        {
-            'key': item.get('Key'),
-            'size': item.get('Size'),
-            'etag': item.get('ETag'),
-            'last_modified': item.get('LastModified'),
-            'storage_class': item.get('StorageClass'),
-        }
-        for item in objects
-    ]
-
-
-def _s3_bucket_versions(s3, bucket: str) -> dict[str, Any]:
-    response = _s3_optional(
-        lambda: s3.list_object_versions(Bucket=bucket),
-        {'NoSuchBucket'},
-    )
-
-    if not response or 'error' in response:
-        return response or {'versions': [], 'delete_markers': []}
-
-    return {
-        'versions': [
-            {
-                'key': item.get('Key'),
-                'version_id': item.get('VersionId'),
-                'latest': item.get('IsLatest'),
-                'size': item.get('Size'),
-                'last_modified': item.get('LastModified'),
-            }
-            for item in response.get('Versions', [])
-        ],
-        'delete_markers': [
-            {
-                'key': item.get('Key'),
-                'version_id': item.get('VersionId'),
-                'latest': item.get('IsLatest'),
-                'last_modified': item.get('LastModified'),
-            }
-            for item in response.get('DeleteMarkers', [])
-        ],
-    }
-
-
-def create_s3_bucket(name: str, region: str | None = None) -> dict[str, Any]:
-    factory = FlociClientFactory()
-    s3 = factory.client('s3')
-    resolved_region = (region or factory.region or 'us-east-1').strip()
-
-    if resolved_region == 'us-east-1':
-        s3.create_bucket(Bucket=name)
-    else:
-        s3.create_bucket(
-            Bucket=name,
-            CreateBucketConfiguration={'LocationConstraint': resolved_region},
-        )
-
-    return {'name': name, 'region': resolved_region}
-
-
-def s3_inventory() -> dict[str, Any]:
-    from ..s3_api import s3_inventory_summary
-
-    return s3_inventory_summary()
-
-
 def costexplorer_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     ce = factory.client('ce')
@@ -9370,16 +9282,6 @@ def list_iam_roles(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ]
 
 
-def list_s3_buckets(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    return [
-        {
-            'name': bucket.get('Name'),
-            'created': bucket.get('CreationDate'),
-        }
-        for bucket in factory.client('s3').list_buckets().get('Buckets', [])
-    ]
-
-
 def list_sqs_queues(factory: FlociClientFactory) -> list[dict[str, Any]]:
     urls = factory.client('sqs').list_queues().get('QueueUrls', [])
     return _string_items(urls, 'url')
@@ -11604,7 +11506,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('iot-resources', 'IoT Core resources', list_iot_resources),
         ('ec2-resources', 'EC2 resources', list_ec2_resources),
         ('ecs-resources', 'ECS resources', list_ecs_resources),
-        ('s3-buckets', 'S3 buckets', list_s3_buckets),
+        ('s3-buckets', 'S3 buckets', s3.list_s3_buckets),
         ('s3vectors-resources', 'S3 Vectors resources', list_s3vectors_resources),
         ('sqs-queues', 'SQS queues', list_sqs_queues),
         ('dynamodb-tables', 'DynamoDB tables', list_dynamodb_tables),
@@ -11641,3 +11543,10 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
             lambda args: _resource(args[0], args[1], partial(args[2], factory)),
             resource_loaders,
         ))
+
+
+# Service modules. Imported last because they use the helpers above.
+from . import (  # noqa: E402
+    s3,
+)
+from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
