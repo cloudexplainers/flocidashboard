@@ -14,3 +14,4 @@ frontend/test-results/
 frontend/playwright-report/
 test-results/
 .django_secret_key
+AGENTS.md
