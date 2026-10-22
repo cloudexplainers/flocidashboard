@@ -43,6 +43,13 @@ def dynamodb_inventory() -> dict[str, Any]:
             'name': table_name,
             'arn': table_arn,
             'status': description.get('TableStatus') if isinstance(description, dict) else None,
+            'created': description.get('CreationDateTime') if isinstance(description, dict) else None,
+            'deletion_protection': description.get('DeletionProtectionEnabled') if isinstance(description, dict) else None,
+            'table_class': (description.get('TableClassSummary') or {}).get('TableClass') if isinstance(description, dict) else None,
+            'continuous_backups': _dynamodb_optional(
+                lambda: dynamodb.describe_continuous_backups(TableName=table_name).get('ContinuousBackupsDescription', {}),
+                {'ResourceNotFoundException', 'TableNotFoundException'},
+            ),
             'item_count': description.get('ItemCount') if isinstance(description, dict) else None,
             'size_bytes': description.get('TableSizeBytes') if isinstance(description, dict) else None,
             'billing_mode': description.get('BillingModeSummary') if isinstance(description, dict) else None,

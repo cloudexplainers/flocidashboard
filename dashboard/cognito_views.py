@@ -13,6 +13,7 @@ from .cognito_api import (
     admin_delete_user,
     admin_set_user_password,
     create_group,
+    create_identity_pool,
     create_resource_server,
     create_user_pool,
     create_user_pool_client,
@@ -213,3 +214,15 @@ def cognito_user_state(request, user_pool_id: str, username: str):
         return JsonResponse(change_user_state(user_pool_id, username, body.get('action', '')))
     except Exception as exc:
         return handle_action_error(exc, service='cognito', operation='change_user_state')
+
+
+@require_http_methods(['POST'])
+def cognito_identity_pools_create(request):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(create_identity_pool(
+            body.get('identity_pool_name', ''),
+            allow_unauthenticated=body.get('allow_unauthenticated_identities') is True,
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='cognito', operation='create_identity_pool')

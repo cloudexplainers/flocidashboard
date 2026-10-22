@@ -146,3 +146,37 @@ class DynamoDBApiTests(SimpleTestCase):
     def test_partiql_rejects_non_select(self):
         with self.assertRaisesMessage(ValueError, 'Only read-only SELECT statements are allowed'):
             execute_select_statement('DELETE FROM "orders"')
+
+
+class DynamoDbTableManagementTests(SimpleTestCase):
+    def test_float_attributes_are_stored_as_numbers(self):
+        from .dynamodb_api import _serialize_item
+
+        self.assertEqual(_serialize_item({'price': 19.99}), {'price': {'N': '19.99'}})
+
+    @patch('dashboard.dynamodb_api._dynamodb_client')
+    def test_create_table_builds_key_schema_and_capacity(self, client_mock):
+        from .dynamodb_api import create_table
+
+        client_mock.return_value.create_table.return_value = {'TableDescription': {'TableStatus': 'ACTIVE'}}
+
+        create_table('Orders', partition_key={'name': 'pk', 'type': 'S'}, sort_key={'name': 'sk', 'type': 'N'}, billing_mode='PROVISIONED', read_capacity_units=2, write_capacity_units=3)
+
+        kwargs = client_mock.return_value.create_table.call_args.kwargs
+        self.assertEqual(kwargs['KeySchema'], [{'AttributeName': 'pk', 'KeyType': 'HASH'}, {'AttributeName': 'sk', 'KeyType': 'RANGE'}])
+        self.assertEqual(kwargs['ProvisionedThroughput'], {'ReadCapacityUnits': 2, 'WriteCapacityUnits': 3})
+
+    def test_create_table_rejects_invalid_names(self):
+        from .dynamodb_api import create_table
+
+        with self.assertRaises(ValueError):
+            create_table('a b', partition_key={'name': 'pk'})
+
+    @patch('dashboard.dynamodb_views.update_point_in_time_recovery')
+    def test_pitr_route(self, update_mock):
+        update_mock.return_value = {'table': 'Orders'}
+
+        response = self.client.put(reverse('dashboard:dynamodb-table-backups', args=['Orders']), data=json.dumps({'enabled': True}), content_type='application/json')
+
+        self.assertEqual(response.status_code, 200)
+        update_mock.assert_called_once_with('Orders', enabled=True)

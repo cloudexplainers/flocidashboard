@@ -107,3 +107,24 @@ Left as is:
 - There is no in-browser code editor or deploy; `UpdateFunctionCode` is supported by the backend (now including inline source) but not wired to an editor.
 - Layers, destinations, concurrency, permissions (resource policy), VPC and tags have backend routes but no editors in this console.
 
+## DynamoDB
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | Create table, delete table, put item, delete item, capacity changes, point-in-time recovery and TTL all went through the inventory endpoint and did nothing while reporting success. Create/delete table, capacity and PITR had no backend route at all. | Fixed: new routes for `CreateTable`, `DeleteTable`, `UpdateTable` (capacity mode) and `Describe/UpdateContinuousBackups`; items and TTL use their existing routes. |
+| High | Putting an item with a decimal number (for example `19.99`) failed with "Float types are not supported". | Fixed: JSON numbers are converted to `Decimal` before serialization. |
+| High | PITR always showed "Disabled" because the inventory never read continuous backups; the stream view type showed `NEW_AND_OLD_IMAGES` even when streams were off. | Fixed: inventory reads `DescribeContinuousBackups`; streams show Off, or On with the real view type. |
+| Medium | Capacity mode defaulted to on-demand when `BillingModeSummary` is absent, which in AWS means the table has always been provisioned. | Fixed. Capacity mode is shown as "On-demand" / "Provisioned". |
+| Medium | Deleting an item skipped a sort key of `0` (falsy check), and new items were pre-filled with invented attributes. | Fixed: the item template contains only the key attributes, and saving validates them. |
+| Medium | No confirmation for deleting tables or items. | Fixed ("confirm" typed for tables, as the console does). |
+| Medium | Creation date, deletion protection and table class were never shown. | Fixed: added to the inventory and Overview tab. |
+| Low | Status values were raw (`ACTIVE`), list columns did not match the console, and the PartiQL "latency" badge looked like a server metric. | Fixed: Active/Creating, Indexes, Deletion protection, Read/write capacity mode, Total size; the timing is labeled as round-trip time. |
+
+Left as is:
+- The PartiQL editor allows only `SELECT` (the backend refuses writes), and the items view is a Scan without the console's Query builder; `Query` exists in the backend.
+- Creating GSIs/LSIs, enabling streams, backups (on-demand), exports and global tables are not in this console.
+
+## Cross-cutting: Cognito identity pools
+
+`createCognitoIdentityPool` also used the broken action path, and the dashboard had no route for it. A `POST /api/cognito/identity-pools/` route (`CreateIdentityPool`) now exists; Floci supports Cognito identity pools.
+

@@ -426,7 +426,7 @@ test('resource details preserve returned SQS and DynamoDB ARNs across Regions', 
   const tableArn = 'arn:aws:dynamodb:eu-west-1:123456789012:table/Orders';
   await inventory(page, 'dynamodb', { tables: [{ TableName: 'Orders', TableArn: tableArn, PartitionKey: 'orderId' }] });
   await page.goto('/dynamodb/');
-  await page.getByRole('tab', { name: 'Table Overview', exact: true }).click();
+  await page.getByRole('tab', { name: 'Overview', exact: true }).click();
   await expect(page.getByText(tableArn, { exact: true })).toBeVisible();
 });
 
@@ -965,15 +965,15 @@ test('DynamoDB normalizes live schema, TTL, streams and capacity and preserves t
   await expect(page.getByText('customerId (String)', { exact: true })).toBeVisible();
   await expect(page.getByText('orderDate (Number)', { exact: true })).toBeVisible();
   await expect(page.getByText('ENABLED · expiresOn', { exact: true })).toBeVisible();
-  await expect(page.getByText('NEW_AND_OLD_IMAGES', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Capacity & Backups', exact: true }).click();
-  await expect(page.getByLabel('Read Capacity Units (RCU)', { exact: true })).toHaveValue('17');
-  await expect(page.getByLabel('Write Capacity Units (WCU)', { exact: true })).toHaveValue('9');
+  await expect(page.getByText('On · NEW_AND_OLD_IMAGES', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Capacity and backups', exact: true }).click();
+  await expect(page.getByLabel('Read capacity units', { exact: true })).toHaveValue('17');
+  await expect(page.getByLabel('Write capacity units', { exact: true })).toHaveValue('9');
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Table: Orders', exact: true })).toBeVisible();
   await page.getByRole('tab', { name: /Indexes/ }).click();
   await expect(page.getByRole('cell', { name: 'ByStatus', exact: true })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'KEYS_ONLY', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Keys only', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/screenshots/dynamodb-schema.png', fullPage: true });
 });
 

@@ -319,43 +319,16 @@ export async function runCliCommand(command: string, confirmed: boolean = false)
   return data;
 }
 
-export function executeServiceAction(
-  serviceKey: string,
-  actionKey: string,
-  payload: Record<string, any>
-): Promise<any>;
-export function executeServiceAction(
-  action: ServiceAction,
-  formValues: Record<string, any>,
-  fileValues?: Record<string, File>
-): Promise<any>;
+/**
+ * Runs a ServiceAction from /api/services/ against its own method and path.
+ * Pages call typed helpers instead; posting an action name to /api/<service>/ is not
+ * supported because those inventory endpoints ignore request bodies.
+ */
 export async function executeServiceAction(
-  actionOrServiceKey: string | ServiceAction,
-  actionKeyOrFormValues: string | Record<string, any>,
-  payloadOrFileValues: Record<string, any> = {}
+  actionOrServiceKey: ServiceAction,
+  actionKeyOrFormValues: Record<string, any> = {},
+  payloadOrFileValues: Record<string, File> = {}
 ): Promise<any> {
-  if (typeof actionOrServiceKey === 'string') {
-    const serviceKey = actionOrServiceKey;
-    const actionKey = actionKeyOrFormValues as string;
-    const payload = payloadOrFileValues as Record<string, any>;
-    const res = await fetch(`/api/${serviceKey}/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRFToken': getCsrfToken(),
-      },
-      body: JSON.stringify({
-        action: actionKey,
-        ...payload,
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || data.error) {
-      throw new Error(data.error || `Action failed with status ${res.status}`);
-    }
-    return data;
-  }
-
   const action = actionOrServiceKey;
   const formValues = (actionKeyOrFormValues || {}) as Record<string, any>;
   const fileValues = (payloadOrFileValues || {}) as Record<string, File>;
@@ -566,18 +539,31 @@ export async function executeDynamoDbPartiQL(statement: string, limit: number = 
   return requestJson('/api/dynamodb/partiql/', { method: 'POST', json: { statement, limit }, errorMessage: `PartiQL query failed` });
 }
 
+const dynamoTable = (name: string) => `/api/dynamodb/tables/${encodeURIComponent(name)}`;
+
+/** PutItem with a plain JSON document; the backend converts it to DynamoDB attribute values. */
 export async function putDynamoDbItem(tableName: string, item: Record<string, any>): Promise<any> {
-  return await executeServiceAction('dynamodb', 'put_item', {
-    table_name: tableName,
-    item,
-  });
+  return requestJson(`${dynamoTable(tableName)}/items/`, { method: 'POST', json: { item }, errorMessage: 'Failed to save item' });
 }
 
 export async function deleteDynamoDbItem(tableName: string, key: Record<string, any>): Promise<any> {
-  return await executeServiceAction('dynamodb', 'delete_item', {
-    table_name: tableName,
-    key,
-  });
+  return requestJson(`${dynamoTable(tableName)}/items/delete/`, { method: 'POST', json: { key }, errorMessage: 'Failed to delete item' });
+}
+
+export async function createDynamoDbTable(request: {
+  table_name: string;
+  partition_key: { name: string; type: string };
+  sort_key?: { name: string; type: string };
+  billing_mode: 'PAY_PER_REQUEST' | 'PROVISIONED';
+  read_capacity_units?: number;
+  write_capacity_units?: number;
+  deletion_protection?: boolean;
+}): Promise<any> {
+  return requestJson('/api/dynamodb/tables/', { method: 'POST', json: request, errorMessage: 'Failed to create table' });
+}
+
+export async function deleteDynamoDbTable(tableName: string): Promise<any> {
+  return requestJson(`${dynamoTable(tableName)}/`, { method: 'DELETE', errorMessage: 'Failed to delete table' });
 }
 
 // Lambda Deepening APIs
@@ -1453,29 +1439,23 @@ export async function removeUserFromIamGroup(groupName: string, userName: string
   return requestJson(`/api/iam/groups/${encodeURIComponent(groupName)}/members/`, { method: 'DELETE', json: { user_name: userName }, errorMessage: 'Failed to remove user from group' });
 }
 
-// DynamoDB Additional APIs
-export async function updateDynamoDbTableCapacity(tableName: string, billingMode: 'PAY_PER_REQUEST' | 'PROVISIONED', readUnits: number = 5, writeUnits: number = 5): Promise<any> {
-  return await executeServiceAction('dynamodb', 'update_table', {
-    table_name: tableName,
-    billing_mode: billingMode,
-    read_capacity_units: readUnits,
-    write_capacity_units: writeUnits,
+// DynamoDB capacity, backups and TTL
+/** UpdateTable BillingMode (and ProvisionedThroughput when provisioned). */
+export async function updateDynamoDbTableCapacity(tableName: string, billingMode: 'PAY_PER_REQUEST' | 'PROVISIONED', readUnits?: number, writeUnits?: number): Promise<any> {
+  return requestJson(`${dynamoTable(tableName)}/`, {
+    method: 'PATCH',
+    json: { billing_mode: billingMode, read_capacity_units: readUnits, write_capacity_units: writeUnits },
+    errorMessage: 'Failed to update capacity',
   });
 }
 
+/** UpdateContinuousBackups (point-in-time recovery). */
 export async function updateDynamoDbPitr(tableName: string, enabled: boolean): Promise<any> {
-  return await executeServiceAction('dynamodb', 'update_continuous_backups', {
-    table_name: tableName,
-    point_in_time_recovery_enabled: enabled,
-  });
+  return requestJson(`${dynamoTable(tableName)}/backups/`, { method: 'PUT', json: { enabled }, errorMessage: 'Failed to update point-in-time recovery' });
 }
 
 export async function updateDynamoDbTtl(tableName: string, attributeName: string, enabled: boolean): Promise<any> {
-  return await executeServiceAction('dynamodb', 'update_time_to_live', {
-    table_name: tableName,
-    attribute_name: attributeName,
-    enabled,
-  });
+  return requestJson(`${dynamoTable(tableName)}/ttl/`, { method: 'PUT', json: { attribute_name: attributeName, enabled }, errorMessage: 'Failed to update TTL' });
 }
 
 // Lambda configuration and aliases
@@ -1562,9 +1542,10 @@ export async function adminToggleCognitoUserState(userPoolId: string, username: 
 }
 
 export async function createCognitoIdentityPool(identityPoolName: string, allowUnauthenticated: boolean = false): Promise<any> {
-  return await executeServiceAction('cognito-identity', 'create_identity_pool', {
-    identity_pool_name: identityPoolName,
-    allow_unauthenticated_identities: allowUnauthenticated,
+  return requestJson('/api/cognito/identity-pools/', {
+    method: 'POST',
+    json: { identity_pool_name: identityPoolName, allow_unauthenticated_identities: allowUnauthenticated },
+    errorMessage: 'Failed to create identity pool',
   });
 }
 

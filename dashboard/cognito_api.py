@@ -308,3 +308,13 @@ def change_user_state(user_pool_id: str, username: str, action: str) -> dict[str
         UserPoolId=_required(user_pool_id, 'User pool ID'), Username=_required(username, 'Username'),
     )
     return {'username': username, 'action': action, 'response': _clean_response(response)}
+
+
+def create_identity_pool(name: str, *, allow_unauthenticated: bool = False) -> dict[str, Any]:
+    """CreateIdentityPool (Amazon Cognito identity pools / federated identities)."""
+    pool = FlociClientFactory().client('cognito-identity').create_identity_pool(
+        IdentityPoolName=_required(name, 'Identity pool name'),
+        AllowUnauthenticatedIdentities=bool(allow_unauthenticated),
+    )
+    pool.pop('ResponseMetadata', None)
+    return {'identity_pool_id': pool.get('IdentityPoolId'), 'name': pool.get('IdentityPoolName'), 'identity_pool': _clean_response(pool)}

@@ -7,7 +7,12 @@ from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
 from .dynamodb_api import (
+    create_table,
     delete_item,
+    delete_table,
+    describe_continuous_backups,
+    update_point_in_time_recovery,
+    update_table_capacity,
     describe_time_to_live,
     execute_select_statement,
     get_item,
@@ -119,3 +124,48 @@ def dynamodb_partiql_execute(request):
     except Exception as exc:
         return handle_action_error(exc, service='dynamodb', operation='execute_select_statement')
 
+
+
+@require_http_methods(['POST'])
+def dynamodb_tables_create(request):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(create_table(
+            body.get('table_name', ''),
+            partition_key=body.get('partition_key') or {},
+            sort_key=body.get('sort_key') or None,
+            billing_mode=body.get('billing_mode') or 'PAY_PER_REQUEST',
+            read_capacity_units=body.get('read_capacity_units'),
+            write_capacity_units=body.get('write_capacity_units'),
+            deletion_protection=body.get('deletion_protection') is True,
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='dynamodb', operation='create_table')
+
+
+@require_http_methods(['PATCH', 'DELETE'])
+def dynamodb_table_detail(request, table_name: str):
+    try:
+        if request.method == 'DELETE':
+            return JsonResponse(delete_table(table_name))
+        body = parse_json_body(request)
+        return JsonResponse(update_table_capacity(
+            table_name,
+            billing_mode=body.get('billing_mode', ''),
+            read_capacity_units=body.get('read_capacity_units'),
+            write_capacity_units=body.get('write_capacity_units'),
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='dynamodb', operation='delete_table' if request.method == 'DELETE' else 'update_table')
+
+
+@require_http_methods(['GET', 'PUT'])
+def dynamodb_table_backups(request, table_name: str):
+    try:
+        if request.method == 'GET':
+            return JsonResponse(describe_continuous_backups(table_name))
+        body = parse_json_body(request)
+        return JsonResponse(update_point_in_time_recovery(table_name, enabled=body.get('enabled') is True))
+    except Exception as exc:
+        operation = 'describe_continuous_backups' if request.method == 'GET' else 'update_continuous_backups'
+        return handle_action_error(exc, service='dynamodb', operation=operation)

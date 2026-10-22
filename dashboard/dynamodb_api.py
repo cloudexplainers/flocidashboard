@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from decimal import Decimal
 from typing import Any
 
@@ -55,10 +56,21 @@ def _deserialize_item(item: dict[str, Any]) -> dict[str, Any]:
     return _json_safe(item)
 
 
+def _decimals(value: Any) -> Any:
+    """JSON numbers arrive as floats; DynamoDB numbers must be Decimal (DynamoDB stores them exactly)."""
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, list):
+        return [_decimals(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _decimals(item) for key, item in value.items()}
+    return value
+
+
 def _serialize_value(val: Any) -> Any:
     if isinstance(val, dict) and len(val) == 1 and list(val.keys())[0] in {'S', 'N', 'B', 'SS', 'NS', 'BS', 'M', 'L', 'NULL', 'BOOL'}:
         return val
-    return serializer.serialize(val)
+    return serializer.serialize(_decimals(val))
 
 
 def _serialize_item(item: dict[str, Any]) -> dict[str, Any]:
@@ -301,3 +313,101 @@ def parse_start_key(value: Any) -> dict[str, Any] | None:
             raise ValueError('Exclusive start key must be a JSON object')
         return parsed
     raise ValueError('Exclusive start key must be a JSON object')
+
+
+TABLE_NAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]{3,255}$')
+KEY_TYPES = {'S', 'N', 'B'}
+
+
+def _key_attribute(name: Any, attribute_type: Any, label: str) -> tuple[str, str]:
+    clean = str(name or '').strip()
+    if not clean:
+        raise ValueError(f'{label} name is required')
+    clean_type = str(attribute_type or 'S').upper()
+    if clean_type not in KEY_TYPES:
+        raise ValueError(f'{label} type must be S, N or B')
+    return clean, clean_type
+
+
+def create_table(
+    table_name: str,
+    *,
+    partition_key: dict[str, Any],
+    sort_key: dict[str, Any] | None = None,
+    billing_mode: str = 'PAY_PER_REQUEST',
+    read_capacity_units: int | None = None,
+    write_capacity_units: int | None = None,
+    deletion_protection: bool = False,
+) -> dict[str, Any]:
+    """CreateTable with a partition key, optional sort key and capacity mode, as the console's Create table form."""
+    name = str(table_name or '').strip()
+    if not TABLE_NAME_PATTERN.match(name):
+        raise ValueError('Table name must be 3 to 255 characters: letters, numbers, underscores (_), hyphens (-) and periods (.)')
+    pk_name, pk_type = _key_attribute(partition_key.get('name'), partition_key.get('type'), 'Partition key')
+    key_schema = [{'AttributeName': pk_name, 'KeyType': 'HASH'}]
+    attributes = [{'AttributeName': pk_name, 'AttributeType': pk_type}]
+    if sort_key and str(sort_key.get('name') or '').strip():
+        sk_name, sk_type = _key_attribute(sort_key.get('name'), sort_key.get('type'), 'Sort key')
+        if sk_name == pk_name:
+            raise ValueError('Sort key must differ from the partition key')
+        key_schema.append({'AttributeName': sk_name, 'KeyType': 'RANGE'})
+        attributes.append({'AttributeName': sk_name, 'AttributeType': sk_type})
+    payload: dict[str, Any] = {
+        'TableName': name,
+        'KeySchema': key_schema,
+        'AttributeDefinitions': attributes,
+        'BillingMode': _billing_mode(billing_mode),
+        'DeletionProtectionEnabled': bool(deletion_protection),
+    }
+    if payload['BillingMode'] == 'PROVISIONED':
+        payload['ProvisionedThroughput'] = _throughput(read_capacity_units, write_capacity_units)
+    table = _dynamodb_client().create_table(**payload).get('TableDescription', {})
+    return {'table': name, 'arn': table.get('TableArn'), 'status': table.get('TableStatus')}
+
+
+def delete_table(table_name: str) -> dict[str, Any]:
+    clean_name = validate_table_name(table_name)
+    table = _dynamodb_client().delete_table(TableName=clean_name).get('TableDescription', {})
+    return {'table': clean_name, 'status': table.get('TableStatus'), 'deleted': True}
+
+
+def _billing_mode(value: Any) -> str:
+    mode = str(value or 'PAY_PER_REQUEST').upper()
+    if mode not in {'PAY_PER_REQUEST', 'PROVISIONED'}:
+        raise ValueError('Capacity mode must be PAY_PER_REQUEST (on-demand) or PROVISIONED')
+    return mode
+
+
+def _throughput(read_units: Any, write_units: Any) -> dict[str, int]:
+    try:
+        reads, writes = int(read_units), int(write_units)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Provisioned capacity needs whole-number read and write capacity units') from exc
+    if reads < 1 or writes < 1:
+        raise ValueError('Read and write capacity units must be at least 1')
+    return {'ReadCapacityUnits': reads, 'WriteCapacityUnits': writes}
+
+
+def update_table_capacity(table_name: str, *, billing_mode: str, read_capacity_units: Any = None, write_capacity_units: Any = None) -> dict[str, Any]:
+    """UpdateTable to switch between on-demand and provisioned capacity."""
+    clean_name = validate_table_name(table_name)
+    payload: dict[str, Any] = {'TableName': clean_name, 'BillingMode': _billing_mode(billing_mode)}
+    if payload['BillingMode'] == 'PROVISIONED':
+        payload['ProvisionedThroughput'] = _throughput(read_capacity_units, write_capacity_units)
+    table = _dynamodb_client().update_table(**payload).get('TableDescription', {})
+    return {'table': clean_name, 'status': table.get('TableStatus'), 'billing_mode': payload['BillingMode']}
+
+
+def describe_continuous_backups(table_name: str) -> dict[str, Any]:
+    clean_name = validate_table_name(table_name)
+    description = _dynamodb_client().describe_continuous_backups(TableName=clean_name).get('ContinuousBackupsDescription', {})
+    return {'table': clean_name, 'continuous_backups': _json_safe(description)}
+
+
+def update_point_in_time_recovery(table_name: str, *, enabled: bool) -> dict[str, Any]:
+    clean_name = validate_table_name(table_name)
+    description = _dynamodb_client().update_continuous_backups(
+        TableName=clean_name,
+        PointInTimeRecoverySpecification={'PointInTimeRecoveryEnabled': bool(enabled)},
+    ).get('ContinuousBackupsDescription', {})
+    return {'table': clean_name, 'continuous_backups': _json_safe(description)}
