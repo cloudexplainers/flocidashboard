@@ -10,15 +10,38 @@ function getCsrfToken(): string {
   return match ? match[1] : '';
 }
 
-export async function fetchCloudWatchLogs(path: 'log-streams' | 'log-events', payload: Record<string, unknown>): Promise<any> {
-  const response = await fetch(`/api/cloudwatch/${path}/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(payload),
+/**
+ * Sends a JSON request and returns the parsed body.
+ * Throws on HTTP errors, and on an `error` field in a successful body unless ignoreErrorField is set.
+ */
+async function requestJson(
+  url: string,
+  {
+    method = 'GET',
+    json,
+    errorMessage,
+    ignoreErrorField = false,
+  }: { method?: string; json?: unknown; errorMessage?: string; ignoreErrorField?: boolean } = {},
+): Promise<any> {
+  const headers: Record<string, string> = {};
+  if (json !== undefined) headers['Content-Type'] = 'application/json';
+  if (method !== 'GET') headers['X-CSRFToken'] = getCsrfToken();
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: json === undefined ? undefined : JSON.stringify(json),
   });
-  const data = await response.json();
-  if (!response.ok || data.error) throw new Error(data.error || 'Unable to load CloudWatch logs');
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || errorMessage || `HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if (!ignoreErrorField && data.error) throw new Error(data.error);
   return data;
+}
+
+export async function fetchCloudWatchLogs(path: 'log-streams' | 'log-events', payload: Record<string, unknown>): Promise<any> {
+  return requestJson(`/api/cloudwatch/${path}/`, { method: 'POST', json: payload, errorMessage: 'Unable to load CloudWatch logs' });
 }
 
 export async function fetchServices(): Promise<ServiceDefinition[]> {
@@ -93,13 +116,7 @@ export async function runLabStep(
 }
 
 export async function resetLab(serviceKey: string, labKey: string): Promise<any> {
-  const res = await fetch(`/api/labs/${serviceKey}/${labKey}/reset/`, {
-    method: 'POST',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
+  return requestJson(`/api/labs/${serviceKey}/${labKey}/reset/`, { method: 'POST' });
 }
 
 export async function resetAllLabs(): Promise<any> {
@@ -219,24 +236,15 @@ export async function resetEndpoint(): Promise<any> {
 }
 
 export async function testConnection(endpointUrl?: string): Promise<any> {
-  const res = await fetch('/api/settings/test-connection/', {
+  return requestJson('/api/settings/test-connection/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(endpointUrl ? { endpoint_url: endpointUrl } : {}),
+    json: endpointUrl ? { endpoint_url: endpointUrl } : {},
+    errorMessage: 'Connection test failed',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Connection test failed');
-  return data;
 }
 
 export async function resetFlociState(): Promise<any> {
-  const res = await fetch('/api/settings/floci-reset/', {
-    method: 'POST',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Floci reset failed');
-  return data;
+  return requestJson('/api/settings/floci-reset/', { method: 'POST', errorMessage: 'Floci reset failed' });
 }
 
 export async function fetchIdentityDetail(): Promise<any> {
@@ -424,14 +432,11 @@ export async function fetchS3Objects(bucketName: string, prefix: string = ''): P
 }
 
 export async function presignS3Object(bucketName: string, key: string, expiresIn: number = 3600): Promise<{ url: string; expires_in: number }> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/presign/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/presign/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ key, expires_in: expiresIn }),
+    json: { key, expires_in: expiresIn },
+    errorMessage: `Failed to generate presigned URL`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to generate presigned URL`);
-  return data;
 }
 
 export async function fetchS3Website(bucketName: string): Promise<any> {
@@ -446,14 +451,11 @@ export async function fetchS3Website(bucketName: string): Promise<any> {
 }
 
 export async function putS3Website(bucketName: string, config: { IndexDocument: { Suffix: string }; ErrorDocument?: { Key: string } }): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/website/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/website/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ configuration: config }),
+    json: { configuration: config },
+    errorMessage: `Failed to update website configuration`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to update website configuration`);
-  return data;
 }
 
 export async function deleteS3Website(bucketName: string): Promise<any> {
@@ -475,14 +477,11 @@ export async function fetchS3Notifications(bucketName: string): Promise<any> {
 }
 
 export async function putS3Notifications(bucketName: string, config: any): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/notifications/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/notifications/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(config),
+    json: config,
+    errorMessage: `Failed to update notifications`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to update notifications`);
-  return data;
 }
 
 export async function deleteS3Object(bucketName: string, key: string): Promise<any> {
@@ -495,26 +494,20 @@ export async function deleteS3Object(bucketName: string, key: string): Promise<a
 }
 
 export async function createS3Folder(bucketName: string, folder: string): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/folders/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/folders/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ folder }),
+    json: { folder },
+    errorMessage: `Failed to create folder`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to create folder`);
-  return data;
 }
 
 // IAM Deepening APIs
 export async function createIamRole(roleName: string, trustTemplate: string = 'lambda', trustPolicy?: any): Promise<any> {
-  const res = await fetch('/api/iam/roles/', {
+  return requestJson('/api/iam/roles/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ role_name: roleName, trust_template: trustTemplate, trust_policy: trustPolicy }),
+    json: { role_name: roleName, trust_template: trustTemplate, trust_policy: trustPolicy },
+    errorMessage: `Failed to create IAM role`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to create IAM role`);
-  return data;
 }
 
 export async function deleteIamRole(roleName: string): Promise<any> {
@@ -526,48 +519,28 @@ export async function deleteIamRole(roleName: string): Promise<any> {
 }
 
 export async function createIamGroup(groupName: string): Promise<any> {
-  const res = await fetch('/api/iam/groups/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ group_name: groupName }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to create IAM group`);
-  return data;
+  return requestJson('/api/iam/groups/', { method: 'POST', json: { group_name: groupName }, errorMessage: `Failed to create IAM group` });
 }
 
 export async function simulateIamPolicy(principalArn: string, actionNames: string[], resourceArns: string[] = ['*']): Promise<any> {
-  const res = await fetch('/api/iam/policy-simulation/', {
+  return requestJson('/api/iam/policy-simulation/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ principal_arn: principalArn, action_names: actionNames, resource_arns: resourceArns }),
+    json: { principal_arn: principalArn, action_names: actionNames, resource_arns: resourceArns },
+    errorMessage: `Policy simulation failed`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Policy simulation failed`);
-  return data;
 }
 
 // DynamoDB Deepening APIs
 export async function fetchDynamoDbTableScan(tableName: string, limit: number = 50, startKey?: any): Promise<{ items: any[]; count: number; scanned_count: number; last_evaluated_key?: any }> {
-  const response = await fetch(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/scan/`, {
+  return requestJson(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/scan/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ limit, exclusive_start_key: startKey }),
+    json: { limit, exclusive_start_key: startKey },
+    errorMessage: 'Unable to scan table',
   });
-  const data = await response.json();
-  if (!response.ok || data.error) throw new Error(data.error || 'Unable to scan table');
-  return data;
 }
 
 export async function executeDynamoDbPartiQL(statement: string, limit: number = 50): Promise<{ items: any[]; count: number }> {
-  const res = await fetch('/api/dynamodb/partiql/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ statement, limit }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `PartiQL query failed`);
-  return data;
+  return requestJson('/api/dynamodb/partiql/', { method: 'POST', json: { statement, limit }, errorMessage: `PartiQL query failed` });
 }
 
 export async function putDynamoDbItem(tableName: string, item: Record<string, any>): Promise<any> {
@@ -596,19 +569,16 @@ export async function fetchLambdaFunctionUrl(functionName: string): Promise<any>
 }
 
 export async function createLambdaFunctionUrl(functionName: string, authType: 'NONE' | 'AWS_IAM' = 'NONE', cors?: any): Promise<any> {
-  const res = await fetch(`/api/lambda/functions/${encodeURIComponent(functionName)}/url/`, {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/url/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       options: {
         AuthType: authType,
         Cors: cors || { AllowOrigins: ['*'], AllowMethods: ['*'] },
       },
-    }),
+    },
+    errorMessage: `Failed to create Function URL`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to create Function URL`);
-  return data;
 }
 
 export async function deleteLambdaFunctionUrl(functionName: string): Promise<any> {
@@ -631,20 +601,17 @@ export async function fetchLambdaEventSourceMappings(functionName: string): Prom
 }
 
 export async function createLambdaEventSourceMapping(functionName: string, eventSourceArn: string, batchSize: number = 10): Promise<any> {
-  const res = await fetch(`/api/lambda/functions/${encodeURIComponent(functionName)}/event-source-mappings/`, {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/event-source-mappings/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       options: {
         EventSourceArn: eventSourceArn,
         BatchSize: batchSize,
         StartingPosition: 'LATEST',
       },
-    }),
+    },
+    errorMessage: `Failed to add event source mapping trigger`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to add event source mapping trigger`);
-  return data;
 }
 
 export async function deleteLambdaEventSourceMapping(uuid: string): Promise<any> {
@@ -667,68 +634,49 @@ export async function fetchLambdaVersions(functionName: string): Promise<any[]> 
 }
 
 export async function publishLambdaVersion(functionName: string, description: string = ''): Promise<any> {
-  const res = await fetch(`/api/lambda/functions/${encodeURIComponent(functionName)}/versions/`, {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/versions/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ description }),
+    json: { description },
+    errorMessage: `Failed to publish version`,
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || `Failed to publish version`);
-  return data;
 }
 
 // Cognito Deepening APIs
 export async function createCognitoUserPool(name: string): Promise<any> {
-  const res = await fetch('/api/cognito/user-pools/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create user pool');
-  return data;
+  return requestJson('/api/cognito/user-pools/', { method: 'POST', json: { name }, errorMessage: 'Failed to create user pool' });
 }
 
 export async function createCognitoUser(userPoolId: string, username: string, password: string = 'TempPass123!', email?: string): Promise<any> {
-  const res = await fetch(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/`, {
+  return requestJson(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/users/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       username,
       temporary_password: password,
       attributes: email ? [{ Name: 'email', Value: email }] : [],
-    }),
+    },
+    errorMessage: 'Failed to create Cognito user',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create Cognito user');
-  return data;
 }
 
 export async function createCognitoAppClient(userPoolId: string, clientName: string, enablePasswordAuth = true): Promise<any> {
-  const res = await fetch(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/clients/`, {
+  return requestJson(`/api/cognito/user-pools/${encodeURIComponent(userPoolId)}/clients/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name: clientName, generate_secret: false, ...(enablePasswordAuth ? { explicit_auth_flows: ['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'] } : {}) }),
+    json: { name: clientName, generate_secret: false, ...(enablePasswordAuth ? { explicit_auth_flows: ['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'] } : {}) },
+    errorMessage: 'Failed to create app client',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create app client');
-  return data;
 }
 
 export async function initiateCognitoAuth(clientId: string, username: string, password: string): Promise<any> {
-  const res = await fetch('/api/cognito/auth/initiate/', {
+  return requestJson('/api/cognito/auth/initiate/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       client_id: clientId,
       username,
       password,
       auth_flow: 'USER_PASSWORD_AUTH',
-    }),
+    },
+    errorMessage: 'Authentication failed',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Authentication failed');
-  return data;
 }
 
 export async function deleteCognitoUser(userPoolId: string, username: string): Promise<any> {
@@ -741,32 +689,25 @@ export async function deleteCognitoUser(userPoolId: string, username: string): P
 
 // API Gateway Deepening APIs
 export async function createApiGatewayApi(name: string, protocolType: string = 'HTTP', description: string = ''): Promise<any> {
-  const res = await fetch('/api/apigateway/apis/create/', {
+  return requestJson('/api/apigateway/apis/create/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, api_type: protocolType.toLowerCase(), description }),
+    json: { name, api_type: protocolType.toLowerCase(), description },
+    errorMessage: 'Failed to create API',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create API');
-  return data;
 }
 
 export async function deleteApiGatewayApi(apiId: string, apiType: string = 'http'): Promise<any> {
-  const res = await fetch('/api/apigateway/apis/delete/', {
+  return requestJson('/api/apigateway/apis/delete/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ api_id: apiId, api_type: apiType.toLowerCase() }),
+    json: { api_id: apiId, api_type: apiType.toLowerCase() },
+    errorMessage: 'Failed to delete API',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete API');
-  return data;
 }
 
 export async function testApiGatewayRequest(apiId: string, path: string, method: string = 'GET', headers: any = {}, body: any = null, apiType = 'http', stage = '', endpoint = ''): Promise<any> {
-  const res = await fetch('/api/apigateway/requests/test/', {
+  return requestJson('/api/apigateway/requests/test/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       api_id: apiId,
       path: path.startsWith('/') ? path : `/${path}`,
       method,
@@ -775,24 +716,15 @@ export async function testApiGatewayRequest(apiId: string, path: string, method:
       endpoint,
       headers,
       body,
-    }),
+    },
+    errorMessage: 'Request failed',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Request failed');
-  return data;
 }
 
 // SSM Parameter Store Deepening APIs
 // EC2 Networking & Security Groups APIs
 export async function createEc2Vpc(cidrBlock: string, name?: string): Promise<any> {
-  const res = await fetch('/api/ec2/vpcs/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ cidr_block: cidrBlock, name }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create VPC');
-  return data;
+  return requestJson('/api/ec2/vpcs/', { method: 'POST', json: { cidr_block: cidrBlock, name }, errorMessage: 'Failed to create VPC' });
 }
 
 export async function deleteEc2Vpc(vpcId: string): Promise<any> {
@@ -804,14 +736,11 @@ export async function deleteEc2Vpc(vpcId: string): Promise<any> {
 }
 
 export async function createEc2Subnet(vpcId: string, cidrBlock: string, az?: string, name?: string): Promise<any> {
-  const res = await fetch('/api/ec2/subnets/', {
+  return requestJson('/api/ec2/subnets/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ vpc_id: vpcId, cidr_block: cidrBlock, availability_zone: az, name }),
+    json: { vpc_id: vpcId, cidr_block: cidrBlock, availability_zone: az, name },
+    errorMessage: 'Failed to create subnet',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create subnet');
-  return data;
 }
 
 export async function deleteEc2Subnet(subnetId: string): Promise<any> {
@@ -823,14 +752,11 @@ export async function deleteEc2Subnet(subnetId: string): Promise<any> {
 }
 
 export async function createEc2SecurityGroup(name: string, description: string, vpcId: string): Promise<any> {
-  const res = await fetch('/api/ec2/security-groups/', {
+  return requestJson('/api/ec2/security-groups/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, description, vpc_id: vpcId }),
+    json: { name, description, vpc_id: vpcId },
+    errorMessage: 'Failed to create security group',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create security group');
-  return data;
 }
 
 export async function deleteEc2SecurityGroup(groupId: string): Promise<any> {
@@ -842,25 +768,19 @@ export async function deleteEc2SecurityGroup(groupId: string): Promise<any> {
 }
 
 export async function changeEc2SecurityGroupRule(groupId: string, direction: 'ingress' | 'egress', rule: any, revoke: boolean = false): Promise<any> {
-  const res = await fetch(`/api/ec2/security-groups/${encodeURIComponent(groupId)}/rules/`, {
+  return requestJson(`/api/ec2/security-groups/${encodeURIComponent(groupId)}/rules/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ direction, rule, revoke }),
+    json: { direction, rule, revoke },
+    errorMessage: 'Failed to update security group rule',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update security group rule');
-  return data;
 }
 
 export async function runEc2InstanceCommand(instanceId: string, command: string): Promise<any> {
-  const res = await fetch(`/api/ec2/instances/${encodeURIComponent(instanceId)}/commands/`, {
+  return requestJson(`/api/ec2/instances/${encodeURIComponent(instanceId)}/commands/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ command }),
+    json: { command },
+    errorMessage: 'Failed to execute SSM command on instance',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to execute SSM command on instance');
-  return data;
 }
 
 // Resource Graph APIs
@@ -877,14 +797,11 @@ export async function fetchResourceGraph(scenario: string = 'eventbridge-applica
 
 // SQS Operational APIs
 export async function createSqsQueue(name: string, fifo: boolean = false, visibilityTimeout?: number): Promise<any> {
-  const res = await fetch('/api/sqs/queues/', {
+  return requestJson('/api/sqs/queues/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, fifo, visibility_timeout: visibilityTimeout }),
+    json: { name, fifo, visibility_timeout: visibilityTimeout },
+    errorMessage: 'Failed to create queue',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create queue');
-  return data;
 }
 
 export async function deleteSqsQueue(queueName: string): Promise<any> {
@@ -896,13 +813,7 @@ export async function deleteSqsQueue(queueName: string): Promise<any> {
 }
 
 export async function purgeSqsQueue(queueName: string): Promise<any> {
-  const res = await fetch(`/api/sqs/queues/${encodeURIComponent(queueName)}/purge/`, {
-    method: 'POST',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to purge queue');
-  return data;
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/purge/`, { method: 'POST', errorMessage: 'Failed to purge queue' });
 }
 
 export async function sendSqsMessage(
@@ -912,19 +823,16 @@ export async function sendSqsMessage(
   messageGroupId?: string,
   messageDeduplicationId?: string
 ): Promise<any> {
-  const res = await fetch(`/api/sqs/queues/${encodeURIComponent(queueName)}/messages/send/`, {
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/messages/send/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       body,
       delay_seconds: delaySeconds,
       message_group_id: messageGroupId,
       message_deduplication_id: messageDeduplicationId,
-    }),
+    },
+    errorMessage: 'Failed to send message',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to send message');
-  return data;
 }
 
 export async function receiveSqsMessages(
@@ -933,18 +841,15 @@ export async function receiveSqsMessages(
   visibilityTimeout?: number,
   waitTimeSeconds: number = 0
 ): Promise<{ queue: string; messages: any[] }> {
-  const res = await fetch(`/api/sqs/queues/${encodeURIComponent(queueName)}/messages/`, {
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/messages/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       max_number: maxNumber,
       visibility_timeout: visibilityTimeout,
       wait_time_seconds: waitTimeSeconds,
-    }),
+    },
+    errorMessage: 'Failed to receive messages',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to receive messages');
-  return data;
 }
 
 export async function deleteSqsMessage(queueName: string, receiptHandle: string): Promise<any> {
@@ -966,10 +871,9 @@ export async function publishSnsMessage(
   messageGroupId?: string,
   messageDeduplicationId?: string
 ): Promise<any> {
-  const res = await fetch('/api/sns/messages/publish/', {
+  return requestJson('/api/sns/messages/publish/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       topic_arn: topicArn,
       message,
       subject,
@@ -977,11 +881,9 @@ export async function publishSnsMessage(
       message_structure: messageStructure,
       message_group_id: messageGroupId,
       message_deduplication_id: messageDeduplicationId,
-    }),
+    },
+    errorMessage: 'Failed to publish message',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to publish message');
-  return data;
 }
 
 // RDS Operational APIs
@@ -996,10 +898,9 @@ export async function createRdsInstance(
   engineVersion: string = '',
   enableIamAuth: boolean = false
 ): Promise<any> {
-  const res = await fetch('/api/rds/instances/', {
+  return requestJson('/api/rds/instances/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       identifier,
       engine,
       username,
@@ -1009,11 +910,9 @@ export async function createRdsInstance(
       db_name: dbName,
       engine_version: engineVersion,
       enable_iam_auth: enableIamAuth,
-    }),
+    },
+    errorMessage: 'Failed to create database instance',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create database instance');
-  return data;
 }
 
 export async function modifyRdsInstance(
@@ -1023,43 +922,34 @@ export async function modifyRdsInstance(
   masterUserPassword?: string,
   applyImmediately: boolean = true
 ): Promise<any> {
-  const res = await fetch(`/api/rds/instances/${encodeURIComponent(identifier)}/`, {
+  return requestJson(`/api/rds/instances/${encodeURIComponent(identifier)}/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       db_instance_class: dbInstanceClass,
       allocated_storage: allocatedStorage,
       master_user_password: masterUserPassword,
       apply_immediately: applyImmediately,
-    }),
+    },
+    errorMessage: 'Failed to modify database instance',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to modify database instance');
-  return data;
 }
 
 export async function rebootRdsInstance(identifier: string): Promise<any> {
-  const res = await fetch(`/api/rds/instances/${encodeURIComponent(identifier)}/reboot/`, {
+  return requestJson(`/api/rds/instances/${encodeURIComponent(identifier)}/reboot/`, {
     method: 'POST',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    errorMessage: 'Failed to reboot database instance',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to reboot database instance');
-  return data;
 }
 
 export async function deleteRdsInstance(identifier: string, skipFinalSnapshot: boolean = true, finalSnapshotId: string = ''): Promise<any> {
-  const res = await fetch(`/api/rds/instances/${encodeURIComponent(identifier)}/`, {
+  return requestJson(`/api/rds/instances/${encodeURIComponent(identifier)}/`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       skip_final_snapshot: skipFinalSnapshot,
       final_snapshot_identifier: finalSnapshotId,
-    }),
+    },
+    errorMessage: 'Failed to delete database instance',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete database instance');
-  return data;
 }
 
 export async function createRdsCluster(
@@ -1071,10 +961,9 @@ export async function createRdsCluster(
   engineVersion: string = '',
   enableIamAuth: boolean = false
 ): Promise<any> {
-  const res = await fetch('/api/rds/clusters/', {
+  return requestJson('/api/rds/clusters/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       identifier,
       engine,
       username,
@@ -1082,43 +971,29 @@ export async function createRdsCluster(
       database_name: databaseName,
       engine_version: engineVersion,
       enable_iam_auth: enableIamAuth,
-    }),
+    },
+    errorMessage: 'Failed to create DB cluster',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create DB cluster');
-  return data;
 }
 
 export async function deleteRdsCluster(identifier: string, skipFinalSnapshot: boolean = true, finalSnapshotId: string = ''): Promise<any> {
-  const res = await fetch(`/api/rds/clusters/${encodeURIComponent(identifier)}/`, {
+  return requestJson(`/api/rds/clusters/${encodeURIComponent(identifier)}/`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ skip_final_snapshot: skipFinalSnapshot, final_snapshot_identifier: finalSnapshotId }),
+    json: { skip_final_snapshot: skipFinalSnapshot, final_snapshot_identifier: finalSnapshotId },
+    errorMessage: 'RDS operation failed',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'RDS operation failed');
-  return data;
 }
 
 export async function createRdsParameterGroup(name: string, family: string, description: string): Promise<any> {
-  const res = await fetch('/api/rds/parameter-groups/', {
+  return requestJson('/api/rds/parameter-groups/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, family, description }),
+    json: { name, family, description },
+    errorMessage: 'Failed to create parameter group',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create parameter group');
-  return data;
 }
 
 export async function deleteRdsParameterGroup(name: string): Promise<any> {
-  const res = await fetch(`/api/rds/parameter-groups/${encodeURIComponent(name)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'RDS operation failed');
-  return data;
+  return requestJson(`/api/rds/parameter-groups/${encodeURIComponent(name)}/`, { method: 'DELETE', errorMessage: 'RDS operation failed' });
 }
 
 // S3 Deepening APIs (Permissions & Properties)
@@ -1134,14 +1009,11 @@ export async function fetchS3BucketPolicy(bucketName: string): Promise<string> {
 }
 
 export async function putS3BucketPolicy(bucketName: string, policy: string): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/policy/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/policy/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ policy }),
+    json: { policy },
+    errorMessage: 'Failed to update bucket policy',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update bucket policy');
-  return data;
 }
 
 export async function deleteS3BucketPolicy(bucketName: string): Promise<any> {
@@ -1163,14 +1035,11 @@ export async function fetchS3BucketCors(bucketName: string): Promise<any> {
 }
 
 export async function putS3BucketCors(bucketName: string, corsRules: any): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/cors/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/cors/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ cors_configuration: corsRules }),
+    json: { cors_configuration: corsRules },
+    errorMessage: 'Failed to update CORS',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update CORS');
-  return data;
 }
 
 export async function deleteS3BucketCors(bucketName: string): Promise<any> {
@@ -1193,14 +1062,11 @@ export async function fetchS3BucketVersioning(bucketName: string): Promise<{ sta
 }
 
 export async function putS3BucketVersioning(bucketName: string, status: 'Enabled' | 'Suspended'): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/versioning/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/versioning/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ status }),
+    json: { status },
+    errorMessage: 'Failed to update versioning',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update versioning');
-  return data;
 }
 
 export async function fetchS3BucketPublicAccessBlock(bucketName: string): Promise<any> {
@@ -1214,14 +1080,11 @@ export async function fetchS3BucketPublicAccessBlock(bucketName: string): Promis
 }
 
 export async function putS3BucketPublicAccessBlock(bucketName: string, config: any): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/public-access-block/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/public-access-block/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(config),
+    json: config,
+    errorMessage: 'Failed to update public access block',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update public access block');
-  return data;
 }
 
 export async function fetchS3ObjectTags(bucketName: string, key: string): Promise<any[]> {
@@ -1236,14 +1099,11 @@ export async function fetchS3ObjectTags(bucketName: string, key: string): Promis
 }
 
 export async function putS3ObjectTags(bucketName: string, key: string, tags: Array<{ Key: string; Value: string }>): Promise<any> {
-  const res = await fetch(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/tags/`, {
+  return requestJson(`/api/s3/buckets/${encodeURIComponent(bucketName)}/objects/tags/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ key, tags }),
+    json: { key, tags },
+    errorMessage: 'Failed to update object tags',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update object tags');
-  return data;
 }
 
 export async function fetchS3ObjectHead(bucketName: string, key: string): Promise<any> {
@@ -1258,14 +1118,11 @@ export async function fetchS3ObjectHead(bucketName: string, key: string): Promis
 
 // CloudFormation Operational APIs
 export async function validateCloudFormationTemplate(templateBody: string): Promise<any> {
-  const res = await fetch('/api/cloudformation/templates/validate/', {
+  return requestJson('/api/cloudformation/templates/validate/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ template_body: templateBody }),
+    json: { template_body: templateBody },
+    errorMessage: 'Template validation failed',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Template validation failed');
-  return data;
 }
 
 export async function createCloudFormationStack(
@@ -1275,20 +1132,17 @@ export async function createCloudFormationStack(
   capabilities?: string[],
   disableRollback: boolean = false
 ): Promise<any> {
-  const res = await fetch('/api/cloudformation/stacks/', {
+  return requestJson('/api/cloudformation/stacks/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       stack_name: stackName,
       template_body: templateBody,
       parameters,
       capabilities: capabilities || [],
       disable_rollback: disableRollback,
-    }),
+    },
+    errorMessage: 'Failed to create stack',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create stack');
-  return data;
 }
 
 export async function updateCloudFormationStack(
@@ -1297,28 +1151,22 @@ export async function updateCloudFormationStack(
   parameters?: any,
   capabilities?: string[]
 ): Promise<any> {
-  const res = await fetch(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/`, {
+  return requestJson(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       template_body: templateBody,
       parameters,
       capabilities,
-    }),
+    },
+    errorMessage: 'Failed to update stack',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to update stack');
-  return data;
 }
 
 export async function deleteCloudFormationStack(stackName: string): Promise<any> {
-  const res = await fetch(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/`, {
+  return requestJson(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/`, {
     method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    errorMessage: 'CloudFormation operation failed',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'CloudFormation operation failed');
-  return data;
 }
 
 export async function createCloudFormationChangeSet(
@@ -1329,60 +1177,47 @@ export async function createCloudFormationChangeSet(
   parameters?: any,
   capabilities?: string[]
 ): Promise<any> {
-  const res = await fetch('/api/cloudformation/change-sets/', {
+  return requestJson('/api/cloudformation/change-sets/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       stack_name: stackName,
       change_set_name: changeSetName,
       template_body: templateBody,
       change_set_type: changeSetType,
       parameters,
       capabilities,
-    }),
+    },
+    errorMessage: 'Failed to create change set',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create change set');
-  return data;
 }
 
 export async function describeCloudFormationChangeSet(stackName: string, changeSetName: string): Promise<any> {
-  const res = await fetch(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/change-sets/${encodeURIComponent(changeSetName)}/`);
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'CloudFormation operation failed');
-  return data;
+  return requestJson(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/change-sets/${encodeURIComponent(changeSetName)}/`, {
+    errorMessage: 'CloudFormation operation failed',
+  });
 }
 
 export async function executeCloudFormationChangeSet(stackName: string, changeSetName: string): Promise<any> {
-  const res = await fetch(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/change-sets/${encodeURIComponent(changeSetName)}/`, {
+  return requestJson(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/change-sets/${encodeURIComponent(changeSetName)}/`, {
     method: 'POST',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    errorMessage: 'Failed to execute change set',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to execute change set');
-  return data;
 }
 
 export async function deleteCloudFormationChangeSet(stackName: string, changeSetName: string): Promise<any> {
-  const res = await fetch(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/change-sets/${encodeURIComponent(changeSetName)}/`, {
+  return requestJson(`/api/cloudformation/stacks/${encodeURIComponent(stackName)}/change-sets/${encodeURIComponent(changeSetName)}/`, {
     method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    errorMessage: 'CloudFormation operation failed',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'CloudFormation operation failed');
-  return data;
 }
 
 // EventBridge Operational APIs
 export async function createEventBus(name: string, description: string = ''): Promise<any> {
-  const res = await fetch('/api/eventbridge/buses/create/', {
+  return requestJson('/api/eventbridge/buses/create/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, description }),
+    json: { name, description },
+    errorMessage: 'Failed to create event bus',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create event bus');
-  return data;
 }
 
 export async function deleteEventBus(name: string): Promise<any> {
@@ -1404,32 +1239,26 @@ export async function putEventRule(
   description: string = '',
   state: string = 'ENABLED'
 ): Promise<any> {
-  const res = await fetch('/api/eventbridge/rules/put/', {
+  return requestJson('/api/eventbridge/rules/put/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       name,
       event_bus_name: busName,
       event_pattern: pattern ? (typeof pattern === 'string' ? pattern : JSON.stringify(pattern)) : undefined,
       schedule_expression: schedule,
       description,
       state,
-    }),
+    },
+    errorMessage: 'Failed to put event rule',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to put event rule');
-  return data;
 }
 
 export async function setEventRuleState(name: string, busName: string = 'default', enabled: boolean = true): Promise<any> {
-  const res = await fetch('/api/eventbridge/rules/state/', {
+  return requestJson('/api/eventbridge/rules/state/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, event_bus_name: busName, enabled }),
+    json: { name, event_bus_name: busName, enabled },
+    errorMessage: 'Failed to change rule state',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to change rule state');
-  return data;
 }
 
 export async function deleteEventRule(name: string, busName: string = 'default'): Promise<any> {
@@ -1486,14 +1315,11 @@ export async function removeEventTarget(ruleName: string, busName: string = 'def
 export async function putEvents(entries: any[]): Promise<any> {
   if (entries.length !== 1) throw new Error('Send one event at a time.');
   const entry = entries[0];
-  const res = await fetch('/api/eventbridge/events/put/', {
+  return requestJson('/api/eventbridge/events/put/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ event_bus_name: entry.EventBusName, source: entry.Source, detail_type: entry.DetailType, detail: entry.Detail, resources: entry.Resources }),
+    json: { event_bus_name: entry.EventBusName, source: entry.Source, detail_type: entry.DetailType, detail: entry.Detail, resources: entry.Resources },
+    errorMessage: 'Failed to send events',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to send events');
-  return data;
 }
 
 // ----------------------------------------------------
@@ -1686,29 +1512,15 @@ export async function createCognitoIdentityPool(identityPoolName: string, allowU
 // Phase 3: ECS APIs
 // ==========================================
 export async function createEcsCluster(name: string, capacityProviders?: string[], tags?: Array<{ Key: string; Value: string }>): Promise<any> {
-  const res = await fetch('/api/ecs/clusters/', {
+  return requestJson('/api/ecs/clusters/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, capacity_providers: capacityProviders, tags }),
+    json: { name, capacity_providers: capacityProviders, tags },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteEcsCluster(cluster: string): Promise<any> {
-  const res = await fetch('/api/ecs/clusters/delete/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ cluster }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ecs/clusters/delete/', { method: 'POST', json: { cluster }, ignoreErrorField: true });
 }
 
 export async function registerEcsTaskDefinition(params: {
@@ -1721,29 +1533,15 @@ export async function registerEcsTaskDefinition(params: {
   task_role_arn?: string;
   execution_role_arn?: string;
 }): Promise<any> {
-  const res = await fetch('/api/ecs/task-definitions/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ecs/task-definitions/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function deregisterEcsTaskDefinition(taskDefinition: string): Promise<any> {
-  const res = await fetch('/api/ecs/task-definitions/detail/', {
+  return requestJson('/api/ecs/task-definitions/detail/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ task_definition: taskDefinition }),
+    json: { task_definition: taskDefinition },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function runEcsTask(params: {
@@ -1753,29 +1551,15 @@ export async function runEcsTask(params: {
   count?: number;
   network_configuration?: any;
 }): Promise<any> {
-  const res = await fetch('/api/ecs/tasks/run/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ecs/tasks/run/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function stopEcsTask(cluster: string, task: string, reason?: string): Promise<any> {
-  const res = await fetch('/api/ecs/tasks/stop/', {
+  return requestJson('/api/ecs/tasks/stop/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ cluster, task, reason: reason || 'Stopped from Floci Workbench' }),
+    json: { cluster, task, reason: reason || 'Stopped from Floci Workbench' },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function createEcsService(params: {
@@ -1786,16 +1570,7 @@ export async function createEcsService(params: {
   desired_count?: number;
   launch_type?: string;
 }): Promise<any> {
-  const res = await fetch('/api/ecs/services/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ecs/services/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function updateEcsService(params: {
@@ -1804,123 +1579,66 @@ export async function updateEcsService(params: {
   desired_count?: number;
   task_definition?: string;
 }): Promise<any> {
-  const res = await fetch('/api/ecs/services/update/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ecs/services/update/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function deleteEcsService(cluster: string, service: string, force: boolean = true): Promise<any> {
-  const res = await fetch('/api/ecs/services/delete/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ cluster, service, force }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ecs/services/delete/', { method: 'POST', json: { cluster, service, force }, ignoreErrorField: true });
 }
 
 export async function updateEcsContainerInstanceState(cluster: string, containerInstances: string[], status: 'ACTIVE' | 'DRAINING'): Promise<any> {
-  const res = await fetch('/api/ecs/container-instances/state/', {
+  return requestJson('/api/ecs/container-instances/state/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ cluster, container_instances: containerInstances, status }),
+    json: { cluster, container_instances: containerInstances, status },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 // ==========================================
 // Phase 3: ECR APIs
 // ==========================================
 export async function createEcrRepository(name: string, imageTagMutability: 'MUTABLE' | 'IMMUTABLE' = 'MUTABLE'): Promise<any> {
-  const res = await fetch('/api/ecr/repositories/', {
+  return requestJson('/api/ecr/repositories/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, image_tag_mutability: imageTagMutability }),
+    json: { name, image_tag_mutability: imageTagMutability },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteEcrRepository(repositoryName: string, force: boolean = true): Promise<any> {
-  const res = await fetch('/api/ecr/repositories/delete/', {
+  return requestJson('/api/ecr/repositories/delete/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ repository_name: repositoryName, force }),
+    json: { repository_name: repositoryName, force },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function batchDeleteEcrImages(repositoryName: string, imageIds: Array<{ imageDigest?: string; imageTag?: string }>): Promise<any> {
-  const res = await fetch('/api/ecr/images/delete/', {
+  return requestJson('/api/ecr/images/delete/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ repository_name: repositoryName, image_ids: imageIds }),
+    json: { repository_name: repositoryName, image_ids: imageIds },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function putEcrTagMutability(repositoryName: string, imageTagMutability: 'MUTABLE' | 'IMMUTABLE'): Promise<any> {
-  const res = await fetch('/api/ecr/tag-mutability/', {
+  return requestJson('/api/ecr/tag-mutability/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ repository_name: repositoryName, image_tag_mutability: imageTagMutability }),
+    json: { repository_name: repositoryName, image_tag_mutability: imageTagMutability },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function putEcrLifecyclePolicy(repositoryName: string, lifecyclePolicyText: string): Promise<any> {
-  const res = await fetch('/api/ecr/lifecycle-policy/', {
+  return requestJson('/api/ecr/lifecycle-policy/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ repository_name: repositoryName, lifecycle_policy_text: lifecyclePolicyText }),
+    json: { repository_name: repositoryName, lifecycle_policy_text: lifecyclePolicyText },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function runEcrGarbageCollection(): Promise<any> {
-  const res = await fetch('/api/ecr/garbage-collection/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({}),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ecr/garbage-collection/', { method: 'POST', json: {}, ignoreErrorField: true });
 }
 
 // ==========================================
@@ -1940,10 +1658,9 @@ export async function createCloudFrontDistribution(params: {
   http_port?: number;
   https_port?: number;
 }): Promise<any> {
-  const res = await fetch('/api/cloudfront/distributions/', {
+  return requestJson('/api/cloudfront/distributions/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       caller_reference: params.caller_reference || crypto.randomUUID(),
       origin_domain_name: params.origin_domain_name,
       origin_id: params.origin_id || `origin-${Date.now()}`,
@@ -1956,95 +1673,53 @@ export async function createCloudFrontDistribution(params: {
       origin_protocol_policy: params.origin_protocol_policy,
       http_port: params.http_port,
       https_port: params.https_port,
-    }),
+    },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function updateCloudFrontDistribution(distributionId: string, params: { enabled?: boolean; comment?: string; config?: any; if_match?: string }): Promise<any> {
-  const res = await fetch(`/api/cloudfront/distributions/${distributionId}/`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson(`/api/cloudfront/distributions/${distributionId}/`, { method: 'PUT', json: params, ignoreErrorField: true });
 }
 
 export async function deleteCloudFrontDistribution(distributionId: string, ifMatch?: string): Promise<any> {
-  const res = await fetch(`/api/cloudfront/distributions/${distributionId}/`, {
+  return requestJson(`/api/cloudfront/distributions/${distributionId}/`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ if_match: ifMatch || '' }),
+    json: { if_match: ifMatch || '' },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function createCloudFrontInvalidation(distributionId: string, paths: string[]): Promise<any> {
-  const res = await fetch(`/api/cloudfront/distributions/${distributionId}/invalidations/`, {
+  return requestJson(`/api/cloudfront/distributions/${distributionId}/invalidations/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ paths, caller_reference: `inv-${crypto.randomUUID()}` }),
+    json: { paths, caller_reference: `inv-${crypto.randomUUID()}` },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function createCloudFrontCachePolicy(params: { name: string; default_ttl?: number; max_ttl?: number; min_ttl?: number; comment?: string }): Promise<any> {
-  const res = await fetch('/api/cloudfront/cache-policies/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/cloudfront/cache-policies/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function createCloudFrontFunction(name: string, functionCode: string, comment?: string): Promise<any> {
-  const res = await fetch('/api/cloudfront/functions/', {
+  return requestJson('/api/cloudfront/functions/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       name,
       comment: comment || '', runtime: 'cloudfront-js-2.0',
       code: functionCode,
-    }),
+    },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteCloudFrontFunction(name: string, ifMatch?: string): Promise<any> {
-  const res = await fetch(`/api/cloudfront/functions/${name}/`, {
+  return requestJson(`/api/cloudfront/functions/${name}/`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ if_match: ifMatch || '' }),
+    json: { if_match: ifMatch || '' },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function publishCloudFrontFunction(name: string): Promise<any> {
@@ -2064,28 +1739,14 @@ export async function createElbv2LoadBalancer(params: {
   subnets?: string[];
   security_groups?: string[];
 }): Promise<any> {
-  const res = await fetch('/api/elasticloadbalancing/load-balancers/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/elasticloadbalancing/load-balancers/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function deleteElbv2LoadBalancer(loadBalancerArn: string): Promise<any> {
-  const res = await fetch(`/api/elasticloadbalancing/load-balancers/${encodeURIComponent(loadBalancerArn)}/`, {
+  return requestJson(`/api/elasticloadbalancing/load-balancers/${encodeURIComponent(loadBalancerArn)}/`, {
     method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function createElbv2TargetGroup(params: {
@@ -2096,54 +1757,30 @@ export async function createElbv2TargetGroup(params: {
   vpc_id?: string;
   health_check_path?: string;
 }): Promise<any> {
-  const res = await fetch('/api/elasticloadbalancing/target-groups/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/elasticloadbalancing/target-groups/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function deleteElbv2TargetGroup(targetGroupArn: string): Promise<any> {
-  const res = await fetch(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/`, {
+  return requestJson(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/`, {
     method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function registerElbv2Targets(targetGroupArn: string, targets: Array<{ Id: string; Port?: number }>): Promise<any> {
-  const res = await fetch(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/targets/`, {
+  return requestJson(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/targets/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ targets }),
+    json: { targets },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deregisterElbv2Targets(targetGroupArn: string, targets: Array<{ Id: string; Port?: number }>): Promise<any> {
-  const res = await fetch(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/targets/`, {
+  return requestJson(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/targets/`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ targets }),
+    json: { targets },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function createElbv2Listener(params: {
@@ -2152,28 +1789,14 @@ export async function createElbv2Listener(params: {
   port: number;
   target_group_arn: string;
 }): Promise<any> {
-  const res = await fetch('/api/elasticloadbalancing/listeners/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/elasticloadbalancing/listeners/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function deleteElbv2Listener(listenerArn: string): Promise<any> {
-  const res = await fetch(`/api/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn)}/`, {
+  return requestJson(`/api/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn)}/`, {
     method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 // ==========================================
@@ -2186,228 +1809,113 @@ export async function startAthenaQuery(params: {
   workgroup?: string;
   output_location?: string;
 }): Promise<{ query_execution_id: string }> {
-  const res = await fetch('/api/athena/queries/start/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/athena/queries/start/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function stopAthenaQuery(queryExecutionId: string): Promise<any> {
-  const res = await fetch('/api/athena/queries/stop/', {
+  return requestJson('/api/athena/queries/stop/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ query_execution_id: queryExecutionId }),
+    json: { query_execution_id: queryExecutionId },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function fetchAthenaQueryResults(queryExecutionId: string, maxResults: number = 50, nextToken: string = ''): Promise<any> {
-  const res = await fetch('/api/athena/queries/results/', {
+  return requestJson('/api/athena/queries/results/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ query_execution_id: queryExecutionId, max_results: maxResults, next_token: nextToken }),
+    json: { query_execution_id: queryExecutionId, max_results: maxResults, next_token: nextToken },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function fetchAthenaQueryDetail(queryExecutionId: string): Promise<any> {
-  const res = await fetch('/api/athena/queries/detail/', {
+  return requestJson('/api/athena/queries/detail/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ query_execution_id: queryExecutionId }),
+    json: { query_execution_id: queryExecutionId },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function createAthenaWorkgroup(name: string, description?: string, outputLocation?: string): Promise<any> {
-  const res = await fetch('/api/athena/workgroups/', {
+  return requestJson('/api/athena/workgroups/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, description: description || '', output_location: outputLocation || '' }),
+    json: { name, description: description || '', output_location: outputLocation || '' },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 // ==========================================
 // Phase 3: AppSync APIs
 // ==========================================
 export async function createAppSyncGraphQLApi(name: string, authenticationType: 'API_KEY' | 'AWS_IAM' | 'OPENID_CONNECT' | 'AMAZON_COGNITO_USER_POOLS' = 'API_KEY'): Promise<any> {
-  const res = await fetch('/api/appsync/apis/', {
+  return requestJson('/api/appsync/apis/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, authentication_type: authenticationType }),
+    json: { name, authentication_type: authenticationType },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteAppSyncGraphQLApi(apiId: string): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson(`/api/appsync/apis/${apiId}/`, { method: 'DELETE', ignoreErrorField: true });
 }
 
 export async function createAppSyncSchema(apiId: string, definition: string): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/schema/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ definition }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson(`/api/appsync/apis/${apiId}/schema/`, { method: 'POST', json: { definition }, ignoreErrorField: true });
 }
 
 export async function createAppSyncApiKey(apiId: string, description?: string, expires?: number): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/api-keys/`, {
+  return requestJson(`/api/appsync/apis/${apiId}/api-keys/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ description: description || '', expires }),
+    json: { description: description || '', expires },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteAppSyncApiKey(apiId: string, keyId: string): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/api-keys/`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ key_id: keyId }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson(`/api/appsync/apis/${apiId}/api-keys/`, { method: 'DELETE', json: { key_id: keyId }, ignoreErrorField: true });
 }
 
 export async function createAppSyncDataSource(apiId: string, name: string, sourceType: string = 'NONE', description?: string, options?: { service_role_arn?: string; config?: Record<string, unknown> }): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/data-sources/`, {
+  return requestJson(`/api/appsync/apis/${apiId}/data-sources/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name, source_type: sourceType, description: description || '', ...options }),
+    json: { name, source_type: sourceType, description: description || '', ...options },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteAppSyncDataSource(apiId: string, name: string): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/data-sources/`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson(`/api/appsync/apis/${apiId}/data-sources/`, { method: 'DELETE', json: { name }, ignoreErrorField: true });
 }
 
 export async function createAppSyncResolver(apiId: string, typeName: string, fieldName: string, dataSourceName?: string, templates?: { request_mapping_template: string; response_mapping_template: string }): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/resolvers/`, {
+  return requestJson(`/api/appsync/apis/${apiId}/resolvers/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ type_name: typeName, field_name: fieldName, data_source_name: dataSourceName || '', ...templates }),
+    json: { type_name: typeName, field_name: fieldName, data_source_name: dataSourceName || '', ...templates },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteAppSyncResolver(apiId: string, typeName: string, fieldName: string): Promise<any> {
-  const res = await fetch(`/api/appsync/apis/${apiId}/resolvers/`, {
+  return requestJson(`/api/appsync/apis/${apiId}/resolvers/`, {
     method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ type_name: typeName, field_name: fieldName }),
+    json: { type_name: typeName, field_name: fieldName },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 // ==========================================
 // Phase 3: SES APIs
 // ==========================================
 export async function verifySesEmailIdentity(emailAddress: string): Promise<any> {
-  const res = await fetch('/api/ses/identities/email/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ email_address: emailAddress }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ses/identities/email/', { method: 'POST', json: { email_address: emailAddress }, ignoreErrorField: true });
 }
 
 export async function verifySesDomainIdentity(domain: string): Promise<any> {
-  const res = await fetch('/api/ses/identities/domain/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ domain }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ses/identities/domain/', { method: 'POST', json: { domain }, ignoreErrorField: true });
 }
 
 export async function deleteSesIdentity(identity: string): Promise<any> {
-  const res = await fetch(`/api/ses/identities/${encodeURIComponent(identity)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson(`/api/ses/identities/${encodeURIComponent(identity)}/`, { method: 'DELETE', ignoreErrorField: true });
 }
 
 export async function sendSesEmail(params: {
@@ -2420,93 +1928,39 @@ export async function sendSesEmail(params: {
   bcc_addresses?: string[];
   configuration_set_name?: string;
 }): Promise<any> {
-  const res = await fetch('/api/ses/email/send/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ses/email/send/', { method: 'POST', json: params, ignoreErrorField: true });
 }
 
 export async function createSesTemplate(name: string, subject: string, htmlPart?: string, textPart?: string): Promise<any> {
-  const res = await fetch('/api/ses/templates/', {
+  return requestJson('/api/ses/templates/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ template_name: name, subject, html: htmlPart || '', text: textPart || '' }),
+    json: { template_name: name, subject, html: htmlPart || '', text: textPart || '' },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function renderSesTemplate(templateName: string, templateData: string): Promise<any> {
-  const res = await fetch(`/api/ses/templates/${encodeURIComponent(templateName)}/render/`, {
+  return requestJson(`/api/ses/templates/${encodeURIComponent(templateName)}/render/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ template_data: templateData }),
+    json: { template_data: templateData },
+    ignoreErrorField: true,
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
 }
 
 export async function deleteSesTemplate(templateName: string): Promise<any> {
-  const res = await fetch(`/api/ses/templates/${encodeURIComponent(templateName)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson(`/api/ses/templates/${encodeURIComponent(templateName)}/`, { method: 'DELETE', ignoreErrorField: true });
 }
 
 export async function createSesConfigurationSet(name: string): Promise<any> {
-  const res = await fetch('/api/ses/configuration-sets/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ses/configuration-sets/', { method: 'POST', json: { name }, ignoreErrorField: true });
 }
 
 export async function updateSesSendingEnabled(enabled: boolean): Promise<any> {
-  const res = await fetch('/api/ses/account/sending/', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ enabled }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ses/account/sending/', { method: 'PUT', json: { enabled }, ignoreErrorField: true });
 }
 
 export async function clearSesMailbox(): Promise<any> {
-  const res = await fetch('/api/ses/mailbox/', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({}),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return await res.json();
+  return requestJson('/api/ses/mailbox/', { method: 'DELETE', json: {}, ignoreErrorField: true });
 }
 
 // EKS APIs
@@ -2518,32 +1972,22 @@ export async function createEksCluster(
   securityGroupIds?: string[],
   tags?: Record<string, string>
 ): Promise<any> {
-  const res = await fetch('/api/eks/clusters/', {
+  return requestJson('/api/eks/clusters/', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       name,
       role_arn: roleArn,
       version,
       subnet_ids: subnetIds,
       security_group_ids: securityGroupIds,
       tags,
-    }),
+    },
+    errorMessage: 'Failed to create EKS cluster',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create EKS cluster');
-  return data;
 }
 
 export async function deleteEksCluster(name: string): Promise<any> {
-  const res = await fetch('/api/eks/clusters/delete/', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ name }),
-  });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete EKS cluster');
-  return data;
+  return requestJson('/api/eks/clusters/delete/', { method: 'POST', json: { name }, errorMessage: 'Failed to delete EKS cluster' });
 }
 
 export async function createEksNodegroup(
@@ -2559,10 +2003,9 @@ export async function createEksNodegroup(
   labels?: Record<string, string>,
   tags?: Record<string, string>
 ): Promise<any> {
-  const res = await fetch(`/api/eks/clusters/${encodeURIComponent(clusterName)}/nodegroups/`, {
+  return requestJson(`/api/eks/clusters/${encodeURIComponent(clusterName)}/nodegroups/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       nodegroup_name: nodegroupName,
       node_role: nodeRole,
       subnets,
@@ -2573,21 +2016,16 @@ export async function createEksNodegroup(
       disk_size: diskSize,
       labels,
       tags,
-    }),
+    },
+    errorMessage: 'Failed to create EKS node group',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create EKS node group');
-  return data;
 }
 
 export async function deleteEksNodegroup(clusterName: string, nodegroupName: string): Promise<any> {
-  const res = await fetch(`/api/eks/clusters/${encodeURIComponent(clusterName)}/nodegroups/${encodeURIComponent(nodegroupName)}/`, {
+  return requestJson(`/api/eks/clusters/${encodeURIComponent(clusterName)}/nodegroups/${encodeURIComponent(nodegroupName)}/`, {
     method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    errorMessage: 'Failed to delete EKS node group',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete EKS node group');
-  return data;
 }
 
 export async function createEksFargateProfile(
@@ -2598,39 +2036,30 @@ export async function createEksFargateProfile(
   selectors?: Array<{ namespace: string; labels?: Record<string, string> }>,
   tags?: Record<string, string>
 ): Promise<any> {
-  const res = await fetch(`/api/eks/clusters/${encodeURIComponent(clusterName)}/fargate-profiles/`, {
+  return requestJson(`/api/eks/clusters/${encodeURIComponent(clusterName)}/fargate-profiles/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({
+    json: {
       profile_name: profileName,
       pod_execution_role_arn: podExecutionRoleArn,
       subnets,
       selectors,
       tags,
-    }),
+    },
+    errorMessage: 'Failed to create EKS Fargate profile',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to create EKS Fargate profile');
-  return data;
 }
 
 export async function deleteEksFargateProfile(clusterName: string, profileName: string): Promise<any> {
-  const res = await fetch(`/api/eks/clusters/${encodeURIComponent(clusterName)}/fargate-profiles/${encodeURIComponent(profileName)}/`, {
+  return requestJson(`/api/eks/clusters/${encodeURIComponent(clusterName)}/fargate-profiles/${encodeURIComponent(profileName)}/`, {
     method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+    errorMessage: 'Failed to delete EKS Fargate profile',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to delete EKS Fargate profile');
-  return data;
 }
 
 export async function fetchEksKubeconfig(clusterName: string): Promise<any> {
-  const res = await fetch(`/api/eks/clusters/${encodeURIComponent(clusterName)}/kubeconfig/`, {
-    headers: { 'X-CSRFToken': getCsrfToken() },
+  return requestJson(`/api/eks/clusters/${encodeURIComponent(clusterName)}/kubeconfig/`, {
+    errorMessage: 'Failed to fetch EKS kubeconfig',
   });
-  const data = await res.json();
-  if (!res.ok || data.error) throw new Error(data.error || 'Failed to fetch EKS kubeconfig');
-  return data;
 }
 
 export async function runAppSyncGraphQL(apiId: string, query: string, variables: Record<string, unknown>, apiKey?: string, operationName?: string): Promise<any> {
