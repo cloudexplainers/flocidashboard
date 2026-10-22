@@ -30,6 +30,8 @@ Open [http://localhost:8000](http://localhost:8000). Compose starts Floci on por
 
 If that page shows a different app, another local server is already using port 8000. Stop it, or set `DASHBOARD_PORT` in `.env` and open that port instead.
 
+Ports are published on `127.0.0.1` only, so other machines on your network can't reach the dashboard or Floci. The dashboard can run AWS CLI commands, so only set `HOST_BIND_ADDRESS=0.0.0.0` in `.env` on a network you trust. Django runs with `DEBUG` off; its secret key is generated on first start and kept in the dashboard data volume.
+
 Copy `.env.example` to `.env` before starting to customize ports, credentials, or emulator settings. Compose currently pulls `floci/floci:latest`, so the running emulator may be newer than the version used for compatibility checks.
 
 ```bash
@@ -52,6 +54,7 @@ export AWS_DEFAULT_REGION=us-east-1
 export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
 export FLOCI_AWS_PROFILE=''
+export DJANGO_DEBUG=true   # tracebacks and static files from runserver
 
 python manage.py migrate
 python manage.py runserver 127.0.0.1:8000

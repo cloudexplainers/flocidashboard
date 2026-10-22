@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.management.utils import get_random_secret_key
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -21,10 +23,40 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-83*e5+#k1s&f#xi439gk^3*47a&(_)-p+1i!(%%5v+b=-s%%8k')
+DATABASE_PATH = Path(os.getenv('FLOCI_DASHBOARD_DB', str(BASE_DIR / 'db.sqlite3')))
+
+
+def _load_or_create_secret_key(path):
+    """Read the install's secret key, creating it on first run so sessions survive restarts."""
+    try:
+        return path.read_text().strip()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return get_random_secret_key()
+
+    key = get_random_secret_key()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        # Another process created it first; use theirs.
+        return path.read_text().strip()
+    except OSError:
+        # Read-only location: fall back to a key that lasts for this process only.
+        return key
+    with os.fdopen(fd, 'w') as handle:
+        handle.write(key)
+    return key
+
+
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY') or _load_or_create_secret_key(
+    DATABASE_PATH.parent / '.django_secret_key'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DJANGO_DEBUG', 'true').lower() not in {'0', 'false', 'no'}
+# Off by default; set DJANGO_DEBUG=true for tracebacks while developing.
+DEBUG = os.getenv('DJANGO_DEBUG', 'false').lower() in {'1', 'true', 'yes', 'on'}
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -85,7 +117,7 @@ WSGI_APPLICATION = 'flocidashboard.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.getenv('FLOCI_DASHBOARD_DB', str(BASE_DIR / 'db.sqlite3')),
+        'NAME': str(DATABASE_PATH),
     }
 }
 

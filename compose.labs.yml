@@ -3,7 +3,7 @@ services:
   floci:
     image: floci/floci:latest
     ports:
-      - "14566:4566"
+      - "127.0.0.1:14566:4566"
     environment:
       FLOCI_STORAGE_MODE: memory
       FLOCI_HOSTNAME: floci

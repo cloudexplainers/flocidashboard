@@ -28,4 +28,6 @@ RUN mkdir -p /app/data
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver 0.0.0.0:${PORT}"]
+# --insecure lets runserver serve the built UI from static/ while DEBUG is off.
+
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py runserver --insecure 0.0.0.0:${PORT}"]

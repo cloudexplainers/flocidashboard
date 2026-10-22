@@ -3,9 +3,9 @@ services:
     image: floci/floci:latest
     pull_policy: always
     ports:
-      - "${FLOCI_PORT:-4566}:4566"
-      - "${FLOCI_ELASTICACHE_PORTS:-6379-6399}:6379-6399"
-      - "${FLOCI_RDS_PORTS:-7001-7099}:7001-7099"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${FLOCI_PORT:-4566}:4566"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${FLOCI_ELASTICACHE_PORTS:-6379-6399}:6379-6399"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${FLOCI_RDS_PORTS:-7001-7099}:7001-7099"
     environment:
       FLOCI_STORAGE_MODE: ${FLOCI_STORAGE_MODE:-hybrid}
       FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED: ${FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED:-true}
@@ -28,8 +28,9 @@ services:
     build:
       context: .
     ports:
-      - "${DASHBOARD_PORT:-8000}:8000"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${DASHBOARD_PORT:-8000}:8000"
     environment:
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,dashboard}
       FLOCI_DASHBOARD_DB: /app/data/db.sqlite3
       FLOCI_AWS_ENDPOINT_URL: http://floci:4566
