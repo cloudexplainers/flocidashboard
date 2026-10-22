@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Re-leveled the lab curriculum so core Associate-exam topics come early:
+  - **Into Level 1:** the inline-policy lab.
+  - **Into Level 2:** IAM roles, STS session policies, instance profiles, the EC2 instance-role lab, S3 Block Public Access and bucket policies, and the VPC and security-group/network-ACL labs.
+  - **Renamed:** levels 4 and 5 are now "Workflows, Containers & Enforcement" and "Private Networking & Platform". Level subtitles describe skills instead of naming certifications.
+  - **Numbering:** lab numbers come from curriculum position, so they changed; the UI derives the lab count instead of hard-coding 66.
 - Six labs now do what their titles and descriptions promise, which matters for using them as exam prep:
   - **CloudWatch metric alarms:** the alarm reaches ALARM by evaluating a real error spike instead of `set-alarm-state`, and you watch it settle in OK on healthy data first.
   - **CloudWatch Logs:** the lab now creates the metric filter its title names, plus a 30-day retention policy, and confirms only the HTTP 500 lines became metric data.

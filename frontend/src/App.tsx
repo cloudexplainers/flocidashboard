@@ -45,7 +45,7 @@ import { GenericServiceWorkbench } from './pages/GenericServiceWorkbench';
 import { AwsServiceIcon } from './components/AwsServiceIcons';
 import { FavoritesBar } from './components/FavoritesBar';
 import { fetchServices } from './api/client';
-import { LAB_CURRICULUM } from './labCurriculum';
+import { LAB_COUNT, LAB_CURRICULUM } from './labCurriculum';
 import { ServiceDefinition } from './types';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -313,7 +313,7 @@ export const App: React.FC = () => {
       return { href: currentView, text: svc.title };
     }
     const specialHeaders: Record<string, string> = {
-      labs: 'AWS Workflow Labs (66)',
+      labs: `AWS Workflow Labs (${LAB_COUNT})`,
       inspector: 'Developer Inspector',
       topology: 'Architecture Topology Graph',
       settings: 'Dashboard Settings',
@@ -328,7 +328,7 @@ export const App: React.FC = () => {
     if (currentView === 'home') {
       return [
         { type: 'link' as const, text: 'Console Home', href: 'home', icon: <AwsServiceIcon service="aws" size={18} /> },
-        { type: 'link' as const, text: 'Workflow Labs (66)', href: 'labs', icon: <AwsServiceIcon service="labs" size={18} /> },
+        { type: 'link' as const, text: `Workflow Labs (${LAB_COUNT})`, href: 'labs', icon: <AwsServiceIcon service="labs" size={18} /> },
         { type: 'link' as const, text: 'Local Inspector Inbox', href: 'inspector', icon: <AwsServiceIcon service="inspector" size={18} /> },
         { type: 'link' as const, text: 'Architecture Topology Graph', href: 'topology', icon: <AwsServiceIcon service="topology" size={18} /> },
         { type: 'divider' as const },
@@ -693,7 +693,7 @@ export const App: React.FC = () => {
         return [
           {
             type: 'link' as const,
-            text: 'All Labs Overview (66)',
+            text: `All Labs Overview (${LAB_COUNT})`,
             href: 'labs',
             icon: <AwsServiceIcon service="labs" size={18} />,
           },

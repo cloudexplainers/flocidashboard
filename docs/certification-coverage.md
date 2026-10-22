@@ -57,7 +57,7 @@ A few REST-JSON calls failed with `AuthorizationHeaderMalformed`. Those are mark
 
 ## 2. Lab-to-exam mapping
 
-Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *Design scalable and loosely coupled architectures*. **Relevance** is how directly the lab serves these two exams. "Dev/Ops" means the lab mainly serves the Developer or CloudOps tracks.
+Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They changed on 2026-10-22, when IAM roles, inline policies, S3 bucket security, and the VPC and security-group labs moved into Levels 1 and 2. Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *Design scalable and loosely coupled architectures*. **Relevance** is how directly the lab serves these two exams. "Dev/Ops" means the lab mainly serves the Developer or CloudOps tracks.
 
 ### Level 1: Beginner Foundations
 
@@ -69,88 +69,88 @@ Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *D
 | 4 | iam/access-key-alice | 2.3 | 1.1 | Medium | Access keys. Missing: rotation and "prefer roles over long-term keys." |
 | 5 | iam/group-membership-alice | 2.3 | 1.1 | High | |
 | 6 | iam/group-policy-floci-developers | 2.3 | 1.1 | High | |
-| 7 | s3/create-bucket | 3.6 | 3.1 | Medium | |
-| 8 | s3/object-workflow | 3.1, 3.6 | 3.1 | Medium | Programmatic access (CLI) is a CLF 3.1 phrase. |
-| 9 | s3/prefix-copy | 3.6 | 3.1 | Low | Could note per-prefix request scaling. |
-| 10 | s3/metadata-tags | 3.6 | 1.3 | Medium | Classification. Object tags are **not** cost allocation tags; the exam lens should say so. |
-| 11 | sqs/create-queue | 3.8 | 2.1 | Medium | |
-| 12 | sqs/message-lifecycle | 3.8 | 2.1 | High | |
-| 13 | dynamodb/crud-query | 3.4 | 3.3 | Medium | Has a GSI query. Missing: capacity modes, the most-tested DynamoDB angle. |
-| 14 | lambda/create-invoke-logs | 3.3 | 2.1 | High | Serverless compute. |
+| 7 | iam/inline-policy-alice | 2.3 | 1.1 | Medium | |
+| 8 | s3/create-bucket | 3.6 | 3.1 | Medium | |
+| 9 | s3/object-workflow | 3.1, 3.6 | 3.1 | Medium | Programmatic access (CLI) is a CLF 3.1 phrase. |
+| 10 | s3/prefix-copy | 3.6 | 3.1 | Low | Could note per-prefix request scaling. |
+| 11 | s3/metadata-tags | 3.6 | 1.3 | Medium | Classification. Object tags are **not** cost allocation tags; the exam lens should say so. |
+| 12 | sqs/create-queue | 3.8 | 2.1 | Medium | |
+| 13 | sqs/message-lifecycle | 3.8 | 2.1 | High | |
+| 14 | dynamodb/crud-query | 3.4 | 3.3 | Medium | Has a GSI query. Missing: capacity modes, the most-tested DynamoDB angle. |
+| 15 | lambda/create-invoke-logs | 3.3 | 2.1 | High | Serverless compute. |
 
 ### Level 2: Intermediate Architecture
 
 | # | Lab | CLF-C02 | SAA-C03 | Relevance | Notes |
 |---|---|---|---|---|---|
-| 15 | s3/version-recovery | 3.6 | 1.3, 2.2 | High | Data recovery and durability. |
-| 16 | s3/default-encryption | 2.2 | 1.3 | High | Encryption at rest (SSE-S3 only; no SSE-KMS). |
-| 17 | s3/lifecycle-retention | 3.6 | 1.3, 4.1 | High | ✅ Now tiers to STANDARD_IA (30 days) and GLACIER (90 days) before expiring at 365. Floci stores the rule but doesn't move objects. |
-| 18 | s3/bucket-cors | — | 1.2 | Low | Dev-oriented. |
-| 19 | s3/presigned-url | 2.2 | 1.3 | Medium | Temporary, scoped data access. |
-| 20 | s3/multipart-upload | 3.6 | 3.1, 4.1 | Medium | Upload performance and batch strategies. |
-| 21 | kms/key-alias-encrypt-decrypt | 2.2 | 1.3 | ◐ | No key policy, rotation, or envelope (data key) pattern. |
-| 22 | ssm/parameter-store-config | 2.3 | 1.2 | Medium | Credential and config storage. |
-| 23 | secretsmanager/secret-lifecycle | 2.3 | 1.2, 1.3 | High | ✅ Now adds a Lambda rotation function and real rotation (AWSCURRENT/AWSPREVIOUS), the exam's Secrets Manager vs Parameter Store differentiator. |
-| 24 | cognito/user-pool-signup-auth | 2.3 | 1.2 | Medium | User pools only; no identity pools or federation. |
-| 25 | cognito/user-groups-custom-attributes | — | 1.2 | Low | Dev. |
-| 26 | rds/db-instance-lifecycle | 3.4 | 3.3, 1.3 | ◐ | ✅ Now encrypted at creation with 7-day automated backups. Still **no Multi-AZ, read replicas, or snapshots** (planned in W1-2). |
-| 27 | ec2/guided-imds | 3.3 | 1.2 | Low | Dev/Ops. |
-| 28 | ec2/guided-userdata | 3.1 | 2.2 | Low | Bootstrapping; a light touch on immutable infrastructure. |
-| 29 | ec2/guided-web-server | 3.5 | 1.2 | Medium | Security group in action. |
-| 30 | lambda/runtime-config | 2.3 | 1.2 | High | Application configuration and credentials security. |
-| 31 | dynamodb/lambda-writes | 3.4 | 2.1 | Medium | |
+| 16 | iam/role-trust-policy | 2.3 | 1.1 | High | |
+| 17 | iam/sts-session-policy | 2.3 | 1.1 | High | STS. |
+| 18 | iam/ec2-instance-profile | 2.3 | 1.1, 1.2 | High | |
+| 19 | s3/version-recovery | 3.6 | 1.3, 2.2 | High | Data recovery and durability. |
+| 20 | s3/default-encryption | 2.2 | 1.3 | High | Encryption at rest (SSE-S3 only; no SSE-KMS). |
+| 21 | s3/bucket-security | 2.2, 2.3 | 1.1, 1.3 | High | Resource policies and Block Public Access. |
+| 22 | s3/lifecycle-retention | 3.6 | 1.3, 4.1 | High | ✅ Now tiers to STANDARD_IA (30 days) and GLACIER (90 days) before expiring at 365. Floci stores the rule but doesn't move objects. |
+| 23 | s3/bucket-cors | — | 1.2 | Low | Dev-oriented. |
+| 24 | s3/presigned-url | 2.2 | 1.3 | Medium | Temporary, scoped data access. |
+| 25 | s3/multipart-upload | 3.6 | 3.1, 4.1 | Medium | Upload performance and batch strategies. |
+| 26 | kms/key-alias-encrypt-decrypt | 2.2 | 1.3 | ◐ | No key policy, rotation, or envelope (data key) pattern. |
+| 27 | ssm/parameter-store-config | 2.3 | 1.2 | Medium | Credential and config storage. |
+| 28 | secretsmanager/secret-lifecycle | 2.3 | 1.2, 1.3 | High | ✅ Now adds a Lambda rotation function and real rotation (AWSCURRENT/AWSPREVIOUS), the exam's Secrets Manager vs Parameter Store differentiator. |
+| 29 | cognito/user-pool-signup-auth | 2.3 | 1.2 | Medium | User pools only; no identity pools or federation. |
+| 30 | cognito/user-groups-custom-attributes | — | 1.2 | Low | Dev. |
+| 31 | rds/db-instance-lifecycle | 3.4 | 3.3, 1.3 | ◐ | ✅ Now encrypted at creation with 7-day automated backups. Still **no Multi-AZ, read replicas, or snapshots** (planned in W1-2). |
+| 32 | ec2/vpc-public-private | 3.5 | 1.2, 3.4 | ◐ | No NAT gateway, so the private subnet has no egress story. NAT is heavily tested (SAA 1.2, 4.4). |
+| 33 | ec2/security-controls | 3.5 | 1.2 | High | Stateful SGs vs stateless NACLs. |
+| 34 | ec2/guided-imds | 3.3 | 1.2 | Low | Dev/Ops. |
+| 35 | ec2/guided-userdata | 3.1 | 2.2 | Low | Bootstrapping; a light touch on immutable infrastructure. |
+| 36 | ec2/guided-web-server | 3.5 | 1.2 | Medium | Security group in action. |
+| 37 | ec2/guided-instance-role | 2.3 | 1.1, 1.2 | High | "Use roles, not keys, on EC2," a top SAA answer. |
+| 38 | lambda/runtime-config | 2.3 | 1.2 | High | Application configuration and credentials security. |
+| 39 | dynamodb/lambda-writes | 3.4 | 2.1 | Medium | |
 
 ### Level 3: Advanced Event-Driven and APIs
 
 | # | Lab | CLF-C02 | SAA-C03 | Relevance | Notes |
 |---|---|---|---|---|---|
-| 32 | sqs/visibility-timeout | 3.8 | 2.1, 2.2 | Medium | A frequent SAA distractor topic. |
-| 33 | sqs/delayed-message | — | 2.1 | Low | Dev. |
-| 34 | sqs/batch-messages | — | 2.1 | Low | Dev. |
-| 35 | sqs/queue-configuration | 4.2 | 2.1 | Low | Long polling and retention are useful. Tags are a light touch on CLF 4.2. |
-| 36 | sqs/dead-letter-redrive | 3.8 | 2.1, 2.2 | High | Failure isolation. |
-| 37 | sqs/fifo-ordering | 3.8 | 2.1 | High | FIFO vs standard is a classic SAA question. |
-| 38 | sqs/purge-delete | — | — | Low | Ops hygiene. |
-| 39 | sns/sqs-fanout | 3.8 | 2.1 | High | The SNS-to-SQS fan-out pattern. |
-| 40 | sns/filter-policies | 3.8 | 2.1 | High | |
-| 41 | s3/object-notifications-sqs | 3.8 | 2.1 | High | Event-driven ingestion. |
-| 42 | lambda/sqs-event-source | 3.3 | 2.1, 3.2 | High | Decoupling so components scale independently. |
-| 43 | scheduler/sqs-delivery | 3.8 | 2.1 | Medium | |
-| 44 | apigateway/lambda-request | 3.3 | 2.1 | High | API creation. HTTP API only; no REST API, throttling, or usage plans. |
-| 45 | eventbridge/application-spine | 3.8 | 2.1, 2.2 | High | Capstone. Failure experiments map to SAA 2.2. |
-| 46 | cloudwatch/metric-alarms | 2.2 | 2.2, 3.2 | High | ✅ Now reaches ALARM from a real error spike after settling in OK. Floci doesn't run alarm actions (no SNS notification). |
-| 47 | cloudwatch/log-groups-metric-filters | 2.2 | 2.2 | Medium | ✅ Now creates a 30-day retention policy and a metric filter, and verifies that only HTTP 500 lines became metric data. |
+| 40 | sqs/visibility-timeout | 3.8 | 2.1, 2.2 | Medium | A frequent SAA distractor topic. |
+| 41 | sqs/delayed-message | — | 2.1 | Low | Dev. |
+| 42 | sqs/batch-messages | — | 2.1 | Low | Dev. |
+| 43 | sqs/queue-configuration | 4.2 | 2.1 | Low | Long polling and retention are useful. Tags are a light touch on CLF 4.2. |
+| 44 | sqs/dead-letter-redrive | 3.8 | 2.1, 2.2 | High | Failure isolation. |
+| 45 | sqs/fifo-ordering | 3.8 | 2.1 | High | FIFO vs standard is a classic SAA question. |
+| 46 | sqs/purge-delete | — | — | Low | Ops hygiene. |
+| 47 | sns/sqs-fanout | 3.8 | 2.1 | High | The SNS-to-SQS fan-out pattern. |
+| 48 | sns/filter-policies | 3.8 | 2.1 | High | |
+| 49 | s3/object-notifications-sqs | 3.8 | 2.1 | High | Event-driven ingestion. |
+| 50 | lambda/sqs-event-source | 3.3 | 2.1, 3.2 | High | Decoupling so components scale independently. |
+| 51 | scheduler/sqs-delivery | 3.8 | 2.1 | Medium | |
+| 52 | apigateway/lambda-request | 3.3 | 2.1 | High | API creation. HTTP API only; no REST API, throttling, or usage plans. |
+| 53 | eventbridge/application-spine | 3.8 | 2.1, 2.2 | High | Capstone. Failure experiments map to SAA 2.2. |
+| 54 | cloudwatch/metric-alarms | 2.2 | 2.2, 3.2 | High | ✅ Now reaches ALARM from a real error spike after settling in OK. Floci doesn't run alarm actions (no SNS notification). |
+| 55 | cloudwatch/log-groups-metric-filters | 2.2 | 2.2 | Medium | ✅ Now creates a 30-day retention policy and a metric filter, and verifies that only HTTP 500 lines became metric data. |
 
-### Level 4: Senior Security and Workflows
-
-| # | Lab | CLF-C02 | SAA-C03 | Relevance | Notes |
-|---|---|---|---|---|---|
-| 48 | iam/inline-policy-alice | 2.3 | 1.1 | Medium | |
-| 49 | iam/role-trust-policy | 2.3 | 1.1 | High | |
-| 50 | iam/sts-session-policy | 2.3 | 1.1 | High | STS. |
-| 51 | iam/ec2-instance-profile | 2.3 | 1.1, 1.2 | High | |
-| 52 | iam/identity-enforcement-capstone | 2.3 | 1.1 | High | Role switching with real enforcement. |
-| 53 | ec2/guided-instance-role | 2.3 | 1.1, 1.2 | High | "Use roles, not keys, on EC2," a top SAA answer. |
-| 54 | ec2/guided-ssm-command | 3.1 | — | Low | Dev/Ops (CloudOps). |
-| 55 | stepfunctions/order-processing-workflow | — | 2.1 | High | Workflow orchestration. |
-| 56 | stepfunctions/parallel-retry-workflow | — | 2.1 | Medium | |
-| 57 | ecs/fargate-microservice | 3.3 | 2.1, 3.2, 4.2 | High | When to use containers and Fargate. |
-
-### Level 5: Principal DevOps and K8s Expert
+### Level 4: Workflows, Containers and Enforcement
 
 | # | Lab | CLF-C02 | SAA-C03 | Relevance | Notes |
 |---|---|---|---|---|---|
-| 58 | ec2/vpc-public-private | 3.5 | 1.2, 3.4 | ◐ | No NAT gateway, so the private subnet has no egress story. NAT is heavily tested (SAA 1.2, 4.4). |
-| 59 | ec2/security-controls | 3.5 | 1.2 | High | Stateful SGs vs stateless NACLs. |
-| 60 | ec2/guided-broken-route | 3.5 | 2.2, 3.4 | Medium | Route tables. Troubleshooting itself is CloudOps. |
-| 61 | s3/bucket-security | 2.2, 2.3 | 1.1, 1.3 | High | Resource policies and Block Public Access. |
+| 56 | iam/identity-enforcement-capstone | 2.3 | 1.1 | High | Role switching with real enforcement. |
+| 57 | ec2/guided-ssm-command | 3.1 | — | Low | Dev/Ops (CloudOps). |
+| 58 | stepfunctions/order-processing-workflow | — | 2.1 | High | Workflow orchestration. |
+| 59 | stepfunctions/parallel-retry-workflow | — | 2.1 | Medium | |
+| 60 | ecs/fargate-microservice | 3.3 | 2.1, 3.2, 4.2 | High | When to use containers and Fargate. |
+
+### Level 5: Private Networking and Platform
+
+| # | Lab | CLF-C02 | SAA-C03 | Relevance | Notes |
+|---|---|---|---|---|---|
+| 61 | ec2/guided-broken-route | 3.5 | 2.2, 3.4 | Medium | Route tables. Troubleshooting itself is CloudOps. |
 | 62 | ec2/s3-gateway-endpoint | 3.5 | 1.2, 3.4, 4.4 | High | VPC endpoints for security and to avoid NAT data charges. |
 | 63 | ec2/guided-private-s3 | 3.5 | 1.2, 4.4 | Medium | Overlaps with #62. |
 | 64 | ec2/sqs-interface-endpoint | 3.5 | 1.2, 3.4 | High | PrivateLink. |
 | 65 | eks/control-plane-nodegroup | 3.3 | 2.1, 3.2 | Medium | Associate exams only need "when to pick EKS vs ECS"; node groups and kubeconfig are deeper than needed. |
 | 66 | cloudformation/s3-sqs-stack | 3.1 | 2.2 | High | IaC, repeatable processes, and automation for infrastructure integrity. ✅ Now previews and applies an update through a change set (Add vs Modify, Replacement). |
 
-**Summary of relevance.** About 38 labs are high or medium value for SAA and about 30 for CLF. Roughly 10 labs (#18, 25, 27, 33, 34, 38, 54, and parts of 47 and 65) mainly serve the Developer or CloudOps tracks. They should stay, tagged for those tracks later.
+**Summary of relevance.** About 38 labs are high or medium value for SAA and about 30 for CLF. Roughly 10 labs (#23, #30, #34, #41, #42, #46, #57, and parts of #55 and #65) mainly serve the Developer or CloudOps tracks. They should stay, tagged for those tracks later.
 
 ---
 
@@ -164,15 +164,15 @@ Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *D
 | 1.2 | Well-Architected pillars | 📖 | — | Concept. Could tag each lab with its primary pillar. |
 | 1.3 | Migration and the CAF | 📖 | — | Concept. DMS can be labbed lightly (see SAA 4.3). |
 | 1.4 | Cloud economics | 📖 / ◐ | #66 (automation) | Rightsizing and BYOL are concepts. |
-| 2.1 | Shared responsibility | 📖 / ◐ | EC2 vs RDS vs Lambda labs exist | No lab makes the comparison explicit. Ideal as an exam-lens card on #14, #26, and #27. |
-| 2.2 | Security, governance, compliance | ◐ | #16, #19, #46, #47, #61 | **CloudTrail, Config, GuardDuty, Inspector, Security Hub, Shield, Artifact** |
-| 2.3 | Access management | ● | 11 IAM labs, #22, #23, #24, #53 | Root-user protection, **MFA, password policy, IAM Identity Center**, federation |
+| 2.1 | Shared responsibility | 📖 / ◐ | EC2 vs RDS vs Lambda labs exist | No lab makes the comparison explicit. Ideal as an exam-lens card on #15, #31, and #34. |
+| 2.2 | Security, governance, compliance | ◐ | #20, #21, #24, #54, #55 | **CloudTrail, Config, GuardDuty, Inspector, Security Hub, Shield, Artifact** |
+| 2.3 | Access management | ● | 11 IAM labs, #27, #28, #29, #37 | Root-user protection, **MFA, password policy, IAM Identity Center**, federation |
 | 2.4 | Security components and resources | ○ | — | WAF, Shield, Firewall Manager, Trusted Advisor, Marketplace |
-| 3.1 | Deploying and operating | ● | #8, #66, #28, #54 | Console vs CLI vs IaC is already implicit. Make it explicit. |
-| 3.2 | Global infrastructure | ◐ | Subnets pin AZs in #58 and #59 | Multi-AZ HA, multiple Regions, edge locations |
-| 3.3 | Compute | ◐ | #14, #57, #65, guided EC2 | **Instance types, Auto Scaling, load balancers** |
-| 3.4 | Databases | ◐ | #13, #26, #31 | **Aurora, ElastiCache**, EC2-hosted vs managed, DMS |
-| 3.5 | Network | ● | #58–#64, #29 | **Route 53**, VPN and Direct Connect (concept) |
+| 3.1 | Deploying and operating | ● | #9, #35, #57, #66 | Console vs CLI vs IaC is already implicit. Make it explicit. |
+| 3.2 | Global infrastructure | ◐ | Subnets pin AZs in #32 and #33 | Multi-AZ HA, multiple Regions, edge locations |
+| 3.3 | Compute | ◐ | #15, #60, #65, guided EC2 | **Instance types, Auto Scaling, load balancers** |
+| 3.4 | Databases | ◐ | #14, #31, #39 | **Aurora, ElastiCache**, EC2-hosted vs managed, DMS |
+| 3.5 | Network | ● | #21, #32, #33, #36, #61, #62, #63, #64 | **Route 53**, VPN and Direct Connect (concept) |
 | 3.6 | Storage | ◐ | 12 S3 labs | **Storage classes, EBS, instance store, EFS**, FSx, Storage Gateway, **AWS Backup** |
 | 3.7 | AI/ML and analytics | ○ | — | Athena, Kinesis, Glue (labbable); SageMaker AI, Lex, Quick (concept) |
 | 3.8 | Other categories | ◐ | SQS, SNS, EventBridge labs | SES, CodeBuild and CodePipeline, X-Ray, IoT Core, Amplify, Connect, WorkSpaces |
@@ -186,18 +186,18 @@ Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *D
 
 | Task | Topic | Coverage | Covered by | Gap |
 |---|---|---|---|---|
-| 1.1 | Secure access | ● | 11 IAM labs, #53, #61 | **Multi-account: Organizations, SCPs, Control Tower**; MFA; IAM Identity Center; directory federation |
-| 1.2 | Secure workloads | ● | #58, #59, #62–#64, #22, #23, #24, #30 | **NAT gateways**, WAF and Shield, GuardDuty and Macie, VPN and Direct Connect |
-| 1.3 | Data security controls | ◐ | #15, #16, #17, #19, #21, #61 | **KMS key policies and rotation, SSE-KMS, ACM/TLS, backups and replication (CRR, AWS Backup), Object Lock**, secret rotation |
+| 1.1 | Secure access | ● | 11 IAM labs, #21, #37 | **Multi-account: Organizations, SCPs, Control Tower**; MFA; IAM Identity Center; directory federation |
+| 1.2 | Secure workloads | ● | #27, #28, #29, #32, #33, #38, #62, #63, #64 | **NAT gateways**, WAF and Shield, GuardDuty and Macie, VPN and Direct Connect |
+| 1.3 | Data security controls | ◐ | #19, #20, #21, #22, #24, #26 | **KMS key policies and rotation, SSE-KMS, ACM/TLS, backups and replication (CRR, AWS Backup), Object Lock**, secret rotation |
 | 2.1 | Scalable, loosely coupled | ● | ~20 labs (SQS, SNS, EventBridge, Lambda, Step Functions, API Gateway, ECS) | **Load balancing (ALB), horizontal scaling, caching, CDN, read replicas**, storage types (block vs file) |
-| 2.2 | HA and fault tolerance | ◐ | #15, #36, #45, #60, #66 | **Multi-AZ, Route 53 failover, DR strategies (RPO/RTO), RDS Proxy, Aurora failover**, quotas and throttling, X-Ray |
-| 3.1 | Storage performance | ◐ | #20, S3 basics | **EBS volume types, EFS**, hybrid storage |
-| 3.2 | Elastic compute | ◐ | #42, #57, #65 | **Auto Scaling and scaling metrics, instance families, Lambda memory sizing**, Batch and EMR |
-| 3.3 | Database performance | ◐ | #13, #26 | **Read replicas, Aurora, ElastiCache, DynamoDB capacity and DAX, RDS Proxy** |
-| 3.4 | Network performance | ◐ | #58, #60, #62, #64 | **CloudFront, Global Accelerator, ALB vs NLB**, VPN, Direct Connect |
+| 2.2 | HA and fault tolerance | ◐ | #19, #44, #53, #61, #66 | **Multi-AZ, Route 53 failover, DR strategies (RPO/RTO), RDS Proxy, Aurora failover**, quotas and throttling, X-Ray |
+| 3.1 | Storage performance | ◐ | #25, S3 basics | **EBS volume types, EFS**, hybrid storage |
+| 3.2 | Elastic compute | ◐ | #50, #60, #65 | **Auto Scaling and scaling metrics, instance families, Lambda memory sizing**, Batch and EMR |
+| 3.3 | Database performance | ◐ | #14, #31 | **Read replicas, Aurora, ElastiCache, DynamoDB capacity and DAX, RDS Proxy** |
+| 3.4 | Network performance | ◐ | #32, #61, #62, #64 | **CloudFront, Global Accelerator, ALB vs NLB**, VPN, Direct Connect |
 | 3.5 | Data ingestion and transformation | ○ | — | **Kinesis, Firehose, Glue, Athena, Lake Formation**, DataSync, data lakes, CSV-to-Parquet |
-| 4.1 | Cost-optimized storage | ◐ | #17, #20 | **Storage tiers and transitions, Intelligent-Tiering, Requester Pays, EBS types**, Backup retention, cost tools |
-| 4.2 | Cost-optimized compute | ○ | #57 touches Fargate | **Spot, RI, Savings Plans, instance sizing, ALB vs NLB vs GWLB**, scaling strategies |
+| 4.1 | Cost-optimized storage | ◐ | #22, #25 | **Storage tiers and transitions, Intelligent-Tiering, Requester Pays, EBS types**, Backup retention, cost tools |
+| 4.2 | Cost-optimized compute | ○ | #60 touches Fargate | **Spot, RI, Savings Plans, instance sizing, ALB vs NLB vs GWLB**, scaling strategies |
 | 4.3 | Cost-optimized databases | ○ | — | **DynamoDB on-demand vs provisioned, Aurora Serverless**, snapshot retention, DMS |
 | 4.4 | Cost-optimized networking | ◐ | #62, #63 (endpoints) | **NAT per AZ vs shared, VPC peering vs Transit Gateway**, CloudFront, API throttling |
 
@@ -298,7 +298,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 | W1-1 | **Highly available web tier**: launch template, ALB across 2 AZ subnets, target group with health check, ASG (min 2), target-tracking policy, scale out, curl the ALB | `elbv2_labs.py` (new) + `autoscaling` | ~11 | 2.1, 2.2, 3.2, 3.4, 4.2 | 3.2, 3.3 | ✅ (confirm ALB forwards to ASG targets, not just fixed responses) | The single most-tested SAA architecture, and nothing covers it today |
 | W1-2 | **RDS and Aurora resilience**: Postgres Multi-AZ with encryption and backup retention, read replica, manual snapshot, forced failover; then an Aurora cluster with a reader and a cluster snapshot | `rds_labs.py` (extend) | ~10 | 2.2, 3.3, 1.3, 4.3 | 3.4 | ✅ | Read replicas vs Multi-AZ is a top SAA trap |
 | W1-3 | **S3 data protection and storage tiers**: upload with storage classes, lifecycle transitions to STANDARD_IA, GLACIER, and expiry, Intelligent-Tiering, Object Lock compliance (real deny), cross-Region replication config, Requester Pays | `s3_labs.py` (extend) | ~10 | 1.3, 4.1, 2.2 | 3.6, 4.1 | ✅ / ⚠️ (tiering and replication are config only) | Covers SAA 4.1, the largest single cost task |
-| W1-4 | **Three-tier VPC with NAT**: extend the VPC lab with an EIP, a NAT gateway in the public subnet, a private default route via NAT, and a database subnet tier; exam lens on one NAT per AZ vs a shared NAT, and NAT vs gateway endpoint cost | `ec2_labs.py` (extend #58 or add a new lab) | ~8 | 1.2, 3.4, 4.4 | 3.5 | ⚠️ Control plane (check whether private-instance egress works) | NAT is in three SAA task statements |
+| W1-4 | **Three-tier VPC with NAT**: extend the VPC lab with an EIP, a NAT gateway in the public subnet, a private default route via NAT, and a database subnet tier; exam lens on one NAT per AZ vs a shared NAT, and NAT vs gateway endpoint cost | `ec2_labs.py` (extend #32 or add a new lab) | ~8 | 1.2, 3.4, 4.4 | 3.5 | ⚠️ Control plane (check whether private-instance egress works) | NAT is in three SAA task statements |
 | W1-5 | **KMS key management**: customer managed key with key policy, automatic rotation, grant, envelope encryption via `generate-data-key`, SSE-KMS bucket default | `kms_labs.py` (extend) | ~7 | 1.3 | 2.2 | ✅ / ⚠️ (key policy not enforced; inspect only) | Keys, rotation, and access policies are explicit SAA 1.3 skills |
 | W1-6 | **Route 53 routing and failover**: hosted zone, health check, failover primary and secondary records, weighted records; exam lens on all routing policies | `route53_labs.py` (new) | ~7 | 2.2, 3.4 | 3.5 | ⚠️ Records verifiable; resolution not | Route 53 underpins every DR answer |
 
@@ -332,15 +332,15 @@ The six rows marked ✅ shipped on 2026-10-22 and pass `check_labs` on Floci 2.3
 
 | Lab | Extension | Exam value |
 |---|---|---|
-| ✅ #17 s3/lifecycle-retention | Add a transition rule, not just expiry | SAA 4.1 |
-| ✅ #23 secretsmanager/secret-lifecycle | Add a rotation Lambda and `rotate-secret` | SAA 1.2, 1.3; CLF 2.3 |
-| ✅ #46 cloudwatch/metric-alarms | Replace `set-alarm-state` with a real threshold breach | SAA 2.2, 3.2 |
-| ✅ #47 cloudwatch/log-groups-metric-filters | Add the metric filter and retention the title promises | CLF 2.2 |
-| ✅ #26 rds/db-instance-lifecycle | Add `--storage-encrypted` and `--backup-retention-period` | SAA 1.3 |
+| ✅ #22 s3/lifecycle-retention | Add a transition rule, not just expiry | SAA 4.1 |
+| ✅ #28 secretsmanager/secret-lifecycle | Add a rotation Lambda and `rotate-secret` | SAA 1.2, 1.3; CLF 2.3 |
+| ✅ #54 cloudwatch/metric-alarms | Replace `set-alarm-state` with a real threshold breach | SAA 2.2, 3.2 |
+| ✅ #55 cloudwatch/log-groups-metric-filters | Add the metric filter and retention the title promises | CLF 2.2 |
+| ✅ #31 rds/db-instance-lifecycle | Add `--storage-encrypted` and `--backup-retention-period` | SAA 1.3 |
 | ✅ #66 cloudformation/s3-sqs-stack | Add a change set (drift detection still open) | SAA 2.2; CLF 3.1 |
-| #44 apigateway/lambda-request | Exam lens on HTTP API vs REST API (usage plans, caching, WAF) | SAA 2.1 |
+| #52 apigateway/lambda-request | Exam lens on HTTP API vs REST API (usage plans, caching, WAF) | SAA 2.1 |
 | #4 iam/access-key-alice | Add key rotation (create a second key, deactivate the first) | CLF 2.3 |
-| #14, #26, #27 | Shared-responsibility exam-lens card (who patches what) | CLF 2.1 |
+| #15, #31, #34 | Shared-responsibility exam-lens card (who patches what) | CLF 2.1 |
 
 ### Concept-only content (cards and videos, not labs)
 
