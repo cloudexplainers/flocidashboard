@@ -591,25 +591,51 @@ export async function fetchLambdaFunctionUrl(functionName: string): Promise<any>
   }
 }
 
+/** CreateFunctionUrlConfig. CORS is only sent when configured, as in the console (off by default). */
 export async function createLambdaFunctionUrl(functionName: string, authType: 'NONE' | 'AWS_IAM' = 'NONE', cors?: any): Promise<any> {
   return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/url/`, {
     method: 'POST',
-    json: {
-      options: {
-        AuthType: authType,
-        Cors: cors || { AllowOrigins: ['*'], AllowMethods: ['*'] },
-      },
-    },
+    json: { options: { AuthType: authType, ...(cors ? { Cors: cors } : {}) } },
     errorMessage: `Failed to create Function URL`,
   });
 }
 
 export async function deleteLambdaFunctionUrl(functionName: string): Promise<any> {
-  const res = await fetch(`/api/lambda/functions/${encodeURIComponent(functionName)}/url/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/url/`, { method: 'DELETE', errorMessage: 'Failed to delete Function URL' });
+}
+
+export async function createLambdaFunction(request: { name: string; role: string; runtime: string; handler: string; fileName: string; source: string; architecture?: string }): Promise<any> {
+  return requestJson('/api/lambda/functions/', {
+    method: 'POST',
+    json: {
+      name: request.name,
+      role: request.role,
+      code: { InlineSource: { FileName: request.fileName, Content: request.source } },
+      configuration: { Runtime: request.runtime, Handler: request.handler, Architectures: [request.architecture || 'x86_64'] },
+    },
+    errorMessage: 'Failed to create function',
   });
-  return await res.json();
+}
+
+export async function deleteLambdaFunction(functionName: string): Promise<any> {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/`, { method: 'DELETE', errorMessage: 'Failed to delete function' });
+}
+
+export interface LambdaInvokeResult {
+  status_code?: number;
+  executed_version?: string;
+  function_error?: string;
+  log_tail?: string;
+  payload?: unknown;
+}
+
+/** Invoke with LogType Tail, so the response includes the last 4 KB of logs, like the console's Test tab. */
+export async function invokeLambdaFunction(functionName: string, payload: unknown, qualifier?: string): Promise<LambdaInvokeResult> {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/invoke/`, {
+    method: 'POST',
+    json: { payload, qualifier: qualifier || undefined },
+    errorMessage: 'Failed to invoke function',
+  });
 }
 
 export async function fetchLambdaEventSourceMappings(functionName: string): Promise<any[]> {
@@ -623,14 +649,16 @@ export async function fetchLambdaEventSourceMappings(functionName: string): Prom
   }
 }
 
+/** CreateEventSourceMapping. StartingPosition applies only to stream sources (Kinesis, DynamoDB Streams); SQS rejects it. */
 export async function createLambdaEventSourceMapping(functionName: string, eventSourceArn: string, batchSize: number = 10): Promise<any> {
+  const isStream = /^arn:aws:(kinesis|dynamodb):/.test(eventSourceArn);
   return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/event-source-mappings/`, {
     method: 'POST',
     json: {
       options: {
         EventSourceArn: eventSourceArn,
         BatchSize: batchSize,
-        StartingPosition: 'LATEST',
+        ...(isStream ? { StartingPosition: 'LATEST' } : {}),
       },
     },
     errorMessage: `Failed to add event source mapping trigger`,
@@ -638,11 +666,7 @@ export async function createLambdaEventSourceMapping(functionName: string, event
 }
 
 export async function deleteLambdaEventSourceMapping(uuid: string): Promise<any> {
-  const res = await fetch(`/api/lambda/event-source-mappings/${encodeURIComponent(uuid)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`/api/lambda/event-source-mappings/${encodeURIComponent(uuid)}/`, { method: 'DELETE', errorMessage: 'Failed to delete trigger' });
 }
 
 export async function fetchLambdaVersions(functionName: string): Promise<any[]> {
@@ -1454,26 +1478,25 @@ export async function updateDynamoDbTtl(tableName: string, attributeName: string
   });
 }
 
-// Lambda Additional APIs
+// Lambda configuration and aliases
+/** UpdateFunctionConfiguration with only the fields given. */
 export async function updateLambdaFunctionConfiguration(
   functionName: string,
-  config: { timeout?: number; memorySize?: number; description?: string; handler?: string; runtime?: string }
+  config: { timeout?: number; memorySize?: number; description?: string; handler?: string; runtime?: string; ephemeralStorage?: number }
 ): Promise<any> {
-  return await executeServiceAction('lambda', 'update_function_configuration', {
-    function_name: functionName,
-    timeout: config.timeout,
-    memory_size: config.memorySize,
-    description: config.description,
-    handler: config.handler,
-    runtime: config.runtime,
-  });
+  const configuration: Record<string, unknown> = {};
+  if (config.timeout !== undefined) configuration.Timeout = config.timeout;
+  if (config.memorySize !== undefined) configuration.MemorySize = config.memorySize;
+  if (config.description !== undefined) configuration.Description = config.description;
+  if (config.handler !== undefined) configuration.Handler = config.handler;
+  if (config.runtime !== undefined) configuration.Runtime = config.runtime;
+  if (config.ephemeralStorage !== undefined) configuration.EphemeralStorage = { Size: config.ephemeralStorage };
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/`, { method: 'PATCH', json: { configuration }, errorMessage: 'Failed to update configuration' });
 }
 
+/** UpdateFunctionConfiguration replaces the whole Environment, so pass every variable to keep. */
 export async function updateLambdaEnvironmentVariables(functionName: string, variables: Record<string, string>): Promise<any> {
-  return await executeServiceAction('lambda', 'update_function_configuration', {
-    function_name: functionName,
-    environment: { Variables: variables },
-  });
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/`, { method: 'PATCH', json: { configuration: { Environment: { Variables: variables } } }, errorMessage: 'Failed to update environment variables' });
 }
 
 export async function fetchLambdaAliases(functionName: string): Promise<any[]> {
@@ -1487,18 +1510,12 @@ export async function fetchLambdaAliases(functionName: string): Promise<any[]> {
   }
 }
 
-export async function createLambdaAlias(functionName: string, name: string, functionVersion: string = '$LATEST', description: string = '', routingWeight?: number): Promise<any> {
-  return await executeServiceAction('lambda', 'create_alias', {
-    function_name: functionName,
-    name,
-    function_version: functionVersion,
-    description,
-    routing_config: routingWeight ? { AdditionalVersionWeights: { [functionVersion]: routingWeight } } : undefined,
-  });
+export async function createLambdaAlias(functionName: string, name: string, functionVersion: string = '$LATEST', description: string = ''): Promise<any> {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/aliases/`, { method: 'POST', json: { name, function_version: functionVersion, description }, errorMessage: 'Failed to create alias' });
 }
 
 export async function deleteLambdaAlias(functionName: string, name: string): Promise<any> {
-  return await executeServiceAction('lambda', 'delete_alias', { function_name: functionName, name });
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/aliases/${encodeURIComponent(name)}/`, { method: 'DELETE', errorMessage: 'Failed to delete alias' });
 }
 
 // KMS Additional APIs

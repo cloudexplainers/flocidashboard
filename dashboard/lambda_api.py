@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
+import zipfile
 from typing import Any
 
 from botocore.exceptions import ClientError
 
-from .aws import FlociClientFactory, _clean_response
+from .aws import FlociClientFactory, _clean_response, browser_reachable_url
 
 
 def _lambda_client():
@@ -42,12 +44,34 @@ def _object(value: Any, label: str, *, empty: bool = True) -> dict[str, Any]:
     return value
 
 
+def _function_code(code: Any) -> dict[str, Any]:
+    """Build the Code parameter. JSON cannot carry bytes, so the console sends
+    either {"InlineSource": {"FileName", "Content"}} (zipped here, like the
+    console's "Author from scratch" editor) or {"ZipFile": "<base64>"}."""
+    value = _object(code, 'Code', empty=False)
+    inline = value.pop('InlineSource', None)
+    if inline is not None:
+        if not isinstance(inline, dict):
+            raise ValueError('InlineSource must be an object with FileName and Content')
+        file_name = _required(inline.get('FileName'), 'Code file name')
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(file_name, str(inline.get('Content') or ''))
+        value['ZipFile'] = buffer.getvalue()
+    elif isinstance(value.get('ZipFile'), str):
+        try:
+            value['ZipFile'] = base64.b64decode(value['ZipFile'], validate=True)
+        except ValueError as exc:
+            raise ValueError('ZipFile must be base64-encoded') from exc
+    return value
+
+
 def create_function(name: str, role: str, code: Any, *, configuration: Any = None, tags: Any = None) -> dict[str, Any]:
     kwargs = {
         **_object(configuration, 'Configuration'),
         'FunctionName': validate_function_name(name),
         'Role': _required(role, 'Execution role ARN'),
-        'Code': _object(code, 'Code', empty=False),
+        'Code': _function_code(code),
     }
     clean_tags = _object(tags, 'Tags')
     if clean_tags:
@@ -64,7 +88,7 @@ def update_function_configuration(name: str, configuration: Any) -> dict[str, An
 
 
 def update_function_code(name: str, code: Any, *, publish: bool = False) -> dict[str, Any]:
-    kwargs = _object(code, 'Code', empty=False)
+    kwargs = _function_code(code)
     kwargs.update(FunctionName=validate_function_name(name), Publish=bool(publish))
     response = _lambda_client().update_function_code(**kwargs)
     return {'function_name': kwargs['FunctionName'], 'version': response.get('Version'), 'response': _clean_response(response)}
@@ -153,7 +177,10 @@ def get_function_url(function_name: str) -> dict[str, Any] | None:
             return None
         raise
     response.pop('ResponseMetadata', None)
-    return _clean_response(response)
+    result = _clean_response(response)
+    # FunctionUrl uses Floci's container hostname; BrowserUrl is the same endpoint reached from the host.
+    result['BrowserUrl'] = browser_reachable_url(result.get('FunctionUrl'))
+    return result
 
 
 def save_function_url(function_name: str, options: Any, *, update: bool = False) -> dict[str, Any]:

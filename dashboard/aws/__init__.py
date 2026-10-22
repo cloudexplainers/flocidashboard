@@ -760,3 +760,30 @@ from .textract import textract_inventory  # noqa: E402, F401
 from .transcribe import transcribe_inventory  # noqa: E402, F401
 from .transfer import transfer_inventory  # noqa: E402, F401
 from .wafv2 import wafv2_inventory  # noqa: E402, F401
+
+
+def public_endpoint_url() -> str:
+    """The Floci URL a browser can reach.
+
+    Inside Docker the dashboard talks to http://floci:4566, which the host's browser
+    cannot resolve. FLOCI_PUBLIC_ENDPOINT_URL names the host-side URL for links the
+    console hands to the browser (presigned URLs, website endpoints, function URLs).
+    """
+    return (os.getenv('FLOCI_PUBLIC_ENDPOINT_URL') or FlociClientFactory().endpoint_url).rstrip('/')
+
+
+def browser_reachable_url(url: str | None) -> str | None:
+    """Rewrite a Floci-generated URL (host suffix "floci" or the internal endpoint host)
+    so it resolves from the browser, keeping the subdomain, path and query."""
+    if not url:
+        return url
+    parsed = urlparse(url)
+    public = urlparse(public_endpoint_url())
+    internal = urlparse(FlociClientFactory().endpoint_url)
+    host = parsed.hostname or ''
+    for suffix in {'floci', internal.hostname or ''} - {''}:
+        if host == suffix or host.endswith(f'.{suffix}'):
+            new_host = host[: len(host) - len(suffix)] + (public.hostname or 'localhost')
+            port = f':{public.port}' if public.port else ''
+            return parsed._replace(netloc=f'{new_host}{port}').geturl()
+    return url

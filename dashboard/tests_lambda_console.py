@@ -52,7 +52,7 @@ class LambdaFunctionsApiTests(SimpleTestCase):
 
         client.get_function_url_config.side_effect = None
         client.get_function_url_config.return_value = {'FunctionUrl': 'http://x/', 'ResponseMetadata': {}}
-        self.assertEqual(get('dashboard:lambda-function-url').json(), {'FunctionUrl': 'http://x/'})
+        self.assertEqual(get('dashboard:lambda-function-url').json(), {'FunctionUrl': 'http://x/', 'BrowserUrl': 'http://x/'})
 
     @patch('dashboard.lambda_views.create_function')
     def test_create_function_success(self, create_mock):
@@ -193,3 +193,31 @@ class LambdaApiHelperTests(SimpleTestCase):
         result = set_concurrency('worker', '5')
         self.assertEqual(result['reserved_concurrency'], 5)
         client.put_function_concurrency.assert_called_once_with(FunctionName='worker', ReservedConcurrentExecutions=5)
+
+
+class LambdaInlineCodeTests(SimpleTestCase):
+    def test_inline_source_is_zipped_for_create_function(self):
+        import io
+        import zipfile
+
+        from .lambda_api import _function_code
+
+        code = _function_code({'InlineSource': {'FileName': 'lambda_function.py', 'Content': 'print(1)'}})
+
+        with zipfile.ZipFile(io.BytesIO(code['ZipFile'])) as archive:
+            self.assertEqual(archive.read('lambda_function.py'), b'print(1)')
+        self.assertNotIn('InlineSource', code)
+
+    def test_base64_zip_is_decoded(self):
+        from .lambda_api import _function_code
+
+        self.assertEqual(_function_code({'ZipFile': 'UEsFBg=='})['ZipFile'], b'PK\x05\x06')
+
+    @patch.dict('os.environ', {'FLOCI_PUBLIC_ENDPOINT_URL': 'http://localhost:4566'})
+    def test_function_url_is_rewritten_for_the_browser(self):
+        from .aws import browser_reachable_url
+
+        self.assertEqual(
+            browser_reachable_url('http://abc.lambda-url.us-east-1.floci:4566/'),
+            'http://abc.lambda-url.us-east-1.localhost:4566/',
+        )

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-import os
 from typing import Any
 from urllib.parse import urlparse
 
 from botocore.exceptions import ClientError
 
-from .aws import FlociClientFactory, _clean_response, _error_code, _paginate
+from .aws import FlociClientFactory, _clean_response, _error_code, _paginate, public_endpoint_url
 from .aws.s3 import _s3_bucket_location, _s3_bucket_objects, _s3_bucket_versions, _s3_optional
 
 MULTIPART_THRESHOLD = 5 * 1024 * 1024
@@ -27,16 +26,6 @@ def _bucket_encryption(s3, bucket: str) -> dict[str, Any]:
 
 def _s3_client():
     return FlociClientFactory().client('s3')
-
-
-def public_endpoint_url() -> str:
-    """The Floci URL a browser can reach.
-
-    Inside Docker the dashboard talks to http://floci:4566, which the host's browser
-    cannot resolve. FLOCI_PUBLIC_ENDPOINT_URL names the host-side URL for links the
-    console hands to the browser (presigned URLs, website endpoints).
-    """
-    return (os.getenv('FLOCI_PUBLIC_ENDPOINT_URL') or FlociClientFactory().endpoint_url).rstrip('/')
 
 
 def s3_website_endpoint(bucket: str, region: str | None) -> str:

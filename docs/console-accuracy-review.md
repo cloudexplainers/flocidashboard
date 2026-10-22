@@ -89,3 +89,21 @@ Left as is:
 - Policy versions, permissions boundaries, login profiles and tags have backend routes but no editors here.
 - Identity providers, Access Analyzer and account settings are not emulated.
 
+## Lambda
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | Create, delete, invoke, configuration and environment updates, and alias create/delete went through the inventory endpoint and did nothing while reporting success ("Function invoked successfully" with the inventory as the "result"). | Fixed: `CreateFunction`, `DeleteFunction`, `Invoke`, `UpdateFunctionConfiguration`, `CreateAlias`, `DeleteAlias`. |
+| High | Create function sent the string `dummy` as the deployment package and a hard-coded role. | Fixed: "Author from scratch" with the console's Hello World code, zipped by the backend (new `InlineSource` code option), and an execution role picker that suggests roles trusting `lambda.amazonaws.com`. |
+| High | Adding an SQS trigger always sent `StartingPosition: LATEST`, which AWS rejects for SQS. | Fixed: only stream sources get a starting position. |
+| High | The Function URL shown was invented (`<function-name>.lambda-url.localhost:4566`). The real one uses a hash ID and Floci's container hostname. | Fixed: shows the real `FunctionUrl` plus a browser-reachable version (`BrowserUrl`), verified to invoke the function. New URLs no longer get a wildcard CORS policy the console would not add. |
+| Medium | Defaults were invented: timeout 30 s (AWS default is 3 s), memory 128 MB, name "my-function", and a fake "$LATEST — Active working draft" version row. | Removed; values come from `GetFunctionConfiguration` and `ListVersionsByFunction`. |
+| Medium | Test results were raw JSON of the dashboard response. | Fixed: "Execution result: succeeded/failed", status code, executed version, function error, response and log tail, as on the console's Test tab. |
+| Medium | Delete function and delete alias had no confirmation. Memory and timeout were not validated. | Fixed ("confirm" typed confirmation, 128–10240 MB, 1–900 s). |
+| Low | List columns and labels did not match the console. | Fixed: Description, Package type, Runtime, Last modified; triggers show State, Last processing result and UUID; versions show aliases and last modified. |
+
+Left as is:
+- Floci returns no `LogResult` for synchronous invokes, so the Test tab's log section is empty; the Monitor tab reads the CloudWatch log group instead.
+- There is no in-browser code editor or deploy; `UpdateFunctionCode` is supported by the backend (now including inline source) but not wired to an editor.
+- Layers, destinations, concurrency, permissions (resource policy), VPC and tags have backend routes but no editors in this console.
+
