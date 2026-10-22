@@ -532,11 +532,12 @@ export async function simulateIamPolicy(principalArn: string, actionNames: strin
 }
 
 // DynamoDB Deepening APIs
-export async function fetchDynamoDbTableScan(tableName: string, limit: number = 50, startKey?: any): Promise<{ items: any[]; count: number; scanned_count: number; last_evaluated_key?: any }> {
-  return requestJson(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/scan/`, {
+export async function fetchDynamoDbTableScan(tableName: string, limit: number = 50, startKey?: any, request: Record<string, any> = {}): Promise<{ items: any[]; count: number; scanned_count: number; last_evaluated_key?: any }> {
+  const { mode = 'scan', ...body } = request;
+  return requestJson(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/${mode === 'query' ? 'query' : 'scan'}/`, {
     method: 'POST',
-    json: { limit, exclusive_start_key: startKey },
-    errorMessage: 'Unable to scan table',
+    json: { ...body, limit, exclusive_start_key: startKey },
+    errorMessage: mode === 'query' ? 'Unable to query table' : 'Unable to scan table',
   });
 }
 

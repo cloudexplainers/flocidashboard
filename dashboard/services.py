@@ -1060,13 +1060,12 @@ DYNAMODB_ACTIONS = (
     ),
     action(
         'execute_select_statement',
-        'Execute SELECT',
+        'Run PartiQL statement',
         'POST',
         '/api/dynamodb/partiql/',
-        'read',
-        safety='safe',
+        'execute',
         fields=(
-            action_field('statement', 'SELECT statement', required=True, field_type='textarea'),
+            action_field('statement', 'PartiQL statement', required=True, field_type='textarea', help_text='SELECT, INSERT, UPDATE or DELETE.'),
             action_field('limit', 'Limit', field_type='number'),
         ),
     ),

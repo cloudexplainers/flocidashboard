@@ -1090,6 +1090,38 @@ test('DynamoDB normalizes live schema, TTL, streams and capacity and preserves t
   await page.screenshot({ path: 'test-results/screenshots/dynamodb-schema.png', fullPage: true });
 });
 
+test('DynamoDB query builder sends a typed key condition and PartiQL can write', async ({ page }) => {
+  await inventory(page, 'dynamodb', { tables: [dynamoReviewTable] });
+  let query: any = null;
+  let statement: any = null;
+  await page.route('**/api/dynamodb/tables/Orders/scan/', route => route.fulfill({ json: { items: [] } }));
+  await page.route('**/api/dynamodb/tables/Orders/query/', route => { query = route.request().postDataJSON(); return route.fulfill({ json: { items: [{ customerId: 'alice', orderDate: 3 }] } }); });
+  await page.route('**/api/dynamodb/partiql/', route => { statement = route.request().postDataJSON(); return route.fulfill({ json: { statement_type: 'DELETE', items: [] } }); });
+  await page.goto('/dynamodb/items?table=Orders');
+  await page.getByText('Query', { exact: true }).click();
+  await page.getByLabel('Partition key value', { exact: true }).fill('alice');
+  await page.getByRole('button', { name: /Sort key condition|orderDate \(Sort key\)/ }).first().click();
+  await page.getByRole('option', { name: 'Between', exact: true }).click();
+  await page.getByLabel('Sort key value', { exact: true }).fill('1');
+  await page.getByLabel('Sort key upper value', { exact: true }).fill('x');
+  await expect(page.getByText('Enter a number.', { exact: true })).toBeVisible();
+  await page.getByLabel('Sort key upper value', { exact: true }).fill('5');
+  await page.getByText('Sort descending', { exact: true }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).first().click();
+  await expect.poll(() => query).toMatchObject({
+    key_condition_expression: '#pk = :pk AND #sk BETWEEN :sk AND :sk2',
+    expression_attribute_names: { '#pk': 'customerId', '#sk': 'orderDate' },
+    expression_attribute_values: { ':pk': 'alice', ':sk': 1, ':sk2': 5 },
+    scan_index_forward: false,
+  });
+  await expect(page.getByText('Query: showing 1 items.', { exact: false })).toBeVisible();
+  await page.getByRole('tab', { name: 'PartiQL editor', exact: true }).click();
+  await page.getByRole('textbox').last().fill('DELETE FROM "Orders" WHERE customerId = \'alice\' AND orderDate = 3');
+  await page.getByRole('button', { name: 'Run', exact: true }).last().click();
+  await expect.poll(() => statement?.statement).toContain('DELETE FROM');
+  await expect(page.getByText('DELETE statement ran successfully.', { exact: true })).toBeVisible();
+});
+
 test('DynamoDB ignores an old scan after switching tables and reports scan failures', async ({ page }) => {
   await inventory(page, 'dynamodb', { tables: [{ TableName: 'Orders', PartitionKey: 'id' }, { TableName: 'Other', PartitionKey: 'id' }] });
   let release!: () => void;
