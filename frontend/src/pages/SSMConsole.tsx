@@ -76,6 +76,9 @@ export const SSMConsole: React.FC<SSMConsoleProps> = ({
   const [formValue, setFormValue] = useState("");
   const [description, setDescription] = useState("");
   const [docType, setDocType] = useState("Command");
+  const [formTier, setFormTier] = useState("Standard");
+  const [formDataType, setFormDataType] = useState("text");
+  const [formKeyId, setFormKeyId] = useState("");
   const [confirmation, setConfirmation] = useState<{
     type: "parameter" | "document";
     name: string;
@@ -154,6 +157,10 @@ export const SSMConsole: React.FC<SSMConsoleProps> = ({
     );
     setDescription(next === "edit" ? parameter?.description || "" : "");
     setFormType(next === "edit" ? parameter?.type || "String" : "String");
+    // Console defaults: Standard tier, text data type, the AWS managed key alias/aws/ssm.
+    setFormTier(next === "edit" ? parameter?.tier || "Standard" : "Standard");
+    setFormDataType(next === "edit" ? parameter?.dataType || "text" : "text");
+    setFormKeyId(next === "edit" ? parameter?.keyId || "" : "");
   };
   const saveForm = () =>
     run(async () => {
@@ -183,13 +190,9 @@ export const SSMConsole: React.FC<SSMConsoleProps> = ({
             type: formType,
             description,
             overwrite: editing,
-            ...(editing
-              ? {
-                  key_id: parameter?.keyId,
-                  tier: parameter?.tier,
-                  data_type: parameter?.dataType,
-                }
-              : {}),
+            tier: formTier,
+            ...(formType === "String" ? { data_type: formDataType } : {}),
+            ...(formType === "SecureString" && formKeyId.trim() ? { key_id: formKeyId.trim() } : {}),
           },
         );
         const savedName = editing ? name : formName.trim();
@@ -199,6 +202,9 @@ export const SSMConsole: React.FC<SSMConsoleProps> = ({
         navigate("details", savedName);
       }
     });
+  // Standard parameters hold up to 4 KB, Advanced up to 8 KB.
+  const valueLimit = formTier === "Advanced" ? 8192 : 4096;
+  const valueTooLarge = form !== "document" && new TextEncoder().encode(formValue).length > valueLimit;
   const validName =
     /^[a-zA-Z0-9_.\-/]+$/.test(formName) &&
     !formName.endsWith("/") &&
@@ -593,6 +599,7 @@ export const SSMConsole: React.FC<SSMConsoleProps> = ({
                 disabled={
                   !formName.trim() ||
                   !formValue.length ||
+                  valueTooLarge ||
                   (form !== "document" && !validName)
                 }
                 onClick={saveForm}
@@ -660,6 +667,39 @@ export const SSMConsole: React.FC<SSMConsoleProps> = ({
                   onChange={({ detail }) => setDescription(detail.value)}
                 />
               </FormField>
+              <FormField
+                label="Tier"
+                description={form === "edit" && parameter?.tier === "Advanced"
+                  ? "An advanced parameter can't be changed back to standard; delete and recreate it instead."
+                  : "Standard: up to 4 KB, no charge. Advanced: up to 8 KB and parameter policies, charged per parameter."}
+              >
+                <Select
+                  ariaLabel="Tier"
+                  disabled={form === "edit" && parameter?.tier === "Advanced"}
+                  selectedOption={{ label: formTier, value: formTier }}
+                  options={["Standard", "Advanced"].map((value) => ({ label: value, value }))}
+                  onChange={({ detail }) => setFormTier(detail.selectedOption.value!)}
+                />
+              </FormField>
+              {formType === "String" && (
+                <FormField label="Data type" description="aws:ec2:image validates that the value is an AMI ID.">
+                  <Select
+                    ariaLabel="Data type"
+                    selectedOption={{ label: formDataType, value: formDataType }}
+                    options={["text", "aws:ec2:image"].map((value) => ({ label: value, value }))}
+                    onChange={({ detail }) => setFormDataType(detail.selectedOption.value!)}
+                  />
+                </FormField>
+              )}
+              {formType === "SecureString" && (
+                <FormField label="KMS key ID - optional" description="Leave empty to use the AWS managed key alias/aws/ssm.">
+                  <Input
+                    value={formKeyId}
+                    placeholder="alias/aws/ssm"
+                    onChange={({ detail }) => setFormKeyId(detail.value)}
+                  />
+                </FormField>
+              )}
             </>
           )}
           {form === "edit" && (
@@ -681,6 +721,7 @@ export const SSMConsole: React.FC<SSMConsoleProps> = ({
                 ? undefined
                 : "The value is saved exactly as entered, including whitespace."
             }
+            errorText={valueTooLarge ? `The value is larger than ${valueLimit / 1024} KB, the ${formTier.toLowerCase()} tier limit.` : undefined}
           >
             <Textarea
               rows={form === "document" ? 10 : 4}

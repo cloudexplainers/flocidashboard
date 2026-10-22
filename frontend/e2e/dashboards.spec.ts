@@ -1718,6 +1718,7 @@ test('SSM creation preserves whitespace without overwriting and editing creates 
   await expect(page.getByRole('heading', { name: '/app/prod/new', exact: true })).toBeVisible();
   expect(requests[0].overwrite).toBe(false);
   expect(requests[0].value).toBe('  keep whitespace\n');
+  expect(requests[0]).toMatchObject({ tier: 'Standard', data_type: 'text' });
   await page.getByRole('button', { name: 'Edit parameter', exact: true }).click();
   await dialog.getByRole('textbox', { name: 'New value', exact: true }).fill(' next version ');
   await dialog.getByRole('button', { name: 'Save new version', exact: true }).click();
@@ -1725,6 +1726,32 @@ test('SSM creation preserves whitespace without overwriting and editing creates 
   expect(requests[1].method).toBe('PUT');
   expect(requests[1].path).toBe('/api/ssm/parameters//app/prod/new/value/');
   expect(requests[1].value).toBe(' next version ');
+});
+
+test('SSM create enforces the tier value size and sends tier and KMS key', async ({ page }) => {
+  const fixture = ssmFixture();
+  let created: any = null;
+  await page.route('**/api/ssm/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/ssm/') return route.fulfill({ json: fixture });
+    created = route.request().postDataJSON();
+    return route.fulfill({ json: { name: '/app/secret', version: 1 } });
+  });
+  await page.goto('/ssm/parameters');
+  await page.getByRole('button', { name: 'Create parameter', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Parameter name', exact: true }).fill('/app/secret');
+  await dialog.getByRole('textbox', { name: 'Value', exact: true }).fill('x'.repeat(5000));
+  await expect(dialog.getByText('The value is larger than 4 KB, the standard tier limit.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Create parameter', exact: true })).toBeDisabled();
+  await dialog.getByRole('button', { name: /^Tier/ }).click();
+  await page.getByRole('option', { name: 'Advanced', exact: true }).click();
+  await dialog.getByRole('button', { name: /^Parameter type/ }).click();
+  await page.getByRole('option', { name: 'SecureString', exact: true }).click();
+  await dialog.getByPlaceholder('alias/aws/ssm').fill('alias/app-key');
+  await dialog.getByRole('button', { name: 'Create parameter', exact: true }).click();
+  await expect.poll(() => created).toMatchObject({ type: 'SecureString', tier: 'Advanced', key_id: 'alias/app-key' });
+  expect(created.data_type).toBeUndefined();
 });
 
 test('SSM tags accept an empty value and parameter deletion requires confirmation', async ({ page }) => {
