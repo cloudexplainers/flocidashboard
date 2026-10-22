@@ -1338,7 +1338,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
       >
         <SpaceBetween size="m">
           <Box>Object: <Box variant="code">{selectedObject?.key}</Box></Box>
-          <FormField label="Time interval until the presigned URL expires" description="Anyone with the URL can download the object until it expires.">
+          <FormField label="Time interval until the presigned URL expires" description="Anyone with the URL can download the object until it expires. The console allows up to 12 hours.">
             <Select
               selectedOption={presignExpires}
               onChange={({ detail }) => setPresignExpires(detail.selectedOption as any)}
@@ -1346,7 +1346,6 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                 { label: '15 minutes', value: '900' },
                 { label: '1 hour', value: '3600' },
                 { label: '12 hours', value: '43200' },
-                { label: '7 days', value: '604800' },
               ]}
             />
           </FormField>

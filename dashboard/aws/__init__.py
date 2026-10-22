@@ -261,6 +261,9 @@ class FlociClientFactory:
                 connect_timeout=2,
                 read_timeout=5,
                 s3={'addressing_style': 'auto'},
+                # Presigned URLs use SigV4, as the S3 console's do. botocore otherwise
+                # presigns with SigV2 for this client.
+                signature_version='s3v4',
             )
         else:
             # botocore rewrites a config's retries dict in place; pass a copy so
