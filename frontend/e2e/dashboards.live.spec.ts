@@ -68,8 +68,15 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
   let subnet = '';
   let serviceCreated = false;
   let clusterCreated = false;
+  let bodyPassed = false;
   let csrf = '';
   const taskArns: string[] = [];
+  const clusterTasks = async () => {
+    const inventory = await (await page.request.get('/api/ecs/')).json();
+    return inventory.clusters.find((item: any) => item.name === name)?.tasks || [];
+  };
+  // Only a STOPPED task lets the cluster be deleted; PENDING and STOPPING still count.
+  const activeTasks = async () => (await clusterTasks()).filter((task: any) => task.lastStatus !== 'STOPPED');
   const post = async (path: string, data: any) => {
     const response = await page.request.post(path, { headers: { 'X-CSRFToken': csrf }, data });
     const result = await response.json();
@@ -126,13 +133,19 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
     const updated = await update;
     expect(updated.ok(), await updated.text()).toBe(true);
     await expect(page.getByRole('dialog')).not.toBeVisible();
-    // In CI service containers without Docker daemon access, the emulator's service reconciler
-    // does not spawn container tasks automatically. Seed the task directly so the UI workflow can proceed.
-    execFileSync(python, ['-c', `import boto3\necs=boto3.client('ecs',endpoint_url='${flociEndpoint}',region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\necs.run_task(cluster='${name}',taskDefinition='${definition}',launchType='FARGATE',group='service:web',networkConfiguration={'awsvpcConfiguration':{'subnets':['${subnet}']}})`]);
+    // With Docker access, Floci's service reconciler starts the task itself. Without it, nothing
+    // starts, so seed one directly; seeding on top of a reconciler task would leave an extra task.
+    const serviceStartedTask = async () => (await clusterTasks()).some((task: any) => task.group === 'service:web');
+    let started = false;
+    try {
+      await expect.poll(serviceStartedTask, { timeout: 15_000, intervals: [1000, 2000] }).toBe(true);
+      started = true;
+    } catch {
+      started = false;
+    }
+    if (!started) execFileSync(python, ['-c', `import boto3\necs=boto3.client('ecs',endpoint_url='${flociEndpoint}',region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\necs.run_task(cluster='${name}',taskDefinition='${definition}',launchType='FARGATE',group='service:web',networkConfiguration={'awsvpcConfiguration':{'subnets':['${subnet}']}})`]);
     await expect.poll(async () => {
-      const inventory = await (await page.request.get('/api/ecs/')).json();
-      const cluster = inventory.clusters.find((item: any) => item.name === name);
-      const tasks = (cluster?.tasks || []).filter((task: any) => task.group === 'service:web');
+      const tasks = (await clusterTasks()).filter((task: any) => task.group === 'service:web');
       for (const task of tasks) if (!taskArns.includes(task.taskArn)) taskArns.push(task.taskArn);
       return tasks.length;
     }, { timeout: 60_000, intervals: [1000, 2000, 5000] }).toBeGreaterThan(0);
@@ -165,28 +178,48 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
     await expect.poll(async () => {
       const inventory = await (await page.request.get('/api/ecs/')).json();
       const cluster = inventory.clusters.find((item: any) => item.name === name);
-      const tasks = cluster?.tasks || [];
-      const runningTasks = tasks.filter((t: any) => t.lastStatus === 'RUNNING');
+      const tasks = (cluster?.tasks || []).filter((task: any) => task.lastStatus !== 'STOPPED');
       const services = cluster?.services || [];
       const activeServices = services.filter((s: any) => s.status === 'ACTIVE');
-      return runningTasks.length === 0 && activeServices.length === 0;
-    }, { timeout: 30_000, intervals: [500, 1000] }).toBe(true);
+      return tasks.length === 0 && activeServices.length === 0;
+    }, { timeout: 60_000, intervals: [500, 1000, 2000] }).toBe(true);
     await page.getByRole('button', { name: 'Delete cluster', exact: true }).click();
     await expect(page).toHaveURL(/\/ecs\/clusters$/);
     clusterCreated = false;
+    bodyPassed = true;
   } finally {
+    // Clean up everything, but report cleanup failures without hiding the test's own error.
+    const cleanupErrors: string[] = [];
+    const attempt = async (step: string, action: () => Promise<unknown>) => {
+      try { await action(); } catch (error) { cleanupErrors.push(`${step}: ${error}`); }
+    };
+    const remove = async (path: string, data?: any) => {
+      const response = await page.request.delete(path, { headers: { 'X-CSRFToken': csrf }, data });
+      expect(response.ok(), await response.text()).toBe(true);
+    };
     if (serviceCreated) {
-      await post('/api/ecs/services/update/', { cluster: name, service: 'web', desired_count: 0 });
-      await post('/api/ecs/services/delete/', { cluster: name, service: 'web', force: true });
+      await attempt('scale service down', () => post('/api/ecs/services/update/', { cluster: name, service: 'web', desired_count: 0 }));
+      await attempt('delete service', () => post('/api/ecs/services/delete/', { cluster: name, service: 'web', force: true }));
     }
-    if (clusterCreated) for (const task of taskArns) await post('/api/ecs/tasks/stop/', { cluster: name, task });
-    if (clusterCreated) await post('/api/ecs/clusters/delete/', { cluster: name });
-    if (subnet) { const response = await page.request.delete(`/api/ec2/subnets/${subnet}/`, { headers: { 'X-CSRFToken': csrf } }); expect(response.ok(), await response.text()).toBe(true); }
-    if (vpc) { const response = await page.request.delete(`/api/ec2/vpcs/${vpc}/`, { headers: { 'X-CSRFToken': csrf } }); expect(response.ok(), await response.text()).toBe(true); }
+    if (clusterCreated) {
+      // Stop every task still active, including any the test didn't track, and wait for them.
+      await attempt('stop tasks', async () => {
+        for (const task of await activeTasks()) await post('/api/ecs/tasks/stop/', { cluster: name, task: task.taskArn });
+      });
+      await attempt('wait for tasks to stop', () => expect.poll(async () => (await activeTasks()).length, { timeout: 60_000, intervals: [1000, 2000] }).toBe(0));
+      await attempt('delete cluster', () => post('/api/ecs/clusters/delete/', { cluster: name }));
+    }
+    if (subnet) await attempt('delete subnet', () => remove(`/api/ec2/subnets/${subnet}/`));
+    if (vpc) await attempt('delete VPC', () => remove(`/api/ec2/vpcs/${vpc}/`));
     if (definition) {
-      await post('/api/ecs/task-definitions/detail/', { task_definition: definition });
-      const cleanup = await page.request.delete('/api/ecs/task-definitions/detail/', { headers: { 'X-CSRFToken': csrf }, data: { task_definitions: [definition] } });
-      expect(cleanup.ok(), await cleanup.text()).toBe(true);
+      await attempt('deregister task definition', () => post('/api/ecs/task-definitions/detail/', { task_definition: definition }));
+      await attempt('delete task definition', () => remove('/api/ecs/task-definitions/detail/', { task_definitions: [definition] }));
+    }
+    if (cleanupErrors.length) {
+      const report = `ECS live cleanup problems:\n${cleanupErrors.join('\n')}`;
+      // Throwing here would replace the test's own error, so only fail on cleanup when the body passed.
+      if (bodyPassed) throw new Error(report);
+      console.warn(report);
     }
   }
 });
