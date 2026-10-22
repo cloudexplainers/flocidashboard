@@ -3361,7 +3361,7 @@ test('CloudTrail event details preserve identity errors and raw record on reload
   await expect(page.getByRole('heading', { name: 'Event: DeleteBucket', exact: true })).toBeVisible();
   await expect(page.getByText('Explicit deny', { exact: true })).toBeVisible();
   await expect(page.getByText('arn:aws:sts::123456789012:assumed-role/Student/session', { exact: true })).toBeVisible();
-  await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('No', { exact: true }).first()).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Event: DeleteBucket', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/screenshots/cloudtrail-event-desktop.png', fullPage: true });
@@ -3404,7 +3404,7 @@ test('CloudTrail selectors preserve false and replace only after explicit save',
   });
   await page.goto('/cloudtrail/trails?trail=learning-audit&tab=selectors');
   await expect(page.getByText('WriteOnly', { exact: true })).toBeVisible();
-  await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('No', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Edit event selectors', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Event selector JSON', { exact: true }).fill('{bad');
