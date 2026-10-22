@@ -910,82 +910,6 @@ def bcmdataexports_inventory() -> dict[str, Any]:
     }
 
 
-def amazonmq_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    mq = factory.client('mq')
-    operations = set(mq.meta.service_model.operation_names)
-
-    brokers = _safe_value(
-        lambda: _operation_items(mq, 'list_brokers', 'BrokerSummaries'),
-        [],
-    ) if 'ListBrokers' in operations else []
-
-    def broker_detail(broker: dict[str, Any]) -> dict[str, Any]:
-        broker_id = broker.get('BrokerId')
-        details = _safe_value(
-            lambda: mq.describe_broker(BrokerId=broker_id),
-            {},
-        ) if broker_id and 'DescribeBroker' in operations else {}
-        users = _safe_value(
-            lambda: _operation_items(mq, 'list_users', 'Users', BrokerId=broker_id),
-            [],
-        ) if broker_id and 'ListUsers' in operations else []
-        configurations = _safe_value(
-            lambda: _operation_items(mq, 'list_configurations', 'Configurations'),
-            [],
-        ) if 'ListConfigurations' in operations else []
-
-        return {
-            'name': broker.get('BrokerName') or details.get('BrokerName') or broker_id,
-            'broker_id': broker_id,
-            'arn': broker.get('BrokerArn') or details.get('BrokerArn'),
-            'engine_type': broker.get('EngineType') or details.get('EngineType'),
-            'engine_version': broker.get('EngineVersion') or details.get('EngineVersion'),
-            'instance_type': broker.get('HostInstanceType') or details.get('HostInstanceType'),
-            'deployment_mode': broker.get('DeploymentMode') or details.get('DeploymentMode'),
-            'state': broker.get('BrokerState') or details.get('BrokerState'),
-            'created': broker.get('Created') or details.get('Created'),
-            'publicly_accessible': details.get('PubliclyAccessible'),
-            'endpoints': details.get('BrokerInstances') or details.get('Endpoints'),
-            'users': _clean_response(users),
-            'user_count': len(users),
-            'configurations': _clean_response(configurations),
-            'details': _clean_response(details),
-        }
-
-    detailed_brokers = [broker_detail(broker) for broker in brokers]
-
-    return {
-        'summary': {
-            'brokers': len(detailed_brokers),
-            'running_brokers': sum(1 for broker in detailed_brokers if broker.get('state') == 'RUNNING'),
-            'users': sum(broker.get('user_count') or 0 for broker in detailed_brokers),
-            'available_sdk_operations': len(operations),
-        },
-        'brokers': detailed_brokers,
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'CreateBroker',
-                'DescribeBroker',
-                'ListBrokers',
-                'DeleteBroker',
-                'CreateUser',
-                'ListUsers',
-                'DeleteUser',
-                'CreateConfiguration',
-                'ListConfigurations',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.30 adds the Amazon MQ broker control plane backed by RabbitMQ.',
-            'The dashboard inspects brokers, users, and configurations when the local SDK model exposes those APIs.',
-        ],
-    }
-
-
 def batch_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     batch = factory.client('batch')
@@ -11429,7 +11353,9 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
 # Service modules. Imported last because they use the helpers above.
 from . import (  # noqa: E402
     acm,
+    amazonmq,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
+from .amazonmq import amazonmq_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
