@@ -2144,6 +2144,7 @@ export async function executeKmsAction(action: string, payload: Record<string, a
     generate_data_key: ['POST', 'data-keys'], set_key_rotation: ['POST', 'rotation'],
     set_key_enabled: ['POST', 'key-state'], put_key_policy: ['PUT', 'key-policy'],
     create_grant: ['POST', 'grants'], revoke_grant: ['DELETE', 'grants'],
+    schedule_key_deletion: ['POST', 'deletion/schedule'], cancel_key_deletion: ['POST', 'deletion/cancel'],
   };
   const target = paths[action];
   if (!target) throw new Error(`Unsupported KMS action: ${action}`);

@@ -132,7 +132,7 @@ def kms_deletion_schedule(request):
         body = parse_json_body(request)
         return JsonResponse(schedule_key_deletion(
             body.get('key_id') or '',
-            pending_window_in_days=body.get('pending_window_in_days') or 7,
+            pending_window_in_days=body.get('pending_window_in_days') or 30,
         ))
     except Exception as exc:
         return handle_action_error(exc, service='kms', operation='schedule_key_deletion')

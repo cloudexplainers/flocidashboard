@@ -213,11 +213,20 @@ def set_key_enabled(key_id: str, enabled: bool) -> dict[str, Any]:
     return {'key_id': clean_key, 'enabled': enabled, 'key_state': 'Enabled' if enabled else 'Disabled'}
 
 
-def schedule_key_deletion(key_id: str, pending_window_in_days: Any = 7) -> dict[str, Any]:
+def _pending_window(value: Any) -> int:
+    # AWS default and console default: 30 days. AWS rejects values outside 7-30 rather
+    # than clamping them, so the console does too.
+    days = _optional_int(value, 'Waiting period', 30)
+    if not 7 <= days <= 30:
+        raise ValueError('Waiting period must be between 7 and 30 days')
+    return days
+
+
+def schedule_key_deletion(key_id: str, pending_window_in_days: Any = 30) -> dict[str, Any]:
     clean_key = _clean_required(key_id, 'Key ID')
     response = _client().schedule_key_deletion(
         KeyId=clean_key,
-        PendingWindowInDays=max(7, min(_optional_int(pending_window_in_days, 'Pending window days', 7), 30)),
+        PendingWindowInDays=_pending_window(pending_window_in_days),
     )
     return {
         'key_id': response.get('KeyId') or clean_key,

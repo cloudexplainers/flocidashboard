@@ -1988,7 +1988,7 @@ KMS_ACTIONS = (
         confirm='Schedule this key for deletion?',
         fields=(
             action_field('key_id', 'Key ID', required=True),
-            action_field('pending_window_in_days', 'Pending window days', field_type='number'),
+            action_field('pending_window_in_days', 'Waiting period (days)', field_type='number', default=30, help_text='7-30 days.'),
         ),
         success_message='Key deletion scheduled',
     ),

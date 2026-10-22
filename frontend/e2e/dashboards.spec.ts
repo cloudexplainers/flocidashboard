@@ -1338,7 +1338,7 @@ test('KMS reads nested metadata and preserves key routes, policies, and real sta
   await inventory(page, 'kms', kmsFixture());
   await page.goto('/kms/keys');
   const pendingRow = page.getByRole('row').filter({ hasText: 'key-pending' });
-  await expect(pendingRow).toContainText('PendingDeletion');
+  await expect(pendingRow).toContainText('Pending deletion');
   const unknownRow = page.getByRole('row').filter({ hasText: 'key-unknown' });
   await expect(unknownRow).not.toContainText('Enabled');
   await page.getByRole('button', { name: 'key-app', exact: true }).click();
@@ -1357,6 +1357,32 @@ test('KMS reads nested metadata and preserves key routes, policies, and real sta
   await page.screenshot({ path: 'test-results/screenshots/kms-key-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/screenshots/kms-key-mobile.png', fullPage: true });
+});
+
+test('KMS schedules key deletion with a 7-30 day waiting period and can cancel it', async ({ page }) => {
+  await inventory(page, 'kms', kmsFixture());
+  const requests: { path: string; body: any }[] = [];
+  await page.route('**/api/kms/deletion/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    requests.push({ path, body: route.request().postDataJSON() });
+    return route.fulfill({ json: path.endsWith('/schedule/') ? { key_id: 'key-app', deletion_date: '2026-11-01T12:00:00Z', key_state: 'PendingDeletion' } : { key_id: 'key-pending', key_state: 'Disabled' } });
+  });
+  await page.goto('/kms/details?key=key-app');
+  await page.getByRole('button', { name: 'Schedule key deletion', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Schedule key deletion' });
+  await expect(dialog.getByRole('spinbutton')).toHaveValue('30');
+  await expect(dialog.getByRole('button', { name: 'Schedule deletion', exact: true })).toBeDisabled();
+  await dialog.getByRole('spinbutton').fill('6');
+  await expect(dialog.getByText('The waiting period must be between 7 and 30 days.', { exact: true })).toBeVisible();
+  await dialog.getByRole('spinbutton').fill('10');
+  await dialog.getByText(/Confirm that you want to schedule this key for deletion after a 10 day waiting period/).click();
+  await dialog.getByRole('button', { name: 'Schedule deletion', exact: true }).click();
+  await expect.poll(() => requests[0]).toEqual({ path: '/api/kms/deletion/schedule/', body: { key_id: 'key-app', pending_window_in_days: 10 } });
+  await expect(page.getByText(/Key deletion scheduled for November 1, 2026/)).toBeVisible();
+  await page.goto('/kms/details?key=key-pending');
+  await expect(page.getByRole('button', { name: 'Schedule key deletion', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Cancel key deletion', exact: true }).click();
+  await expect.poll(() => requests[1]).toEqual({ path: '/api/kms/deletion/cancel/', body: { key_id: 'key-pending' } });
 });
 
 function kmsRequestAction(path: string, method: string) {
