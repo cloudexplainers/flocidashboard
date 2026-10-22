@@ -302,6 +302,43 @@ class EKSInventoryCapabilityTests(SimpleTestCase):
         self.assertNotIn('access_entries', inventory)
 
 
+class EKSCreateClusterRecoveryTests(SimpleTestCase):
+    def _closed(self):
+        from botocore.exceptions import ConnectionClosedError
+        return ConnectionClosedError(endpoint_url='http://localhost:4566/clusters')
+
+    @patch('dashboard.eks_api.time.sleep')
+    @patch('dashboard.eks_api._client')
+    def test_dropped_create_returns_the_cluster_floci_created(self, client_mock, _sleep):
+        from .eks_api import create_cluster
+        client = client_mock.return_value
+        client.create_cluster.side_effect = self._closed()
+        client.describe_cluster.return_value = {'cluster': {'name': 'demo', 'arn': 'arn:demo', 'status': 'CREATING'}}
+
+        result = create_cluster(name='demo', role_arn='arn:aws:iam::000000000000:role/eks', subnet_ids='subnet-1')
+
+        self.assertEqual(result['status'], 'CREATING')
+        self.assertEqual(result['arn'], 'arn:demo')
+        client.create_cluster.assert_called_once()
+        client.describe_cluster.assert_called_once_with(name='demo')
+
+    @patch('dashboard.eks_api.time.sleep')
+    @patch('dashboard.eks_api._client')
+    def test_dropped_create_raises_when_no_cluster_appears(self, client_mock, sleep_mock):
+        from botocore.exceptions import ClientError, ConnectionClosedError
+        from .eks_api import create_cluster
+        client = client_mock.return_value
+        client.create_cluster.side_effect = self._closed()
+        client.describe_cluster.side_effect = ClientError(
+            {'Error': {'Code': 'ResourceNotFoundException', 'Message': 'missing'}}, 'DescribeCluster')
+
+        with self.assertRaises(ConnectionClosedError):
+            create_cluster(name='demo', role_arn='arn:aws:iam::000000000000:role/eks', subnet_ids='subnet-1')
+
+        self.assertEqual(client.describe_cluster.call_count, 5)
+        client.create_cluster.assert_called_once()
+
+
 class EKSClientTimeoutTests(SimpleTestCase):
     @patch('dashboard.eks_api.FlociClientFactory')
     def test_cluster_mutations_allow_runtime_startup_without_retries(self, factory_mock):
