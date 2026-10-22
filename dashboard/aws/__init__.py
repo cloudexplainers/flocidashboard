@@ -853,138 +853,6 @@ def transcribe_inventory() -> dict[str, Any]:
     }
 
 
-def _kms_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
-    try:
-        return _clean_response(loader())
-    except ClientError as exc:
-        if _error_code(exc) in empty_codes:
-            return None
-        return {'error': str(exc)}
-    except (BotoCoreError, ValueError, json.JSONDecodeError) as exc:
-        return {'error': str(exc)}
-
-
-def kms_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    kms = factory.client('kms')
-    keys = _safe_value(lambda: _paginate(kms, 'list_keys', 'Keys'), [])
-    aliases = _safe_value(lambda: _paginate(kms, 'list_aliases', 'Aliases'), [])
-
-    aliases_by_key: dict[str, list[dict[str, Any]]] = {}
-    for alias in aliases:
-        target_key_id = alias.get('TargetKeyId')
-        if target_key_id:
-            aliases_by_key.setdefault(target_key_id, []).append(_clean_response(alias))
-
-    def key_detail(key: dict[str, Any]) -> dict[str, Any]:
-        key_id = key.get('KeyId')
-        metadata = _kms_optional(
-            lambda: kms.describe_key(KeyId=key_id).get('KeyMetadata', {}),
-            {'NotFoundException', 'KMSInvalidStateException'},
-        )
-
-        return {
-            'name': key_id,
-            'key_id': key_id,
-            'key_arn': key.get('KeyArn'),
-            'metadata': metadata,
-            'aliases': _kms_optional(
-                lambda: _paginate(kms, 'list_aliases', 'Aliases', KeyId=key_id),
-                {'NotFoundException'},
-            ),
-            'tags': _kms_optional(
-                lambda: _paginate(kms, 'list_resource_tags', 'Tags', KeyId=key_id),
-                {'NotFoundException'},
-            ),
-            'policy': _kms_optional(
-                lambda: json.loads(kms.get_key_policy(KeyId=key_id, PolicyName='default').get('Policy', '{}')),
-                {'NotFoundException'},
-            ),
-            'rotation_enabled': _kms_optional(
-                lambda: kms.get_key_rotation_status(KeyId=key_id).get('KeyRotationEnabled'),
-                {'NotFoundException', 'UnsupportedOperationException'},
-            ),
-            'grants': _kms_optional(
-                lambda: _paginate(kms, 'list_grants', 'Grants', KeyId=key_id),
-                {'NotFoundException'},
-            ),
-        }
-
-    if len(keys) > 1:
-        with ThreadPoolExecutor(max_workers=min(8, len(keys))) as executor:
-            detailed_keys = list(executor.map(key_detail, keys))
-    else:
-        detailed_keys = [key_detail(key) for key in keys]
-
-    return {
-        'summary': {
-            'keys': len(detailed_keys),
-            'aliases': len(aliases),
-            'enabled_keys': sum(
-                1
-                for key in detailed_keys
-                if isinstance(key.get('metadata'), dict)
-                and key['metadata'].get('KeyState') == 'Enabled'
-            ),
-            'pending_deletion': sum(
-                1
-                for key in detailed_keys
-                if isinstance(key.get('metadata'), dict)
-                and key['metadata'].get('KeyState') == 'PendingDeletion'
-            ),
-            'rotation_enabled': sum(1 for key in detailed_keys if key.get('rotation_enabled') is True),
-            'grants': sum(len(key.get('grants') or []) for key in detailed_keys if isinstance(key.get('grants'), list)),
-        },
-        'keys': detailed_keys,
-        'aliases': _clean_response(aliases),
-        'supported': [
-            'CreateKey',
-            'DescribeKey',
-            'ListKeys',
-            'Encrypt',
-            'Decrypt',
-            'ReEncrypt',
-            'GenerateDataKey',
-            'GenerateDataKeyWithoutPlaintext',
-            'GenerateRandom',
-            'Sign',
-            'Verify',
-            'GenerateMac',
-            'VerifyMac',
-            'CreateAlias',
-            'DeleteAlias',
-            'ListAliases',
-            'ScheduleKeyDeletion',
-            'CancelKeyDeletion',
-            'TagResource',
-            'UntagResource',
-            'ListResourceTags',
-            'GetKeyPolicy',
-            'PutKeyPolicy',
-            'GetKeyRotationStatus',
-            'EnableKeyRotation',
-            'DisableKeyRotation',
-            'RotateKeyOnDemand',
-            'CreateGrant',
-            'ListGrants',
-            'ListRetirableGrants',
-            'RevokeGrant',
-            'RetireGrant',
-        ],
-        'notes': [
-            'KMS uses JSON 1.1 with X-Amz-Target: TrentService.* against the local Floci endpoint.',
-            'CreateKey accepts creation-time tag floci:override-id for deterministic local test key IDs.',
-            'Floci strips reserved floci:* tags from stored resource tags and rejects adding them later.',
-            'Floci 1.5.18 adds KMS GenerateMac and VerifyMac support.',
-            'Floci 1.5.22 adds KMS GenerateRandom support.',
-            'Floci 1.5.24 expands key state and key description operations for closer AWS parity.',
-            'Floci 1.5.26 adds EnableKey support and improves RSA DIGEST signature wrapping.',
-            'Floci 1.5.21 enforces the RotateKeyOnDemand rotation limit.',
-            'Grant lifecycle APIs are stored and queryable but are not evaluated during cryptographic operations.',
-        ],
-    }
-
-
 def _lambda_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
     try:
         return _clean_response(loader())
@@ -3402,16 +3270,6 @@ def list_lambda_functions(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ]
 
 
-def list_kms_keys(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    return [
-        {
-            'id': key.get('KeyId'),
-            'arn': key.get('KeyArn'),
-        }
-        for key in factory.client('kms').get_paginator('list_keys').paginate().build_full_result().get('Keys', [])
-    ]
-
-
 def list_secrets(factory: FlociClientFactory) -> list[dict[str, Any]]:
     return [
         {
@@ -3944,7 +3802,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('transfer-resources', 'Transfer Family resources', list_transfer_resources),
         ('wafv2-resources', 'WAF v2 resources', list_wafv2_resources),
         ('lambda-functions', 'Lambda functions', list_lambda_functions),
-        ('kms-keys', 'KMS keys', list_kms_keys),
+        ('kms-keys', 'KMS keys', kms.list_kms_keys),
         ('secrets', 'Secrets Manager secrets', list_secrets),
         ('log-groups', 'CloudWatch log groups', cloudwatch.list_log_groups),
         ('cloudwatch-metrics', 'CloudWatch metrics and alarms', cloudwatch.list_cloudwatch_metrics),
@@ -4012,6 +3870,7 @@ from . import (  # noqa: E402
     iot,
     kafka,
     kinesis,
+    kms,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -4055,4 +3914,5 @@ from .iam import iam_inventory  # noqa: E402
 from .iot import iot_inventory  # noqa: E402
 from .kafka import kafka_inventory  # noqa: E402
 from .kinesis import kinesis_inventory  # noqa: E402
+from .kms import kms_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
