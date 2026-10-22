@@ -882,6 +882,36 @@ test('S3 bucket links preserve selection across tabs and reload without claiming
   await page.screenshot({ path: 'test-results/screenshots/s3-resource.png', fullPage: true });
 });
 
+test('S3 Show versions lists versions and delete markers and permanently deletes one version', async ({ page }) => {
+  await inventory(page, 's3', { buckets: [{ Name: 'versioned' }] });
+  let deleteBody: any = null;
+  await page.route('**/api/s3/buckets/versioned/objects/?*', route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('versions') !== '1') return route.fulfill({ json: { bucket: 'versioned', prefix: '', folders: [], objects: [], is_truncated: false, key_count: 0 } });
+    return route.fulfill({ json: { bucket: 'versioned', prefix: '', folders: [], is_truncated: false, key_count: 2, objects: [
+      { key: 'a.txt', name: 'a.txt', type: 'delete_marker', size: null, version_id: 'marker-1', is_latest: true, last_modified: '2026-10-22T10:00:00Z' },
+      { key: 'a.txt', name: 'a.txt', type: 'file', size: 2, version_id: 'version-1', is_latest: false, last_modified: '2026-10-21T10:00:00Z' },
+    ] } });
+  });
+  await page.route('**/api/s3/buckets/versioned/objects/', route => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    deleteBody = route.request().postDataJSON();
+    return route.fulfill({ json: { deleted: [{ Key: 'a.txt', VersionId: 'version-1' }], errors: [] } });
+  });
+  await page.goto('/s3/objects?bucket=versioned');
+  await expect(page.getByText("You don't have any objects in this bucket.")).toBeVisible();
+  await page.getByText('Show versions', { exact: true }).click();
+  await expect(page.getByText('Delete marker', { exact: true })).toBeVisible();
+  await expect(page.getByText('version-1', { exact: true })).toBeVisible();
+  await page.getByRole('row').filter({ hasText: 'version-1' }).getByRole('radio').check();
+  await page.getByRole('button', { name: 'Delete', exact: true }).last().click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Deleting version version-1 of a.txt permanently removes that version');
+  await dialog.getByLabel('Confirmation text').fill('permanently delete');
+  await dialog.getByRole('button', { name: 'Delete objects', exact: true }).click();
+  await expect.poll(() => deleteBody).toEqual({ keys: [{ key: 'a.txt', version_id: 'version-1' }] });
+});
+
 test('S3 missing bucket link does not expose another bucket details', async ({ page }) => {
   await inventory(page, 's3', { buckets: [{ Name: 'available-bucket' }] });
   await page.goto('/s3/objects?bucket=missing-bucket');

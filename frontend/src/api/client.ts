@@ -404,14 +404,15 @@ const s3Bucket = (name: string) => `/api/s3/buckets/${encodeURIComponent(name)}`
 export interface S3ObjectListing {
   prefix: string;
   folders: Array<{ prefix: string; name: string }>;
-  objects: Array<{ key: string; name: string; size: number | null; etag?: string; last_modified?: string; storage_class?: string }>;
+  objects: Array<{ key: string; name: string; size: number | null; etag?: string; last_modified?: string; storage_class?: string; version_id?: string; is_latest?: boolean; type?: string }>;
   is_truncated: boolean;
   key_count: number;
 }
 
 /** ListObjectsV2 with Delimiter "/" so prefixes show as folders, like the S3 console. */
-export async function fetchS3Objects(bucketName: string, prefix: string = ''): Promise<S3ObjectListing> {
-  const params = new URLSearchParams({ prefix, delimiter: '/', max_keys: '1000' });
+export async function fetchS3Objects(bucketName: string, prefix: string = '', versions = false): Promise<S3ObjectListing> {
+  // versions: ListObjectVersions, as with the console's "Show versions" toggle.
+  const params = new URLSearchParams({ prefix, delimiter: '/', max_keys: '1000', ...(versions ? { versions: '1' } : {}) });
   return requestJson(`${s3Bucket(bucketName)}/objects/?${params}`, { errorMessage: 'Failed to list objects' });
 }
 
@@ -444,14 +445,14 @@ export async function uploadS3Object(bucketName: string, key: string, content: {
   });
 }
 
-export function s3DownloadUrl(bucketName: string, key: string): string {
-  return `${s3Bucket(bucketName)}/objects/download/?${new URLSearchParams({ key })}`;
+export function s3DownloadUrl(bucketName: string, key: string, versionId?: string): string {
+  return `${s3Bucket(bucketName)}/objects/download/?${new URLSearchParams({ key, ...(versionId ? { versionId } : {}) })}`;
 }
 
-export async function presignS3Object(bucketName: string, key: string, expiresIn: number = 3600): Promise<{ url: string; expires_in: number }> {
+export async function presignS3Object(bucketName: string, key: string, expiresIn: number = 3600, versionId?: string): Promise<{ url: string; expires_in: number }> {
   return requestJson(`${s3Bucket(bucketName)}/objects/presign/`, {
     method: 'POST',
-    json: { key, expires_in: expiresIn },
+    json: { key, expires_in: expiresIn, ...(versionId ? { version_id: versionId } : {}) },
     errorMessage: `Failed to generate presigned URL`,
   });
 }
@@ -488,8 +489,12 @@ export async function putS3Notifications(bucketName: string, config: any): Promi
   });
 }
 
-export async function deleteS3Object(bucketName: string, key: string): Promise<any> {
-  return requestJson(`${s3Bucket(bucketName)}/objects/`, { method: 'DELETE', json: { keys: [{ key }] }, errorMessage: 'Failed to delete object' });
+export async function deleteS3Object(bucketName: string, key: string, versionId?: string): Promise<any> {
+  const result = await requestJson(`${s3Bucket(bucketName)}/objects/`, { method: 'DELETE', json: { keys: [{ key, ...(versionId ? { version_id: versionId } : {}) }] }, errorMessage: 'Failed to delete object' });
+  // DeleteObjects reports per-key failures in a 200 response.
+  const failure = Array.isArray(result?.errors) ? result.errors[0] : null;
+  if (failure) throw new Error(failure.Message || failure.message || failure.Code || 'Failed to delete object');
+  return result;
 }
 
 export async function createS3Folder(bucketName: string, folder: string): Promise<any> {

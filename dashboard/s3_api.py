@@ -182,6 +182,8 @@ def list_s3_objects(
             'Bucket': bucket,
             'MaxKeys': max_keys,
         }
+        if delimiter:
+            params['Delimiter'] = delimiter
         if prefix:
             params['Prefix'] = prefix
         if continuation_token:
@@ -216,10 +218,17 @@ def list_s3_objects(
                 'is_delete_marker': True,
             })
 
+        # Group by key with the current version first, as the console's "Show versions"
+        # view does. ListObjectVersions already returns versions newest first.
+        items.sort(key=lambda item: (item.get('key') or '', not item.get('is_latest')))
         return {
             'bucket': bucket,
             'prefix': prefix,
-            'folders': [],
+            'folders': [
+                {'prefix': entry.get('Prefix'), 'name': _object_display_name(entry.get('Prefix'), prefix).rstrip('/')}
+                for entry in response.get('CommonPrefixes', [])
+                if entry.get('Prefix')
+            ],
             'objects': items,
             'is_truncated': response.get('IsTruncated', False),
             'next_continuation_token': response.get('NextKeyMarker'),

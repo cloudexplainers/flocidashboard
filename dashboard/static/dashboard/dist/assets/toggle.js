@@ -1,0 +1,1 @@
+import{Ci as e,Fr as t,Pr as n,xi as r}from"./internal.js";import{r as i}from"./ResourceTable.js";var a=e(r()),o=a.forwardRef((e,n)=>{let r=t(`Toggle`,{props:{readOnly:e.readOnly}});return a.createElement(i,{...e,...r,ref:n,__injectAnalyticsComponentMetadata:!0})});n(o,`Toggle`);export{o as t};

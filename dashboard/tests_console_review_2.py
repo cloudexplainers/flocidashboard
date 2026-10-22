@@ -128,3 +128,22 @@ class AmazonMqUserCountTests(SimpleTestCase):
 
         self.assertIsNone(result['brokers'][0]['user_count'])
         mq.list_users.assert_not_called()
+
+
+class S3VersionListingTests(SimpleTestCase):
+    def test_versions_keep_folders_and_list_current_version_first(self):
+        from unittest.mock import patch
+
+        from dashboard.s3_api import list_s3_objects
+
+        with patch('dashboard.s3_api._s3_client') as client:
+            client.return_value.list_object_versions.return_value = {
+                'CommonPrefixes': [{'Prefix': 'docs/'}],
+                'Versions': [{'Key': 'a.txt', 'VersionId': 'v1', 'IsLatest': False}],
+                'DeleteMarkers': [{'Key': 'a.txt', 'VersionId': 'm1', 'IsLatest': True}],
+            }
+            result = list_s3_objects('bucket', versions=True)
+
+        client.return_value.list_object_versions.assert_called_once_with(Bucket='bucket', MaxKeys=100, Delimiter='/')
+        self.assertEqual(result['folders'], [{'prefix': 'docs/', 'name': 'docs'}])
+        self.assertEqual([item['version_id'] for item in result['objects']], ['m1', 'v1'])
