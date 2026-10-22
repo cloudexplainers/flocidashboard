@@ -24,7 +24,7 @@ def transcribe_jobs_start(request):
             body.get('name') or '',
             media_uri=body.get('media_uri') or '',
             language_code=body.get('language_code') or 'en-US',
-            media_format=body.get('media_format') or 'mp4',
+            media_format=body.get('media_format') or '',
             options=body.get('options') or {},
         ))
     except Exception as exc:

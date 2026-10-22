@@ -88,7 +88,9 @@ def _auth_mode(value: Any, auth_type: str = '') -> dict[str, Any]:
     if mode:
         return mode
     clean_type = str(auth_type or '').strip().lower()
-    if clean_type in {'iam', 'password', 'no-password'}:
+    if clean_type == 'no-password':
+        clean_type = 'no-password-required'  # The AWS enum value.
+    if clean_type in {'iam', 'password', 'no-password-required'}:
         return {'Type': clean_type}
     return {}
 

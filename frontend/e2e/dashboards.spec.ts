@@ -398,21 +398,71 @@ test('API Gateway route tests and create/delete send the backend contract', asyn
 });
 
 test('generic workbench opens one task, prefills resource fields, and clears stale resource context', async ({ page }) => {
-  await inventory(page, 'acm', { certificates: [{ name: 'example.test', certificate: 'certificate-review', status: 'ISSUED' }] });
+  await inventory(page, 'acm', { certificates: [{ name: 'example.test', arn: 'certificate-review', status: 'ISSUED' }] });
   await page.route('**/api/acm/certificates/certificate-review/', route => route.fulfill({ json: { Certificate: 'returned-certificate' } }));
   await page.goto('/acm/');
   await expect(page.getByRole('button', { name: /^Execute / })).toHaveCount(0);
   await page.getByRole('radio').first().check();
   await page.getByRole('button', { name: /^Operation / }).click();
   await page.getByRole('option', { name: 'Get certificate PEM', exact: true }).click();
-  await expect(page.getByLabel('certificate', { exact: true })).toHaveValue('certificate-review');
+  await expect(page.getByLabel('Certificate ARN', { exact: true })).toHaveValue('certificate-review');
   await expect(page.getByRole('button', { name: /^Execute / })).toHaveCount(1);
   await page.getByRole('button', { name: 'Execute Get certificate PEM', exact: true }).click();
   await expect(page.getByText('Operation Succeeded', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Response details', exact: true }).click();
   await expect(page.getByText(/returned-certificate/)).toBeVisible();
-  await expect(page.getByLabel('certificate', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Certificate ARN', { exact: true })).toHaveValue('');
   await page.screenshot({ path: 'test-results/screenshots/generic-operation.png', fullPage: true });
+});
+
+test('generic workbench fills only the selected resource and its parents, and deletes need typed confirmation', async ({ page }) => {
+  await inventory(page, 'transfer', {
+    servers: [{ name: 's-1234', id: 's-1234', state: 'ONLINE' }],
+    users: [{ name: 'alice', user_name: 'alice', server_id: 's-1234' }],
+    notes: ['Floci Transfer Family covers the management-plane API only.', 'Floci 1.5.20 adds an example changelog line.'],
+    supported: ['CreateServer'],
+  });
+  let deleted = '';
+  await page.route('**/api/transfer/servers/s-1234/users/alice/', route => { deleted = route.request().method(); return route.fulfill({ json: { ok: true } }); });
+  await page.goto('/transfer/');
+  await page.getByRole('button', { name: /^Resource type/ }).click();
+  await expect(page.getByRole('option', { name: /^Notes/ })).toHaveCount(0);
+  await page.getByRole('option', { name: 'Users (1)', exact: true }).click();
+  await page.getByRole('button', { name: 'alice', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete resource', exact: true }).click();
+  await page.getByRole('button', { name: /^Operation / }).click();
+  await page.getByRole('option', { name: 'Delete server', exact: true }).click();
+  await expect(page.getByLabel('Server', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: /^Operation / }).click();
+  await page.getByRole('option', { name: 'Delete user', exact: true }).click();
+  await expect(page.getByLabel('Server', { exact: true })).toHaveValue('s-1234');
+  await expect(page.getByLabel('User', { exact: true })).toHaveValue('alice');
+  await page.getByRole('button', { name: 'Execute Delete user', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Target: server s-1234, user alice')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Delete user', exact: true })).toBeDisabled();
+  await dialog.getByLabel('Confirmation text').fill('delete');
+  await dialog.getByRole('button', { name: 'Delete user', exact: true }).click();
+  await expect.poll(() => deleted).toBe('DELETE');
+  await page.getByRole('button', { name: 'How Floci emulates this service', exact: true }).click();
+  await expect(page.getByText('Floci Transfer Family covers the management-plane API only.')).toBeVisible();
+  await expect(page.getByText(/example changelog line/)).toHaveCount(0);
+});
+
+test('generic workbench selects show AWS values and send the visible default', async ({ page }) => {
+  await inventory(page, 'kinesis', { streams: [] });
+  let payload: any = null;
+  await page.route('**/api/kinesis/streams/', route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    payload = route.request().postDataJSON();
+    return route.fulfill({ json: { name: 'orders' } });
+  });
+  await page.goto('/kinesis/');
+  await page.getByRole('button', { name: 'Create resource', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Stream mode/ })).toContainText('ON_DEMAND');
+  await page.getByLabel('Stream name', { exact: true }).fill('orders');
+  await page.getByRole('button', { name: 'Execute Create stream', exact: true }).click();
+  await expect.poll(() => payload).toEqual({ name: 'orders', mode: 'ON_DEMAND' });
 });
 
 test('resource details preserve returned SQS and DynamoDB ARNs across Regions', async ({ page }) => {
@@ -465,7 +515,7 @@ test('API Gateway and generic task forms remain usable on narrow screens', async
 });
 
 test('generic inventory exposes readable details and contextual actions', async ({ page }) => {
-  await inventory(page, 'acm', { certificates: [{ name: 'example.test', certificate: 'review-cert', status: 'FAILED' }] });
+  await inventory(page, 'acm', { certificates: [{ name: 'example.test', arn: 'review-cert', status: 'FAILED' }] });
   await page.goto('/acm/');
   await expect(page.getByRole('button', { name: 'Delete resource', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'example.test', exact: true }).click();
@@ -473,7 +523,7 @@ test('generic inventory exposes readable details and contextual actions', async 
   await expect(page.getByText('FAILED', { exact: true })).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'Raw resource JSON', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await page.getByRole('button', { name: 'Delete resource', exact: true }).click();
-  await expect(page.getByLabel('certificate', { exact: true })).toHaveValue('review-cert');
+  await expect(page.getByLabel('Certificate ARN', { exact: true })).toHaveValue('review-cert');
   await page.screenshot({ path: 'test-results/screenshots/resource-details.png', fullPage: true });
 });
 

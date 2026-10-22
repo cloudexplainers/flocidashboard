@@ -28,7 +28,7 @@ from .codedeploy_api import (
 def codedeploy_applications_create(request):
     try:
         body = parse_json_body(request)
-        return JsonResponse(create_application(body.get('name') or '', body.get('compute_platform') or 'Lambda'))
+        return JsonResponse(create_application(body.get('name') or '', body.get('compute_platform') or 'Server'))
     except Exception as exc:
         return handle_action_error(exc, service='codedeploy', operation='create_application')
 

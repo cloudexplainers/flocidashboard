@@ -155,7 +155,7 @@ def autoscaling_lifecycle_hooks_put(request, name: str):
             name,
             body.get('hook_name', ''),
             body.get('transition', ''),
-            default_result=body.get('default_result') or 'CONTINUE',
+            default_result=body.get('default_result') or 'ABANDON',
             heartbeat_timeout=body.get('heartbeat_timeout') or 3600,
         ))
     except Exception as exc:

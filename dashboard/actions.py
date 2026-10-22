@@ -20,6 +20,11 @@ class ActionField:
     required: bool = False
     field_type: str = 'string'
     help_text: str = ''
+    # Allowed values, shown as a select (AWS enum values).
+    options: tuple[str, ...] = ()
+    # Value the form starts with. It is sent unless changed, so the form shows what the
+    # backend will use instead of hiding a default.
+    default: str | int | bool | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +80,8 @@ def field(
     required: bool = False,
     field_type: str = 'string',
     help_text: str = '',
+    options: tuple[str, ...] = (),
+    default: str | int | bool | None = None,
 ) -> ActionField:
     return ActionField(
         name=name,
@@ -82,6 +89,8 @@ def field(
         required=required,
         field_type=field_type,
         help_text=help_text,
+        options=tuple(options),
+        default=default,
     )
 
 

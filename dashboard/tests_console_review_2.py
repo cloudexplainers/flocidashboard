@@ -82,3 +82,30 @@ class FirehoseCreateTests(SimpleTestCase):
         self.assertEqual(kwargs['DeliveryStreamType'], 'DirectPut')
         self.assertEqual(kwargs['ExtendedS3DestinationConfiguration']['BucketARN'], 'arn:aws:s3:::lake')
         self.assertEqual(kwargs['ExtendedS3DestinationConfiguration']['BufferingHints'], {'SizeInMBs': 5, 'IntervalInSeconds': 300})
+
+
+class WorkbenchFieldDefaultsTests(SimpleTestCase):
+    def _field(self, service_key, action_name, field_name):
+        from dashboard.services import SERVICES
+
+        service = next(item for item in SERVICES if item.key == service_key)
+        action = next(item for item in service.actions if item.name == action_name)
+        return next(item for item in action.fields if item.name == field_name)
+
+    def test_enum_fields_list_aws_values_and_console_defaults(self):
+        mode = self._field('kinesis', 'create_stream', 'mode')
+        self.assertEqual(mode.options, ('ON_DEMAND', 'PROVISIONED'))
+        self.assertEqual(mode.default, 'ON_DEMAND')
+        self.assertEqual(self._field('codedeploy', 'create_application', 'compute_platform').default, 'Server')
+        self.assertEqual(self._field('autoscaling', 'put_lifecycle_hook', 'default_result').default, 'ABANDON')
+
+    def test_neptune_delete_shows_that_no_snapshot_is_taken(self):
+        skip = self._field('neptune', 'delete_db_cluster', 'skip_final_snapshot')
+        self.assertIs(skip.default, True)
+        self.assertIn('does not create Neptune snapshots', skip.help_text)
+
+    def test_transfer_actions_stay_in_transfer(self):
+        from dashboard.services import SERVICES
+
+        transfer = next(item for item in SERVICES if item.key == 'transfer')
+        self.assertTrue(all(action.path.startswith('/api/transfer/') for action in transfer.actions))

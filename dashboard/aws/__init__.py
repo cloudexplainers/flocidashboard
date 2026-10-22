@@ -480,7 +480,8 @@ _MANUAL_PAGE_LIMIT = 100
 
 
 def _paginate(client, operation_name: str, result_key: str, **kwargs) -> list[Any]:
-    if client.can_paginate(operation_name):
+    can_paginate = getattr(client, 'can_paginate', None)
+    if can_paginate is None or can_paginate(operation_name):
         paginator = client.get_paginator(operation_name)
         return paginator.paginate(**kwargs).build_full_result().get(result_key, [])
 

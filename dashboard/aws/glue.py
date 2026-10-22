@@ -244,6 +244,8 @@ def glue_inventory() -> dict[str, Any]:
             'schema_versions': sum(registry.get('version_count') or 0 for registry in detailed_registries),
         },
         'databases': detailed_databases,
+        # Tables as their own list, as in the Glue console's Tables page.
+        'tables': [table for database in detailed_databases for table in database.get('tables', [])],
         'functions': functions,
         'registries': detailed_registries,
         'supported': {

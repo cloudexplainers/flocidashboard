@@ -9,23 +9,35 @@ import FormField from '@cloudscape-design/components/form-field';
 import Input from '@cloudscape-design/components/input';
 import Textarea from '@cloudscape-design/components/textarea';
 import Checkbox from '@cloudscape-design/components/checkbox';
-import Modal from '@cloudscape-design/components/modal';
 import Box from '@cloudscape-design/components/box';
 import Badge from '@cloudscape-design/components/badge';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Grid from '@cloudscape-design/components/grid';
-import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import SegmentedControl from '@cloudscape-design/components/segmented-control';
 import Select from '@cloudscape-design/components/select';
 import { ServiceAction, ServiceDefinition, ActionField } from '../types';
 import { executeServiceAction } from '../api/client';
 import { CodeSnippet } from '../components/CodeSnippet';
+import { resourceFieldValues } from '../workbenchFill';
+import ConfirmActionModal from '../components/ConfirmActionModal';
 
 interface GenericServiceWorkbenchProps {
   service: ServiceDefinition;
   onNavigateLabs?: () => void;
 }
+
+/** "certificate_arn" -> "Certificate ARN", "service_id" -> "Service ID". */
+const pathParamLabel = (name: string) => name.split('_').map((part, index) => /^(arn|id)$/.test(part) ? part.toUpperCase() : index === 0 ? part.charAt(0).toUpperCase() + part.slice(1) : part).join(' ');
+
+/** Form values with each untouched field's declared default filled in. */
+const withDefaults = (action: ServiceAction, values: Record<string, any>) => {
+  const merged = { ...values };
+  for (const field of action.fields || []) {
+    if (merged[field.name] === undefined && field.default != null) merged[field.name] = field.default;
+  }
+  return merged;
+};
 
 export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = ({
   service,
@@ -36,6 +48,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
   const [selectedKind, setSelectedKind] = useState<string>('all');
   const [selectedAction, setSelectedAction] = useState('');
   const [selectedResource, setSelectedResource] = useState<Record<string, any> | null>(null);
+  const [selectedCollection, setSelectedCollection] = useState('');
   const [formValues, setFormValues] = useState<Record<string, Record<string, any>>>({});
   const [fileValues, setFileValues] = useState<Record<string, Record<string, File>>>({});
   const [actionOutputs, setActionOutputs] = useState<Record<string, { status: 'success' | 'error'; data: any; elapsed: number }>>({});
@@ -49,7 +62,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
     fields: [
       ...(action.path.match(/\{([^}]+)\}/g) || []).map(parameter => parameter.slice(1, -1))
         .filter(name => !(action.fields || []).some(field => field.name === name))
-        .map(name => ({ name, label: name.replace(/_/g, ' '), required: true, field_type: 'string', help_text: 'Resource identifier for this operation' })),
+        .map(name => ({ name, label: pathParamLabel(name), required: true, field_type: 'string', help_text: 'Resource identifier for this operation' })),
       ...(action.fields || []),
     ],
   }));
@@ -103,7 +116,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
     setRunningActionName(action.name);
     setPendingAction(null);
     const start = performance.now();
-    const actionForm = formValues[action.name] || {};
+    const actionForm = withDefaults(action, formValues[action.name] || {});
     const actionFiles = fileValues[action.name] || {};
 
     try {
@@ -134,6 +147,10 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
     }
   };
 
+  const pendingTargets = pendingAction
+    ? (pendingAction.path.match(/\{([^}]+)\}/g) || []).map(param => param.slice(1, -1)).map(name => [name, String((formValues[pendingAction.name] || {})[name] ?? '')] as [string, string]).filter(([, value]) => value)
+    : [];
+
   const filteredActions = actions.filter((act) => {
     const matchesFilter =
       act.name.toLowerCase().includes(filterText.toLowerCase()) ||
@@ -146,7 +163,18 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
   });
 
   const renderFieldInput = (action: ServiceAction, f: ActionField) => {
-    const currentVal = (formValues[action.name] || {})[f.name] ?? '';
+    const currentVal = (formValues[action.name] || {})[f.name] ?? f.default ?? '';
+    if (f.options?.length) {
+      return (
+        <Select
+          ariaLabel={f.label}
+          selectedOption={currentVal === '' ? null : { value: String(currentVal), label: String(currentVal) }}
+          placeholder={`Choose ${f.label.toLowerCase()}`}
+          options={[...(f.required ? [] : [{ value: '', label: '-' }]), ...f.options.map(option => ({ value: option, label: option }))]}
+          onChange={({ detail }) => handleFieldChange(action.name, f.name, detail.selectedOption.value ?? '')}
+        />
+      );
+    }
 
     switch (f.field_type) {
       case 'number':
@@ -245,13 +273,16 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
         </SpaceBetween>
       </Container>
 
-      <ResourceInventory key={service.key} service={service} revision={inventoryRevision} onSelectResource={resource => {
+      <ResourceInventory key={service.key} service={service} revision={inventoryRevision} onSelectResource={(resource, collection) => {
+        // Clear what the previous selection filled, then fill from the new one.
+        const previousFill = selectedResource ? Object.fromEntries(actions.map(action => [action.name, resourceFieldValues(action, selectedResource, selectedCollection)])) : {};
         setSelectedResource(resource || null);
-        setFormValues(previous => Object.fromEntries(actions.map(action => [action.name, {
-          ...(previous[action.name] || {}),
-          ...Object.fromEntries(action.fields.filter(field => selectedResource?.[field.name] != null).map(field => [field.name, ''])),
-          ...Object.fromEntries(action.fields.filter(field => resource?.[field.name] != null).map(field => [field.name, resource[field.name]])),
-        }])));
+        setSelectedCollection(collection);
+        setFormValues(previous => Object.fromEntries(actions.map(action => {
+          const current = { ...(previous[action.name] || {}) };
+          for (const [name, value] of Object.entries(previousFill[action.name] || {})) if (current[name] === value) current[name] = '';
+          return [action.name, { ...current, ...resourceFieldValues(action, resource || null, collection) }];
+        })));
       }} />
 
       <Container header={<Header variant="h2" description={selectedResource ? 'Actions apply to the selected resource. Review the form before executing.' : 'Create a resource or select one in the inventory to manage it.'}>Resource actions</Header>}>
@@ -279,7 +310,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
         }
       >
         <SpaceBetween size="m">
-          {selectedResource && <StatusIndicator type="info">Selected resource: {String(selectedResource.name || selectedResource.Name || selectedResource.id || selectedResource.arn || selectedResource.ARN || 'Resource selected')}. Matching resource fields are filled in below.</StatusIndicator>}
+          {selectedResource && <StatusIndicator type="info">Selected resource: {String(selectedResource.name || selectedResource.Name || selectedResource.id || selectedResource.arn || selectedResource.ARN || 'Resource selected')}. Fields that identify it, or its parent, are filled in below.</StatusIndicator>}
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ flex: 1, minWidth: '260px' }}>
               <TextFilter
@@ -317,7 +348,7 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
               {filteredActions.filter(action => action.name === selectedAction).map((action) => {
                 const output = actionOutputs[action.name];
                 const isRunning = runningActionName === action.name;
-                const missingRequired = action.fields.some(field => field.required && !String((formValues[action.name] || {})[field.name] ?? '').trim());
+                const missingRequired = action.fields.some(field => field.required && !String(withDefaults(action, formValues[action.name] || {})[field.name] ?? '').trim());
 
                 return (
                   <Container
@@ -421,36 +452,21 @@ export const GenericServiceWorkbench: React.FC<GenericServiceWorkbenchProps> = (
         </SpaceBetween>
       </Container>
 
-      {/* Destructive Action Modal */}
-      <Modal
+      {/* Destructive action confirmation, as in the AWS console: deletes need "delete" typed. */}
+      <ConfirmActionModal
         visible={Boolean(pendingAction)}
         onDismiss={() => setPendingAction(null)}
         header={`${pendingAction?.label}?`}
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setPendingAction(null)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={Boolean(runningActionName)}
-                onClick={() => {
-                  if (pendingAction) {
-                    executeAction(pendingAction);
-                  }
-                }}
-              >
-                {pendingAction?.label || 'Confirm'}
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
+        confirmLabel={pendingAction?.label || 'Confirm'}
+        confirmationText={pendingAction?.kind === 'delete' ? 'delete' : undefined}
+        loading={Boolean(runningActionName)}
+        onConfirm={() => { if (pendingAction) executeAction(pendingAction); }}
       >
-        <Alert type="warning">
-          {pendingAction?.confirm || `${pendingAction?.label} can't be undone.`}
-        </Alert>
-      </Modal>
+        <SpaceBetween size="xs">
+          <span>{pendingAction?.confirm || `${pendingAction?.label} can't be undone.`}</span>
+          {pendingAction && pendingTargets.length > 0 && <span>Target: {pendingTargets.map(([name, value]) => `${name.replace(/_/g, ' ')} ${value}`).join(', ')}</span>}
+        </SpaceBetween>
+      </ConfirmActionModal>
     </SpaceBetween>
   );
 };

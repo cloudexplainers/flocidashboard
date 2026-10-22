@@ -5,11 +5,16 @@ import ExpandableSection from '@cloudscape-design/components/expandable-section'
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import SpaceBetween from '@cloudscape-design/components/space-between';
 import { CodeSnippet } from './CodeSnippet';
+import { formatAwsDate } from '../format';
+
+const isTimestampKey = (name: string) => /(created|creation|modified|updated|time|date|_at)$|^(created|start|end|issued|not_before|not_after)/i.test(name);
 
 export const attributeLabel = (value: string) => value.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
 export function ResourceValue({ value, name = '' }: { value: unknown; name?: string }) {
   if (value == null || value === '') return <>Not reported</>;
-  if (typeof value === 'boolean') return <>{value ? 'Enabled' : 'Disabled'}</>;
+  // Feature switches read Enabled/Disabled in the console; other flags (Multi-AZ, Deleted) read Yes/No.
+  if (typeof value === 'boolean') return <>{/enabled|encrypt|protection|monitoring|upgrade|logging/i.test(name) ? (value ? 'Enabled' : 'Disabled') : (value ? 'Yes' : 'No')}</>;
+  if (typeof value === 'string' && isTimestampKey(name) && /^\d{4}-\d{2}-\d{2}T/.test(value)) return <>{formatAwsDate(value)}</>;
   if (/status$|state$/i.test(name) && typeof value === 'string') {
     const state = value.toUpperCase();
     const type = /FAILED|ERROR|UNHEALTHY|ALARM|DENIED/.test(state) ? 'error' : /^(ACTIVE|AVAILABLE|RUNNING|ISSUED|ENABLED|HEALTHY|SUCCEEDED|DEPLOYED|OK)$/.test(state) ? 'success' : /PENDING|CREATING|UPDATING|PROGRESS|DELETING/.test(state) ? 'in-progress' : 'info';

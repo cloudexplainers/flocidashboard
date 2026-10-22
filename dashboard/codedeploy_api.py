@@ -34,11 +34,11 @@ def _list_value(value: Any, label: str) -> list[Any]:
     return value
 
 
-def create_application(name: str, compute_platform: str = 'Lambda') -> dict[str, Any]:
+def create_application(name: str, compute_platform: str = 'Server') -> dict[str, Any]:
     clean_name = _required(name, 'Application name')
     response = _client().create_application(
         applicationName=clean_name,
-        computePlatform=(compute_platform or 'Lambda').strip(),
+        computePlatform=(compute_platform or 'Server').strip(),
     )
     return {'application_name': clean_name, 'application_id': response.get('applicationId'), 'response': _clean_response(response)}
 

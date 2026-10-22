@@ -32,7 +32,7 @@ def opensearch_domains_create(request):
             instance_type=body.get('instance_type') or 'm5.large.search',
             instance_count=body.get('instance_count') or 1,
             ebs_enabled=body.get('ebs_enabled', True),
-            volume_type=body.get('volume_type') or 'gp2',
+            volume_type=body.get('volume_type') or 'gp3',
             volume_size=body.get('volume_size') or 10,
             tags=body.get('tags') or [],
         ))
