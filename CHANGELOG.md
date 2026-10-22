@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Split `dashboard/aws.py` (11.6k lines) into a `dashboard/aws/` package with one inventory module per service; shared client plumbing and `list_resources` stay in `__init__.py`.
 - Docker Compose now publishes the dashboard and Floci ports on `127.0.0.1` only (set `HOST_BIND_ADDRESS` to change it). Django runs with `DEBUG` off by default, and the hard-coded secret key is replaced by one generated per install and stored next to the dashboard database.
 - Polished the AWS service consoles, including Route 53, Cognito, CloudTrail investigation workflows, session identity switching, and the AWS CLI console.
 - Lab progress loads much faster: boto3 clients are cached per endpoint and identity, and lab status checks run in parallel (`/api/labs/progress/` from about 35s to under 1s). The labs page shows loading and retryable error states.

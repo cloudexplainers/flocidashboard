@@ -1,3 +1,17 @@
+"""Floci client plumbing and the shared resource list.
+
+This package holds the shared pieces: FlociClientFactory, the runtime
+endpoint and identity overrides, pagination and response-cleaning helpers,
+and list_resources. Each service's inventory and resource-list loaders live
+in their own module (dashboard/aws/<service>.py, lambda_.py for Lambda) and
+are re-exported at the bottom, so `from dashboard.aws import s3_inventory`
+still works.
+
+Service modules call FlociClientFactory and the paginate helpers through
+this package (core.FlociClientFactory), so tests can patch them once on
+dashboard.aws.
+"""
+
 from __future__ import annotations
 
 import copy
@@ -8,19 +22,16 @@ from contextvars import ContextVar
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
-from datetime import date, timedelta
 from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from typing import Any, Callable, Optional
 
 import boto3
-from botocore import xform_name
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, ProfileNotFound
 from botocore.parsers import ResponseParserError
 from django.conf import settings
-from django.core.cache import cache
 
 
 RUNTIME_ENDPOINT_SESSION_KEY = 'floci_runtime_endpoint_url'
@@ -617,7 +628,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
 
 
 # Service modules. Imported last because they use the helpers above.
-from . import (  # noqa: E402
+from . import (  # noqa: E402, F401
     acm,
     amazonmq,
     apigateway,
@@ -684,68 +695,68 @@ from . import (  # noqa: E402
     transfer,
     wafv2,
 )
-from .acm import acm_inventory  # noqa: E402
-from .amazonmq import amazonmq_inventory  # noqa: E402
-from .apigateway import apigateway_inventory  # noqa: E402
-from .appconfig import appconfig_inventory  # noqa: E402
-from .appsync import appsync_inventory  # noqa: E402
-from .athena import athena_inventory  # noqa: E402
-from .autoscaling import autoscaling_inventory  # noqa: E402
-from .backup import backup_inventory  # noqa: E402
-from .batch import batch_inventory  # noqa: E402
-from .bcmdataexports import bcmdataexports_inventory  # noqa: E402
-from .bedrockruntime import bedrockruntime_inventory  # noqa: E402
-from .cloudcontrol import cloudcontrol_inventory  # noqa: E402
-from .cloudformation import cloudformation_inventory  # noqa: E402
-from .cloudfront import cloudfront_inventory  # noqa: E402
-from .cloudmap import cloudmap_inventory  # noqa: E402
-from .cloudtrail import cloudtrail_inventory  # noqa: E402
-from .cloudwatch import cloudwatch_inventory  # noqa: E402
-from .codebuild import codebuild_inventory  # noqa: E402
-from .codedeploy import codedeploy_inventory  # noqa: E402
-from .codepipeline import codepipeline_inventory  # noqa: E402
-from .cognito import cognito_inventory  # noqa: E402
-from .config import config_inventory  # noqa: E402
-from .costexplorer import costexplorer_inventory  # noqa: E402
-from .cur import cur_inventory  # noqa: E402
-from .docdb import docdb_inventory  # noqa: E402
-from .dynamodb import dynamodb_inventory  # noqa: E402
-from .ec2 import ec2_inventory  # noqa: E402
-from .ecr import ecr_inventory  # noqa: E402
-from .ecs import ecs_inventory  # noqa: E402
-from .eks import eks_inventory  # noqa: E402
-from .elasticache import elasticache_inventory  # noqa: E402
-from .elasticbeanstalk import elasticbeanstalk_inventory  # noqa: E402
-from .elasticloadbalancing import elasticloadbalancing_inventory  # noqa: E402
-from .emr import emr_inventory  # noqa: E402
-from .eventbridge import eventbridge_inventory  # noqa: E402
-from .firehose import firehose_inventory  # noqa: E402
-from .glue import glue_inventory  # noqa: E402
-from .iam import iam_inventory  # noqa: E402
-from .iot import iot_inventory  # noqa: E402
-from .kafka import kafka_inventory  # noqa: E402
-from .kinesis import kinesis_inventory  # noqa: E402
-from .kms import kms_inventory  # noqa: E402
-from .lambda_ import lambda_inventory  # noqa: E402
-from .memorydb import memorydb_inventory  # noqa: E402
-from .neptune import neptune_inventory  # noqa: E402
-from .opensearch import opensearch_inventory  # noqa: E402
-from .pipes import pipes_inventory  # noqa: E402
-from .pricing import pricing_inventory  # noqa: E402
-from .rds import rds_inventory  # noqa: E402
-from .rdsdata import rdsdata_inventory  # noqa: E402
-from .resourcegroupstagging import resourcegroupstagging_inventory  # noqa: E402
-from .route53 import route53_inventory  # noqa: E402
-from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
-from .s3vectors import s3vectors_inventory  # noqa: E402
-from .scheduler import scheduler_inventory  # noqa: E402
-from .secretsmanager import secretsmanager_inventory  # noqa: E402
-from .ses import ses_inventory  # noqa: E402
-from .sns import sns_inventory  # noqa: E402
-from .sqs import sqs_inventory  # noqa: E402
-from .ssm import ssm_inventory  # noqa: E402
-from .stepfunctions import stepfunctions_inventory  # noqa: E402
-from .textract import textract_inventory  # noqa: E402
-from .transcribe import transcribe_inventory  # noqa: E402
-from .transfer import transfer_inventory  # noqa: E402
-from .wafv2 import wafv2_inventory  # noqa: E402
+from .acm import acm_inventory  # noqa: E402, F401
+from .amazonmq import amazonmq_inventory  # noqa: E402, F401
+from .apigateway import apigateway_inventory  # noqa: E402, F401
+from .appconfig import appconfig_inventory  # noqa: E402, F401
+from .appsync import appsync_inventory  # noqa: E402, F401
+from .athena import athena_inventory  # noqa: E402, F401
+from .autoscaling import autoscaling_inventory  # noqa: E402, F401
+from .backup import backup_inventory  # noqa: E402, F401
+from .batch import batch_inventory  # noqa: E402, F401
+from .bcmdataexports import bcmdataexports_inventory  # noqa: E402, F401
+from .bedrockruntime import bedrockruntime_inventory  # noqa: E402, F401
+from .cloudcontrol import cloudcontrol_inventory  # noqa: E402, F401
+from .cloudformation import cloudformation_inventory  # noqa: E402, F401
+from .cloudfront import cloudfront_inventory  # noqa: E402, F401
+from .cloudmap import cloudmap_inventory  # noqa: E402, F401
+from .cloudtrail import cloudtrail_inventory  # noqa: E402, F401
+from .cloudwatch import cloudwatch_inventory  # noqa: E402, F401
+from .codebuild import codebuild_inventory  # noqa: E402, F401
+from .codedeploy import codedeploy_inventory  # noqa: E402, F401
+from .codepipeline import codepipeline_inventory  # noqa: E402, F401
+from .cognito import cognito_inventory  # noqa: E402, F401
+from .config import config_inventory  # noqa: E402, F401
+from .costexplorer import costexplorer_inventory  # noqa: E402, F401
+from .cur import cur_inventory  # noqa: E402, F401
+from .docdb import docdb_inventory  # noqa: E402, F401
+from .dynamodb import dynamodb_inventory  # noqa: E402, F401
+from .ec2 import ec2_inventory  # noqa: E402, F401
+from .ecr import ecr_inventory  # noqa: E402, F401
+from .ecs import ecs_inventory  # noqa: E402, F401
+from .eks import eks_inventory  # noqa: E402, F401
+from .elasticache import elasticache_inventory  # noqa: E402, F401
+from .elasticbeanstalk import elasticbeanstalk_inventory  # noqa: E402, F401
+from .elasticloadbalancing import elasticloadbalancing_inventory  # noqa: E402, F401
+from .emr import emr_inventory  # noqa: E402, F401
+from .eventbridge import eventbridge_inventory  # noqa: E402, F401
+from .firehose import firehose_inventory  # noqa: E402, F401
+from .glue import glue_inventory  # noqa: E402, F401
+from .iam import iam_inventory  # noqa: E402, F401
+from .iot import iot_inventory  # noqa: E402, F401
+from .kafka import kafka_inventory  # noqa: E402, F401
+from .kinesis import kinesis_inventory  # noqa: E402, F401
+from .kms import kms_inventory  # noqa: E402, F401
+from .lambda_ import lambda_inventory  # noqa: E402, F401
+from .memorydb import memorydb_inventory  # noqa: E402, F401
+from .neptune import neptune_inventory  # noqa: E402, F401
+from .opensearch import opensearch_inventory  # noqa: E402, F401
+from .pipes import pipes_inventory  # noqa: E402, F401
+from .pricing import pricing_inventory  # noqa: E402, F401
+from .rds import rds_inventory  # noqa: E402, F401
+from .rdsdata import rdsdata_inventory  # noqa: E402, F401
+from .resourcegroupstagging import resourcegroupstagging_inventory  # noqa: E402, F401
+from .route53 import route53_inventory  # noqa: E402, F401
+from .s3 import create_s3_bucket, s3_inventory  # noqa: E402, F401
+from .s3vectors import s3vectors_inventory  # noqa: E402, F401
+from .scheduler import scheduler_inventory  # noqa: E402, F401
+from .secretsmanager import secretsmanager_inventory  # noqa: E402, F401
+from .ses import ses_inventory  # noqa: E402, F401
+from .sns import sns_inventory  # noqa: E402, F401
+from .sqs import sqs_inventory  # noqa: E402, F401
+from .ssm import ssm_inventory  # noqa: E402, F401
+from .stepfunctions import stepfunctions_inventory  # noqa: E402, F401
+from .textract import textract_inventory  # noqa: E402, F401
+from .transcribe import transcribe_inventory  # noqa: E402, F401
+from .transfer import transfer_inventory  # noqa: E402, F401
+from .wafv2 import wafv2_inventory  # noqa: E402, F401

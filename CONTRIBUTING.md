@@ -46,7 +46,7 @@ See the [README](./README.md#configuration) for endpoint, Region, credential, an
 | Path | What lives there |
 | --- | --- |
 | `dashboard/services.py` | Service registry: title, category, maturity (`interactive_workbench`, `read_only_inspector`, `inventory_only`), docs links, and action metadata. |
-| `dashboard/aws.py` | `FlociClientFactory`, response cleaning, and read-only inventory loaders. Loaders return empty or error shapes, never exceptions, when Floci has nothing to show. |
+| `dashboard/aws/` | Read-only inventory loaders: one `<service>.py` per service (`lambda_.py` for Lambda), plus `FlociClientFactory`, response cleaning, and `list_resources` in `__init__.py`. Service modules call `core.FlociClientFactory` and `core._paginate` so tests can patch them once on `dashboard.aws`. Loaders return empty or error shapes, never exceptions, when Floci has nothing to show. |
 | `dashboard/actions.py` | Shared JSON parsing and normalized action errors. |
 | `dashboard/<service>_api.py`, `dashboard/<service>_views.py` | Service-specific boto3 logic and JSON endpoints. |
 | `dashboard/urls.py` | API routes under `api/<service>/…`. Every registered service also gets an SPA deep link automatically. |

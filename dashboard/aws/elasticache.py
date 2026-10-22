@@ -6,7 +6,6 @@ import json
 from typing import Any, Callable
 
 from botocore.exceptions import BotoCoreError, ClientError
-from django.core.cache import cache
 
 from dashboard import aws as core
 from dashboard.aws import _clean_response, _error_code, _safe_value

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from django.conf import settings
-
 from dashboard import aws as core
 from dashboard.aws import _clean_response, _safe_value
 
