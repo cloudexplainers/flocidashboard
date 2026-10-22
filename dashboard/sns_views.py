@@ -7,6 +7,7 @@ from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
 from .sns_api import (
+    set_topic_attribute,
     create_topic,
     delete_topic,
     get_topic_attributes,
@@ -32,14 +33,18 @@ def sns_topics_create(request):
         return handle_action_error(exc, service='sns', operation='create_topic')
 
 
-@require_http_methods(['GET', 'DELETE'])
+@require_http_methods(['GET', 'PATCH', 'DELETE'])
 def sns_topic_detail(request, topic_arn: str):
+    operation = {'GET': 'get_topic_attributes', 'PATCH': 'set_topic_attributes'}.get(request.method, 'delete_topic')
     try:
         if request.method == 'GET':
             return JsonResponse(get_topic_attributes(topic_arn))
+        if request.method == 'PATCH':
+            body = parse_json_body(request)
+            return JsonResponse(set_topic_attribute(topic_arn, body.get('attribute_name') or '', body.get('attribute_value')))
         return JsonResponse(delete_topic(topic_arn))
     except Exception as exc:
-        return handle_action_error(exc, service='sns', operation='delete_topic')
+        return handle_action_error(exc, service='sns', operation=operation)
 
 
 @require_http_methods(['POST'])

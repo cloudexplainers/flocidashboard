@@ -966,6 +966,11 @@ export async function publishSnsMessage(
   });
 }
 
+/** SetTopicAttributes (Policy, DisplayName or DeliveryPolicy). */
+export async function setSnsTopicAttribute(topicArn: string, name: string, value: string): Promise<any> {
+  return requestJson(`/api/sns/topics/${encodeURIComponent(topicArn)}/`, { method: 'PATCH', json: { attribute_name: name, attribute_value: value }, errorMessage: 'Failed to update topic' });
+}
+
 // RDS Operational APIs
 export async function createRdsInstance(
   identifier: string,

@@ -105,6 +105,28 @@ def get_topic_attributes(topic_arn: str) -> dict[str, Any]:
     return {'topic_arn': arn, 'attributes': response.get('Attributes', {})}
 
 
+TOPIC_EDITABLE_ATTRIBUTES = ('Policy', 'DisplayName', 'DeliveryPolicy')
+
+
+def set_topic_attribute(topic_arn: str, name: str, value: Any) -> dict[str, Any]:
+    """SetTopicAttributes for the attributes the console's topic editor changes."""
+    arn = validate_topic_arn(topic_arn)
+    if name not in TOPIC_EDITABLE_ATTRIBUTES:
+        raise ValueError(f'Attribute must be one of: {", ".join(TOPIC_EDITABLE_ATTRIBUTES)}')
+    if isinstance(value, (dict, list)):
+        value = json.dumps(value)
+    text = str(value or '')
+    if name in ('Policy', 'DeliveryPolicy'):
+        if not text.strip():
+            raise ValueError(f'{name} is required')  # AWS has no way to remove a topic policy.
+        try:
+            json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f'{name} must be valid JSON') from exc
+    _sns_client().set_topic_attributes(TopicArn=arn, AttributeName=name, AttributeValue=text)
+    return get_topic_attributes(arn)
+
+
 def subscribe(
     topic_arn: str,
     protocol: str,

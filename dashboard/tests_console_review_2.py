@@ -205,3 +205,22 @@ class LambdaSourceTests(SimpleTestCase):
             lambda_api._download_package('worker')
 
         self.assertEqual(urlopen.call_args.args[0], 'http://floci:4566/pkg/worker?sig=1')
+
+
+class SnsTopicAttributeTests(SimpleTestCase):
+    def test_policy_must_be_json_and_other_attributes_are_refused(self):
+        from unittest.mock import patch
+
+        from dashboard.sns_api import set_topic_attribute
+
+        arn = 'arn:aws:sns:us-east-1:000000000000:orders'
+        with patch('dashboard.sns_api._sns_client') as client:
+            client.return_value.get_topic_attributes.return_value = {'Attributes': {}}
+            with self.assertRaisesMessage(ValueError, 'Policy must be valid JSON'):
+                set_topic_attribute(arn, 'Policy', '{bad')
+            with self.assertRaisesMessage(ValueError, 'Attribute must be one of'):
+                set_topic_attribute(arn, 'Owner', 'x')
+            set_topic_attribute(arn, 'Policy', {'Version': '2012-10-17', 'Statement': []})
+        client.return_value.set_topic_attributes.assert_called_once_with(
+            TopicArn=arn, AttributeName='Policy', AttributeValue='{"Version": "2012-10-17", "Statement": []}',
+        )

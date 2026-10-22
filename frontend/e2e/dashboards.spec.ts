@@ -1045,6 +1045,27 @@ test('SNS policy view uses actual statements and preserves topic on reload', asy
   await page.screenshot({ path: 'test-results/screenshots/sns-mobile.png', fullPage: true });
 });
 
+test('SNS access policy edits validate JSON and save with SetTopicAttributes', async ({ page }) => {
+  await inventory(page, 'sns', { topics: [{ arn: messagingTopicArn, attributes: { Policy: JSON.stringify({ Version: '2012-10-17', Statement: [] }) } }] });
+  let patch: any = null;
+  await page.route('**/api/sns/topics/**', route => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    patch = route.request().postDataJSON();
+    return route.fulfill({ json: { topic_arn: messagingTopicArn, attributes: {} } });
+  });
+  await page.goto(`/sns/policy?${new URLSearchParams({ topic: messagingTopicArn })}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const editor = page.getByRole('textbox', { name: /Policy JSON|Topic access policy JSON/ });
+  await editor.fill('{bad');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByText('The access policy must be valid JSON.', { exact: true })).toBeVisible();
+  expect(patch).toBeNull();
+  const policy = JSON.stringify({ Version: '2012-10-17', Statement: [{ Effect: 'Allow', Principal: { Service: 'events.amazonaws.com' }, Action: 'sns:Publish', Resource: messagingTopicArn }] });
+  await editor.fill(policy);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => patch).toEqual({ attribute_name: 'Policy', attribute_value: policy });
+});
+
 test('SNS never invents a default access policy', async ({ page }) => {
   await inventory(page, 'sns', { topics: [{ arn: messagingTopicArn }] });
   await page.goto(`/sns/policy?${new URLSearchParams({ topic: messagingTopicArn })}`);
