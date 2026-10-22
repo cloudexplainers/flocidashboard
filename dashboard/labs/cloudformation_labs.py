@@ -68,6 +68,48 @@ CLOUDFORMATION_TEMPLATE_TEXT = json.dumps(
     CLOUDFORMATION_TEMPLATE,
     indent=2,
 )
+CLOUDFORMATION_DLQ_NAME = 'lab-cfn-jobs-dlq'
+CLOUDFORMATION_DLQ_ARN = f'arn:aws:sqs:{AWS_REGION}:{AWS_ACCOUNT_ID}:{CLOUDFORMATION_DLQ_NAME}'
+CLOUDFORMATION_CHANGE_SET_NAME = 'lab-add-dead-letter-queue'
+CLOUDFORMATION_UPDATED_VISIBILITY_TIMEOUT = 60
+CLOUDFORMATION_MAX_RECEIVE_COUNT = 3
+CLOUDFORMATION_UPDATED_TEMPLATE = json.loads(json.dumps(CLOUDFORMATION_TEMPLATE))
+CLOUDFORMATION_UPDATED_TEMPLATE['Description'] = (
+    'Provision local S3 storage and an SQS work queue with a dead-letter queue.'
+)
+CLOUDFORMATION_UPDATED_TEMPLATE['Resources']['JobsDeadLetterQueue'] = {
+    'Type': 'AWS::SQS::Queue',
+    'Properties': {
+        'QueueName': CLOUDFORMATION_DLQ_NAME,
+        'MessageRetentionPeriod': 1209600,
+    },
+}
+CLOUDFORMATION_UPDATED_TEMPLATE['Resources']['JobsQueue']['Properties'].update({
+    'VisibilityTimeout': CLOUDFORMATION_UPDATED_VISIBILITY_TIMEOUT,
+    'RedrivePolicy': {
+        'deadLetterTargetArn': {'Fn::GetAtt': ['JobsDeadLetterQueue', 'Arn']},
+        'maxReceiveCount': CLOUDFORMATION_MAX_RECEIVE_COUNT,
+    },
+})
+CLOUDFORMATION_UPDATED_TEMPLATE['Outputs']['DeadLetterQueueArn'] = {
+    'Description': 'ARN of the dead-letter queue.',
+    'Value': {'Fn::GetAtt': ['JobsDeadLetterQueue', 'Arn']},
+}
+CLOUDFORMATION_UPDATED_TEMPLATE_TEXT = json.dumps(CLOUDFORMATION_UPDATED_TEMPLATE, indent=2)
+CLOUDFORMATION_CREATE_CHANGE_SET_COMMAND = (
+    f'aws cloudformation create-change-set --stack-name {CLOUDFORMATION_STACK_NAME} '
+    f'--change-set-name {CLOUDFORMATION_CHANGE_SET_NAME} --change-set-type UPDATE '
+    '--template-body file://storage-messaging-stack-v2.json'
+)
+CLOUDFORMATION_DESCRIBE_CHANGE_SET_COMMAND = (
+    f'aws cloudformation describe-change-set --stack-name {CLOUDFORMATION_STACK_NAME} '
+    f'--change-set-name {CLOUDFORMATION_CHANGE_SET_NAME}'
+)
+CLOUDFORMATION_EXECUTE_CHANGE_SET_COMMAND = (
+    f'aws cloudformation execute-change-set --stack-name {CLOUDFORMATION_STACK_NAME} '
+    f'--change-set-name {CLOUDFORMATION_CHANGE_SET_NAME}'
+)
+CLOUDFORMATION_CHANGE_SET_EXECUTED_CACHE_KEY = 'floci-lab:cloudformation:s3-sqs:change-set-executed'
 CLOUDFORMATION_CREATED_CACHE_KEY = 'floci-lab:cloudformation:s3-sqs:created'
 CLOUDFORMATION_INSPECTED_CACHE_KEY = 'floci-lab:cloudformation:s3-sqs:inspected'
 CLOUDFORMATION_DELETED_CACHE_KEY = 'floci-lab:cloudformation:s3-sqs:deleted'
@@ -75,7 +117,10 @@ CLOUDFORMATION_S3_SQS_LAB = {
     'service': 'cloudformation',
     'key': 's3-sqs-stack',
     'title': 'Provision S3 and SQS resources with CloudFormation',
-    'description': 'Validate one infrastructure template, create a stack, inspect its outputs, resources, and events, then delete the stack and verify cleanup.',
+    'description': (
+        'Validate one infrastructure template, create a stack, and inspect its outputs, resources, and events. '
+        'Then preview an update with a change set before applying it, and finally delete the stack and verify cleanup.'
+    ),
     'steps': [
         {
             'key': 'validate-template',
@@ -116,6 +161,37 @@ CLOUDFORMATION_S3_SQS_LAB = {
             'explanation': 'Confirms that S3 and SQS expose the resources with the expected queue ARN and visibility timeout.',
         },
         {
+            'key': 'create-change-set',
+            'title': 'Propose an update with a change set',
+            'command': CLOUDFORMATION_CREATE_CHANGE_SET_COMMAND,
+            'explanation': (
+                'Submits version 2 of the template as a change set: it adds a dead-letter queue and changes the jobs '
+                f'queue to {CLOUDFORMATION_UPDATED_VISIBILITY_TIMEOUT}s visibility with a redrive policy. '
+                'Nothing changes yet; CloudFormation only works out what would happen.'
+            ),
+            'artifact_label': 'storage-messaging-stack-v2.json',
+            'artifact': CLOUDFORMATION_UPDATED_TEMPLATE_TEXT,
+        },
+        {
+            'key': 'describe-change-set',
+            'title': 'Review the proposed changes',
+            'command': CLOUDFORMATION_DESCRIBE_CHANGE_SET_COMMAND,
+            'explanation': (
+                'Lists each resource change: JobsDeadLetterQueue is an Add, JobsQueue is a Modify with '
+                'Replacement False. Checking Replacement before you apply is the point of a change set: a replaced '
+                'database or bucket would lose its data.'
+            ),
+        },
+        {
+            'key': 'execute-change-set',
+            'title': 'Apply the reviewed change set',
+            'command': CLOUDFORMATION_EXECUTE_CHANGE_SET_COMMAND,
+            'explanation': (
+                'Applies exactly the reviewed changes. The stack moves to UPDATE_COMPLETE, the dead-letter queue '
+                'exists, and the jobs queue now carries the new visibility timeout and redrive policy.'
+            ),
+        },
+        {
             'key': 'delete-stack',
             'title': 'Delete the stack',
             'command': f'aws cloudformation delete-stack --stack-name {CLOUDFORMATION_STACK_NAME}',
@@ -124,8 +200,8 @@ CLOUDFORMATION_S3_SQS_LAB = {
         {
             'key': 'confirm-resources-deleted',
             'title': 'Confirm stack-owned cleanup',
-            'command': f'aws cloudformation describe-stacks --stack-name {CLOUDFORMATION_STACK_NAME}\naws s3api head-bucket --bucket {CLOUDFORMATION_BUCKET_NAME}\naws sqs get-queue-url --queue-name {CLOUDFORMATION_QUEUE_NAME}',
-            'explanation': 'Requires the stack, bucket, and queue to be absent after deletion.',
+            'command': f'aws cloudformation describe-stacks --stack-name {CLOUDFORMATION_STACK_NAME}\naws s3api head-bucket --bucket {CLOUDFORMATION_BUCKET_NAME}\naws sqs get-queue-url --queue-name {CLOUDFORMATION_QUEUE_NAME}\naws sqs get-queue-url --queue-name {CLOUDFORMATION_DLQ_NAME}',
+            'explanation': 'Requires the stack, bucket, and both queues to be absent after deletion, including the queue the change set added.',
         },
     ],
 }
@@ -164,14 +240,14 @@ def _verify_cloudformation_stack() -> dict[str, Any]:
     }
     queue_url = outputs.get('QueueUrl', '')
     if (
-        stack.get('StackStatus') == 'CREATE_COMPLETE'
+        stack.get('StackStatus') in {'CREATE_COMPLETE', 'UPDATE_COMPLETE'}
         and outputs.get('BucketName') == CLOUDFORMATION_BUCKET_NAME
         and queue_url.rstrip('/').endswith(f'/{CLOUDFORMATION_QUEUE_NAME}')
         and outputs.get('QueueArn') == CLOUDFORMATION_QUEUE_ARN
     ):
         return {
             'status': 'passed',
-            'message': 'The stack is CREATE_COMPLETE with all expected outputs.',
+            'message': f"The stack is {stack.get('StackStatus')} with all expected outputs.",
             'resource': {
                 'stack': _clean_response(stack),
                 'outputs': outputs,
@@ -196,16 +272,16 @@ def _verify_cloudformation_resources() -> dict[str, Any]:
     if (
         bucket.get('PhysicalResourceId') == CLOUDFORMATION_BUCKET_NAME
         and bucket.get('ResourceType') == 'AWS::S3::Bucket'
-        and bucket.get('ResourceStatus') == 'CREATE_COMPLETE'
+        and bucket.get('ResourceStatus') in {'CREATE_COMPLETE', 'UPDATE_COMPLETE'}
         and queue.get('PhysicalResourceId', '').rstrip('/').endswith(
             f'/{CLOUDFORMATION_QUEUE_NAME}'
         )
         and queue.get('ResourceType') == 'AWS::SQS::Queue'
-        and queue.get('ResourceStatus') == 'CREATE_COMPLETE'
+        and queue.get('ResourceStatus') in {'CREATE_COMPLETE', 'UPDATE_COMPLETE'}
     ):
         return {
             'status': 'passed',
-            'message': 'Both logical resources map to CREATE_COMPLETE physical resources.',
+            'message': 'Both logical resources map to completed physical resources.',
             'resource': {'resources': _clean_response(list(resources.values()))},
         }
     return {'status': 'failed', 'message': 'The stack resource mapping is incomplete.'}
@@ -272,6 +348,7 @@ def _verify_cloudformation_deleted() -> dict[str, Any]:
     stack_absent = False
     bucket_absent = False
     queue_absent = False
+    dlq_absent = False
     try:
         _cloudformation_stack()
     except ClientError:
@@ -287,10 +364,17 @@ def _verify_cloudformation_deleted() -> dict[str, Any]:
             'AWS.SimpleQueueService.NonExistentQueue',
             'QueueDoesNotExist',
         }
-    if stack_absent and bucket_absent and queue_absent:
+    try:
+        _sqs_queue_url(CLOUDFORMATION_DLQ_NAME)
+    except ClientError as exc:
+        dlq_absent = _error_code(exc) in {
+            'AWS.SimpleQueueService.NonExistentQueue',
+            'QueueDoesNotExist',
+        }
+    if stack_absent and bucket_absent and queue_absent and dlq_absent:
         return {
             'status': 'passed',
-            'message': 'The stack, bucket, and queue are all absent.',
+            'message': 'The stack, bucket, jobs queue, and dead-letter queue are all absent.',
         }
     return {'status': 'failed', 'message': 'One or more stack-owned resources still exist.'}
 
@@ -367,6 +451,7 @@ def _run_cloudformation_create_stack() -> dict[str, Any]:
         cache.delete_many([
             CLOUDFORMATION_INSPECTED_CACHE_KEY,
             CLOUDFORMATION_DELETED_CACHE_KEY,
+            CLOUDFORMATION_CHANGE_SET_EXECUTED_CACHE_KEY,
         ])
     verification = _verify_cloudformation_stack()
     output = {**_clean_response(response), 'Stack': _clean_response(stack)}
@@ -456,6 +541,139 @@ def _run_cloudformation_inspect_services() -> dict[str, Any]:
     )
 
 
+def _describe_lab_change_set() -> dict[str, Any]:
+    return _cloudformation_client().describe_change_set(
+        StackName=CLOUDFORMATION_STACK_NAME,
+        ChangeSetName=CLOUDFORMATION_CHANGE_SET_NAME,
+    )
+
+
+def _change_set_actions(change_set: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        change.get('ResourceChange', {}).get('LogicalResourceId'): change.get('ResourceChange', {})
+        for change in change_set.get('Changes', [])
+    }
+
+
+def _verify_cloudformation_change_set_proposed() -> dict[str, Any]:
+    try:
+        change_set = _describe_lab_change_set()
+    except ClientError as exc:
+        return {'status': 'failed', 'message': str(exc)}
+    actions = _change_set_actions(change_set)
+    dlq = actions.get('JobsDeadLetterQueue', {})
+    queue = actions.get('JobsQueue', {})
+    if (
+        change_set.get('Status') == 'CREATE_COMPLETE'
+        and dlq.get('Action') == 'Add'
+        and queue.get('Action') == 'Modify'
+        and str(queue.get('Replacement')) in {'False', 'false'}
+    ):
+        return {
+            'status': 'passed',
+            'message': (
+                'The change set adds JobsDeadLetterQueue and modifies JobsQueue in place (Replacement False); '
+                f"execution status {change_set.get('ExecutionStatus')}."
+            ),
+            'resource': {'changes': _clean_response(list(actions.values()))},
+        }
+    return {
+        'status': 'failed',
+        'message': f"Change set {CLOUDFORMATION_CHANGE_SET_NAME} does not show the expected Add and in-place Modify.",
+    }
+
+
+def _verify_cloudformation_change_set_executed() -> dict[str, Any]:
+    try:
+        stack = _cloudformation_stack()
+        queue_url = _sqs_queue_url(CLOUDFORMATION_QUEUE_NAME)
+        attributes = _sqs_client().get_queue_attributes(
+            QueueUrl=queue_url,
+            AttributeNames=['VisibilityTimeout', 'RedrivePolicy'],
+        ).get('Attributes', {})
+    except ClientError as exc:
+        return {'status': 'failed', 'message': str(exc)}
+    outputs = {item.get('OutputKey'): item.get('OutputValue') for item in stack.get('Outputs', [])}
+    redrive = json.loads(attributes.get('RedrivePolicy') or '{}')
+    if (
+        stack.get('StackStatus') == 'UPDATE_COMPLETE'
+        and outputs.get('DeadLetterQueueArn') == CLOUDFORMATION_DLQ_ARN
+        and attributes.get('VisibilityTimeout') == str(CLOUDFORMATION_UPDATED_VISIBILITY_TIMEOUT)
+        and redrive.get('deadLetterTargetArn') == CLOUDFORMATION_DLQ_ARN
+        and int(redrive.get('maxReceiveCount', 0)) == CLOUDFORMATION_MAX_RECEIVE_COUNT
+    ):
+        return {
+            'status': 'passed',
+            'message': (
+                f'The stack is UPDATE_COMPLETE; {CLOUDFORMATION_QUEUE_NAME} now has '
+                f'{CLOUDFORMATION_UPDATED_VISIBILITY_TIMEOUT}s visibility and redrives to {CLOUDFORMATION_DLQ_NAME} '
+                f'after {CLOUDFORMATION_MAX_RECEIVE_COUNT} receives.'
+            ),
+            'resource': {'outputs': outputs, 'queue_attributes': attributes},
+        }
+    return {'status': 'failed', 'message': 'The stack does not reflect the executed change set yet.'}
+
+
+def _run_cloudformation_create_change_set() -> dict[str, Any]:
+    started = time.perf_counter()
+    client = _cloudformation_client()
+    try:
+        response = client.create_change_set(
+            StackName=CLOUDFORMATION_STACK_NAME,
+            ChangeSetName=CLOUDFORMATION_CHANGE_SET_NAME,
+            ChangeSetType='UPDATE',
+            TemplateBody=CLOUDFORMATION_UPDATED_TEMPLATE_TEXT,
+            Description='Add a dead-letter queue to the jobs queue.',
+        )
+    except ClientError as exc:
+        if _error_code(exc) != 'AlreadyExistsException':
+            raise
+        response = _describe_lab_change_set()
+    deadline = time.monotonic() + 10
+    verification = _verify_cloudformation_change_set_proposed()
+    while verification.get('status') != 'passed' and time.monotonic() < deadline:
+        time.sleep(0.2)
+        verification = _verify_cloudformation_change_set_proposed()
+    return _cloudformation_step_result(
+        'create-change-set',
+        CLOUDFORMATION_CREATE_CHANGE_SET_COMMAND,
+        response,
+        verification,
+        started,
+    )
+
+
+def _run_cloudformation_describe_change_set() -> dict[str, Any]:
+    started = time.perf_counter()
+    response = _describe_lab_change_set()
+    return _cloudformation_step_result(
+        'describe-change-set',
+        CLOUDFORMATION_DESCRIBE_CHANGE_SET_COMMAND,
+        response,
+        _verify_cloudformation_change_set_proposed(),
+        started,
+    )
+
+
+def _run_cloudformation_execute_change_set() -> dict[str, Any]:
+    started = time.perf_counter()
+    response = _cloudformation_client().execute_change_set(
+        StackName=CLOUDFORMATION_STACK_NAME,
+        ChangeSetName=CLOUDFORMATION_CHANGE_SET_NAME,
+    )
+    _wait_for_cloudformation_status({'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE', 'UPDATE_FAILED'})
+    verification = _verify_cloudformation_change_set_executed()
+    if verification.get('status') == 'passed':
+        cache.set(CLOUDFORMATION_CHANGE_SET_EXECUTED_CACHE_KEY, True, timeout=86400)
+    return _cloudformation_step_result(
+        'execute-change-set',
+        CLOUDFORMATION_EXECUTE_CHANGE_SET_COMMAND,
+        response,
+        verification,
+        started,
+    )
+
+
 def _run_cloudformation_delete_stack() -> dict[str, Any]:
     command = (
         f'aws cloudformation delete-stack '
@@ -463,6 +681,8 @@ def _run_cloudformation_delete_stack() -> dict[str, Any]:
     )
     if not cache.get(CLOUDFORMATION_INSPECTED_CACHE_KEY):
         raise ValueError('Inspect the provisioned resources before deleting the stack.')
+    if not cache.get(CLOUDFORMATION_CHANGE_SET_EXECUTED_CACHE_KEY):
+        raise ValueError('Apply the change set before deleting the stack.')
     started = time.perf_counter()
     response = _cloudformation_client().delete_stack(
         StackName=CLOUDFORMATION_STACK_NAME,
@@ -490,7 +710,8 @@ def _run_cloudformation_confirm_deleted() -> dict[str, Any]:
         f'aws cloudformation describe-stacks '
         f'--stack-name {CLOUDFORMATION_STACK_NAME}\n'
         f'aws s3api head-bucket --bucket {CLOUDFORMATION_BUCKET_NAME}\n'
-        f'aws sqs get-queue-url --queue-name {CLOUDFORMATION_QUEUE_NAME}'
+        f'aws sqs get-queue-url --queue-name {CLOUDFORMATION_QUEUE_NAME}\n'
+        f'aws sqs get-queue-url --queue-name {CLOUDFORMATION_DLQ_NAME}'
     )
     started = time.perf_counter()
     verification = _verify_cloudformation_deleted()
@@ -498,6 +719,7 @@ def _run_cloudformation_confirm_deleted() -> dict[str, Any]:
         'stack_absent': verification.get('status') == 'passed',
         'bucket_absent': verification.get('status') == 'passed',
         'queue_absent': verification.get('status') == 'passed',
+        'dead_letter_queue_absent': verification.get('status') == 'passed',
     }
     return _cloudformation_step_result(
         'confirm-resources-deleted',
@@ -506,6 +728,19 @@ def _run_cloudformation_confirm_deleted() -> dict[str, Any]:
         verification,
         started,
     )
+
+
+def _delete_lab_queue(queue_name: str) -> bool:
+    try:
+        _sqs_client().delete_queue(QueueUrl=_sqs_queue_url(queue_name))
+        return True
+    except ClientError as exc:
+        if _error_code(exc) in {
+            'AWS.SimpleQueueService.NonExistentQueue',
+            'QueueDoesNotExist',
+        }:
+            return True
+        raise
 
 
 def _reset_cloudformation_s3_sqs() -> dict[str, Any]:
@@ -543,28 +778,20 @@ def _reset_cloudformation_s3_sqs() -> dict[str, Any]:
         )
         deleted_bucket = bucket_result.get('deleted_bucket', False)
 
-    try:
-        queue_url = _sqs_queue_url(CLOUDFORMATION_QUEUE_NAME)
-        _sqs_client().delete_queue(QueueUrl=queue_url)
-        deleted_queue = True
-    except ClientError as exc:
-        if _error_code(exc) in {
-            'AWS.SimpleQueueService.NonExistentQueue',
-            'QueueDoesNotExist',
-        }:
-            deleted_queue = True
-        else:
-            raise
+    deleted_queue = _delete_lab_queue(CLOUDFORMATION_QUEUE_NAME)
+    deleted_dlq = _delete_lab_queue(CLOUDFORMATION_DLQ_NAME)
 
     cache.delete_many([
         CLOUDFORMATION_CREATED_CACHE_KEY,
         CLOUDFORMATION_INSPECTED_CACHE_KEY,
         CLOUDFORMATION_DELETED_CACHE_KEY,
+        CLOUDFORMATION_CHANGE_SET_EXECUTED_CACHE_KEY,
     ])
     output = {
         'deleted_stack': deleted_stack,
         'deleted_bucket': deleted_bucket,
         'deleted_queue': deleted_queue,
+        'deleted_dead_letter_queue': deleted_dlq,
     }
     return {
         'service': 'cloudformation',
@@ -579,7 +806,7 @@ def _reset_cloudformation_s3_sqs() -> dict[str, Any]:
         **output,
         'verification': {
             'status': 'passed',
-            'message': 'The CloudFormation stack and its S3 and SQS resources were removed.',
+            'message': 'The CloudFormation stack and its S3 bucket and SQS queues were removed.',
         },
     }
 
@@ -596,6 +823,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
             'describe-stack-resources': _run_cloudformation_describe_resources,
             'describe-stack-events': _run_cloudformation_describe_events,
             'inspect-provisioned-resources': _run_cloudformation_inspect_services,
+            'create-change-set': _run_cloudformation_create_change_set,
+            'describe-change-set': _run_cloudformation_describe_change_set,
+            'execute-change-set': _run_cloudformation_execute_change_set,
             'delete-stack': _run_cloudformation_delete_stack,
             'confirm-resources-deleted': _run_cloudformation_confirm_deleted,
         }
@@ -619,7 +849,24 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
             'status': 'passed',
             'message': 'Stack resources, events, and underlying services were inspected.',
         }
-        if deleted_verified:
+        executed = bool(cache.get(CLOUDFORMATION_CHANGE_SET_EXECUTED_CACHE_KEY))
+        executed_verification = {
+            'status': 'passed',
+            'message': 'The change set was reviewed and applied; the stack reached UPDATE_COMPLETE.',
+        }
+        if executed:
+            change_set_proposed = True
+            change_set_executed = (
+                deleted_verified
+                or _verify_cloudformation_change_set_executed().get('status') == 'passed'
+            )
+        else:
+            change_set_proposed = (
+                not deleted_verified
+                and _verify_cloudformation_change_set_proposed().get('status') == 'passed'
+            )
+            change_set_executed = False
+        if deleted_verified or executed:
             stack_verified = created_verified
             resources_verified = inspected_verified
             events_verified = inspected_verified
@@ -642,6 +889,7 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
             'complete': (
                 created_verified
                 and inspected_verified
+                and executed
                 and deleted_verified
             ),
             'steps': {
@@ -680,6 +928,24 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
                     'verification': (
                         inspected_verification if services_verified else None
                     ),
+                },
+                'create-change-set': {
+                    'verified': change_set_proposed,
+                    'verification': executed_verification if executed else (
+                        {'status': 'passed', 'message': 'The change set is ready for review.'}
+                        if change_set_proposed else None
+                    ),
+                },
+                'describe-change-set': {
+                    'verified': change_set_proposed,
+                    'verification': executed_verification if executed else (
+                        {'status': 'passed', 'message': 'The change set shows an Add and an in-place Modify.'}
+                        if change_set_proposed else None
+                    ),
+                },
+                'execute-change-set': {
+                    'verified': change_set_executed,
+                    'verification': executed_verification if change_set_executed else None,
                 },
                 'delete-stack': {
                     'verified': deleted_verified,

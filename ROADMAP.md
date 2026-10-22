@@ -372,7 +372,12 @@ Why it matters:
 
 Continue the local AWS workflow lab system beyond the completed foundations: 66 labs across IAM, S3, KMS, SSM, Secrets Manager, Cognito, SQS, SNS, Scheduler, DynamoDB, Lambda, API Gateway, EventBridge, Step Functions, CloudWatch, EC2, RDS, ECS, EKS, and CloudFormation.
 
+Certification study path: [`docs/certification-coverage.md`](./docs/certification-coverage.md) maps every lab to the AWS Cloud Practitioner (CLF-C02) and Solutions Architect – Associate (SAA-C03) exam domains. It also covers gaps, what Floci can emulate, a prioritized plan for new labs, and how exam tags and study tracks could work in the curriculum UI and extend to other certifications.
+
 Feasible follow-ups:
+
+- Build the certification lab waves from `docs/certification-coverage.md`. Wave 1: HA web tier with ALB and Auto Scaling, RDS and Aurora resilience, S3 data protection and storage tiers, a three-tier VPC with NAT, KMS key management, and Route 53 failover.
+- Add exam and task tags to labs, plus a study-track view (Levels · CLF-C02 · SAA-C03) with domain-weighted progress.
 
 - Continue the new serverless application spine with S3 object-created notifications to Lambda, EventBridge rules to Lambda or SQS, and EventBridge Pipes source-to-target flows where local support is reliable.
 - Continue networking labs with multi-AZ interface endpoints, endpoint policy variations, or hybrid connectivity when local support makes them useful.

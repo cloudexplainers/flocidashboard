@@ -603,6 +603,9 @@ class LabsRunnerTests(SimpleTestCase):
                 'describe-stack-resources',
                 'describe-stack-events',
                 'inspect-provisioned-resources',
+                'create-change-set',
+                'describe-change-set',
+                'execute-change-set',
                 'delete-stack',
                 'confirm-resources-deleted',
             ],
@@ -2527,14 +2530,18 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
 
     @patch('dashboard.labs.FlociClientFactory')
-    def test_s3_lifecycle_lab_configures_30_day_logs_expiration(self, factory_mock):
+    def test_s3_lifecycle_lab_tiers_then_expires_logs(self, factory_mock):
         s3 = MagicMock()
         configuration = {
             'Rules': [{
-                'ID': 'ExpireApplicationLogsAfter30Days',
+                'ID': 'TierThenExpireApplicationLogs',
                 'Status': 'Enabled',
                 'Filter': {'Prefix': 'logs/'},
-                'Expiration': {'Days': 30},
+                'Transitions': [
+                    {'Days': 30, 'StorageClass': 'STANDARD_IA'},
+                    {'Days': 90, 'StorageClass': 'GLACIER'},
+                ],
+                'Expiration': {'Days': 365},
             }],
         }
         s3.put_bucket_lifecycle_configuration.return_value = {}
@@ -2566,10 +2573,14 @@ class LabsRunnerTests(SimpleTestCase):
         s3.get_object.return_value = {'Body': body}
         s3.get_bucket_lifecycle_configuration.return_value = {
             'Rules': [{
-                'ID': 'ExpireApplicationLogsAfter30Days',
+                'ID': 'TierThenExpireApplicationLogs',
                 'Status': 'Enabled',
                 'Filter': {'Prefix': 'logs/'},
-                'Expiration': {'Days': 30},
+                'Transitions': [
+                    {'Days': 90, 'StorageClass': 'GLACIER'},
+                    {'Days': 30, 'StorageClass': 'STANDARD_IA'},
+                ],
+                'Expiration': {'Days': 365},
             }],
         }
         factory_mock.return_value.client.return_value = s3
@@ -2583,6 +2594,25 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(status['steps']['put-object']['verified'])
         self.assertTrue(status['steps']['put-lifecycle-configuration']['verified'])
         self.assertTrue(status['steps']['get-lifecycle-configuration']['verified'])
+
+    @patch('dashboard.labs.FlociClientFactory')
+    def test_s3_lifecycle_lab_rejects_expiration_only_rule(self, factory_mock):
+        s3 = MagicMock()
+        s3.get_bucket_lifecycle_configuration.return_value = {
+            'Rules': [{
+                'ID': 'TierThenExpireApplicationLogs',
+                'Status': 'Enabled',
+                'Filter': {'Prefix': 'logs/'},
+                'Expiration': {'Days': 365},
+            }],
+        }
+        factory_mock.return_value.client.return_value = s3
+
+        from .labs import lab_status
+
+        status = lab_status('s3', 'lifecycle-retention')
+
+        self.assertFalse(status['steps']['put-lifecycle-configuration']['verified'])
 
     @patch('dashboard.labs.FlociClientFactory')
     def test_s3_lifecycle_lab_reset_removes_rule_then_bucket(self, factory_mock):
@@ -5410,6 +5440,7 @@ class LabsRunnerTests(SimpleTestCase):
     ):
         cache.clear()
         cache.set('floci-lab:cloudformation:s3-sqs:inspected', True)
+        cache.set('floci-lab:cloudformation:s3-sqs:change-set-executed', True)
         cloudformation = MagicMock()
         cloudformation.describe_stacks.side_effect = ClientError(
             {
@@ -5447,6 +5478,7 @@ class LabsRunnerTests(SimpleTestCase):
         cache.clear()
         cache.set('floci-lab:cloudformation:s3-sqs:created', True)
         cache.set('floci-lab:cloudformation:s3-sqs:inspected', True)
+        cache.set('floci-lab:cloudformation:s3-sqs:change-set-executed', True)
         with patch(
             'dashboard.labs.cloudformation_labs._verify_cloudformation_deleted',
             return_value={'status': 'passed', 'message': 'deleted'},
@@ -5457,8 +5489,59 @@ class LabsRunnerTests(SimpleTestCase):
 
         self.assertTrue(status['complete'])
         self.assertTrue(status['steps']['describe-stack-events']['verified'])
+        self.assertTrue(status['steps']['execute-change-set']['verified'])
         self.assertTrue(status['steps']['confirm-resources-deleted']['verified'])
         cache.clear()
+
+    def test_cloudformation_lab_is_incomplete_without_the_change_set(self):
+        cache.clear()
+        cache.set('floci-lab:cloudformation:s3-sqs:created', True)
+        cache.set('floci-lab:cloudformation:s3-sqs:inspected', True)
+        with patch(
+            'dashboard.labs.cloudformation_labs._verify_cloudformation_deleted',
+            return_value={'status': 'passed', 'message': 'deleted'},
+        ):
+            from .labs import lab_status
+
+            status = lab_status('cloudformation', 's3-sqs-stack')
+
+        self.assertFalse(status['complete'])
+        self.assertFalse(status['steps']['execute-change-set']['verified'])
+        cache.clear()
+
+    def test_cloudformation_lab_refuses_delete_before_change_set(self):
+        cache.clear()
+        cache.set('floci-lab:cloudformation:s3-sqs:inspected', True)
+        with self.assertRaisesRegex(ValueError, 'change set'):
+            run_lab_step('cloudformation', 's3-sqs-stack', 'delete-stack')
+        cache.clear()
+
+    @patch('dashboard.labs.FlociClientFactory')
+    def test_cloudformation_change_set_review_requires_add_and_in_place_modify(self, factory_mock):
+        cloudformation = MagicMock()
+        factory_mock.return_value.client.return_value = cloudformation
+
+        def change_set(replacement):
+            return {
+                'Status': 'CREATE_COMPLETE',
+                'ExecutionStatus': 'AVAILABLE',
+                'Changes': [
+                    {'ResourceChange': {'Action': 'Add', 'LogicalResourceId': 'JobsDeadLetterQueue'}},
+                    {'ResourceChange': {
+                        'Action': 'Modify',
+                        'LogicalResourceId': 'JobsQueue',
+                        'Replacement': replacement,
+                    }},
+                ],
+            }
+
+        cloudformation.describe_change_set.return_value = change_set('False')
+        result = run_lab_step('cloudformation', 's3-sqs-stack', 'describe-change-set')
+        self.assertTrue(result['verified'])
+
+        cloudformation.describe_change_set.return_value = change_set('True')
+        result = run_lab_step('cloudformation', 's3-sqs-stack', 'describe-change-set')
+        self.assertFalse(result['verified'])
 
     @patch('dashboard.labs.ec2_labs._verify_ec2_vpc')
     @patch('dashboard.labs.FlociClientFactory')
@@ -6877,9 +6960,9 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(result['verified'])
         cache.clear()
 
-    @patch('dashboard.labs.secretsmanager_labs._verify_secretsmanager_updated_secret')
+    @patch('dashboard.labs.secretsmanager_labs._verify_secretsmanager_manual_update_is_current')
     @patch('dashboard.labs.FlociClientFactory')
-    def test_secretsmanager_lab_put_secret_value_writes_rotated_json(self, factory_mock, verify_mock):
+    def test_secretsmanager_lab_put_secret_value_writes_updated_json(self, factory_mock, verify_mock):
         secrets = MagicMock()
         secrets.put_secret_value.return_value = {
             'Name': 'lab/app-credentials',
@@ -6893,30 +6976,68 @@ class LabsRunnerTests(SimpleTestCase):
 
         call = secrets.put_secret_value.call_args.kwargs
         self.assertEqual(call['SecretId'], 'lab/app-credentials')
-        self.assertIn('rotated-local-password', call['SecretString'])
+        self.assertIn('updated-local-password', call['SecretString'])
         self.assertTrue(result['verified'])
 
-    def test_secretsmanager_lab_status_requires_initial_and_updated_secret(self):
+    SECRETS_STATUS_VERIFIERS = (
+        '_verify_secretsmanager_secret_exists',
+        '_verify_secretsmanager_initial_read',
+        '_verify_secretsmanager_updated_secret',
+        '_verify_secrets_rotation_role',
+        '_verify_secrets_rotation_function',
+        '_verify_secrets_rotation_permission',
+        '_verify_secrets_rotation_enabled',
+        '_verify_secrets_rotated_value',
+    )
+
+    def _secrets_status(self, failing=()):
         passed = {'status': 'passed', 'message': 'verified'}
+        failed = {'status': 'failed', 'message': 'not yet'}
         with ExitStack() as stack:
-            for verifier in (
-                '_verify_secretsmanager_secret_exists',
-                '_verify_secretsmanager_initial_read',
-                '_verify_secretsmanager_updated_secret',
-            ):
+            for verifier in self.SECRETS_STATUS_VERIFIERS:
                 stack.enter_context(patch(
                     f'dashboard.labs.secretsmanager_labs.{verifier}',
-                    return_value=passed,
+                    return_value=failed if verifier in failing else passed,
                 ))
             from .labs import lab_status
 
-            status = lab_status('secretsmanager', 'secret-lifecycle')
+            return lab_status('secretsmanager', 'secret-lifecycle')
+
+    def test_secretsmanager_lab_status_requires_initial_updated_and_rotated_secret(self):
+        status = self._secrets_status()
 
         self.assertTrue(status['complete'])
-        self.assertTrue(status['steps']['create-secret']['verified'])
-        self.assertTrue(status['steps']['get-initial-secret']['verified'])
-        self.assertTrue(status['steps']['put-secret-value']['verified'])
-        self.assertTrue(status['steps']['describe-secret']['verified'])
+        self.assertEqual(len(status['steps']), 10)
+        self.assertTrue(all(step['verified'] for step in status['steps'].values()))
+
+    def test_secretsmanager_lab_status_incomplete_until_rotation_finishes(self):
+        status = self._secrets_status(failing={'_verify_secrets_rotated_value'})
+
+        self.assertFalse(status['complete'])
+        self.assertTrue(status['steps']['rotate-secret']['verified'])
+        self.assertFalse(status['steps']['get-rotated-secret']['verified'])
+
+    @patch('dashboard.labs.FlociClientFactory')
+    def test_secretsmanager_rotated_value_requires_new_password_and_manual_previous(self, factory_mock):
+        secrets = MagicMock()
+        factory_mock.return_value.client.return_value = secrets
+
+        def versions(current_password, previous_password):
+            values = {
+                'AWSCURRENT': {'username': 'lab-app', 'password': current_password},
+                'AWSPREVIOUS': {'username': 'lab-app', 'password': previous_password},
+            }
+            return lambda **kwargs: {'SecretString': json.dumps(values[kwargs['VersionStage']])}
+
+        from dashboard.labs.secretsmanager_labs import _verify_secrets_rotated_value
+
+        # Before rotation: the manual update is still current.
+        secrets.get_secret_value.side_effect = versions('updated-local-password', 'initial-local-password')
+        self.assertEqual(_verify_secrets_rotated_value()['status'], 'failed')
+
+        # After rotation: a generated password is current and the manual update is previous.
+        secrets.get_secret_value.side_effect = versions('rotated-0a1b2c3d4e5f6789', 'updated-local-password')
+        self.assertEqual(_verify_secrets_rotated_value()['status'], 'passed')
 
     @patch('dashboard.labs.FlociClientFactory')
     def test_secretsmanager_lab_reset_deletes_secret_and_clears_markers(self, factory_mock):
@@ -6937,6 +7058,8 @@ class LabsRunnerTests(SimpleTestCase):
         )
         self.assertTrue(result['reset'])
         self.assertTrue(result['deleted'])
+        secrets.delete_function.assert_called_once_with(FunctionName='lab-secret-rotator')
+        secrets.delete_role.assert_called_once_with(RoleName='FlociSecretsRotationRole')
         self.assertIsNone(cache.get('floci-lab:secretsmanager:secret-lifecycle:initial-read'))
         self.assertIsNone(cache.get('floci-lab:secretsmanager:secret-lifecycle:updated-read'))
 
@@ -7210,35 +7333,61 @@ class CloudWatchLabRunnerTests(SimpleTestCase):
         mock_logs = MagicMock()
         client_mock.side_effect = lambda name: mock_cw if name == 'cloudwatch' else mock_logs
 
-        mock_cw.put_metric_data.return_value = {}
-        mock_cw.put_metric_alarm.return_value = {}
-        mock_cw.set_alarm_state.return_value = {}
-        mock_cw.describe_alarms.return_value = {'MetricAlarms': [{'AlarmName': 'lab-order-error-alarm', 'StateValue': 'ALARM'}]}
+        def alarm(state):
+            return {'MetricAlarms': [{'AlarmName': 'lab-order-error-alarm', 'Threshold': 10, 'StateValue': state}]}
 
-        mock_logs.create_log_group.return_value = {}
-        mock_logs.create_log_stream.return_value = {}
-        mock_logs.put_log_events.return_value = {}
-        mock_logs.get_log_events.return_value = {'events': [{'timestamp': 1700000000000, 'message': 'HTTP 500'}]}
+        mock_cw.describe_alarms.side_effect = [alarm('INSUFFICIENT_DATA'), alarm('OK'), alarm('ALARM'), alarm('ALARM')]
+        mock_cw.get_metric_statistics.return_value = {'Datapoints': [{'Sum': 2.0}]}
+        mock_logs.describe_log_groups.return_value = {
+            'logGroups': [{'logGroupName': '/aws/floci/app-logs', 'retentionInDays': 30}],
+        }
+        mock_logs.describe_log_streams.return_value = {'logStreams': [{'logStreamName': 'web-server-1'}]}
+        mock_logs.describe_metric_filters.return_value = {
+            'metricFilters': [{'filterName': 'lab-http-500-errors', 'filterPattern': '"HTTP 500"'}],
+        }
 
         from dashboard.labs.cloudwatch_labs import run_step, status, reset
 
-        res1 = run_step('cloudwatch', 'metric-alarms', 'put-metric-data')
-        self.assertTrue(res1['verified'])
+        for step in ['create-metric-alarm', 'publish-healthy-metrics', 'publish-error-spike', 'describe-alarms']:
+            with self.subTest(step=step):
+                self.assertTrue(run_step('cloudwatch', 'metric-alarms', step)['verified'])
+        mock_cw.set_alarm_state.assert_not_called()
+        self.assertEqual(
+            [call.kwargs['MetricData'][0]['Value'] for call in mock_cw.put_metric_data.call_args_list],
+            [2, 25],
+        )
+        self.assertTrue(status('cloudwatch', 'metric-alarms')['complete'])
 
-        res2 = run_step('cloudwatch', 'metric-alarms', 'create-metric-alarm')
-        self.assertTrue(res2['verified'])
+        for step in [
+            'create-log-group', 'put-retention-policy', 'create-log-stream',
+            'put-metric-filter', 'put-log-events', 'get-metric-statistics',
+        ]:
+            with self.subTest(step=step):
+                self.assertTrue(run_step('cloudwatch', 'log-groups-metric-filters', step)['verified'])
+        mock_logs.put_retention_policy.assert_called_once_with(logGroupName='/aws/floci/app-logs', retentionInDays=30)
+        events = mock_logs.put_log_events.call_args.kwargs['logEvents']
+        self.assertEqual(sum('HTTP 500' in event['message'] for event in events), 2)
+        self.assertTrue(status('cloudwatch', 'log-groups-metric-filters')['complete'])
 
-        res3 = run_step('cloudwatch', 'metric-alarms', 'trigger-alarm-state')
-        self.assertTrue(res3['verified'])
+        self.assertTrue(reset('cloudwatch', 'metric-alarms')['reset'])
 
-        res4 = run_step('cloudwatch', 'metric-alarms', 'describe-alarms')
-        self.assertTrue(res4['verified'])
+    @patch('dashboard.labs.cloudwatch_labs.ALARM_WAIT_SECONDS', 0)
+    @patch('dashboard.labs.cloudwatch_labs.client')
+    def test_cloudwatch_alarm_step_fails_until_cloudwatch_evaluates_alarm(self, client_mock):
+        cache.clear()
+        mock_cw = MagicMock()
+        client_mock.return_value = mock_cw
+        mock_cw.describe_alarms.return_value = {
+            'MetricAlarms': [{'AlarmName': 'lab-order-error-alarm', 'Threshold': 10, 'StateValue': 'OK'}],
+        }
 
-        st = status('cloudwatch', 'metric-alarms')
-        self.assertTrue(st['complete'])
+        from dashboard.labs.cloudwatch_labs import _wait_for_alarm_state, step_describe_alarms
 
-        rst = reset('cloudwatch', 'metric-alarms')
-        self.assertTrue(rst['reset'])
+        with patch('dashboard.labs.cloudwatch_labs._wait_for_alarm_state', lambda expected: _wait_for_alarm_state(expected, 0)):
+            result = step_describe_alarms()
+
+        self.assertFalse(result['verified'])
+        self.assertIn('is OK', result['verification']['message'])
 
 
 class MultiSdkSnippetsTests(SimpleTestCase):

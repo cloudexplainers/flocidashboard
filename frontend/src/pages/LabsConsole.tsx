@@ -17,7 +17,7 @@ import SegmentedControl from '@cloudscape-design/components/segmented-control';
 import { fetchLabsCatalog, fetchLabsProgress, fetchLabStatus, runLabStep, resetLab, resetAllLabs } from '../api/client';
 import { LabDefinition, LabStep } from '../types';
 import { CodeSnippet } from '../components/CodeSnippet';
-import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, getCurriculumItem, getLevelForLab } from '../labCurriculum';
+import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab } from '../labCurriculum';
 import { LabCompletionMap, readLabCompletion, writeLabCompletion } from '../labCompletion';
 
 export const LabsConsole: React.FC = () => {
@@ -319,7 +319,7 @@ export const LabsConsole: React.FC = () => {
       setCompletedLabsMap({});
       setResetResultMessage({
         type: 'success',
-        text: `Successfully reset all ${res.reset_lab_count || 66} labs in the system.`,
+        text: `Successfully reset all ${res.reset_lab_count || LAB_COUNT} labs in the system.`,
       });
       setResetAllModalOpen(false);
       await loadCatalog();
@@ -333,7 +333,7 @@ export const LabsConsole: React.FC = () => {
     }
   };
 
-  // Sort labs strictly according to the Beginner -> Senior Level Expert curriculum
+  // Sort labs in curriculum order
   const sortedCurriculumLabs = [...allLabsList].sort((a, b) => {
     const curA = getCurriculumItem(a.service, a.key);
     const curB = getCurriculumItem(b.service, b.key);
@@ -406,7 +406,7 @@ export const LabsConsole: React.FC = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 {currentCurriculum && (
-                  <Badge color="grey">Lesson #{currentCurriculum.id} of 66</Badge>
+                  <Badge color="grey">Lesson #{currentCurriculum.id} of {LAB_COUNT}</Badge>
                 )}
                 {currentLevel && (
                   <Badge color={currentLevel.color}>{currentLevel.badge}</Badge>
@@ -567,7 +567,7 @@ export const LabsConsole: React.FC = () => {
         header={
           <Header
             variant="h1"
-            description="Master AWS from Beginner to Senior Level Expert across 66 hands-on lessons in 5 progressive tiers."
+            description={`Learn AWS hands-on, from foundations to private networking and platform engineering, across ${LAB_COUNT} lessons in ${LAB_CURRICULUM.length} progressive levels.`}
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button
@@ -584,7 +584,7 @@ export const LabsConsole: React.FC = () => {
               </SpaceBetween>
             }
           >
-            AWS Workflow Labs Curriculum (66 Progressive Lessons)
+            AWS Workflow Labs Curriculum ({LAB_COUNT} Progressive Lessons)
           </Header>
         }
       >
@@ -595,7 +595,7 @@ export const LabsConsole: React.FC = () => {
               selectedId={selectedLevelId}
               onChange={({ detail }) => setSelectedLevelId(detail.selectedId)}
               options={[
-                { id: 'all', text: 'All 66 Labs' },
+                { id: 'all', text: `All ${LAB_COUNT} Labs` },
                 ...LAB_CURRICULUM.map((lvl) => ({
                   id: lvl.id,
                   text: `${lvl.title} (${lvl.labs.length})`,
@@ -606,7 +606,7 @@ export const LabsConsole: React.FC = () => {
 
           <TextFilter
             filteringText={filterText}
-            filteringPlaceholder="Filter labs by number (#1-#66), service (S3, IAM, EC2, EKS), or keyword..."
+            filteringPlaceholder={`Filter labs by number (#1-#${LAB_COUNT}), service (S3, IAM, EC2, EKS), or keyword...`}
             onChange={({ detail }) => setFilterText(detail.filteringText)}
           />
 
@@ -708,7 +708,7 @@ export const LabsConsole: React.FC = () => {
       <Modal
         visible={resetAllModalOpen}
         onDismiss={() => !resettingAll && setResetAllModalOpen(false)}
-        header="Reset All 66 Workflow Labs"
+        header={`Reset All ${LAB_COUNT} Workflow Labs`}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
@@ -724,7 +724,7 @@ export const LabsConsole: React.FC = () => {
       >
         <SpaceBetween size="m">
           <Alert type="warning">
-            This will tear down all lab-created AWS resources across all 20 services (S3 buckets, DynamoDB tables, Lambda functions, IAM roles/users, SQS queues, RDS instances, ECS clusters, EKS clusters, etc.) and clear completion progress for all 66 lessons.
+            This will tear down all lab-created AWS resources across all 20 services (S3 buckets, DynamoDB tables, Lambda functions, IAM roles/users, SQS queues, RDS instances, ECS clusters, EKS clusters, etc.) and clear completion progress for all {LAB_COUNT} lessons.
           </Alert>
           <p>Are you sure you want to reset every lab in the system?</p>
         </SpaceBetween>

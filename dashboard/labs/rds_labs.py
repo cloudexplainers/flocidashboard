@@ -18,12 +18,25 @@ CACHE_PREFIX = 'floci-lab:rds:'
 
 PG_NAME = 'lab-pg-ecommerce'
 DB_IDENTIFIER = 'lab-db-orders'
+BACKUP_RETENTION_DAYS = 7
+BACKUP_WINDOW = '03:00-04:00'
+INITIAL_STORAGE_GB = 20
+SCALED_STORAGE_GB = 40
+CREATE_INSTANCE_COMMAND = (
+    f'aws rds create-db-instance --db-instance-identifier {DB_IDENTIFIER} --engine postgres '
+    f'--db-instance-class db.t3.micro --allocated-storage {INITIAL_STORAGE_GB} --master-username dbadmin '
+    f'--master-user-password LabPassword123! --db-parameter-group-name {PG_NAME} --storage-encrypted '
+    f'--backup-retention-period {BACKUP_RETENTION_DAYS} --preferred-backup-window {BACKUP_WINDOW}'
+)
 
 RDS_LIFECYCLE_LAB = {
     'service': 'rds',
     'key': 'db-instance-lifecycle',
     'title': 'Provision relational databases and manage instance lifecycles in Amazon RDS',
-    'description': 'Create custom DB parameter groups, provision a PostgreSQL DB instance, inspect connection topology, modify storage allocations, and execute instance reboots.',
+    'description': (
+        'Create a custom DB parameter group, provision an encrypted PostgreSQL DB instance with automated backups, '
+        'inspect its endpoint and data-protection settings, scale its storage, and reboot it.'
+    ),
     'steps': [
         {
             'key': 'create-parameter-group',
@@ -33,21 +46,30 @@ RDS_LIFECYCLE_LAB = {
         },
         {
             'key': 'create-db-instance',
-            'title': 'Provision PostgreSQL DB Instance',
-            'command': f'aws rds create-db-instance --db-instance-identifier {DB_IDENTIFIER} --engine postgres --db-instance-class db.t3.micro --allocated-storage 20 --master-username dbadmin --master-user-password LabPassword123! --db-parameter-group-name {PG_NAME}',
-            'explanation': 'Launches a managed PostgreSQL database instance configured with our custom parameter group.',
+            'title': 'Provision an encrypted PostgreSQL DB instance with automated backups',
+            'command': CREATE_INSTANCE_COMMAND,
+            'explanation': (
+                'Launches a managed PostgreSQL instance with the custom parameter group. --storage-encrypted encrypts '
+                'storage, automated backups, snapshots, and read replicas with KMS; it can only be chosen at creation '
+                '(to encrypt an existing instance you copy a snapshot with encryption and restore it). '
+                f'--backup-retention-period {BACKUP_RETENTION_DAYS} keeps daily automated backups and transaction logs '
+                'for point-in-time restore (0 turns them off; the maximum is 35 days).'
+            ),
         },
         {
             'key': 'describe-db-instance',
-            'title': 'Inspect DB status, endpoint, and configuration',
+            'title': 'Inspect status, endpoint, and data protection',
             'command': f'aws rds describe-db-instances --db-instance-identifier {DB_IDENTIFIER}',
-            'explanation': 'Queries the instance endpoint, port, status, allocated storage, and engine version.',
+            'explanation': (
+                'Queries the endpoint, port, status, and storage, and confirms StorageEncrypted, the KMS key, '
+                'the backup retention period, and the daily backup window.'
+            ),
         },
         {
             'key': 'modify-db-instance',
             'title': 'Scale allocated storage capacity',
-            'command': f'aws rds modify-db-instance --db-instance-identifier {DB_IDENTIFIER} --allocated-storage 40 --apply-immediately',
-            'explanation': 'Dynamically expands database storage volume capacity without downtime.',
+            'command': f'aws rds modify-db-instance --db-instance-identifier {DB_IDENTIFIER} --allocated-storage {SCALED_STORAGE_GB} --apply-immediately',
+            'explanation': 'Grows the storage volume without downtime. RDS storage can grow but never shrink.',
         },
         {
             'key': 'reboot-db-instance',
@@ -119,6 +141,31 @@ def step_create_pg() -> dict[str, Any]:
     )
 
 
+def _describe_lab_instance() -> dict[str, Any] | None:
+    try:
+        instances = client('rds').describe_db_instances(DBInstanceIdentifier=DB_IDENTIFIER).get('DBInstances', [])
+    except ClientError:
+        return None
+    return instances[0] if instances else None
+
+
+def _check_data_protection(instance: dict[str, Any] | None) -> tuple[bool, str]:
+    if not instance:
+        return False, f'DB instance {DB_IDENTIFIER} not found.'
+    problems = []
+    if not instance.get('StorageEncrypted'):
+        problems.append('storage is not encrypted')
+    if instance.get('BackupRetentionPeriod') != BACKUP_RETENTION_DAYS:
+        problems.append(f"backup retention is {instance.get('BackupRetentionPeriod')} days, not {BACKUP_RETENTION_DAYS}")
+    if problems:
+        return False, f'{DB_IDENTIFIER}: ' + '; '.join(problems) + '. Reset the lab and create the instance again.'
+    return True, (
+        f'{DB_IDENTIFIER} is encrypted at rest'
+        + (f" with {instance['KmsKeyId']}" if instance.get('KmsKeyId') else '')
+        + f' and keeps automated backups for {BACKUP_RETENTION_DAYS} days.'
+    )
+
+
 def step_create_instance() -> dict[str, Any]:
     started = time.perf_counter()
     rds = client('rds')
@@ -127,41 +174,52 @@ def step_create_instance() -> dict[str, Any]:
             DBInstanceIdentifier=DB_IDENTIFIER,
             Engine='postgres',
             DBInstanceClass='db.t3.micro',
-            AllocatedStorage=20,
+            AllocatedStorage=INITIAL_STORAGE_GB,
             MasterUsername='dbadmin',
             MasterUserPassword='LabPassword123!',
             DBParameterGroupName=PG_NAME,
+            StorageEncrypted=True,
+            BackupRetentionPeriod=BACKUP_RETENTION_DAYS,
+            PreferredBackupWindow=BACKUP_WINDOW,
         )
     except ClientError as exc:
         if 'DBInstanceAlreadyExists' in str(exc):
             resp = rds.describe_db_instances(DBInstanceIdentifier=DB_IDENTIFIER)
         else:
             raise
-    marker('db', {'id': DB_IDENTIFIER})
+    verified, message = _check_data_protection(_describe_lab_instance())
+    if verified:
+        marker('db', {'id': DB_IDENTIFIER})
     return result(
         'db-instance-lifecycle',
         'create-db-instance',
-        f'aws rds create-db-instance --db-instance-identifier {DB_IDENTIFIER} ...',
+        CREATE_INSTANCE_COMMAND,
         resp,
-        True,
-        f'Created PostgreSQL DB instance {DB_IDENTIFIER}.',
+        verified,
+        message,
         started,
     )
 
 
 def step_describe_instance() -> dict[str, Any]:
     started = time.perf_counter()
-    rds = client('rds')
-    resp = rds.describe_db_instances(DBInstanceIdentifier=DB_IDENTIFIER)
-    instances = resp.get('DBInstances', [])
-    verified = len(instances) > 0
+    instance = _describe_lab_instance()
+    verified, message = _check_data_protection(instance)
+    if verified and not (instance.get('Endpoint') or {}).get('Address'):
+        verified, message = False, f'{DB_IDENTIFIER} has no endpoint yet.'
+    if verified:
+        endpoint = instance['Endpoint']
+        message = (
+            f"{DB_IDENTIFIER} is {instance.get('DBInstanceStatus')} at {endpoint.get('Address')}:{endpoint.get('Port')}. "
+            + message
+        )
     return result(
         'db-instance-lifecycle',
         'describe-db-instance',
         f'aws rds describe-db-instances --db-instance-identifier {DB_IDENTIFIER}',
-        resp,
+        {'DBInstances': [instance]} if instance else {'DBInstances': []},
         verified,
-        f'Inspected DB instance {DB_IDENTIFIER} status and endpoint.' if verified else 'DB instance not found',
+        message,
         started,
     )
 
@@ -171,17 +229,23 @@ def step_modify_instance() -> dict[str, Any]:
     rds = client('rds')
     resp = rds.modify_db_instance(
         DBInstanceIdentifier=DB_IDENTIFIER,
-        AllocatedStorage=40,
+        AllocatedStorage=SCALED_STORAGE_GB,
         ApplyImmediately=True,
     )
-    marker('modified', True)
+    instance = _describe_lab_instance() or {}
+    pending = (instance.get('PendingModifiedValues') or {}).get('AllocatedStorage')
+    verified = SCALED_STORAGE_GB in (instance.get('AllocatedStorage'), pending)
+    if verified:
+        marker('modified', True)
     return result(
         'db-instance-lifecycle',
         'modify-db-instance',
-        f'aws rds modify-db-instance --db-instance-identifier {DB_IDENTIFIER} --allocated-storage 40',
+        f'aws rds modify-db-instance --db-instance-identifier {DB_IDENTIFIER} --allocated-storage {SCALED_STORAGE_GB} --apply-immediately',
         resp,
-        True,
-        f'Scaled storage capacity for DB instance {DB_IDENTIFIER} to 40 GB.',
+        verified,
+        f'Scaled storage for DB instance {DB_IDENTIFIER} to {SCALED_STORAGE_GB} GB.'
+        if verified
+        else f"{DB_IDENTIFIER} still reports {instance.get('AllocatedStorage')} GB.",
         started,
     )
 
@@ -230,10 +294,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
     except Exception:
         pg_ok = bool(marked('pg'))
 
-    # 2. Instance
+    # 2. Instance, encrypted and with automated backups
     try:
         dbs = rds.describe_db_instances(DBInstanceIdentifier=DB_IDENTIFIER).get('DBInstances', [])
-        db_ok = len(dbs) > 0
+        db_ok = _check_data_protection(dbs[0] if dbs else None)[0]
     except Exception:
         db_ok = bool(marked('db'))
 
@@ -250,7 +314,7 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
         },
         'create-db-instance': {
             'verified': db_ok,
-            'verification': {'status': 'passed', 'message': f'DB Instance {DB_IDENTIFIER} running.'} if db_ok else None,
+            'verification': {'status': 'passed', 'message': f'DB Instance {DB_IDENTIFIER} is encrypted with {BACKUP_RETENTION_DAYS}-day backups.'} if db_ok else None,
         },
         'describe-db-instance': {
             'verified': db_ok,
@@ -258,7 +322,7 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
         },
         'modify-db-instance': {
             'verified': mod_ok,
-            'verification': {'status': 'passed', 'message': 'DB Instance storage scaled to 40 GB.'} if mod_ok else None,
+            'verification': {'status': 'passed', 'message': f'DB Instance storage scaled to {SCALED_STORAGE_GB} GB.'} if mod_ok else None,
         },
         'reboot-db-instance': {
             'verified': reb_ok,
