@@ -1100,87 +1100,6 @@ def ssm_inventory() -> dict[str, Any]:
     }
 
 
-def route53_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    route53 = factory.client('route53')
-    hosted_zones = _safe_value(lambda: _paginate(route53, 'list_hosted_zones', 'HostedZones'), [])
-    health_checks = _safe_value(lambda: _paginate(route53, 'list_health_checks', 'HealthChecks'), [])
-    traffic_policies = _safe_value(lambda: route53.list_traffic_policies().get('TrafficPolicySummaries', []), [])
-    traffic_policy_instances = _safe_value(
-        lambda: route53.list_traffic_policy_instances().get('TrafficPolicyInstances', []),
-        [],
-    )
-    delegation_sets = _safe_value(
-        lambda: route53.list_reusable_delegation_sets().get('DelegationSets', []),
-        [],
-    )
-
-    def zone_detail(zone: dict[str, Any]) -> dict[str, Any]:
-        zone_id = zone.get('Id')
-        clean_zone_id = zone_id.rsplit('/', 1)[-1] if zone_id else None
-        details = _safe_value(lambda: route53.get_hosted_zone(Id=zone_id), {}) if zone_id else {}
-        records = _safe_value(
-            lambda: _paginate(route53, 'list_resource_record_sets', 'ResourceRecordSets', HostedZoneId=zone_id),
-            [],
-        ) if zone_id else []
-        query_logging_configs = _safe_value(
-            lambda: route53.list_query_logging_configs(HostedZoneId=clean_zone_id).get('QueryLoggingConfigs', []),
-            [],
-        ) if clean_zone_id else []
-
-        return {
-            'name': zone.get('Name'),
-            'id': zone_id,
-            'clean_id': clean_zone_id,
-            'caller_reference': zone.get('CallerReference'),
-            'private_zone': zone.get('Config', {}).get('PrivateZone'),
-            'comment': zone.get('Config', {}).get('Comment'),
-            'resource_record_set_count': zone.get('ResourceRecordSetCount'),
-            'delegation_set': details.get('DelegationSet'),
-            'vpcs': details.get('VPCs'),
-            'query_logging_configs': query_logging_configs,
-            'record_count': len(records),
-            'records': _clean_response(records),
-        }
-
-    detailed_zones = [zone_detail(zone) for zone in hosted_zones]
-
-    return {
-        'summary': {
-            'hosted_zones': len(detailed_zones),
-            'record_sets': sum(zone.get('record_count') or 0 for zone in detailed_zones),
-            'health_checks': len(health_checks),
-            'traffic_policies': len(traffic_policies),
-            'traffic_policy_instances': len(traffic_policy_instances),
-            'delegation_sets': len(delegation_sets),
-            'private_zones': sum(1 for zone in detailed_zones if zone.get('private_zone')),
-        },
-        'hosted_zones': detailed_zones,
-        'health_checks': _clean_response(health_checks),
-        'traffic_policies': _clean_response(traffic_policies),
-        'traffic_policy_instances': _clean_response(traffic_policy_instances),
-        'delegation_sets': _clean_response(delegation_sets),
-        'supported': [
-            'CreateHostedZone',
-            'GetHostedZone',
-            'ListHostedZones',
-            'DeleteHostedZone',
-            'ChangeResourceRecordSets',
-            'ListResourceRecordSets',
-            'ListHealthChecks',
-            'CreateHealthCheck',
-            'DeleteHealthCheck',
-            'ListTrafficPolicies',
-            'ListTrafficPolicyInstances',
-            'ListReusableDelegationSets',
-        ],
-        'notes': [
-            'Route 53 inventory expands hosted zones with record sets and query logging configuration when available.',
-            'Route 53 is a global service; this dashboard still uses the configured local endpoint.',
-        ],
-    }
-
-
 def transfer_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     transfer = factory.client('transfer')
@@ -2321,41 +2240,6 @@ def list_ssm_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     return resources
 
 
-def list_route53_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    route53 = factory.client('route53')
-    resources = [
-        {
-            'type': 'hosted_zone',
-            'name': zone.get('Name'),
-            'id': zone.get('Id'),
-            'private_zone': zone.get('Config', {}).get('PrivateZone'),
-            'record_sets': zone.get('ResourceRecordSetCount'),
-        }
-        for zone in _safe_value(lambda: _paginate(route53, 'list_hosted_zones', 'HostedZones'), [])
-    ]
-    resources.extend(
-        {
-            'type': 'health_check',
-            'name': check.get('Id'),
-            'id': check.get('Id'),
-            'health_check_version': check.get('HealthCheckVersion'),
-            'config': check.get('HealthCheckConfig'),
-        }
-        for check in _safe_value(lambda: _paginate(route53, 'list_health_checks', 'HealthChecks'), [])
-    )
-    resources.extend(
-        {
-            'type': 'traffic_policy',
-            'name': policy.get('Name'),
-            'id': policy.get('Id'),
-            'policy_type': policy.get('Type'),
-            'latest_version': policy.get('LatestVersion'),
-        }
-        for policy in _safe_value(lambda: route53.list_traffic_policies().get('TrafficPolicySummaries', []), [])
-    )
-    return resources
-
-
 def list_transfer_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     transfer = factory.client('transfer')
     resources = [
@@ -2608,7 +2492,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('glue-resources', 'Glue resources', glue.list_glue_resources),
         ('rds-resources', 'RDS resources', rds.list_rds_resources),
         ('rdsdata-resources', 'RDS Data API operations', rdsdata.list_rdsdata_resources),
-        ('route53-resources', 'Route 53 resources', list_route53_resources),
+        ('route53-resources', 'Route 53 resources', route53.list_route53_resources),
         ('iam-users', 'IAM users', iam.list_iam_users),
         ('iam-roles', 'IAM roles', iam.list_iam_roles),
         ('iot-resources', 'IoT Core resources', iot.list_iot_resources),
@@ -2706,6 +2590,7 @@ from . import (  # noqa: E402
     rds,
     rdsdata,
     resourcegroupstagging,
+    route53,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -2759,4 +2644,5 @@ from .pricing import pricing_inventory  # noqa: E402
 from .rds import rds_inventory  # noqa: E402
 from .rdsdata import rdsdata_inventory  # noqa: E402
 from .resourcegroupstagging import resourcegroupstagging_inventory  # noqa: E402
+from .route53 import route53_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
