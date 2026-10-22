@@ -2079,144 +2079,6 @@ def secretsmanager_inventory() -> dict[str, Any]:
     }
 
 
-def _dynamodb_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
-    try:
-        return _clean_response(loader())
-    except ClientError as exc:
-        if _error_code(exc) in empty_codes:
-            return None
-        return {'error': str(exc)}
-    except (BotoCoreError, ValueError, json.JSONDecodeError) as exc:
-        return {'error': str(exc)}
-
-
-def dynamodb_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    dynamodb = factory.client('dynamodb')
-    streams = factory.client('dynamodbstreams')
-    table_names = _safe_value(lambda: _paginate(dynamodb, 'list_tables', 'TableNames'), [])
-
-    def table_detail(table_name: str) -> dict[str, Any]:
-        description = _dynamodb_optional(
-            lambda: dynamodb.describe_table(TableName=table_name).get('Table', {}),
-            {'ResourceNotFoundException'},
-        )
-        table_arn = description.get('TableArn') if isinstance(description, dict) else None
-        scan_preview = _dynamodb_optional(
-            lambda: dynamodb.scan(TableName=table_name, Limit=5),
-            {'ResourceNotFoundException'},
-        )
-
-        return {
-            'name': table_name,
-            'arn': table_arn,
-            'status': description.get('TableStatus') if isinstance(description, dict) else None,
-            'item_count': description.get('ItemCount') if isinstance(description, dict) else None,
-            'size_bytes': description.get('TableSizeBytes') if isinstance(description, dict) else None,
-            'billing_mode': description.get('BillingModeSummary') if isinstance(description, dict) else None,
-            'key_schema': description.get('KeySchema') if isinstance(description, dict) else None,
-            'attribute_definitions': description.get('AttributeDefinitions') if isinstance(description, dict) else None,
-            'provisioned_throughput': description.get('ProvisionedThroughput') if isinstance(description, dict) else None,
-            'global_secondary_indexes': description.get('GlobalSecondaryIndexes') if isinstance(description, dict) else None,
-            'local_secondary_indexes': description.get('LocalSecondaryIndexes') if isinstance(description, dict) else None,
-            'stream_specification': description.get('StreamSpecification') if isinstance(description, dict) else None,
-            'latest_stream_arn': description.get('LatestStreamArn') if isinstance(description, dict) else None,
-            'ttl': _dynamodb_optional(
-                lambda: dynamodb.describe_time_to_live(TableName=table_name).get('TimeToLiveDescription', {}),
-                {'ResourceNotFoundException'},
-            ),
-            'tags': _dynamodb_optional(
-                lambda: _paginate(dynamodb, 'list_tags_of_resource', 'Tags', ResourceArn=table_arn)
-                if table_arn else [],
-                {'ResourceNotFoundException'},
-            ),
-            'scan_preview': {
-                'count': scan_preview.get('Count'),
-                'scanned_count': scan_preview.get('ScannedCount'),
-                'items': scan_preview.get('Items', []),
-            } if isinstance(scan_preview, dict) and 'error' not in scan_preview else scan_preview,
-        }
-
-    tables = [table_detail(name) for name in table_names]
-    stream_summaries = _safe_value(lambda: _paginate(streams, 'list_streams', 'Streams'), [])
-
-    def stream_detail(stream: dict[str, Any]) -> dict[str, Any]:
-        stream_arn = stream.get('StreamArn')
-        description = _dynamodb_optional(
-            lambda: streams.describe_stream(StreamArn=stream_arn).get('StreamDescription', {}),
-            {'ResourceNotFoundException'},
-        )
-
-        return {
-            'name': stream.get('TableName') or stream_arn,
-            'table_name': stream.get('TableName'),
-            'stream_arn': stream_arn,
-            'label': stream.get('StreamLabel'),
-            'description': description,
-        }
-
-    stream_details = [stream_detail(stream) for stream in stream_summaries]
-
-    return {
-        'summary': {
-            'tables': len(tables),
-            'items': sum(table.get('item_count') or 0 for table in tables),
-            'global_secondary_indexes': sum(
-                len(table.get('global_secondary_indexes') or [])
-                for table in tables
-                if isinstance(table.get('global_secondary_indexes'), list)
-            ),
-            'streams': len(stream_details),
-            'ttl_enabled': sum(
-                1
-                for table in tables
-                if isinstance(table.get('ttl'), dict)
-                and table['ttl'].get('TimeToLiveStatus') == 'ENABLED'
-            ),
-        },
-        'tables': tables,
-        'streams': stream_details,
-        'supported': [
-            'CreateTable',
-            'DeleteTable',
-            'DescribeTable',
-            'ListTables',
-            'UpdateTable',
-            'PutItem',
-            'GetItem',
-            'DeleteItem',
-            'UpdateItem',
-            'Query',
-            'Scan',
-            'BatchWriteItem',
-            'BatchGetItem',
-            'TransactWriteItems',
-            'TransactGetItems',
-            'ExecuteStatement',
-            'ExecuteTransaction',
-            'BatchExecuteStatement',
-            'DescribeTimeToLive',
-            'UpdateTimeToLive',
-            'TagResource',
-            'UntagResource',
-            'ListTagsOfResource',
-        ],
-        'notes': [
-            'Floci 1.5.28 returns exact 400 error messages for invalid expressions.',
-            'Floci 1.5.27 adds TableId, TableClass, OnDemandThroughput, deletion-protection fixes, stricter expression validation, ExclusiveStartKey validation, and scan cursor improvements.',
-            'Floci 1.5.17 adds DynamoDB PartiQL support for ExecuteStatement, ExecuteTransaction, and BatchExecuteStatement.',
-            'Floci 1.5.21 merges nested map paths correctly in ProjectionExpression.',
-            'UpdateItem now honors the legacy Expected condition shape for compatibility with older clients.',
-        ],
-        'streams_supported': [
-            'ListStreams',
-            'DescribeStream',
-            'GetShardIterator',
-            'GetRecords',
-        ],
-    }
-
-
 def _eventbridge_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
     try:
         return _clean_response(loader())
@@ -5984,11 +5846,6 @@ def list_sqs_queues(factory: FlociClientFactory) -> list[dict[str, Any]]:
     return _string_items(urls, 'url')
 
 
-def list_dynamodb_tables(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    names = factory.client('dynamodb').get_paginator('list_tables').paginate().build_full_result().get('TableNames', [])
-    return _string_items(names, 'name')
-
-
 def list_sns_topics(factory: FlociClientFactory) -> list[dict[str, Any]]:
     return [
         {'arn': topic.get('TopicArn')}
@@ -7256,7 +7113,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('s3-buckets', 'S3 buckets', s3.list_s3_buckets),
         ('s3vectors-resources', 'S3 Vectors resources', list_s3vectors_resources),
         ('sqs-queues', 'SQS queues', list_sqs_queues),
-        ('dynamodb-tables', 'DynamoDB tables', list_dynamodb_tables),
+        ('dynamodb-tables', 'DynamoDB tables', dynamodb.list_dynamodb_tables),
         ('docdb-resources', 'DocumentDB resources', docdb.list_docdb_resources),
         ('sns-topics', 'SNS topics', list_sns_topics),
         ('ses-resources', 'SES resources', list_ses_resources),
@@ -7319,6 +7176,7 @@ from . import (  # noqa: E402
     costexplorer,
     cur,
     docdb,
+    dynamodb,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -7346,4 +7204,5 @@ from .config import config_inventory  # noqa: E402
 from .costexplorer import costexplorer_inventory  # noqa: E402
 from .cur import cur_inventory  # noqa: E402
 from .docdb import docdb_inventory  # noqa: E402
+from .dynamodb import dynamodb_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
