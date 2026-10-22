@@ -70,3 +70,22 @@ class RDSWorkspaceTests(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('greater than zero', response.json()['error'])
         client_mock.assert_not_called()
+
+
+class RdsFinalSnapshotReportTests(SimpleTestCase):
+    @patch('dashboard.rds_api._client')
+    def test_delete_reports_whether_the_final_snapshot_exists(self, client_mock):
+        from dashboard.rds_api import delete_db_cluster, delete_db_instance
+
+        client = client_mock.return_value
+        client.delete_db_instance.return_value = {}
+        client.delete_db_cluster.return_value = {}
+        client.describe_db_snapshots.return_value = {'DBSnapshots': [{'Status': 'creating'}]}
+        client.describe_db_cluster_snapshots.return_value = {'DBClusterSnapshots': []}
+
+        instance = delete_db_instance('orders', skip_final_snapshot=False, final_snapshot_identifier='orders-final')
+        cluster = delete_db_cluster('orders', skip_final_snapshot=False, final_snapshot_identifier='orders-final')
+
+        self.assertEqual(instance['final_snapshot'], {'identifier': 'orders-final', 'found': True, 'status': 'creating'})
+        self.assertEqual(cluster['final_snapshot'], {'identifier': 'orders-final', 'found': False, 'status': None})
+        self.assertNotIn('final_snapshot', delete_db_instance('orders', skip_final_snapshot=True))

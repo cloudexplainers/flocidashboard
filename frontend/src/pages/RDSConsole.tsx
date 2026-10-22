@@ -64,6 +64,17 @@ const dbPath = (name: string, tab = "overview") =>
   `rds/instances?${new URLSearchParams({ db: name, tab })}`;
 const clusterPath = (name: string, tab = "overview") =>
   `rds/clusters?${new URLSearchParams({ cluster: name, tab })}`;
+/** Success message for a delete, warning when the requested final snapshot was not created. */
+function deletionAlert(message: string, result: any): { type: "success" | "warning"; message: string } {
+  const snapshot = result?.final_snapshot;
+  if (snapshot && !snapshot.found)
+    return {
+      type: "warning",
+      message: `${message} Floci accepted the final snapshot request but did not create snapshot "${snapshot.identifier}", so the data is not kept. In AWS the snapshot would appear under Snapshots.`,
+    };
+  return { type: "success", message: snapshot ? `${message} Final snapshot "${snapshot.identifier}" is being created.` : message };
+}
+
 export const RDSConsole: React.FC<Props> = (props) => {
   const { identity, details, loading } = useSession();
   if (!identity && loading)
@@ -175,7 +186,7 @@ const RdsWorkspace: React.FC<Props> = ({
 
   // Action status / alerts
   const [actionAlert, setActionAlert] = useState<{
-    type: "success" | "error" | "info";
+    type: "success" | "error" | "info" | "warning";
     message: string;
   } | null>(null);
   const [rebooting, setRebooting] = useState(false);
@@ -386,15 +397,12 @@ const RdsWorkspace: React.FC<Props> = ({
     setDeleting(true);
     setActionAlert(null);
     try {
-      await deleteRdsInstance(
+      const result = await deleteRdsInstance(
         activeInstance.name,
         skipFinalSnapshot,
         finalSnapshotId,
       );
-      setActionAlert({
-        type: "success",
-        message: `Deletion requested for database "${activeInstance.name}".`,
-      });
+      setActionAlert(deletionAlert(`Deletion requested for database "${activeInstance.name}".`, result));
       setDeleteInstanceOpen(false);
       setSelectedInstances([]);
       onNavigate?.("rds/instances");
@@ -490,18 +498,18 @@ const RdsWorkspace: React.FC<Props> = ({
     setResourceDeleting(true);
     setActionAlert(null);
     try {
-      if (deleteResource.kind === "cluster")
-        await deleteRdsCluster(
-          deleteResource.name,
-          skipFinalSnapshot,
-          finalSnapshotId,
-        );
-      else await deleteRdsParameterGroup(deleteResource.name);
+      const result = deleteResource.kind === "cluster"
+        ? await deleteRdsCluster(
+            deleteResource.name,
+            skipFinalSnapshot,
+            finalSnapshotId,
+          )
+        : await deleteRdsParameterGroup(deleteResource.name);
       if (!alive.current) return;
-      setActionAlert({
-        type: "success",
-        message: `${deleteResource.kind === "cluster" ? "Cluster deletion requested" : "Parameter group deleted"}: ${deleteResource.name}.`,
-      });
+      setActionAlert(deletionAlert(
+        `${deleteResource.kind === "cluster" ? "Cluster deletion requested" : "Parameter group deleted"}: ${deleteResource.name}.`,
+        result,
+      ));
       setDeleteResource(null);
       setSelectedClusters([]);
       setSelectedParamGroups([]);
