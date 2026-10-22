@@ -168,9 +168,12 @@ test('ECS live resource pages: create, inspect, update, task navigation, stop an
     }
     // Scale down service so it does not replace stopped tasks.
     await post('/api/ecs/services/update/', { cluster: name, service: 'web', desired_count: 0 });
-    await page.reload();
-    await expect(page.getByRole('heading', { name: `Task: ${taskId}`, exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Stop task', exact: true })).toBeDisabled();
+    // A real task container takes a few seconds to stop, so reload until the page shows it stopped.
+    await expect.poll(async () => {
+      await page.reload();
+      await expect(page.getByRole('heading', { name: `Task: ${taskId}`, exact: true })).toBeVisible();
+      return page.getByRole('button', { name: 'Stop task', exact: true }).isDisabled();
+    }, { timeout: 60_000, intervals: [1000, 2000, 5000] }).toBe(true);
     await page.goto(serviceUrl);
     await page.getByRole('button', { name: 'Delete service', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${clusterUrl}$`));
