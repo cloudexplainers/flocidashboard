@@ -24,7 +24,14 @@ class NewServiceLabsLifecycleTests(TestCase):
         mock_rds.create_db_parameter_group.return_value = {'DBParameterGroup': {'DBParameterGroupName': 'lab-pg-ecommerce', 'DBParameterGroupFamily': 'postgres15'}}
         mock_rds.describe_db_parameter_groups.return_value = {'DBParameterGroups': [{'DBParameterGroupName': 'lab-pg-ecommerce'}]}
         mock_rds.create_db_instance.return_value = {'DBInstance': {'DBInstanceIdentifier': 'lab-db-orders', 'Engine': 'postgres'}}
-        mock_rds.describe_db_instances.return_value = {'DBInstances': [{'DBInstanceIdentifier': 'lab-db-orders', 'DBInstanceStatus': 'available'}]}
+        mock_rds.describe_db_instances.return_value = {'DBInstances': [{
+            'DBInstanceIdentifier': 'lab-db-orders',
+            'DBInstanceStatus': 'available',
+            'StorageEncrypted': True,
+            'BackupRetentionPeriod': 7,
+            'AllocatedStorage': 40,
+            'Endpoint': {'Address': 'localhost', 'Port': 5432},
+        }]}
         mock_rds.modify_db_instance.return_value = {'DBInstance': {'DBInstanceIdentifier': 'lab-db-orders', 'AllocatedStorage': 40}}
         mock_rds.reboot_db_instance.return_value = {'DBInstance': {'DBInstanceIdentifier': 'lab-db-orders', 'DBInstanceStatus': 'rebooting'}}
         mock_rds.delete_db_instance.return_value = {}

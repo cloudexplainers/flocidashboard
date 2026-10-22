@@ -90,14 +90,20 @@ S3_LIFECYCLE_BUCKET_NAME = 'lab-lifecycle'
 S3_LIFECYCLE_OBJECT_KEY = 'logs/app.log'
 S3_LIFECYCLE_LOG_TEXT = '2026-06-18T12:00:00Z INFO Floci lifecycle lab started\n'
 S3_LIFECYCLE_LOG_BYTES = S3_LIFECYCLE_LOG_TEXT.encode('utf-8')
-S3_LIFECYCLE_RULE_ID = 'ExpireApplicationLogsAfter30Days'
+S3_LIFECYCLE_RULE_ID = 'TierThenExpireApplicationLogs'
+S3_LIFECYCLE_TRANSITIONS = [
+    {'Days': 30, 'StorageClass': 'STANDARD_IA'},
+    {'Days': 90, 'StorageClass': 'GLACIER'},
+]
+S3_LIFECYCLE_EXPIRATION_DAYS = 365
 S3_LIFECYCLE_CONFIGURATION = {
     'Rules': [
         {
             'ID': S3_LIFECYCLE_RULE_ID,
             'Status': 'Enabled',
             'Filter': {'Prefix': 'logs/'},
-            'Expiration': {'Days': 30},
+            'Transitions': S3_LIFECYCLE_TRANSITIONS,
+            'Expiration': {'Days': S3_LIFECYCLE_EXPIRATION_DAYS},
         },
     ],
 }
@@ -475,36 +481,44 @@ S3_DEFAULT_ENCRYPTION_LAB = {
 S3_LIFECYCLE_RETENTION_LAB = {
     'service': 's3',
     'key': 'lifecycle-retention',
-    'title': 'Automate retention with an S3 lifecycle rule',
-    'description': 'Upload an application log, configure S3 to expire objects under logs/ after 30 days, and inspect the saved lifecycle rule.',
+    'title': 'Tier and expire logs with an S3 lifecycle rule',
+    'description': (
+        'Upload an application log, then add one lifecycle rule for logs/ that moves objects to cheaper storage '
+        'classes as they age (Standard-IA at 30 days, Glacier Flexible Retrieval at 90) and deletes them after a year.'
+    ),
     'steps': [
         {
             'key': 'create-bucket',
             'title': 'Create the lifecycle lab bucket',
             'command': f'aws s3api create-bucket --bucket {S3_LIFECYCLE_BUCKET_NAME}',
-            'explanation': 'Creates a dedicated bucket for learning automated S3 retention.',
+            'explanation': 'Creates a dedicated bucket for learning automated S3 storage tiering and retention.',
         },
         {
             'key': 'put-object',
             'title': 'Upload an application log',
             'command': f'aws s3api put-object --bucket {S3_LIFECYCLE_BUCKET_NAME} --key {S3_LIFECYCLE_OBJECT_KEY} --body app.log --content-type text/plain',
-            'explanation': 'Uploads a sample log beneath the logs/ prefix targeted by the lifecycle rule.',
+            'explanation': 'Uploads a sample log beneath the logs/ prefix targeted by the lifecycle rule. New objects start in S3 Standard.',
             'artifact_label': 'app.log',
             'artifact': S3_LIFECYCLE_LOG_TEXT,
         },
         {
             'key': 'put-lifecycle-configuration',
-            'title': 'Expire logs after 30 days',
+            'title': 'Tier logs to colder storage, then expire them',
             'command': f'aws s3api put-bucket-lifecycle-configuration --bucket {S3_LIFECYCLE_BUCKET_NAME} --lifecycle-configuration file://lifecycle.json',
-            'explanation': 'Adds an enabled lifecycle rule that expires objects under logs/ 30 days after creation. AWS performs lifecycle actions asynchronously.',
+            'explanation': (
+                'Logs are read often for a few days and rarely after that. The rule moves them to Standard-IA after 30 days '
+                '(cheaper storage, per-GB retrieval fee, 30-day minimum), to Glacier Flexible Retrieval after 90 days '
+                '(archive pricing, minutes-to-hours restores), and deletes them after 365 days. AWS runs lifecycle actions '
+                'asynchronously; Floci saves the rule but does not move or delete objects.'
+            ),
             'artifact_label': 'lifecycle.json',
             'artifact': json.dumps(S3_LIFECYCLE_CONFIGURATION, indent=2),
         },
         {
             'key': 'get-lifecycle-configuration',
-            'title': 'Inspect the retention rule',
+            'title': 'Inspect the tiering and retention rule',
             'command': f'aws s3api get-bucket-lifecycle-configuration --bucket {S3_LIFECYCLE_BUCKET_NAME}',
-            'explanation': 'Reads the saved lifecycle configuration and verifies the rule scope, status, and 30-day expiration.',
+            'explanation': 'Reads the saved lifecycle configuration and verifies the rule scope, both transitions, and the 365-day expiration.',
         },
     ],
 }
@@ -1234,21 +1248,30 @@ def _verify_s3_lifecycle_configuration() -> dict[str, Any]:
     if prefix is None:
         prefix = (rule or {}).get('Prefix')
 
+    transitions = sorted(
+        ((item.get('Days'), item.get('StorageClass')) for item in (rule or {}).get('Transitions', [])),
+        key=lambda item: item[0] or 0,
+    )
+    expected_transitions = [(item['Days'], item['StorageClass']) for item in S3_LIFECYCLE_TRANSITIONS]
     if (
         rule
         and rule.get('Status') == 'Enabled'
         and prefix == 'logs/'
-        and rule.get('Expiration', {}).get('Days') == 30
+        and transitions == expected_transitions
+        and rule.get('Expiration', {}).get('Days') == S3_LIFECYCLE_EXPIRATION_DAYS
     ):
         return {
             'status': 'passed',
-            'message': 'The enabled lifecycle rule expires objects under logs/ after 30 days.',
+            'message': (
+                'The enabled rule moves logs/ to STANDARD_IA at 30 days and GLACIER at 90 days, '
+                f'then expires them at {S3_LIFECYCLE_EXPIRATION_DAYS} days.'
+            ),
             'resource': _clean_response(rule),
         }
 
     return {
         'status': 'failed',
-        'message': 'The bucket does not have the expected 30-day logs/ expiration rule.',
+        'message': 'The bucket does not have the expected logs/ tiering and expiration rule.',
     }
 
 

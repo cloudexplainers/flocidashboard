@@ -10,7 +10,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 
 ## TL;DR
 
-- **The current 66 labs (365 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
+- **The current 66 labs (375 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
 - **There are big holes in high-weight SAA topics:** load balancing and Auto Scaling, Multi-AZ and read replicas, caching, Route 53 and DR, storage classes and tiering, the data and streaming domain (SAA 3.5), and nearly all of cost optimization (SAA domain 4, 20%).
 - **For CLF, coverage is lopsided.** The labs serve the hands-on parts of domains 2 and 3. Domain 1 (cloud concepts, 24%) and domain 4 (billing and support, 12%) are almost entirely conceptual, so labs can't cover them. Those need "exam lens" concept cards, not labs.
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
@@ -32,7 +32,7 @@ Both exams have 50 scored and 15 unscored questions. Both exam codes are still c
 
 ### Lab inventory
 
-Built from the live registry (`dashboard.labs.registry.all_labs()`), which reports 66 labs and 365 steps. The curriculum levels and lab IDs come from `frontend/src/labCurriculum.ts`.
+Built from the live registry (`dashboard.labs.registry.all_labs()`), which reported 66 labs and 365 steps when this was written (375 after the quick-win fixes in §5). The curriculum levels and lab IDs come from `frontend/src/labCurriculum.ts`.
 
 ### Floci probe
 
@@ -84,16 +84,16 @@ Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *D
 |---|---|---|---|---|---|
 | 15 | s3/version-recovery | 3.6 | 1.3, 2.2 | High | Data recovery and durability. |
 | 16 | s3/default-encryption | 2.2 | 1.3 | High | Encryption at rest (SSE-S3 only; no SSE-KMS). |
-| 17 | s3/lifecycle-retention | 3.6 | 1.3, 4.1 | ◐ | Expiration only. **No storage-class transitions**, which is the main SAA 4.1 angle. |
+| 17 | s3/lifecycle-retention | 3.6 | 1.3, 4.1 | High | ✅ Now tiers to STANDARD_IA (30 days) and GLACIER (90 days) before expiring at 365. Floci stores the rule but doesn't move objects. |
 | 18 | s3/bucket-cors | — | 1.2 | Low | Dev-oriented. |
 | 19 | s3/presigned-url | 2.2 | 1.3 | Medium | Temporary, scoped data access. |
 | 20 | s3/multipart-upload | 3.6 | 3.1, 4.1 | Medium | Upload performance and batch strategies. |
 | 21 | kms/key-alias-encrypt-decrypt | 2.2 | 1.3 | ◐ | No key policy, rotation, or envelope (data key) pattern. |
 | 22 | ssm/parameter-store-config | 2.3 | 1.2 | Medium | Credential and config storage. |
-| 23 | secretsmanager/secret-lifecycle | 2.3 | 1.2, 1.3 | ◐ | Manual update, not rotation. Rotation is the exam's Secrets Manager vs Parameter Store differentiator. |
+| 23 | secretsmanager/secret-lifecycle | 2.3 | 1.2, 1.3 | High | ✅ Now adds a Lambda rotation function and real rotation (AWSCURRENT/AWSPREVIOUS), the exam's Secrets Manager vs Parameter Store differentiator. |
 | 24 | cognito/user-pool-signup-auth | 2.3 | 1.2 | Medium | User pools only; no identity pools or federation. |
 | 25 | cognito/user-groups-custom-attributes | — | 1.2 | Low | Dev. |
-| 26 | rds/db-instance-lifecycle | 3.4 | 3.3 | ◐ | Parameter group and storage scaling only. **No Multi-AZ, read replicas, snapshots, or encryption**, which are most of the RDS exam angles. |
+| 26 | rds/db-instance-lifecycle | 3.4 | 3.3, 1.3 | ◐ | ✅ Now encrypted at creation with 7-day automated backups. Still **no Multi-AZ, read replicas, or snapshots** (planned in W1-2). |
 | 27 | ec2/guided-imds | 3.3 | 1.2 | Low | Dev/Ops. |
 | 28 | ec2/guided-userdata | 3.1 | 2.2 | Low | Bootstrapping; a light touch on immutable infrastructure. |
 | 29 | ec2/guided-web-server | 3.5 | 1.2 | Medium | Security group in action. |
@@ -118,8 +118,8 @@ Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *D
 | 43 | scheduler/sqs-delivery | 3.8 | 2.1 | Medium | |
 | 44 | apigateway/lambda-request | 3.3 | 2.1 | High | API creation. HTTP API only; no REST API, throttling, or usage plans. |
 | 45 | eventbridge/application-spine | 3.8 | 2.1, 2.2 | High | Capstone. Failure experiments map to SAA 2.2. |
-| 46 | cloudwatch/metric-alarms | 2.2 | 2.2, 3.2 | ◐ | Forces state with `set-alarm-state`. Floci **does** evaluate real metrics (verified), so the lab can show a genuine breach. |
-| 47 | cloudwatch/log-groups-metric-filters | 2.2 | 2.2 | ◐ | The title promises metric filters, but the steps only ingest and read logs. |
+| 46 | cloudwatch/metric-alarms | 2.2 | 2.2, 3.2 | High | ✅ Now reaches ALARM from a real error spike after settling in OK. Floci doesn't run alarm actions (no SNS notification). |
+| 47 | cloudwatch/log-groups-metric-filters | 2.2 | 2.2 | Medium | ✅ Now creates a 30-day retention policy and a metric filter, and verifies that only HTTP 500 lines became metric data. |
 
 ### Level 4: Senior Security and Workflows
 
@@ -148,7 +148,7 @@ Task statement IDs refer to the exam guide numbering, for example `SAA 2.1` = *D
 | 63 | ec2/guided-private-s3 | 3.5 | 1.2, 4.4 | Medium | Overlaps with #62. |
 | 64 | ec2/sqs-interface-endpoint | 3.5 | 1.2, 3.4 | High | PrivateLink. |
 | 65 | eks/control-plane-nodegroup | 3.3 | 2.1, 3.2 | Medium | Associate exams only need "when to pick EKS vs ECS"; node groups and kubeconfig are deeper than needed. |
-| 66 | cloudformation/s3-sqs-stack | 3.1 | 2.2 | High | IaC, repeatable processes, and automation for infrastructure integrity. |
+| 66 | cloudformation/s3-sqs-stack | 3.1 | 2.2 | High | IaC, repeatable processes, and automation for infrastructure integrity. ✅ Now previews and applies an update through a change set (Add vs Modify, Replacement). |
 
 **Summary of relevance.** About 38 labs are high or medium value for SAA and about 30 for CLF. Roughly 10 labs (#18, 25, 27, 33, 34, 38, 54, and parts of 47 and 65) mainly serve the Developer or CloudOps tracks. They should stay, tagged for those tracks later.
 
@@ -225,6 +225,9 @@ Probed on Floci 2.3.0, 2026-10-22. "Lab-ready" means a lab could have meaningful
 | Aurora PostgreSQL/MySQL clusters, Serverless v2 config, reader instance, cluster snapshot | All succeeded (real containers) | SAA 3.3, 4.3; CLF 3.4 |
 | ElastiCache Redis (backed by Valkey) | A real container started | SAA 2.1, 3.3; CLF 3.4 |
 | CloudWatch alarms evaluating real `put-metric-data` | The alarm reached `ALARM` without `set-alarm-state` | SAA 2.2, 3.2 |
+| CloudWatch Logs metric filters and retention | Two "HTTP 500" lines produced a metric Sum of 2; the 200 line didn't count | CLF 2.2; SAA 2.2 |
+| Secrets Manager rotation with a Lambda | Floci invoked all four rotation steps and promoted the new version (it pre-creates an empty AWSPENDING version, which the lab's function handles) | SAA 1.2, 1.3; CLF 2.3 |
+| CloudFormation change sets | `Add` and in-place `Modify` (`Replacement` False) reported; execution reached `UPDATE_COMPLETE` and applied the SQS changes | SAA 2.2; CLF 3.1 |
 | IAM identity policies, **permission boundaries**, and bucket-policy explicit deny | Enforced (AccessDenied) | SAA 1.1, 1.3 |
 | S3 Object Lock (COMPLIANCE) | Deleting a locked version was denied | SAA 1.3 |
 | Lambda versions, aliases, reserved concurrency, memory size, function URLs | All succeeded; invoke via alias returned version 1 | SAA 3.2, 4.2 |
@@ -259,7 +262,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 - **Storage:** EBS **snapshots**, FSx, Storage Gateway.
 - **Databases:** RDS **MySQL** snapshots and read replicas (Postgres works), DynamoDB `CreateBackup` and `RestoreTableToPointInTime`, DAX.
 - **Purchasing and cost:** Reserved Instance offerings, Savings Plans, Compute Optimizer, Pricing Calculator API, Cost Explorer cost-allocation-tag APIs.
-- **Ops:** CloudWatch composite alarms, SSM Session Manager, Automation, and Patch Manager, X-Ray, AWS Health, Trusted Advisor and Support, Resilience Hub.
+- **Ops:** CloudWatch alarm actions (an alarm in ALARM sent nothing to its SNS topic), `describe-alarm-history`, CloudWatch composite alarms, SSM Session Manager, Automation, and Patch Manager, X-Ray, AWS Health, Trusted Advisor and Support, Resilience Hub.
 - **Security and compliance:** Shield, AWS Artifact.
 - **AI and end-user:** QuickSight, Rekognition, Polly, Lex, Amplify, WorkSpaces, App Runner, Outposts.
 - **Inconclusive** (`AuthorizationHeaderMalformed` with signature validation on): Inspector2, Detective, Bedrock control plane, GuardDuty and Access Analyzer `ListFindings`, Lambda provisioned concurrency. Retest these with `FLOCI_AUTH_VALIDATE_SIGNATURES=false` before ruling them out.
@@ -325,14 +328,16 @@ A lab can teach configuration and inspection with these, but it must not claim t
 
 ### Small extensions to existing labs (quick wins)
 
+The six rows marked ✅ shipped on 2026-10-22 and pass `check_labs` on Floci 2.3.0.
+
 | Lab | Extension | Exam value |
 |---|---|---|
-| #17 s3/lifecycle-retention | Add a transition rule, not just expiry (or fold into W1-3) | SAA 4.1 |
-| #23 secretsmanager/secret-lifecycle | Add a rotation Lambda and `rotate-secret`; Floci requires the function to exist, so it likely works | SAA 1.2, 1.3; CLF 2.3 |
-| #46 cloudwatch/metric-alarms | Replace `set-alarm-state` with a real threshold breach (verified working) | SAA 2.2, 3.2 |
-| #47 cloudwatch/log-groups-metric-filters | Actually add the metric filter and retention the title promises | CLF 2.2 |
-| #26 rds/db-instance-lifecycle | Add `--storage-encrypted` and `--backup-retention-period` | SAA 1.3 |
-| #66 cloudformation/s3-sqs-stack | Add a change set (`buildinglabs.md` already mentions one) and drift detection | SAA 2.2; CLF 3.1 |
+| ✅ #17 s3/lifecycle-retention | Add a transition rule, not just expiry | SAA 4.1 |
+| ✅ #23 secretsmanager/secret-lifecycle | Add a rotation Lambda and `rotate-secret` | SAA 1.2, 1.3; CLF 2.3 |
+| ✅ #46 cloudwatch/metric-alarms | Replace `set-alarm-state` with a real threshold breach | SAA 2.2, 3.2 |
+| ✅ #47 cloudwatch/log-groups-metric-filters | Add the metric filter and retention the title promises | CLF 2.2 |
+| ✅ #26 rds/db-instance-lifecycle | Add `--storage-encrypted` and `--backup-retention-period` | SAA 1.3 |
+| ✅ #66 cloudformation/s3-sqs-stack | Add a change set (drift detection still open) | SAA 2.2; CLF 3.1 |
 | #44 apigateway/lambda-request | Exam lens on HTTP API vs REST API (usage plans, caching, WAF) | SAA 2.1 |
 | #4 iam/access-key-alice | Add key rotation (create a second key, deactivate the first) | CLF 2.3 |
 | #14, #26, #27 | Shared-responsibility exam-lens card (who patches what) | CLF 2.1 |

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Six labs now do what their titles and descriptions promise, which matters for using them as exam prep:
+  - **CloudWatch metric alarms:** the alarm reaches ALARM by evaluating a real error spike instead of `set-alarm-state`, and you watch it settle in OK on healthy data first.
+  - **CloudWatch Logs:** the lab now creates the metric filter its title names, plus a 30-day retention policy, and confirms only the HTTP 500 lines became metric data.
+  - **Secrets Manager:** adds automatic rotation with a Lambda rotation function, five new steps.
+  - **CloudFormation:** previews an update with a change set (add a dead-letter queue, modify the jobs queue in place) before applying it, three new steps.
+  - **S3 lifecycle:** the rule now tiers logs to Standard-IA and Glacier before expiring them.
+  - **RDS:** the instance is created encrypted with 7-day automated backups. Its create, describe, and modify steps now check real instance state instead of always passing.
+  - The catalog is now 375 steps.
+- Added `docs/certification-coverage.md`, mapping every lab to the AWS Cloud Practitioner (CLF-C02) and Solutions Architect – Associate (SAA-C03) exam guides, with a gap analysis, Floci 2.3.0 support findings, and a prioritized plan for new labs.
 - The dashboard now defaults to host port 8001 (in Compose, `.env.example`, the docs, and the Vite dev proxy) so it doesn't collide with other local Django projects on 8000. Set `DASHBOARD_PORT` to change it.
 - Split `dashboard/aws.py` (11.6k lines) into a `dashboard/aws/` package with one inventory module per service; shared client plumbing and `list_resources` stay in `__init__.py`.
 - Docker Compose now publishes the dashboard and Floci ports on `127.0.0.1` only (set `HOST_BIND_ADDRESS` to change it). Django runs with `DEBUG` off by default, and the hard-coded secret key is replaced by one generated per install and stored next to the dashboard database.

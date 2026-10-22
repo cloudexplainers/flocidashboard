@@ -332,16 +332,20 @@ def generate_terraform_snippet(command: str, service_hint: str = '') -> str:
     # CloudWatch
     if svc == 'cloudwatch' and 'put-metric-alarm' in op:
         aname = args.get('alarm-name', 'HighErrorRate')
+        operator = args.get('comparison-operator', 'GreaterThanThreshold')
+        missing = args.get('treat-missing-data')
+        missing_line = f'  treat_missing_data  = "{missing}"\n' if missing else ''
         return (
             f'resource "aws_cloudwatch_metric_alarm" "lab_alarm" {{\n'
             f'  alarm_name          = "{aname}"\n'
-            f'  comparison_operator = "GreaterThanOrEqualToThreshold"\n'
-            f'  evaluation_periods  = 1\n'
-            f'  metric_name         = "Errors"\n'
-            f'  namespace           = "Floci/App"\n'
-            f'  period              = 60\n'
-            f'  statistic           = "Sum"\n'
-            f'  threshold           = 5\n'
+            f'  comparison_operator = "{operator}"\n'
+            f'  evaluation_periods  = {args.get("evaluation-periods", 1)}\n'
+            f'  metric_name         = "{args.get("metric-name", "Errors")}"\n'
+            f'  namespace           = "{args.get("namespace", "Floci/App")}"\n'
+            f'  period              = {args.get("period", 60)}\n'
+            f'  statistic           = "{args.get("statistic", "Sum")}"\n'
+            f'  threshold           = {args.get("threshold", 5)}\n'
+            f'{missing_line}'
             f'}}\n'
         )
     if svc == 'logs' and 'create-log-group' in op:

@@ -2,13 +2,13 @@
 
 ## Current Curriculum Status
 
-The curriculum comprises **66 labs across 20 services (365 total runnable steps)**:
+The curriculum comprises **66 labs across 20 services (375 total runnable steps)**:
 
 - **11 IAM labs** (admin bootstrap, users, policies, access keys, groups, roles, STS session policies, instance profiles, switched dashboard identities, and permission-enforcement checks)
 - **12 S3 labs** (buckets, objects, prefixes, metadata, tags, versioning, presigned URLs, security, encryption, lifecycle retention, CORS, S3-to-SQS notifications, and multipart uploads)
 - **1 KMS lab** (key lifecycle, alias creation, envelope encryption, and decryption round trips)
 - **1 SSM Parameter Store lab** (hierarchical application configuration and secure string storage)
-- **1 Secrets Manager lab** (secret creation, runtime retrieval, and secret rotation updates)
+- **1 Secrets Manager lab** (secret creation, manual updates, and automatic rotation through a Lambda rotation function with AWSCURRENT/AWSPREVIOUS staging)
 - **2 Cognito labs** (User Pools, App Clients, authentication flows, user groups, and custom attributes)
 - **9 SQS labs** (queue inspection, message lifecycle, visibility timeouts, delayed delivery, batch operations, dead-letter queues, managed redrive, FIFO ordering, duplicate suppression, and purge)
 - **2 SNS labs** (SNS-to-SQS fan-out, resource policies, raw delivery, and subscription filter policies)
@@ -18,12 +18,12 @@ The curriculum comprises **66 labs across 20 services (365 total runnable steps)
 - **1 API Gateway lab** (HTTP API route creation, integrations, and live request proxying to Lambda)
 - **1 EventBridge application capstone** (API Gateway, Lambda, custom event bus, transformed SQS targets, notification handlers, and failure simulations)
 - **2 Step Functions labs** (State Machine Choice branching workflows and Parallel execution branches)
-- **2 CloudWatch labs** (custom metric filters, CloudWatch Alarms, and Log Group streams)
+- **2 CloudWatch labs** (threshold alarms that evaluate real metric data from OK to ALARM, log retention, and log metric filters that turn HTTP 500 lines into metrics)
 - **11 EC2 labs** (public/private VPC routing, stateful security groups, network ACLs, VPC endpoints, guest IMDS inspection, UserData validation, IAM instance roles, web server SG routing, broken route repair, private S3 gateway endpoints, and SSM RunCommand dispatch)
-- **1 RDS lab** (DB instance provisioning, custom parameter groups, endpoints, storage scaling, and reboot recovery)
+- **1 RDS lab** (encrypted DB instance provisioning with automated backups, custom parameter groups, endpoints, storage scaling, and reboot recovery)
 - **1 ECS lab** (clusters, task definitions, standalone Fargate tasks, and services)
 - **1 EKS lab** (control planes, EC2 node groups, Fargate profiles, and local kubeconfig)
-- **1 CloudFormation lab** (template validation, change set creation, stack provisioning, and resource lifecycle management)
+- **1 CloudFormation lab** (template validation, stack provisioning, a reviewed change set that adds a dead-letter queue, and stack-owned cleanup)
 - **Multi-SDK Code Tabs**: dynamic code generation across AWS CLI, Python `boto3`, and Terraform HCL for every step card with persistent user preference storage
 - **"Run All Steps" Play-Through Runner**: automated step execution with live progress tracking, auto-scrolling, speed regulation, and contextual explanations
 - Shared breadcrumb navigation from labs to the service page or dashboard homepage
@@ -1200,7 +1200,7 @@ Reset deletes the bucket encryption configuration, object, and bucket.
 Implemented ninth S3 lab:
 
 ```text
-Automate retention with an S3 lifecycle rule
+Tier and expire logs with an S3 lifecycle rule
 ```
 
 Steps:
@@ -1212,7 +1212,7 @@ aws s3api put-bucket-lifecycle-configuration --bucket lab-lifecycle --lifecycle-
 aws s3api get-bucket-lifecycle-configuration --bucket lab-lifecycle
 ```
 
-Use an enabled rule scoped to the `logs/` prefix that expires objects after 30 days. Explain that lifecycle actions are asynchronous in AWS and the lab verifies configuration, not the passage of 30 days.
+Use an enabled rule scoped to the `logs/` prefix that transitions objects to `STANDARD_IA` after 30 days and `GLACIER` (Glacier Flexible Retrieval) after 90 days, then expires them after 365 days. Explain that lifecycle actions are asynchronous in AWS and the lab verifies configuration, not the passage of time. Floci 2.3.0 stores transitions but does not move objects between storage classes.
 
 The lifecycle artifact is:
 
@@ -1220,13 +1220,23 @@ The lifecycle artifact is:
 {
   "Rules": [
     {
-      "ID": "ExpireApplicationLogsAfter30Days",
+      "ID": "TierThenExpireApplicationLogs",
       "Status": "Enabled",
       "Filter": {
         "Prefix": "logs/"
       },
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "STANDARD_IA"
+        },
+        {
+          "Days": 90,
+          "StorageClass": "GLACIER"
+        }
+      ],
       "Expiration": {
-        "Days": 30
+        "Days": 365
       }
     }
   ]
@@ -1239,7 +1249,8 @@ Live completion requires:
 - the exact `logs/app.log` artifact with `text/plain` metadata,
 - the named rule to remain enabled,
 - the rule to target `logs/`,
-- expiration to remain set to 30 days.
+- both transitions (30 days to `STANDARD_IA`, 90 days to `GLACIER`),
+- expiration to remain set to 365 days.
 
 Reset removes the lifecycle configuration before deleting the object and bucket.
 
@@ -1694,10 +1705,14 @@ aws cloudformation describe-stack-resources --stack-name lab-storage-messaging
 aws cloudformation describe-stack-events --stack-name lab-storage-messaging
 aws s3api head-bucket --bucket lab-cfn-storage
 aws sqs get-queue-attributes --queue-url <queue-url> --attribute-names QueueArn VisibilityTimeout
+aws cloudformation create-change-set --stack-name lab-storage-messaging --change-set-name lab-add-dead-letter-queue --change-set-type UPDATE --template-body file://storage-messaging-stack-v2.json
+aws cloudformation describe-change-set --stack-name lab-storage-messaging --change-set-name lab-add-dead-letter-queue
+aws cloudformation execute-change-set --stack-name lab-storage-messaging --change-set-name lab-add-dead-letter-queue
 aws cloudformation delete-stack --stack-name lab-storage-messaging
 aws cloudformation describe-stacks --stack-name lab-storage-messaging
 aws s3api head-bucket --bucket lab-cfn-storage
 aws sqs get-queue-url --queue-name lab-cfn-jobs
+aws sqs get-queue-url --queue-name lab-cfn-jobs-dlq
 ```
 
 The JSON template declares an `AWS::S3::Bucket` and `AWS::SQS::Queue`, plus outputs for the bucket name, queue URL, and queue ARN. Validation runs before resource creation.
@@ -1706,16 +1721,15 @@ Creation completion requires `CREATE_COMPLETE` and exact outputs. Resource inspe
 
 The service-level check independently calls S3 and SQS to prove that the provisioned resources are usable and that the queue has the template-defined 30-second visibility timeout.
 
-Deletion is performed through CloudFormation rather than directly against S3 or SQS. Completion requires the stack, bucket, and queue all to be absent. Reset is defensive: it asks CloudFormation to delete the stack first and removes any remaining lab-owned resources only if necessary.
+The change set submits version 2 of the template: it adds `JobsDeadLetterQueue` and changes `JobsQueue` to a 60-second visibility timeout with a redrive policy (`maxReceiveCount` 3). Review completion requires the change set to show `Add` for the dead-letter queue and `Modify` with `Replacement` False for the jobs queue; the lesson stresses checking `Replacement` before applying an update. Execution completion requires `UPDATE_COMPLETE`, the `DeadLetterQueueArn` output, and the new queue attributes read directly from SQS.
 
-Floci 1.5.26 capability boundary:
+Deletion is performed through CloudFormation rather than directly against S3 or SQS, and is only allowed after the change set is applied. Completion requires the stack, bucket, jobs queue, and dead-letter queue all to be absent. Reset is defensive: it asks CloudFormation to delete the stack first and removes any remaining lab-owned resources only if necessary.
+
+Floci 2.3.0 capability boundary:
 
 - Stack create, outputs, resource inventory, event history, and deletion work end to end.
-- Change-set creation succeeds but currently reports an empty `Changes` list.
-- Updating a named SQS queue property currently attempts resource recreation and rolls back because the queue name already exists.
-- Template-defined S3 and SQS tags are not currently propagated to the underlying resources.
-
-Do not add a successful change-set/update lesson until Floci can preview and execute the update without rollback. In AWS, CloudFormation supports in-place updates for many resource properties, and change sets are an important production workflow.
+- Change sets report per-resource `Action` and `Replacement`, and execution applies in-place SQS property updates and new resources without rollback. (Floci 1.5.26 returned empty change sets and rolled back named-queue updates.)
+- Template-defined S3 and SQS tags were not propagated in 1.5.26; recheck before teaching tags through CloudFormation.
 
 Recommended next architecture lab:
 
@@ -2169,7 +2183,7 @@ Reset deletes only `/floci/lab/app/config`.
 Recommended next serverless lab:
 
 ```text
-Create and update a Secrets Manager secret
+Create, update, and rotate a Secrets Manager secret
 ```
 
 ## Secrets Manager Lab Progression
@@ -2177,7 +2191,7 @@ Create and update a Secrets Manager secret
 Implemented first Secrets Manager lab:
 
 ```text
-Create and update a Secrets Manager secret
+Create, update, and rotate a Secrets Manager secret
 ```
 
 Steps:
@@ -2185,21 +2199,36 @@ Steps:
 ```bash
 aws secretsmanager create-secret --name lab/app-credentials --description "Floci lab application credentials" --secret-string file://initial-secret.json
 aws secretsmanager get-secret-value --secret-id lab/app-credentials
-aws secretsmanager put-secret-value --secret-id lab/app-credentials --secret-string file://rotated-secret.json
+aws secretsmanager put-secret-value --secret-id lab/app-credentials --secret-string file://updated-secret.json
+aws secretsmanager get-secret-value --secret-id lab/app-credentials
+aws iam create-role --role-name FlociSecretsRotationRole --assume-role-policy-document file://rotation-trust-policy.json
+aws iam put-role-policy --role-name FlociSecretsRotationRole --policy-name FlociSecretsRotationAccess --policy-document file://rotation-policy.json
+aws lambda create-function --function-name lab-secret-rotator --runtime python3.11 --role arn:aws:iam::000000000000:role/FlociSecretsRotationRole --handler handler.lambda_handler --timeout 30 --zip-file fileb://function.zip
+aws lambda add-permission --function-name lab-secret-rotator --statement-id AllowSecretsManagerRotation --action lambda:InvokeFunction --principal secretsmanager.amazonaws.com
+aws secretsmanager rotate-secret --secret-id lab/app-credentials --rotation-lambda-arn arn:aws:lambda:us-east-1:000000000000:function:lab-secret-rotator --rotation-rules AutomaticallyAfterDays=30
 aws secretsmanager get-secret-value --secret-id lab/app-credentials
 aws secretsmanager describe-secret --secret-id lab/app-credentials
 ```
 
-The lab creates a JSON application credential, reads the initial value, writes a rotated value, reads the current value, and inspects metadata separately from secret material.
+The lab creates a JSON application credential, reads it, updates it by hand, then turns on automatic rotation. The rotation function implements the four-step protocol: `createSecret` stages a new random password as `AWSPENDING`, `setSecret` and `testSecret` only log (there is no database), and `finishSecret` moves `AWSCURRENT` to the new version. The role is scoped to this one secret's ARN plus the function's own log group. Rotation is the exam's main differentiator between Secrets Manager and Parameter Store SecureString.
 
 Live completion requires:
 
 - the secret to exist and not be scheduled for deletion,
 - a recorded successful read of the initial credential JSON,
-- the current secret value to match the rotated credential JSON,
-- metadata inspection through `DescribeSecret`.
+- the manually updated credential to be `AWSCURRENT` (or `AWSPREVIOUS` after rotation),
+- the rotation role with its inline policy, an Active rotation function, and a resource policy that allows `secretsmanager.amazonaws.com` to invoke it,
+- rotation enabled every 30 days with the lab function,
+- `AWSCURRENT` to hold a password generated by the function and `AWSPREVIOUS` to hold the manual update.
 
-The initial-read milestone uses a short-lived server-side marker because once the secret is rotated, live Secrets Manager state can no longer prove that the old value was read successfully. Reset force-deletes only `lab/app-credentials` and clears the lab markers.
+The initial-read milestone uses a short-lived server-side marker because once the secret changes, live Secrets Manager state can no longer prove that the old value was read successfully. Reset force-deletes `lab/app-credentials`, deletes the function, its log group, and the role, and clears the lab markers.
+
+Floci 2.3.0 behavior notes:
+
+- Floci invokes the rotation function for all four steps in the background, like AWS.
+- Floci creates an empty `AWSPENDING` version before calling `createSecret`. The AWS sample rotation template checks for an existing pending version and would skip writing the new value, so the lab function also checks that the pending version has a `SecretString`.
+- Floci does not check the function's resource policy before invoking it; the lab still adds the permission AWS requires.
+- `AWSPENDING` stays attached to the new version after `finishSecret`; AWS removes it.
 
 Implemented follow-up Lambda lab:
 
@@ -2218,8 +2247,8 @@ Good next services:
 - DynamoDB: table CRUD, customer-index query, and Lambda write foundations complete.
 - KMS: key, alias, encrypt, and decrypt foundation complete.
 - SSM Parameter Store: hierarchical JSON configuration foundation complete.
-- Secrets Manager: JSON secret creation, initial read, value update, and metadata inspection foundation complete.
-- CloudFormation: create/delete foundation complete; add updates and rollback labs when local support is reliable.
+- Secrets Manager: JSON secret creation, manual update, and Lambda rotation foundation complete.
+- CloudFormation: create, change-set update, and delete foundation complete; consider rollback and drift-detection labs next.
 - EC2 networking: routing, security-group, S3 gateway endpoint, and SQS interface endpoint foundations complete.
 - EventBridge Scheduler: one-time SQS delivery foundation complete.
 - Event-driven Lambda: SQS event source mapping is complete; next practical gaps are S3 object-created notifications to Lambda, EventBridge rules to Lambda or SQS, and EventBridge Pipes source-to-target flows when local support is reliable.
