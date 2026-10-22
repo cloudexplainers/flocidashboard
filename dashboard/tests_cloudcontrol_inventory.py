@@ -3,7 +3,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 from django.urls import reverse
 
-from .aws import _cloudcontrol_resource_items
+from .aws.cloudcontrol import _cloudcontrol_resource_items
 from .services import get_service
 
 
