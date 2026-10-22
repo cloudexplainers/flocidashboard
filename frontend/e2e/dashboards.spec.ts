@@ -1975,7 +1975,7 @@ test('Secrets Manager metadata, lifecycle, rotation and versions use real invent
   await expect(page.getByText('alias/application-secrets', { exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: `Secret: ${polishedSecret.name}`, exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Rotation', exact: true }).click();
-  await expect(page.getByText('30 days', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tabpanel').getByText('30 days', { exact: true })).toBeVisible();
   await expect(page.getByText(polishedSecret.rotation_lambda_arn, { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Versions (2)', exact: true }).click();
   await expect(page.getByText('AWSPREVIOUS', { exact: true })).toBeVisible();

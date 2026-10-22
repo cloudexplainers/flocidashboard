@@ -32,7 +32,6 @@ from .s3_api import (
     delete_s3_policy,
     get_s3_public_access_block,
     get_s3_versioning,
-    get_s3_website,
     head_s3_object,
     list_s3_buckets,
     list_s3_objects,

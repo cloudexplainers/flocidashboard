@@ -97,6 +97,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
   const [identityPools, setIdentityPools] = useState<any[]>([]);
   const [createIdentityPoolOpen, setCreateIdentityPoolOpen] = useState(false);
   const [identityPoolName, setIdentityPoolName] = useState('');
+  const [allowGuestAccess, setAllowGuestAccess] = useState(false);
   const [creatingIdentityPool, setCreatingIdentityPool] = useState(false);
 
   // Create App Client Modal
@@ -270,7 +271,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
     if (!identityPoolName.trim()) return;
     setCreatingIdentityPool(true);
     try {
-      await createCognitoIdentityPool(identityPoolName.trim(), true);
+      await createCognitoIdentityPool(identityPoolName.trim(), allowGuestAccess);
       setActionMessage({ type: 'success', text: `Identity Pool "${identityPoolName.trim()}" created.` });
       setCreateIdentityPoolOpen(false);
       setIdentityPoolName('');
@@ -789,9 +790,14 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
           </Box>
         }
       >
-        <FormField label="Identity Pool Name">
-          <Input value={identityPoolName} onChange={({ detail }) => setIdentityPoolName(detail.value)} placeholder="MyIdentityPool" />
-        </FormField>
+        <SpaceBetween size="m">
+          <FormField label="Identity pool name">
+            <Input value={identityPoolName} onChange={({ detail }) => setIdentityPoolName(detail.value)} placeholder="MyIdentityPool" />
+          </FormField>
+          <Checkbox checked={allowGuestAccess} onChange={({ detail }) => setAllowGuestAccess(detail.checked)} description="Gives unauthenticated users temporary AWS credentials (AllowUnauthenticatedIdentities). Off by default.">
+            Guest access
+          </Checkbox>
+        </SpaceBetween>
       </Modal>
     </SpaceBetween>
   );

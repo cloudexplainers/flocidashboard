@@ -4,6 +4,34 @@ A service-by-service review of the React console in `frontend/src/` against the 
 Console and AWS APIs, as far as Floci 2.3.0 allows. Each section lists findings ranked by severity,
 what was fixed, and what is left with the reason.
 
+## Summary
+
+- **The biggest problem was silent false success.** Five consoles (S3, EC2, IAM, Lambda, DynamoDB) sent
+  their create/delete/start/stop/invoke actions to the read-only inventory endpoint, which ignored them
+  and returned 200, so the console said "created" or "deleted" while nothing happened. Several more
+  helpers ignored HTTP errors on delete. All of these now call the real endpoints and show AWS errors.
+- **Invented data was the second.** IAM showed `AdministratorAccess` on every user and a Lambda trust
+  policy on every role; S3 showed Block Public Access as on and a sample CORS rule; ECS showed every
+  cluster as ACTIVE with a made-up EC2 instance ID; Settings always said "Healthy". These now show the
+  values the API returns, or "-" when it returns nothing.
+- **Defaults now match AWS**: S3 versioning "Disabled", SQS/SNS FIFO content-based deduplication off,
+  Secrets Manager 30-day recovery window, RDS final snapshot on delete, Lambda timeout from the API.
+- **Destructive actions confirm** using the console's typed phrases ("delete me", "permanently delete",
+  the resource name, "confirm").
+- **Browser-facing URLs work from Docker**: presigned S3 URLs, S3 website endpoints, Lambda function
+  URLs and API Gateway invoke URLs no longer point at the container hostname `floci`.
+
+Verification: `npx tsc --noEmit`, `npm run build`, `npm run test:e2e` (332 passed, against the disposable
+emulator) and `docker compose exec -T dashboard python manage.py test --noinput` (1,141 passed) all pass.
+The "utility dashboard renders" e2e tests occasionally time out on a blank page under repeated runs; `main`
+shows the same rate (1–2 failures in 32 repeats), so this is a pre-existing flake, not from these changes. All 539 workbench action
+definitions resolve to a route that allows their method.
+
+The dashboard container on port 8001 mounts this checkout and runs `runserver` with autoreload, so it
+serves whatever branch is checked out here. The new `FLOCI_PUBLIC_ENDPOINT_URL` variable in
+`docker-compose.yml` only takes effect after `docker compose up -d dashboard`; until then, presigned URLs
+and endpoints fall back to the internal `http://floci:4566`.
+
 Method: each console was read alongside its backend (`dashboard/aws/`, `dashboard/*_api.py`,
 `dashboard/*_views.py`, `dashboard/services.py`), then probed against a disposable Floci on port 14566
 populated by running every lab step (66 of 66 labs passed), with a second dashboard on port 18001.
@@ -219,6 +247,7 @@ Left as is:
 | --- | --- | --- |
 | High | Delete user ignored HTTP errors, and had no confirmation. | Fixed. |
 | Medium | Creating an identity pool posted to a non-existent route. | Fixed (see Cross-cutting). |
+| Medium | Identity pools were always created with guest (unauthenticated) access on. AWS leaves it off unless you opt in. | Fixed: a "Guest access" checkbox, off by default. |
 
 Left as is:
 - Test passwords and the `developer-alice` username are pre-filled in the user and sign-in forms for convenience. They are clearly sample values in a local learning tool.
