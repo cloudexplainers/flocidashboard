@@ -30,6 +30,7 @@ import {
   prettySnsPolicy,
 } from "./snsResources";
 import { CodeSnippet } from "../components/CodeSnippet";
+import ConfirmActionModal from "../components/ConfirmActionModal";
 
 const PROTOCOL_OPTIONS = [
   {
@@ -90,7 +91,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
   const loadGeneration = useRef(0);
   const mutationLock = useRef(false);
   const [modalError, setModalError] = useState("");
-  const [contentDedup, setContentDedup] = useState(true);
+  const [contentDedup, setContentDedup] = useState(false);
   const [messageAttributes, setMessageAttributes] = useState("{}");
   const [published, setPublished] = useState<any>(null);
   const [rawDelivery, setRawDelivery] = useState(false);
@@ -715,7 +716,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
                             </Button>
                           }
                         >
-                          Topic Subscriptions
+                          Subscriptions
                         </Header>
                       }
                       columnDefinitions={[
@@ -723,11 +724,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
                           id: "protocol",
                           header: "Protocol",
                           cell: (sub) => (
-                            <Badge color="blue">
-                              {sub.Protocol
-                                ? sub.Protocol.toUpperCase()
-                                : "UNKNOWN"}
-                            </Badge>
+                            <span>{sub.Protocol ? sub.Protocol.toUpperCase() : "-"}</span>
                           ),
                         },
                         {
@@ -939,37 +936,44 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
                       columns={2}
                       minColumnWidth={280}
                       items={[
-                        { label: "Topic Name", value: activeTopic.TopicName },
-                        { label: "Topic ARN", value: activeTopic.TopicArn },
+                        { label: "Name", value: activeTopic.TopicName },
+                        { label: "ARN", value: activeTopic.TopicArn },
                         {
-                          label: "Topic Type",
+                          label: "Type",
                           value: activeTopic.Type || "Standard",
                         },
                         {
-                          label: "Display Name",
-                          value: activeTopic.DisplayName || "Not configured",
+                          label: "Display name",
+                          value: activeTopic.DisplayName || "-",
                         },
                         {
-                          label: "Subscriptions Confirmed",
+                          label: "Topic owner",
+                          value: activeTopic.attributes?.Owner || "-",
+                        },
+                        {
+                          label: "Subscriptions confirmed",
                           value: String(
                             activeTopic.SubscriptionsConfirmed ?? 0,
                           ),
                         },
                         {
-                          label: "Subscriptions Pending",
+                          label: "Subscriptions pending",
                           value: String(activeTopic.SubscriptionsPending ?? 0),
                         },
                         {
                           label: "Encryption",
-                          value:
-                            activeTopic.attributes?.KmsMasterKeyId ||
-                            "Not configured",
+                          value: activeTopic.attributes?.KmsMasterKeyId
+                            ? `Enabled (${activeTopic.attributes.KmsMasterKeyId})`
+                            : "Disabled",
                         },
                         {
                           label: "Content-based deduplication",
                           value:
-                            activeTopic.attributes?.ContentBasedDeduplication ??
-                            "Not reported",
+                            activeTopic.Type === "FIFO"
+                              ? activeTopic.attributes?.ContentBasedDeduplication === "true"
+                                ? "Enabled"
+                                : "Disabled"
+                              : "-",
                         },
                         {
                           label: "Delivery retry policy",
@@ -988,15 +992,10 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
                 label: "Filter policies",
                 content: (
                   <SpaceBetween size="m">
-                    <Alert header="Attribute-Based Message Filtering">
-                      SNS subscription filter policies evaluate message
-                      attributes and payload bodies, routing only relevant
-                      notifications to specific subscribers.
-                    </Alert>
                     <Table
                       header={
-                        <Header variant="h3">
-                          Subscription delivery policies
+                        <Header variant="h3" description="Subscription filter policies evaluate message attributes or the message body, so each subscriber receives only matching messages.">
+                          Subscription filter policies
                         </Header>
                       }
                       items={activeTopic.subscriptions || []}
@@ -1050,7 +1049,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
                 label: "Access policy",
                 content: (
                   <SpaceBetween size="m">
-                    <Header variant="h3">Topic Access Policy (JSON)</Header>
+                    <Header variant="h3" description="Defines who can access the topic. By default, only the topic owner can publish or subscribe.">Access policy</Header>
                     <PolicySummary document={activeTopic.Policy || undefined} />
                     <textarea
                       readOnly
@@ -1198,7 +1197,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
       <Modal
         visible={createModalOpen}
         onDismiss={() => setCreateModalOpen(false)}
-        header="Create SNS Topic"
+        header="Create topic"
         closeAriaLabel="Close modal"
         footer={
           <Box float="right">
@@ -1221,8 +1220,8 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
         <SpaceBetween size="m">
           {modalError && <Alert type="error">{modalError}</Alert>}
           <FormField
-            label="Topic name"
-            description="Enter a unique name (append .fifo for FIFO topics)."
+            label="Name"
+            constraintText="Maximum 256 characters. Can include alphanumeric characters, hyphens (-) and underscores (_). FIFO topic names get the .fifo suffix."
           >
             <Input
               value={newTopicName}
@@ -1231,8 +1230,8 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
             />
           </FormField>
           <FormField
-            label="Display name (optional)"
-            description="Optional display name used for SMS notifications."
+            label="Display name - optional"
+            description="To use this topic with SMS subscriptions, enter a display name. Only the first 10 characters are displayed in an SMS message."
           >
             <Input
               value={displayName}
@@ -1243,15 +1242,17 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
           <Checkbox
             checked={isFifo}
             onChange={({ detail }) => setIsFifo(detail.checked)}
+            description="Strictly-preserved message ordering, exactly-once delivery, and subscription protocols limited to SQS. The type can't be changed after creation."
           >
-            FIFO topic (Ordering within a message group and deduplication)
+            FIFO (first-in, first-out)
           </Checkbox>
           {isFifo && (
             <Checkbox
               checked={contentDedup}
               onChange={({ detail }) => setContentDedup(detail.checked)}
+              description="SNS uses a SHA-256 hash of the message body as the deduplication ID. Off by default."
             >
-              Content-based deduplication
+              Content-based message deduplication
             </Checkbox>
           )}
         </SpaceBetween>
@@ -1261,7 +1262,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
       <Modal
         visible={subscribeModalOpen}
         onDismiss={() => setSubscribeModalOpen(false)}
-        header={`Create Subscription for ${activeTopic?.TopicName || "topic"}`}
+        header="Create subscription"
         closeAriaLabel="Close modal"
         footer={
           <Box float="right">
@@ -1315,8 +1316,8 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
             />
           </FormField>
           <FormField
-            label="Filter policy (JSON)"
-            description="Use {} to accept all messages."
+            label="Subscription filter policy - optional"
+            description="Leave as {} to receive all messages published to the topic."
           >
             <Textarea
               rows={4}
@@ -1352,7 +1353,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
       <Modal
         visible={publishModalOpen}
         onDismiss={() => setPublishModalOpen(false)}
-        header={`Publish Message to ${activeTopic?.TopicName || "Topic"}`}
+        header="Publish message to topic"
         closeAriaLabel="Close modal"
         footer={
           <Box float="right">
@@ -1382,8 +1383,8 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
         <SpaceBetween size="m">
           {modalError && <Alert type="error">{modalError}</Alert>}
           <FormField
-            label="Subject (optional)"
-            description="Appears in email subjects or event metadata."
+            label="Subject - optional"
+            description="Used as the Subject line for email subscriptions and included in the JSON envelope for others."
           >
             <Input
               value={subject}
@@ -1447,38 +1448,17 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
         </SpaceBetween>
       </Modal>
 
-      {/* Delete Topic Modal */}
-      <Modal
+      <ConfirmActionModal
         visible={deleteModalOpen}
+        header={`Delete topic: ${activeTopic?.TopicName || ""}`}
+        confirmLabel="Delete"
+        confirmationText="delete me"
+        loading={deletingTopic}
+        onConfirm={handleDeleteTopic}
         onDismiss={() => setDeleteModalOpen(false)}
-        header="Delete SNS Topic"
-        closeAriaLabel="Close modal"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setDeleteModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleDeleteTopic}
-                loading={deletingTopic}
-              >
-                Delete topic
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
       >
-        <SpaceBetween size="m">
-          {modalError && <Alert type="error">{modalError}</Alert>}
-          <Alert type="warning" header="Delete topic">
-            Are you sure you want to delete topic{" "}
-            <strong>{activeTopic?.TopicName}</strong>? All associated
-            subscriptions will be removed.
-          </Alert>
-        </SpaceBetween>
-      </Modal>
+        {modalError ? `${modalError} ` : ""}Deleting this topic also deletes all of its subscriptions. Messages published before deletion may still be delivered.
+      </ConfirmActionModal>
     </SpaceBetween>
   );
 };

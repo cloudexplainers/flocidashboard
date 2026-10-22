@@ -65,7 +65,7 @@ def create_topic(
     fifo: bool = False,
     display_name: str | None = None,
     kms_master_key_id: str | None = None,
-    content_based_deduplication: bool = True,
+    content_based_deduplication: bool = False,
 ) -> dict[str, Any]:
     clean_name = (name or '').strip()
     if not clean_name:
@@ -131,8 +131,10 @@ def subscribe(
             raise ValueError('Filter policy must be a JSON object')
         if filter_policy_scope not in ('MessageAttributes', 'MessageBody'):
             raise ValueError('Filter policy scope must be MessageAttributes or MessageBody')
-        attributes['FilterPolicy'] = json.dumps(policy)
-        attributes['FilterPolicyScope'] = filter_policy_scope
+        # An empty policy means "no filtering"; the console omits the attribute in that case.
+        if policy:
+            attributes['FilterPolicy'] = json.dumps(policy)
+            attributes['FilterPolicyScope'] = filter_policy_scope
     if raw_message_delivery and clean_proto not in ('sqs', 'http', 'https', 'firehose'):
         raise ValueError('Raw message delivery is not available for this protocol')
 

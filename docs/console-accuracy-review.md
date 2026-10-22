@@ -143,3 +143,18 @@ Left as is:
 Left as is:
 - Editing queue attributes, access policy, redrive policy and starting a DLQ redrive have backend routes (`/attributes/`, `/redrive/`) but no editors in this console.
 
+## SNS
+
+This console was already close to the AWS console: it reads real attributes, distinguishes pending and confirmed subscriptions, and says that a publish is not proof of delivery.
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | FIFO topics were created with content-based deduplication on (both in the form and in the backend default). AWS leaves it off. | Fixed in both places. |
+| Medium | Creating a subscription with the default `{}` filter policy stored an explicit empty `FilterPolicy` and `FilterPolicyScope`. | Fixed: an empty policy is omitted, as the console does. |
+| Medium | Delete topic used a plain confirmation. | Fixed: typed "delete me", as in the console. |
+| Low | Encryption showed "Not configured" and content-based deduplication showed raw `true/false` for standard topics; labels used Title Case. | Fixed: Enabled/Disabled, "-" for standard topics, topic owner, console wording in the create, subscribe and publish dialogs. |
+
+Left as is:
+- Floci accepts email, SMS and HTTP(S) subscriptions but does not deliver to real inboxes, phones or confirmation URLs; SQS and Lambda subscriptions are delivered. The console does not claim delivery.
+- Editing the topic access policy, delivery policy and data protection policy is not implemented.
+

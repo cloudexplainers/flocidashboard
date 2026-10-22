@@ -2702,9 +2702,9 @@ test('SNS topic and subscription creation use dedicated endpoints and explicit s
   await page.goto('/sns/');
   await page.getByRole('button', { name: 'Create topic', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('textbox', { name: 'Topic name', exact: true }).fill('customer-events');
-  await dialog.getByRole('checkbox', { name: /^FIFO topic/ }).check();
-  await dialog.getByRole('checkbox', { name: 'Content-based deduplication', exact: true }).uncheck();
+  await dialog.getByRole('textbox', { name: 'Name', exact: true }).fill('customer-events');
+  await dialog.getByRole('checkbox', { name: /^FIFO/ }).check();
+  await expect(dialog.getByRole('checkbox', { name: 'Content-based message deduplication', exact: true })).not.toBeChecked();
   await dialog.getByRole('button', { name: 'Create topic', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(requests[0]).toMatchObject({ name: 'customer-events.fifo', fifo: true, content_based_deduplication: false });
@@ -2712,7 +2712,7 @@ test('SNS topic and subscription creation use dedicated endpoints and explicit s
   await page.getByRole('tab', { name: 'Subscriptions (2)', exact: true }).click();
   await page.getByRole('button', { name: 'Create subscription', exact: true }).click();
   await dialog.getByRole('textbox', { name: 'Endpoint', exact: true }).fill(messagingQueueArn);
-  await dialog.getByRole('textbox', { name: 'Filter policy (JSON)', exact: true }).fill('{"kind":["order"]}');
+  await dialog.getByRole('textbox', { name: 'Subscription filter policy - optional', exact: true }).fill('{"kind":["order"]}');
   await dialog.getByRole('checkbox', { name: /^Raw message delivery/ }).check();
   await dialog.getByRole('button', { name: 'Create subscription', exact: true }).click();
   await expect(dialog).toHaveCount(0);
