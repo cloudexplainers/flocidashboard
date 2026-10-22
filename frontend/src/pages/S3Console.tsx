@@ -802,7 +802,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                     header={
                       <Header
                         variant="h3"
-                        counter={listing ? `(${listing.folders.length + listing.objects.length})` : undefined}
+                        counter={listing ? `(${(listing.folders || []).length + (listing.objects || []).length})` : undefined}
                         description="Objects are the fundamental entities stored in Amazon S3. Prefixes ending in / are shown as folders."
                         actions={
                           <SpaceBetween direction="horizontal" size="xs">

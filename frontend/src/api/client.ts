@@ -748,17 +748,29 @@ export async function testApiGatewayRequest(apiId: string, path: string, method:
 }
 
 // SSM Parameter Store Deepening APIs
-// EC2 Networking & Security Groups APIs
+// EC2 instance, networking and security group APIs
+export async function launchEc2Instance(request: {
+  image_id: string;
+  instance_type: string;
+  subnet_id?: string;
+  security_group_ids?: string[];
+  key_name?: string;
+  tags?: Record<string, string>;
+}): Promise<{ instance_id: string | null; reservation_id?: string }> {
+  return requestJson('/api/ec2/instances/', { method: 'POST', json: request, errorMessage: 'Failed to launch instance' });
+}
+
+/** StartInstances, StopInstances, RebootInstances or TerminateInstances for one instance. */
+export async function changeEc2InstanceState(instanceId: string, action: 'start' | 'stop' | 'reboot' | 'terminate'): Promise<any> {
+  return requestJson(`/api/ec2/instances/${encodeURIComponent(instanceId)}/${action}/`, { method: 'POST', errorMessage: `Failed to ${action} instance` });
+}
+
 export async function createEc2Vpc(cidrBlock: string, name?: string): Promise<any> {
   return requestJson('/api/ec2/vpcs/', { method: 'POST', json: { cidr_block: cidrBlock, name }, errorMessage: 'Failed to create VPC' });
 }
 
 export async function deleteEc2Vpc(vpcId: string): Promise<any> {
-  const res = await fetch(`/api/ec2/vpcs/${encodeURIComponent(vpcId)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`/api/ec2/vpcs/${encodeURIComponent(vpcId)}/`, { method: 'DELETE', errorMessage: 'Failed to delete VPC' });
 }
 
 export async function createEc2Subnet(vpcId: string, cidrBlock: string, az?: string, name?: string): Promise<any> {
@@ -770,11 +782,7 @@ export async function createEc2Subnet(vpcId: string, cidrBlock: string, az?: str
 }
 
 export async function deleteEc2Subnet(subnetId: string): Promise<any> {
-  const res = await fetch(`/api/ec2/subnets/${encodeURIComponent(subnetId)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`/api/ec2/subnets/${encodeURIComponent(subnetId)}/`, { method: 'DELETE', errorMessage: 'Failed to delete subnet' });
 }
 
 export async function createEc2SecurityGroup(name: string, description: string, vpcId: string): Promise<any> {
@@ -786,27 +794,38 @@ export async function createEc2SecurityGroup(name: string, description: string, 
 }
 
 export async function deleteEc2SecurityGroup(groupId: string): Promise<any> {
-  const res = await fetch(`/api/ec2/security-groups/${encodeURIComponent(groupId)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`/api/ec2/security-groups/${encodeURIComponent(groupId)}/`, { method: 'DELETE', errorMessage: 'Failed to delete security group' });
 }
 
-export async function changeEc2SecurityGroupRule(groupId: string, direction: 'ingress' | 'egress', rule: any, revoke: boolean = false): Promise<any> {
+export interface Ec2RuleRequest {
+  protocol: string;
+  from_port?: number;
+  to_port?: number;
+  cidr: string;
+  description?: string;
+}
+
+/** AuthorizeSecurityGroupIngress/Egress, or the matching Revoke call when revoke is true. */
+export async function changeEc2SecurityGroupRule(groupId: string, direction: 'ingress' | 'egress', rule: Ec2RuleRequest, revoke: boolean = false): Promise<any> {
   return requestJson(`/api/ec2/security-groups/${encodeURIComponent(groupId)}/rules/`, {
-    method: 'POST',
-    json: { direction, rule, revoke },
-    errorMessage: 'Failed to update security group rule',
+    method: revoke ? 'DELETE' : 'POST',
+    json: { direction, rule },
+    errorMessage: `Failed to ${revoke ? 'remove' : 'add'} security group rule`,
   });
 }
 
-export async function runEc2InstanceCommand(instanceId: string, command: string): Promise<any> {
+/** SSM SendCommand with the AWS-RunShellScript document. */
+export async function runEc2InstanceCommand(instanceId: string, command: string): Promise<{ command_id: string; status: string }> {
   return requestJson(`/api/ec2/instances/${encodeURIComponent(instanceId)}/commands/`, {
     method: 'POST',
     json: { command },
     errorMessage: 'Failed to execute SSM command on instance',
   });
+}
+
+/** SSM GetCommandInvocation for one instance. */
+export async function fetchEc2CommandInvocation(instanceId: string, commandId: string): Promise<{ status: string; status_details?: string; response_code?: number; stdout: string; stderr: string }> {
+  return requestJson(`/api/ec2/instances/${encodeURIComponent(instanceId)}/commands/${encodeURIComponent(commandId)}/`, { errorMessage: 'Failed to read command output' });
 }
 
 // Resource Graph APIs
