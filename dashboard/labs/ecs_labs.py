@@ -326,11 +326,11 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
         },
         'run-task': {
             'verified': task_ok,
-            'verification': {'status': 'passed', 'message': f'Standalone Fargate task running.'} if task_ok else None,
+            'verification': {'status': 'passed', 'message': 'Standalone Fargate task running.'} if task_ok else None,
         },
         'describe-tasks': {
             'verified': task_ok,
-            'verification': {'status': 'passed', 'message': f'Container health and task status inspected.'} if task_ok else None,
+            'verification': {'status': 'passed', 'message': 'Container health and task status inspected.'} if task_ok else None,
         },
         'create-service': {
             'verified': svc_ok,
@@ -338,7 +338,7 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
         },
         'update-service': {
             'verified': scaled_ok,
-            'verification': {'status': 'passed', 'message': f'ECS service scaled to 4 replicas.'} if scaled_ok else None,
+            'verification': {'status': 'passed', 'message': 'ECS service scaled to 4 replicas.'} if scaled_ok else None,
         },
     }
 

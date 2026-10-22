@@ -275,7 +275,7 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
         },
         'describe-cluster': {
             'verified': cluster_ok,
-            'verification': {'status': 'passed', 'message': f'EKS endpoint and CA inspected.'} if cluster_ok else None,
+            'verification': {'status': 'passed', 'message': 'EKS endpoint and CA inspected.'} if cluster_ok else None,
         },
         'create-nodegroup': {
             'verified': ng_ok,

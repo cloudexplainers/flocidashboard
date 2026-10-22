@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import ClientError
 
 from .aws import FlociClientFactory, _clean_response, _error_code, _paginate
 from .aws.s3 import _s3_bucket_location, _s3_bucket_objects, _s3_bucket_versions, _s3_optional

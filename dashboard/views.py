@@ -166,7 +166,7 @@ def labs_catalog(request):
     labs = all_labs()
     service_hint = request.GET.get('service')
     if service_hint:
-        labs = [l for l in labs if l.get('service') == service_hint]
+        labs = [lab for lab in labs if lab.get('service') == service_hint]
 
     services_map: dict[str, list[dict]] = {}
     for lab in labs:

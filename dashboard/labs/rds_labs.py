@@ -258,7 +258,7 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
         },
         'modify-db-instance': {
             'verified': mod_ok,
-            'verification': {'status': 'passed', 'message': f'DB Instance storage scaled to 40 GB.'} if mod_ok else None,
+            'verification': {'status': 'passed', 'message': 'DB Instance storage scaled to 40 GB.'} if mod_ok else None,
         },
         'reboot-db-instance': {
             'verified': reb_ok,

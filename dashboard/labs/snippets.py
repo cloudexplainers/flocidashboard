@@ -76,12 +76,12 @@ def _parse_cli_command(cmd_line: str) -> dict[str, Any] | None:
 
 def generate_boto3_snippet(command: str, service_hint: str = '') -> str:
     """Generate an idiomatic Python boto3 snippet for an AWS CLI command or pipeline."""
-    lines = [l.strip() for l in command.strip().split('\n') if l.strip()]
+    lines = [line.strip() for line in command.strip().split('\n') if line.strip()]
 
     # If multi-line script or compound command
     if len(lines) > 1:
         # Check if lines are multiple aws commands
-        parsed_cmds = [_parse_cli_command(l) for l in lines if l.startswith('aws ')]
+        parsed_cmds = [_parse_cli_command(line) for line in lines if line.startswith('aws ')]
         if parsed_cmds and all(p is not None for p in parsed_cmds):
             services_used = sorted({p['service'].replace('s3api', 's3') for p in parsed_cmds if p})
             out = ['import boto3\n']
@@ -274,10 +274,10 @@ def generate_terraform_snippet(command: str, service_hint: str = '') -> str:
     # KMS
     if svc == 'kms' and 'create-key' in op:
         return (
-            f'resource "aws_kms_key" "lab_key" {{\n'
-            f'  description             = "Floci lab customer master key"\n'
-            f'  deletion_window_in_days = 7\n'
-            f'}}\n'
+            'resource "aws_kms_key" "lab_key" {\n'
+            '  description             = "Floci lab customer master key"\n'
+            '  deletion_window_in_days = 7\n'
+            '}\n'
         )
 
     # SSM

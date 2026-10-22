@@ -255,7 +255,7 @@ EC2_SECURITY_CONTROLS_LAB = {
         {
             'key': 'allow-trusted-https',
             'title': 'Allow HTTPS from trusted clients',
-            'command': f'aws ec2 authorize-security-group-ingress --group-id <web-sg-id> --ip-permissions file://trusted-https.json',
+            'command': 'aws ec2 authorize-security-group-ingress --group-id <web-sg-id> --ip-permissions file://trusted-https.json',
             'explanation': 'Allows TCP 443 only from the documentation CIDR 203.0.113.0/24.',
             'artifact_label': 'trusted-https.json',
             'artifact': json.dumps([{
@@ -447,7 +447,7 @@ EC2_SQS_INTERFACE_ENDPOINT_LAB = {
         {
             'key': 'inspect-private-sqs-path',
             'title': 'Inspect the private SQS path',
-            'command': f'aws ec2 describe-vpc-endpoints --vpc-endpoint-ids <endpoint-id>\naws ec2 describe-network-interfaces --network-interface-ids <eni-id>\naws sqs get-queue-attributes --queue-url <queue-url> --attribute-names QueueArn',
+            'command': 'aws ec2 describe-vpc-endpoints --vpc-endpoint-ids <endpoint-id>\naws ec2 describe-network-interfaces --network-interface-ids <eni-id>\naws sqs get-queue-attributes --queue-url <queue-url> --attribute-names QueueArn',
             'explanation': 'Checks endpoint subnet placement, security groups, private DNS, endpoint ENIs, and the queue protected by the endpoint policy.',
         },
     ],

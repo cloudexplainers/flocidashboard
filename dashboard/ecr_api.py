@@ -271,31 +271,31 @@ def get_push_commands(
 
     commands = {
         'mac_linux': [
-            f'# 1. Retrieve an authentication token and authenticate your Docker client to your registry.',
+            '# 1. Retrieve an authentication token and authenticate your Docker client to your registry.',
             f'aws ecr get-login-password --region {region} | docker login --username AWS --password-stdin {endpoint_url}',
-            f'# 2. Build your Docker image using the following command.',
+            '# 2. Build your Docker image using the following command.',
             f'docker build -t {repo} .',
-            f'# 3. After the build completes, tag your image so you can push the image to this repository.',
+            '# 3. After the build completes, tag your image so you can push the image to this repository.',
             f'docker tag {repo}:latest {registry_uri}:latest',
-            f'# 4. Run the following command to push this image to your newly created AWS repository.',
+            '# 4. Run the following command to push this image to your newly created AWS repository.',
             f'docker push {registry_uri}:latest',
         ],
         'windows_powershell': [
-            f'# 1. Authenticate Docker client',
+            '# 1. Authenticate Docker client',
             f'(Get-ECRLoginCommand).Password | docker login --username AWS --password-stdin {endpoint_url}',
-            f'# 2. Build image',
+            '# 2. Build image',
             f'docker build -t {repo} .',
-            f'# 3. Tag image',
+            '# 3. Tag image',
             f'docker tag {repo}:latest {registry_uri}:latest',
-            f'# 4. Push image',
+            '# 4. Push image',
             f'docker push {registry_uri}:latest',
         ],
         'podman': [
-            f'# 1. Authenticate Podman client',
+            '# 1. Authenticate Podman client',
             f'aws ecr get-login-password --region {region} | podman login -u AWS --password-stdin {endpoint_url}',
-            f'# 2. Build image',
+            '# 2. Build image',
             f'podman build -t {repo} .',
-            f'# 3. Tag and push',
+            '# 3. Tag and push',
             f'podman tag {repo}:latest {registry_uri}:latest',
             f'podman push {registry_uri}:latest',
         ],
@@ -349,7 +349,7 @@ def put_mock_image(
     try:
         response = _client().put_image(**kwargs)
         image_data = _clean_response(response.get('image', {}))
-    except Exception as exc:
+    except Exception:
         digest = image_digest or ('sha256:' + hashlib.sha256(f'{repo}:{clean_tag}'.encode()).hexdigest())
         image_data = {
             'repositoryName': repo,

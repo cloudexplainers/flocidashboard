@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from typing import Any, Callable
+from typing import Any
 
 from botocore.exceptions import ClientError
 from django.core.cache import cache

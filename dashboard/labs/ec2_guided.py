@@ -409,7 +409,7 @@ def _userdata_verify_file() -> dict[str, Any]:
 def _userdata_confirm_status() -> dict[str, Any]:
     started = time.perf_counter()
     instance_id = _get_or_launch_instance('guided-userdata', user_data=USERDATA_SCRIPT)
-    invocation = _require_success(_execute(instance_id, "test -f /tmp/floci-userdata.txt && echo 'artifact-confirmed'"), 'artifact-confirmed')
+    _require_success(_execute(instance_id, "test -f /tmp/floci-userdata.txt && echo 'artifact-confirmed'"), 'artifact-confirmed')
     return _step_result('guided-userdata', 'verify-script-execution', 'aws ssm send-command ... test -f', {'instance_id': instance_id, 'status': 'confirmed'}, True, 'UserData initialization confirmed.', started)
 
 
