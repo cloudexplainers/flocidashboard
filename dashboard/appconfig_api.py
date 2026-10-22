@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .aws import FlociClientFactory, _appconfig_content_preview, _clean_response
+from .aws import FlociClientFactory, _clean_response
+from .aws.appconfig import _appconfig_content_preview
 
 
 def _client():
