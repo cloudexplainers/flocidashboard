@@ -21,6 +21,10 @@ def neptune_inventory() -> dict[str, Any]:
         lambda: core._operation_items(neptune, 'describe_db_instances', 'DBInstances'),
         [],
     ) if 'DescribeDBInstances' in operations else []
+    # DescribeDBClusters/Instances return every RDS-family resource (RDS, Neptune,
+    # DocumentDB share one API). The neptune console lists only engine "neptune".
+    clusters = [item for item in clusters if item.get('Engine') == 'neptune']
+    instances = [item for item in instances if item.get('Engine') == 'neptune']
     subnet_groups = _safe_value(
         lambda: core._operation_items(neptune, 'describe_db_subnet_groups', 'DBSubnetGroups'),
         [],
@@ -29,6 +33,7 @@ def neptune_inventory() -> dict[str, Any]:
         lambda: core._operation_items(neptune, 'describe_db_cluster_snapshots', 'DBClusterSnapshots'),
         [],
     ) if 'DescribeDBClusterSnapshots' in operations else []
+    cluster_snapshots = [item for item in cluster_snapshots if item.get('Engine') == 'neptune']
 
     return {
         'summary': {
@@ -81,6 +86,7 @@ def list_neptune_resources(factory: core.FlociClientFactory) -> list[dict[str, A
                 'status': cluster.get('Status'),
             }
             for cluster in _safe_value(lambda: core._operation_items(neptune, 'describe_db_clusters', 'DBClusters'), [])
+            if cluster.get('Engine') == 'neptune'
         )
 
     if 'DescribeDBInstances' in operations:
@@ -92,6 +98,7 @@ def list_neptune_resources(factory: core.FlociClientFactory) -> list[dict[str, A
                 'status': instance.get('DBInstanceStatus'),
             }
             for instance in _safe_value(lambda: core._operation_items(neptune, 'describe_db_instances', 'DBInstances'), [])
+            if instance.get('Engine') == 'neptune'
         )
 
     return resources

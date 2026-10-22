@@ -43,3 +43,25 @@ class ManualPaginationTests(SimpleTestCase):
         client.list_things.return_value = {'items': [1], 'NextToken': 'same'}
 
         self.assertEqual(_paginate(client, 'list_things', 'items'), [1, 1])
+
+
+class RdsFamilyEngineFilterTests(SimpleTestCase):
+    def test_neptune_inventory_lists_only_neptune_clusters(self):
+        from unittest.mock import patch
+
+        from dashboard.aws.neptune import neptune_inventory
+
+        client = MagicMock()
+        client.meta.service_model.operation_names = ['DescribeDBClusters', 'DescribeDBInstances']
+        client.can_paginate.return_value = False
+        client.describe_db_clusters.return_value = {'DBClusters': [
+            {'DBClusterIdentifier': 'graph', 'Engine': 'neptune'},
+            {'DBClusterIdentifier': 'docs', 'Engine': 'docdb'},
+            {'DBClusterIdentifier': 'aurora', 'Engine': 'aurora-postgresql'},
+        ]}
+        client.describe_db_instances.return_value = {'DBInstances': []}
+        with patch('dashboard.aws.FlociClientFactory') as factory:
+            factory.return_value.client.return_value = client
+            result = neptune_inventory()
+
+        self.assertEqual([item['DBClusterIdentifier'] for item in result['clusters']], ['graph'])
