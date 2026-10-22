@@ -19,6 +19,21 @@ class S3BucketsApiTests(SimpleTestCase):
         self.assertIn('error', response.json())
         self.assertEqual(response.json()['service'], 's3')
 
+    @patch('dashboard.s3_views.upload_s3_object')
+    def test_json_upload_serializes_non_string_body(self, upload_mock):
+        upload_mock.return_value = {'key': 'data.json'}
+
+        response = self.client.post(
+            reverse('dashboard:s3-bucket-objects', args=['demo-bucket']),
+            data=json.dumps({'key': 'data.json', 'body': {'hello': 'world'}}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        upload_mock.assert_called_once_with(
+            'demo-bucket', 'data.json', b'{"hello": "world"}', 'text/plain; charset=utf-8',
+        )
+
     @patch('dashboard.s3_views.list_s3_buckets')
     def test_list_buckets(self, list_mock):
         list_mock.return_value = [{'name': 'a', 'region': 'us-east-1', 'created': None}]
