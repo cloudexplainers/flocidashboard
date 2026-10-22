@@ -609,6 +609,16 @@ export async function createLambdaFunction(request: { name: string; role: string
   });
 }
 
+/** The function's package files (text files with content) from GetFunction's Code.Location. */
+export async function fetchLambdaSource(functionName: string): Promise<any> {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/source/`, { errorMessage: 'Unable to load the function code' });
+}
+
+/** UpdateFunctionCode with the edited files replaced in the current package. */
+export async function deployLambdaSource(functionName: string, files: Record<string, string>): Promise<any> {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/source/`, { method: 'PUT', json: { files }, errorMessage: 'Deploy failed' });
+}
+
 export async function deleteLambdaFunction(functionName: string): Promise<any> {
   return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/`, { method: 'DELETE', errorMessage: 'Failed to delete function' });
 }

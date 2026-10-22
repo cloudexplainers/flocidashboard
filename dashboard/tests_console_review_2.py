@@ -147,3 +147,61 @@ class S3VersionListingTests(SimpleTestCase):
         client.return_value.list_object_versions.assert_called_once_with(Bucket='bucket', MaxKeys=100, Delimiter='/')
         self.assertEqual(result['folders'], [{'prefix': 'docs/', 'name': 'docs'}])
         self.assertEqual([item['version_id'] for item in result['objects']], ['m1', 'v1'])
+
+
+class LambdaSourceTests(SimpleTestCase):
+    def _package(self, files):
+        import io
+        import zipfile
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            for name, content in files.items():
+                archive.writestr(name, content)
+        return buffer.getvalue()
+
+    def test_deploy_replaces_only_the_edited_file(self):
+        import io
+        import zipfile
+        from unittest.mock import patch
+
+        from dashboard import lambda_api
+
+        package = self._package({'app.py': 'old', 'lib/helper.py': 'keep', 'bin/tool': b'\x00\x01'})
+        with patch.object(lambda_api, '_download_package', return_value=({}, package)), patch.object(lambda_api, '_lambda_client') as client:
+            client.return_value.update_function_code.return_value = {'LastUpdateStatus': 'Successful'}
+            lambda_api.deploy_function_source('worker', {'app.py': 'new'})
+
+        sent = zipfile.ZipFile(io.BytesIO(client.return_value.update_function_code.call_args.kwargs['ZipFile']))
+        self.assertEqual(sent.read('app.py'), b'new')
+        self.assertEqual(sent.read('lib/helper.py'), b'keep')
+        self.assertEqual(sent.read('bin/tool'), b'\x00\x01')
+
+    def test_source_marks_binary_files_read_only_and_finds_the_handler_file(self):
+        from unittest.mock import patch
+
+        from dashboard import lambda_api
+
+        package = self._package({'app.py': 'def handler(e, c): pass', 'native.so': b'\xff\xfe'})
+        with patch.object(lambda_api, '_download_package', return_value=({'Handler': 'app.handler'}, package)):
+            source = lambda_api.get_function_source('worker')
+
+        self.assertEqual(source['handler_file'], 'app.py')
+        self.assertEqual({item['name']: item['editable'] for item in source['files']}, {'app.py': True, 'native.so': False})
+
+    def test_download_uses_only_the_location_path_on_the_configured_endpoint(self):
+        from unittest.mock import MagicMock, patch
+
+        from dashboard import lambda_api
+
+        client = MagicMock()
+        client.get_function.return_value = {'Configuration': {}, 'Code': {'Location': 'http://attacker.example/pkg/worker?sig=1'}}
+        response = MagicMock()
+        response.__enter__.return_value.read.return_value = b'zip'
+        with patch.object(lambda_api, '_lambda_client', return_value=client), \
+                patch.object(lambda_api, 'FlociClientFactory') as factory, \
+                patch.object(lambda_api.urllib.request, 'urlopen', return_value=response) as urlopen:
+            factory.return_value.endpoint_url = 'http://floci:4566'
+            lambda_api._download_package('worker')
+
+        self.assertEqual(urlopen.call_args.args[0], 'http://floci:4566/pkg/worker?sig=1')

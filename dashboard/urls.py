@@ -476,6 +476,7 @@ urlpatterns = [
     path('api/lambda/functions/', lambda_views.lambda_functions_create, name='lambda-functions'),
     path('api/lambda/functions/<str:function_name>/', lambda_views.lambda_function_detail, name='lambda-function-detail'),
     path('api/lambda/functions/<str:function_name>/code/', lambda_views.lambda_function_code, name='lambda-function-code'),
+    path('api/lambda/functions/<str:function_name>/source/', lambda_views.lambda_function_source, name='lambda-function-source'),
     path('api/lambda/functions/<str:function_name>/invoke/', lambda_views.lambda_functions_invoke, name='lambda-functions-invoke'),
     path('api/lambda/functions/<str:function_name>/versions/', lambda_views.lambda_function_versions, name='lambda-function-versions'),
     path('api/lambda/functions/<str:function_name>/aliases/', lambda_views.lambda_function_aliases, name='lambda-function-aliases'),

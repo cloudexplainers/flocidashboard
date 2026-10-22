@@ -12,6 +12,7 @@ from .lambda_api import (
     invoke_function, invoke_function_url, list_aliases, list_event_source_mappings,
     list_versions, publish_version, remove_permission, save_alias,
     save_event_source_mapping, save_function_url, set_concurrency,
+    deploy_function_source, get_function_source,
     update_function_code, update_function_configuration, update_tags,
 )
 
@@ -38,6 +39,17 @@ def lambda_function_detail(request, function_name: str):
         return JsonResponse(update_function_configuration(function_name, parse_json_body(request).get('configuration')))
     except Exception as exc:
         return _error(exc, 'delete_function' if request.method == 'DELETE' else 'update_function_configuration')
+
+
+@require_http_methods(['GET', 'PUT'])
+def lambda_function_source(request, function_name: str):
+    try:
+        if request.method == 'GET':
+            return JsonResponse(get_function_source(function_name))
+        body = parse_json_body(request)
+        return JsonResponse(deploy_function_source(function_name, body.get('files')))
+    except Exception as exc:
+        return _error(exc, 'get_function' if request.method == 'GET' else 'update_function_code')
 
 
 @require_http_methods(['PUT'])

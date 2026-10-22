@@ -919,6 +919,27 @@ test('S3 missing bucket link does not expose another bucket details', async ({ p
   await expect(page.getByRole('heading', { name: 'Bucket: available-bucket', exact: true })).toHaveCount(0);
 });
 
+test('Lambda code source edits a package file and deploys only changed files', async ({ page }) => {
+  await inventory(page, 'lambda', { functions: [{ FunctionName: 'worker', Runtime: 'python3.12', Handler: 'app.handler', State: 'Active' }] });
+  let deployed: any = null;
+  await page.route('**/api/lambda/functions/worker/source/', route => {
+    if (route.request().method() === 'PUT') { deployed = route.request().postDataJSON(); return route.fulfill({ json: { last_update_status: 'Successful' } }); }
+    return route.fulfill({ json: { handler_file: 'app.py', files: [
+      { name: 'app.py', size: 40, editable: true, content: 'def handler(event, context):\n    return 1\n' },
+      { name: 'lib/native.so', size: 9000, editable: false },
+    ] } });
+  });
+  await page.goto('/lambda/code?function=worker');
+  const editor = page.getByLabel('Code for app.py', { exact: true });
+  await expect(editor).toHaveValue(/return 1/);
+  await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeDisabled();
+  await editor.fill('def handler(event, context):\n    return 2\n');
+  await expect(page.getByText('Changes not deployed', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Deploy', exact: true }).click();
+  await expect.poll(() => deployed).toEqual({ files: { 'app.py': 'def handler(event, context):\n    return 2\n' } });
+  await expect(page.getByText('Successfully updated the function worker.', { exact: true })).toBeVisible();
+});
+
 test('Lambda function links retain context and show actual execution state', async ({ page }) => {
   await inventory(page, 'lambda', { functions: [{ FunctionName: 'first-worker' }, { FunctionName: 'failed-worker', Runtime: 'python3.12', State: 'Failed', StateReason: 'Execution role unavailable', LastUpdateStatus: 'Failed', Role: 'arn:aws:iam::123456789012:role/worker' }] });
   await page.goto('/lambda/code?function=failed-worker');
