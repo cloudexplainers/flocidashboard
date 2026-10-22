@@ -997,81 +997,6 @@ def secretsmanager_inventory() -> dict[str, Any]:
     }
 
 
-def pricing_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    pricing = factory.client('pricing')
-    operations = set(pricing.meta.service_model.operation_names)
-
-    services = _safe_value(
-        lambda: _paginate(pricing, 'describe_services', 'Services'),
-        [],
-    ) if 'DescribeServices' in operations else []
-    service_details = [
-        {
-            'name': service.get('ServiceCode'),
-            'service_code': service.get('ServiceCode'),
-            'attribute_names': service.get('AttributeNames', []),
-            'attribute_count': len(service.get('AttributeNames', [])),
-        }
-        for service in services
-    ]
-
-    attribute_values = []
-    for service in service_details[:10]:
-        service_code = service.get('service_code')
-        for attribute_name in service.get('attribute_names', [])[:5]:
-            values = _safe_value(
-                lambda service_code=service_code, attribute_name=attribute_name: _paginate(
-                    pricing,
-                    'get_attribute_values',
-                    'AttributeValues',
-                    ServiceCode=service_code,
-                    AttributeName=attribute_name,
-                ),
-                [],
-            ) if service_code and 'GetAttributeValues' in operations else []
-            attribute_values.append({
-                'name': f'{service_code}.{attribute_name}',
-                'service_code': service_code,
-                'attribute_name': attribute_name,
-                'values': values[:25],
-                'value_count': len(values),
-            })
-
-    price_lists = _safe_value(
-        lambda: _paginate(pricing, 'list_price_lists', 'PriceLists', ServiceCode='AmazonS3'),
-        [],
-    ) if 'ListPriceLists' in operations else []
-
-    return {
-        'summary': {
-            'services': len(service_details),
-            'attribute_value_samples': len(attribute_values),
-            'price_lists': len(price_lists),
-            'available_sdk_operations': len(operations),
-        },
-        'services': service_details,
-        'attribute_values': attribute_values,
-        'price_lists': _clean_response(price_lists),
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'DescribeServices',
-                'GetAttributeValues',
-                'GetProducts',
-                'ListPriceLists',
-                'GetPriceListFileUrl',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.15 adds AWS Price List service support under the pricing service name.',
-            'Attribute values are sampled from the first 10 services and first 5 attributes per service to keep page loads bounded.',
-        ],
-    }
-
-
 def resourcegroupstagging_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     tagging = factory.client('resourcegroupstaggingapi')
@@ -2828,23 +2753,6 @@ def list_transfer_resources(factory: FlociClientFactory) -> list[dict[str, Any]]
     return resources
 
 
-def list_pricing_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    pricing = factory.client('pricing')
-    operations = set(pricing.meta.service_model.operation_names)
-
-    if 'DescribeServices' not in operations:
-        return []
-
-    return [
-        {
-            'type': 'pricing_service',
-            'name': service.get('ServiceCode'),
-            'attribute_count': len(service.get('AttributeNames', [])),
-        }
-        for service in _safe_value(lambda: _paginate(pricing, 'describe_services', 'Services'), [])
-    ]
-
-
 def list_wafv2_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     wafv2 = factory.client('wafv2')
     operations = set(wafv2.meta.service_model.operation_names)
@@ -3061,7 +2969,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('kafka-resources', 'MSK / Kafka resources', kafka.list_kafka_resources),
         ('opensearch-resources', 'OpenSearch resources', opensearch.list_opensearch_resources),
         ('pipes-resources', 'EventBridge Pipes resources', pipes.list_pipes_resources),
-        ('pricing-resources', 'AWS Price List resources', list_pricing_resources),
+        ('pricing-resources', 'AWS Price List resources', pricing.list_pricing_resources),
         ('costexplorer-resources', 'Cost Explorer resources', costexplorer.list_costexplorer_resources),
         ('cur-resources', 'Cost and Usage Reports', cur.list_cur_resources),
         ('bcmdataexports-resources', 'BCM Data Exports', bcmdataexports.list_bcmdataexports_resources),
@@ -3168,6 +3076,7 @@ from . import (  # noqa: E402
     neptune,
     opensearch,
     pipes,
+    pricing,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -3217,4 +3126,5 @@ from .memorydb import memorydb_inventory  # noqa: E402
 from .neptune import neptune_inventory  # noqa: E402
 from .opensearch import opensearch_inventory  # noqa: E402
 from .pipes import pipes_inventory  # noqa: E402
+from .pricing import pricing_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
