@@ -388,6 +388,7 @@ test('API Gateway route tests and create/delete send the backend contract', asyn
   await page.getByRole('button', { name: 'Delete API', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Orders HTTP (http-review)');
   expect(deletePayload).toBeUndefined();
+  await page.getByRole('dialog').getByLabel('Confirmation text').fill('confirm');
   await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect.poll(() => deletePayload).toMatchObject({ api_id: 'http-review', api_type: 'http' });
   await page.getByRole('button', { name: 'Create API', exact: true }).click();

@@ -171,3 +171,16 @@ Already accurate in substance: alarms, metrics, log groups and streams all come 
 Left as is:
 - Dashboards, composite alarms, anomaly detection and Logs Insights queries are not in this console (Floci supports Logs Insights).
 
+## API Gateway
+
+Already accurate: REST and HTTP APIs, routes/resources, integrations, stages and deployments come from the API, and the test console sends real requests through Floci.
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Medium | The stage invoke URL was built from the dashboard's internal endpoint, so in Docker it pointed at `http://floci:4566`. | Fixed: built from `FLOCI_PUBLIC_ENDPOINT_URL`. The AWS-style `api_endpoint` (`*.execute-api.<region>.amazonaws.com`) is shown as reported, since Floci serves APIs under `/restapis/<id>/<stage>/_user_request_/`. |
+| Medium | Delete API used a plain confirmation. | Fixed: typed "confirm". |
+| Low | Unknown stage counts showed "Unavailable". | Shows "-". |
+
+Left as is:
+- Creating routes, integrations, authorizers and stages is not in this console (create API only); usage plans, API keys and custom domains are listed in the inventory but have no pages.
+

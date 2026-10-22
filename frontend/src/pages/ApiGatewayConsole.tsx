@@ -23,6 +23,7 @@ import {
 } from "../api/client";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
+import ConfirmActionModal from "../components/ConfirmActionModal";
 import { useSession } from "../components/SessionContext";
 import { ApiTestResponse } from "../components/ApiTestResponse";
 import {
@@ -382,7 +383,7 @@ const GatewayWorkspace: React.FC<Props> = ({
               id: "stage_count",
               header: "Stages",
               cell: (item) =>
-                Array.isArray(item.stages) ? item.stages.length : "Unavailable",
+                Array.isArray(item.stages) ? item.stages.length : "-",
             },
           ]}
           empty={empty(
@@ -1112,56 +1113,29 @@ const GatewayWorkspace: React.FC<Props> = ({
           </FormField>
         </SpaceBetween>
       </Modal>
-      <Modal
+      <ConfirmActionModal
         visible={deleteOpen}
+        header={`Delete API ${deleteTarget?.name || ""}`}
+        confirmLabel="Delete"
+        confirmationText="confirm"
+        loading={busy}
         onDismiss={() => {
           if (!busy) setDeleteOpen(false);
         }}
-        header={`Delete API ${deleteTarget?.name || ""}`}
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button disabled={busy} onClick={() => setDeleteOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={busy}
-                disabled={!deleteTarget}
-                onClick={() =>
-                  run(async () => {
-                    if (!deleteTarget) return;
-                    await deleteApiGatewayApi(
-                      deleteTarget.id,
-                      deleteTarget.api_type,
-                    );
-                    if (!mounted.current) return;
-                    setDeleteOpen(false);
-                    backToList();
-                    await load();
-                    setNotice({
-                      type: "success",
-                      text: `API "${deleteTarget.name}" deleted.`,
-                    });
-                  })
-                }
-              >
-                Delete
-              </Button>
-            </SpaceBetween>
-          </Box>
+        onConfirm={() =>
+          run(async () => {
+            if (!deleteTarget) return;
+            await deleteApiGatewayApi(deleteTarget.id, deleteTarget.api_type);
+            if (!mounted.current) return;
+            setDeleteOpen(false);
+            backToList();
+            await load();
+            setNotice({ type: "success", text: `API "${deleteTarget.name}" deleted.` });
+          })
         }
       >
-        <SpaceBetween size="m">
-          {notice?.type === "error" && (
-            <Alert type="error">{notice.text}</Alert>
-          )}
-          <Alert type="warning">
-            Delete {deleteTarget?.name} ({deleteTarget?.id}) and its routes,
-            integrations, stages, and deployments?
-          </Alert>
-        </SpaceBetween>
-      </Modal>
+        {notice?.type === "error" ? `${notice.text} ` : ""}Deleting {deleteTarget?.name} ({deleteTarget?.id}) also deletes its routes or resources, integrations, stages and deployments. This can't be undone.
+      </ConfirmActionModal>
     </SpaceBetween>
   );
 };
