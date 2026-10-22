@@ -158,3 +158,16 @@ Left as is:
 - Floci accepts email, SMS and HTTP(S) subscriptions but does not deliver to real inboxes, phones or confirmation URLs; SQS and Lambda subscriptions are delivered. The console does not claim delivery.
 - Editing the topic access policy, delivery policy and data protection policy is not implemented.
 
+## CloudWatch
+
+Already accurate in substance: alarms, metrics, log groups and streams all come from the API, and Floci evaluates alarms (state reasons are real).
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| Low | Alarm states showed raw enum values (`ALARM`, `INSUFFICIENT_DATA`); the console shows "In alarm" and "Insufficient data". | Fixed (the Set state dialog still uses the API values). |
+| Low | The alarm list lacked the console's "Last state update" and "Actions" columns; "Threshold" is called "Conditions". | Fixed. |
+| Low | Stored bytes were raw numbers, and labels used Title Case ("Create Alarm", "Retention Settings", "CloudWatch Log Viewer"). | Fixed. |
+
+Left as is:
+- Dashboards, composite alarms, anomaly detection and Logs Insights queries are not in this console (Floci supports Logs Insights).
+

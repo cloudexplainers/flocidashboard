@@ -321,7 +321,7 @@ test('CloudWatch alarm drill-down retains the selected metric dimensions', async
   await expect(page.getByRole('tab', { name: 'Metrics', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect.poll(() => requests.some(url => url.searchParams.get('namespace') === 'App' && JSON.stringify(JSON.parse(url.searchParams.get('dimensions') || '[]')) === JSON.stringify(dimensions))).toBe(true);
   await expect(page.getByRole('button', { name: /^Metric / })).toContainText('App / Latency');
-  await expect(page.getByRole('button', { name: 'Publish Metric Data', exact: true })).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'Publish metric data', exact: true })).not.toBeVisible();
 });
 
 test('CloudWatch loads stream-specific events, filters them, and exposes retrieval failures', async ({ page }) => {
@@ -569,7 +569,7 @@ test('home provides a connection recovery action and CloudWatch summarizes alarm
   await expect(page).toHaveURL(/\/settings$/);
   await inventory(page, 'cloudwatch', { alarms: [{ AlarmName: 'Latency', StateValue: 'ALARM' }, { AlarmName: 'Availability', StateValue: 'OK' }] });
   await page.goto('/cloudwatch/');
-  await expect(page.getByRole('button', { name: 'ALARM', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'In alarm', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Alarm health', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'OK', exact: true })).toBeVisible();
 });
@@ -2171,14 +2171,14 @@ test('CloudWatch alarm creation preserves zero thresholds and configurable evalu
   await inventory(page, 'cloudwatch', {});
   await page.route('**/api/cloudwatch/alarms/', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: {} }); });
   await page.goto('/cloudwatch/');
-  await page.getByRole('button', { name: 'Create Alarm', exact: true }).click();
+  await page.getByRole('button', { name: 'Create alarm', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByRole('textbox', { name: 'Alarm Name', exact: true }).fill('Zero threshold');
+  await dialog.getByRole('textbox', { name: 'Alarm name', exact: true }).fill('Zero threshold');
   await dialog.getByRole('spinbutton', { name: 'Threshold (Value)', exact: true }).fill('0');
   await dialog.getByRole('spinbutton', { name: 'Evaluation periods', exact: true }).fill('3');
   await dialog.getByRole('spinbutton', { name: 'Datapoints to alarm', exact: true }).fill('2');
   await dialog.getByRole('textbox', { name: 'Dimensions (JSON)', exact: true }).fill('[{"Name":"Service","Value":"worker"}]');
-  await dialog.getByRole('button', { name: 'Create Alarm', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Create alarm', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(requests[0]).toMatchObject({ threshold: 0, evaluation_periods: 3, datapoints_to_alarm: 2, dimensions: [{ Name: 'Service', Value: 'worker' }] });
 });
@@ -2222,15 +2222,15 @@ test('CloudWatch uses log group metadata and removes retention for Never expire'
   await page.route('**/api/cloudwatch/log-streams/create/', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: {} }); });
   await page.goto('/cloudwatch/logs');
   await expect(page.getByText('7 days', { exact: true })).toBeVisible();
-  await expect(page.getByText('1024', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Retention Settings', exact: true }).click();
+  await expect(page.getByText('1.0 KB', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit retention setting', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: /^Retention Period / }).click();
   await page.getByRole('option', { name: 'Never expire', exact: true }).click();
   await dialog.getByRole('button', { name: 'Save Retention', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(requests[0]).toEqual({ method: 'DELETE', log_group_name: '/app/worker' });
-  await page.getByRole('button', { name: 'Create Log Stream', exact: true }).click();
+  await page.getByRole('button', { name: 'Create log stream', exact: true }).click();
   await dialog.getByRole('textbox', { name: 'Log Stream Name', exact: true }).fill('manual-test-stream');
   await dialog.getByRole('button', { name: 'Create Stream', exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -2247,9 +2247,9 @@ test('CloudWatch metric statistic selection requests real Sum samples and publis
   await page.getByRole('button', { name: /^Statistic / }).click();
   await page.getByRole('option', { name: 'Sum', exact: true }).click();
   await expect.poll(() => requests.at(-1)?.searchParams.get('statistic')).toBe('Sum');
-  await page.getByRole('button', { name: 'Publish Custom Metric Data', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish custom metric data', exact: true }).click();
   await page.getByRole('spinbutton', { name: 'Value', exact: true }).fill('0');
-  await page.getByRole('button', { name: 'Publish Metric Data', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish metric data', exact: true }).click();
   await expect.poll(() => published?.value).toBe(0);
   await expect(page.getByRole('button', { name: /^Metric / })).toContainText('App / Errors');
 });

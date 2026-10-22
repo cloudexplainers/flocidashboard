@@ -17,6 +17,7 @@ import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Grid from "@cloudscape-design/components/grid";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Textarea from "@cloudscape-design/components/textarea";
+import { formatBytes } from "../format";
 import { useSession } from "../components/SessionContext";
 import {
   alarmCondition,
@@ -52,6 +53,9 @@ export const CloudWatchConsole: React.FC<CloudWatchConsoleProps> = (props) => {
     />
   );
 };
+/** Alarm states as the CloudWatch console labels them. */
+export const alarmStateLabel = (state?: string) =>
+  state === "ALARM" ? "In alarm" : state === "OK" ? "OK" : state === "INSUFFICIENT_DATA" ? "Insufficient data" : state || "Not reported";
 const AlarmState = ({ state }: { state?: string }) => (
   <StatusIndicator
     type={
@@ -64,7 +68,7 @@ const AlarmState = ({ state }: { state?: string }) => (
             : "not-started"
     }
   >
-    {state || "Not reported"}
+    {alarmStateLabel(state)}
   </StatusIndicator>
 );
 const Detail = ({
@@ -466,7 +470,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                     setCreateModalOpen(true);
                   }}
                 >
-                  Create Alarm
+                  Create alarm
                 </Button>
               </SpaceBetween>
             }
@@ -492,13 +496,13 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
         {!openAlarmName && (
           <div className="console-summary">
             <Box padding="m" textAlign="center">
-              <Box variant="awsui-key-label">Metric Alarms</Box>
+              <Box variant="awsui-key-label">Alarms</Box>
               <Box variant="h1" color="text-status-info">
                 {loading ? "—" : alarmsList.length}
               </Box>
             </Box>
             <Box padding="m" textAlign="center">
-              <Box variant="awsui-key-label">Log Groups</Box>
+              <Box variant="awsui-key-label">Log groups</Box>
               <Box variant="h1" color="text-status-info">
                 {loading ? "—" : logGroups.length}
               </Box>
@@ -538,7 +542,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                     onTabChange?.("alarms");
                   }}
                 >
-                  {state === "all" ? "All alarms" : state}
+                  {state === "all" ? "All alarms" : alarmStateLabel(state)}
                 </Button>
                 <Box variant="h1">
                   {loading
@@ -672,7 +676,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
           }}
           tabs={[
             {
-              label: `Metric Alarms (${alarmsList.length})`,
+              label: `Alarms (${alarmsList.length})`,
               id: "alarms",
               content: (
                 <Container
@@ -681,7 +685,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                       variant="h2"
                       actions={openedAlarm ? undefined : alarmButtons}
                     >
-                      Metric Alarms
+                      Alarms
                     </Header>
                   }
                 >
@@ -692,7 +696,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                         selectedOption={{
                           value: stateFilter,
                           label:
-                            stateFilter === "all" ? "All alarms" : stateFilter,
+                            stateFilter === "all" ? "All alarms" : alarmStateLabel(stateFilter),
                         }}
                         options={[
                           "all",
@@ -701,7 +705,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                           "INSUFFICIENT_DATA",
                         ].map((value) => ({
                           value,
-                          label: value === "all" ? "All alarms" : value,
+                          label: value === "all" ? "All alarms" : alarmStateLabel(value),
                         }))}
                         onChange={({ detail }) => {
                           setStateFilter(detail.selectedOption.value!);
@@ -722,7 +726,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                       columnDefinitions={[
                         {
                           id: "name",
-                          header: "Alarm Name",
+                          header: "Name",
                           minWidth: 210,
                           cell: (item) => (
                             <Button
@@ -743,7 +747,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                         },
                         {
                           id: "metric",
-                          header: "Metric Name",
+                          header: "Metric",
                           cell: (item) => (
                             <code>
                               {item.MetricName ||
@@ -762,9 +766,26 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                         },
                         {
                           id: "threshold",
-                          header: "Threshold",
+                          header: "Conditions",
                           cell: (item) => <span>{alarmCondition(item)}</span>,
                           minWidth: 180,
+                        },
+                        {
+                          id: "updated",
+                          header: "Last state update",
+                          cell: (item) => monitoringDate(item.StateUpdatedTimestamp),
+                          minWidth: 200,
+                        },
+                        {
+                          id: "actions",
+                          header: "Actions",
+                          cell: (item) =>
+                            item.ActionsEnabled === false
+                              ? "Actions disabled"
+                              : [...(item.AlarmActions || []), ...(item.OKActions || []), ...(item.InsufficientDataActions || [])].length
+                                ? "Actions enabled"
+                                : "No actions",
+                          minWidth: 150,
                         },
                       ]}
                       loading={loading}
@@ -804,7 +825,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                     }
                     preferredMetric={focusedMetric}
                   />
-                  <ExpandableSection headerText="Publish Custom Metric Data">
+                  <ExpandableSection headerText="Publish custom metric data" headerDescription="Calls PutMetricData. Custom metrics appear in the Metrics list after the first data point.">
                     <SpaceBetween size="m">
                       <Grid
                         gridDefinition={[
@@ -823,7 +844,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                             placeholder="MyApp/Metrics"
                           />
                         </FormField>
-                        <FormField label="Metric Name">
+                        <FormField label="Metric name">
                           <Input
                             value={ingestMetricName}
                             onChange={({ detail }) =>
@@ -861,7 +882,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                         loading={publishingMetric}
                         onClick={handlePublishMetric}
                       >
-                        Publish Metric Data
+                        Publish metric data
                       </Button>
                     </SpaceBetween>
                   </ExpandableSection>
@@ -891,7 +912,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                               setRetentionModalOpen(true);
                             }}
                           >
-                            Retention Settings
+                            Edit retention setting
                           </Button>
                           <Button
                             disabled={!selectedLogGroup?.value}
@@ -902,17 +923,17 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                               setCreateStreamOpen(true);
                             }}
                           >
-                            Create Log Stream
+                            Create log stream
                           </Button>
                         </SpaceBetween>
                       }
                     >
-                      CloudWatch Log Viewer
+                      Log groups
                     </Header>
                   }
                 >
                   <SpaceBetween size="m">
-                    <FormField label="Select Log Group">
+                    <FormField label="Log group">
                       <Select
                         selectedOption={selectedLogGroup}
                         onChange={({ detail }) =>
@@ -931,7 +952,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                           {retentionLabel(group.retentionInDays)}
                         </Detail>
                         <Detail label="Stored bytes">
-                          {group.storedBytes ?? "—"}
+                          {group.storedBytes == null ? "—" : formatBytes(group.storedBytes)}
                         </Detail>
                         <Detail label="Log group ARN">{group.arn}</Detail>
                       </ColumnLayout>
@@ -1062,7 +1083,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                 }
                 onClick={handleCreateAlarm}
               >
-                Create Alarm
+                Create alarm
               </Button>
             </SpaceBetween>
           </Box>
@@ -1070,7 +1091,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
       >
         <SpaceBetween size="m">
           {modalError && <Alert type="error">{modalError}</Alert>}
-          <FormField label="Alarm Name" description="Unique alarm identifier.">
+          <FormField label="Alarm name" description="Must be unique within the Region.">
             <Input
               value={alarmName}
               onChange={({ detail }) => setAlarmName(detail.value)}
@@ -1078,7 +1099,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
             />
           </FormField>
 
-          <FormField label="Metric Name">
+          <FormField label="Metric name">
             <Input
               value={metricName}
               onChange={({ detail }) => setMetricName(detail.value)}
@@ -1239,7 +1260,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
       <Modal
         visible={createStreamOpen}
         onDismiss={() => setCreateStreamOpen(false)}
-        header={`Create Log Stream in ${selectedLogGroup?.value}`}
+        header={`Create log stream in ${selectedLogGroup?.value}`}
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
