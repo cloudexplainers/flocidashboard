@@ -1,5 +1,5 @@
 import { CliResponse } from '../pages/cliResources';
-import { LabDefinition, ServiceAction, ServiceDefinition } from '../types';
+import { ExamTracksResponse, LabDefinition, ServiceAction, ServiceDefinition } from '../types';
 
 function getCsrfToken(): string {
   const meta = document.querySelector('meta[name="csrf-token"]');
@@ -77,6 +77,12 @@ export async function fetchLabsCatalog(): Promise<{ services: Array<{ service_ke
     console.error('Failed to fetch labs catalog:', err);
     return { services: [], total_labs: 0 };
   }
+}
+
+export async function fetchLabExams(): Promise<ExamTracksResponse> {
+  const res = await fetch('/api/labs/exams/');
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
 }
 
 export async function fetchLabsProgress(): Promise<{ completed_lab_count: number; labs: Array<{ service: string; key: string; complete: boolean }> }> {

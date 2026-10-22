@@ -45,6 +45,7 @@ urlpatterns = [
     path('api/labs/<slug:service_key>/<slug:lab_key>/steps/<slug:step_key>/run/', views.lab_step_run, name='lab-step-run'),
     path('api/labs/<slug:service_key>/<slug:lab_key>/reset/', views.lab_reset, name='lab-reset'),
     path('api/labs/catalog/', views.labs_catalog, name='labs-catalog'),
+    path('api/labs/exams/', views.labs_exams, name='labs-exams'),
     path('api/labs/progress/', views.labs_progress, name='labs-progress'),
     path('api/labs/reset-completed/', views.labs_global_reset, name='labs-global-reset'),
     path('api/labs/reset-all/', views.labs_global_reset, name='labs-reset-all'),

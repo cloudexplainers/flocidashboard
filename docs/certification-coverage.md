@@ -366,6 +366,8 @@ These are rough counts. A task counts as ● only when its headline skills are h
 
 ## 6. Curriculum UI: exam tags and study tracks
 
+**Status (2026-10-22): implemented.** Tags, concept cards, and the guides live in `dashboard/labs/exams.py`; the catalog returns `exams` per lab and `/api/labs/exams/` returns each guide with its labs and cards; the labs page has a Levels · CLF-C02 · SAA-C03 switcher (`?track=` in the URL). `dashboard/tests_exams.py` enforces valid tags and that every task statement has a lab or a concept card. The sketch below was the plan; the code is the reference now.
+
 ### Data model (one source of truth)
 
 The lab definitions live in Python, and `labCurriculum.ts` already duplicates titles and step counts. Put exam data on the backend so the frontend, `check_labs`, tests, and video tooling all read the same thing:

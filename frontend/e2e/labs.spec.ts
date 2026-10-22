@@ -44,11 +44,80 @@ for (const lesson of FLAT_CURRICULUM_LABS) {
 
 test('directory search and empty results', async ({ page }) => {
   await page.goto('/labs/');
-  const filter = page.getByPlaceholder('Filter labs by number (#1-#66), service (S3, IAM, EC2, EKS), or keyword...');
+  const filter = page.getByPlaceholder(/^Filter labs by number/);
   await filter.fill('no-such-lab');
   await expect(page.getByText('No matching labs found')).toBeVisible();
   await filter.fill('S3');
   await expect(page.getByRole('button', { name: 'Start Lab Lesson' }).first()).toBeVisible();
+  await filter.fill('SAA 4.4');
+  await expect(page.getByRole('button', { name: 'Start Lab Lesson' })).toHaveCount(2);
+});
+
+test('catalog tags every lab with valid exam tasks', async ({ request }) => {
+  const catalog = await (await request.get('/api/labs/catalog/')).json();
+  const exams = await (await request.get('/api/labs/exams/')).json();
+  const tasks = new Set<string>(
+    exams.exams.flatMap((exam: any) => exam.domains.flatMap((domain: any) => domain.tasks.map((task: any) => `${exam.code} ${task.id}`))),
+  );
+  for (const lab of catalog.labs) {
+    expect(Array.isArray(lab.exams), `${lab.service}/${lab.key}`).toBeTruthy();
+    for (const tag of lab.exams) expect(tasks.has(`${tag.exam} ${tag.task}`)).toBeTruthy();
+  }
+});
+
+test('SAA study track groups labs by domain and opens labs from tasks', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/labs/?track=SAA-C03');
+  await expect(page.getByText('SAA-C03 · AWS Certified Solutions Architect – Associate')).toBeVisible();
+  await expect(page.getByText('30% of scored content · 0 of', { exact: false })).toBeVisible();
+
+  await page.getByText('Domain 3: Design High-Performing Architectures', { exact: true }).click();
+  const ingestion = page.getByTestId('exam-task-SAA-C03-3.5');
+  await expect(ingestion.getByText('No hands-on lab yet')).toBeVisible();
+  await ingestion.getByText('Concept: Data ingestion, transformation, and data lakes').click();
+  await expect(ingestion.getByText(/Planned lab: W2-2/)).toBeVisible();
+
+  const secureAccess = page.getByTestId('exam-task-SAA-C03-1.1');
+  await secureAccess.getByRole('button', { name: 'Create a role with a trust policy' }).click();
+  await expect(page).toHaveURL(/lab=role-trust-policy/);
+  await expect(page.getByText('SAA 1.1', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '← Back to Labs Directory' }).click();
+  await expect(page).toHaveURL(/track=SAA-C03/);
+  await expect(page.getByText('SAA-C03 · AWS Certified Solutions Architect – Associate')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('exam progress is weighted by domain', async ({ page, request }) => {
+  const exams = await (await request.get('/api/labs/exams/')).json();
+  const saa = exams.exams.find((exam: any) => exam.code === 'SAA-C03');
+  const labsIn = (domain: any) => new Set<string>(domain.tasks.flatMap((task: any) => task.labs.map((lab: any) => `${lab.service}:${lab.key}`)));
+  const completed = labsIn(saa.domains.find((domain: any) => domain.id === '1'));
+  // Labs can practice tasks in several domains, so completing Domain 1 also moves other domains.
+  const expected = Math.round(
+    saa.domains.reduce((sum: number, domain: any) => {
+      const labs = [...labsIn(domain)];
+      return labs.length ? sum + domain.weight * (labs.filter((id) => completed.has(id)).length / labs.length) : sum;
+    }, 0),
+  );
+  expect(expected).toBeGreaterThanOrEqual(30);
+  expect(expected).toBeLessThan(100);
+  const labs = [...completed].map((id) => ({ service: id.split(':')[0], key: id.split(':')[1], complete: true }));
+  await page.route('**/api/labs/progress/', route => route.fulfill({ json: { labs } }));
+  await page.goto('/labs/?track=SAA-C03');
+  await expect(page.getByText(`${labsIn(saa.domains[0]).size} of ${labsIn(saa.domains[0]).size} labs complete`, { exact: false })).toBeVisible();
+  await expect(page.getByLabel('Exam-weighted lab progress')).toHaveAttribute('value', String(expected));
+});
+
+test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
+  await page.goto('/labs/?track=NOT-AN-EXAM');
+  await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();
+  await page.getByText('CLF-C02 Cloud Practitioner', { exact: true }).click();
+  await expect(page).toHaveURL(/track=CLF-C02/);
+  await expect(page.getByText('CLF-C02 · AWS Certified Cloud Practitioner')).toBeVisible();
+  await page.getByText('Levels', { exact: true }).click();
+  await expect(page).not.toHaveURL(/track=/);
+  await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();
 });
 
 test('Run all stops on execution errors and permits retry', async ({ page }) => {

@@ -59,6 +59,12 @@ export interface LabStep {
   };
 }
 
+export interface LabExamTag {
+  exam: string;
+  task: string;
+  primary: boolean;
+}
+
 export interface LabDefinition {
   key: string;
   service: string;
@@ -67,6 +73,53 @@ export interface LabDefinition {
   steps: LabStep[];
   step_count?: number;
   complete?: boolean;
+  exams?: LabExamTag[];
+}
+
+export interface ExamTaskLab {
+  service: string;
+  key: string;
+  title: string;
+  primary: boolean;
+}
+
+export interface ExamTask {
+  id: string;
+  title: string;
+  labs: ExamTaskLab[];
+  concepts: string[];
+}
+
+export interface ExamDomain {
+  id: string;
+  title: string;
+  weight: number;
+  tasks: ExamTask[];
+}
+
+export interface ExamTrack {
+  code: string;
+  title: string;
+  short_title: string;
+  level: string;
+  guide_url: string;
+  checked: string;
+  passing_score: number;
+  domains: ExamDomain[];
+}
+
+export interface ConceptCard {
+  key: string;
+  title: string;
+  points: string[];
+  exams: Array<{ exam: string; task: string }>;
+  related_labs: Array<{ service: string; key: string }>;
+  planned: string | null;
+}
+
+export interface ExamTracksResponse {
+  exams: ExamTrack[];
+  concepts: ConceptCard[];
 }
 
 export interface IdentityInfo {

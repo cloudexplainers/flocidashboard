@@ -15,6 +15,7 @@ from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_POST
 from .aws import FlociClientFactory, acm_inventory, amazonmq_inventory, apigateway_inventory, appconfig_inventory, appsync_inventory, athena_inventory, autoscaling_inventory, backup_inventory, batch_inventory, bcmdataexports_inventory, bedrockruntime_inventory, cloudcontrol_inventory, cloudformation_inventory, cloudfront_inventory, cloudmap_inventory, cloudtrail_inventory, cloudwatch_inventory, codebuild_inventory, codepipeline_inventory, codedeploy_inventory, config_inventory, cognito_inventory, costexplorer_inventory, cur_inventory, docdb_inventory, dynamodb_inventory, ec2_inventory, ecr_inventory, ecs_inventory, eks_inventory, elasticache_inventory, elasticbeanstalk_inventory, elasticloadbalancing_inventory, emr_inventory, eventbridge_inventory, firehose_inventory, glue_inventory, iam_inventory, iot_inventory, kafka_inventory, kinesis_inventory, kms_inventory, lambda_inventory, list_resources, memorydb_inventory, neptune_inventory, opensearch_inventory, pipes_inventory, pricing_inventory, rds_inventory, rdsdata_inventory, resourcegroupstagging_inventory, route53_inventory, s3_inventory, s3vectors_inventory, scheduler_inventory, secretsmanager_inventory, ses_inventory, sns_inventory, sqs_inventory, ssm_inventory, stepfunctions_inventory, textract_inventory, transcribe_inventory, transfer_inventory, wafv2_inventory
 from .labs import get_lab, lab_status, next_lab_batch, reset_lab, run_lab_step
+from .labs.exams import exam_tracks, tags_for_lab
 from .labs.registry import all_labs
 from .labs.snippets import get_step_snippets
 from .services import get_service, services_payload
@@ -177,6 +178,7 @@ def labs_catalog(request):
             'title': lab.get('title'),
             'description': lab.get('description'),
             'step_count': len(lab.get('steps', [])),
+            'exams': tags_for_lab(svc, lab.get('key')),
             'steps': [
                 {
                     'key': s.get('key'),
@@ -209,6 +211,7 @@ def labs_catalog(request):
                 'title': lab.get('title'),
                 'description': lab.get('description'),
                 'step_count': len(lab.get('steps', [])),
+                'exams': tags_for_lab(lab.get('service'), lab.get('key')),
                 'steps': [
                     {
                         'key': s.get('key'),
@@ -225,6 +228,11 @@ def labs_catalog(request):
             for lab in labs
         ],
     })
+
+def labs_exams(request):
+    """Certification exam guides with the labs and concept cards for each task statement."""
+    return JsonResponse(exam_tracks(all_labs()))
+
 
 @require_POST
 def lab_step_run(request, service_key: str, lab_key: str, step_key: str):
