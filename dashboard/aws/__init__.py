@@ -1093,74 +1093,6 @@ def memorydb_inventory() -> dict[str, Any]:
     }
 
 
-def codepipeline_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    codepipeline = factory.client('codepipeline')
-    operations = set(codepipeline.meta.service_model.operation_names)
-
-    pipelines = _safe_value(lambda: _operation_items(codepipeline, 'list_pipelines', 'pipelines'), []) if 'ListPipelines' in operations else []
-    webhooks = _safe_value(lambda: _operation_items(codepipeline, 'list_webhooks', 'webhooks'), []) if 'ListWebhooks' in operations else []
-    action_types = _safe_value(lambda: _operation_items(codepipeline, 'list_action_types', 'actionTypes'), []) if 'ListActionTypes' in operations else []
-
-    def pipeline_detail(pipeline: dict[str, Any]) -> dict[str, Any]:
-        name = pipeline.get('name')
-        detail = _safe_value(lambda name=name: codepipeline.get_pipeline(name=name), {}) if name and 'GetPipeline' in operations else {}
-        state = _safe_value(lambda name=name: codepipeline.get_pipeline_state(name=name), {}) if name and 'GetPipelineState' in operations else {}
-        executions = _safe_value(
-            lambda name=name: _operation_items(codepipeline, 'list_pipeline_executions', 'pipelineExecutionSummaries', pipelineName=name),
-            [],
-        ) if name and 'ListPipelineExecutions' in operations else []
-        return {
-            'name': name,
-            'version': pipeline.get('version') or detail.get('pipeline', {}).get('version'),
-            'created': pipeline.get('created') or detail.get('metadata', {}).get('created'),
-            'updated': pipeline.get('updated') or detail.get('metadata', {}).get('updated'),
-            'pipeline_type': detail.get('pipeline', {}).get('pipelineType'),
-            'stages': detail.get('pipeline', {}).get('stages'),
-            'stage_states': state.get('stageStates'),
-            'execution_count': len(executions),
-            'executions': executions,
-        }
-
-    pipeline_details = [pipeline_detail(pipeline) for pipeline in pipelines[:50]]
-
-    return {
-        'summary': {
-            'pipelines': len(pipelines),
-            'sampled_executions': sum(pipeline.get('execution_count') or 0 for pipeline in pipeline_details),
-            'webhooks': len(webhooks),
-            'action_types': len(action_types),
-            'available_sdk_operations': len(operations),
-        },
-        'pipelines': _clean_response(pipeline_details),
-        'pipeline_summaries': _clean_response(pipelines),
-        'webhooks': _clean_response(webhooks),
-        'action_types': _clean_response(action_types),
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'CreatePipeline',
-                'ListPipelines',
-                'GetPipeline',
-                'GetPipelineState',
-                'ListPipelineExecutions',
-                'StartPipelineExecution',
-                'DeletePipeline',
-                'ListWebhooks',
-                'ListActionTypes',
-                'TagResource',
-                'UntagResource',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.27 adds AWS CodePipeline emulation.',
-            'This read-only inspector expands the first 50 pipelines with pipeline definition, state, and execution summaries when supported.',
-        ],
-    }
-
-
 def s3vectors_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     s3vectors = factory.client('s3vectors')
@@ -7654,33 +7586,6 @@ def list_memorydb_resources(factory: FlociClientFactory) -> list[dict[str, Any]]
     return resources
 
 
-def list_codepipeline_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    codepipeline = factory.client('codepipeline')
-    operations = set(codepipeline.meta.service_model.operation_names)
-    resources: list[dict[str, Any]] = []
-
-    if 'ListPipelines' in operations:
-        resources.extend(
-            {
-                'type': 'pipeline',
-                'name': pipeline.get('name'),
-                'version': pipeline.get('version'),
-            }
-            for pipeline in _safe_value(lambda: _operation_items(codepipeline, 'list_pipelines', 'pipelines'), [])
-        )
-    if 'ListWebhooks' in operations:
-        resources.extend(
-            {
-                'type': 'webhook',
-                'name': webhook.get('name'),
-                'arn': webhook.get('arn'),
-            }
-            for webhook in _safe_value(lambda: _operation_items(codepipeline, 'list_webhooks', 'webhooks'), [])
-        )
-
-    return resources
-
-
 def list_s3vectors_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     s3vectors = factory.client('s3vectors')
     operations = set(s3vectors.meta.service_model.operation_names)
@@ -7979,7 +7884,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('cloudmap-resources', 'Cloud Map resources', cloudmap.list_cloudmap_resources),
         ('cloudtrail-resources', 'CloudTrail trails', cloudtrail.list_cloudtrail_resources),
         ('codebuild-resources', 'CodeBuild resources', codebuild.list_codebuild_resources),
-        ('codepipeline-resources', 'CodePipeline resources', list_codepipeline_resources),
+        ('codepipeline-resources', 'CodePipeline resources', codepipeline.list_codepipeline_resources),
         ('codedeploy-resources', 'CodeDeploy resources', codedeploy.list_codedeploy_resources),
         ('config-resources', 'AWS Config resources', list_config_resources),
         ('eks-resources', 'EKS resources', list_eks_resources),
@@ -8071,6 +7976,7 @@ from . import (  # noqa: E402
     cloudwatch,
     codebuild,
     codedeploy,
+    codepipeline,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -8092,4 +7998,5 @@ from .cloudtrail import cloudtrail_inventory  # noqa: E402
 from .cloudwatch import cloudwatch_inventory  # noqa: E402
 from .codebuild import codebuild_inventory  # noqa: E402
 from .codedeploy import codedeploy_inventory  # noqa: E402
+from .codepipeline import codepipeline_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
