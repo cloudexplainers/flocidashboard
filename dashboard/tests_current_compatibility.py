@@ -5,7 +5,7 @@ from unittest.mock import Mock
 from botocore.exceptions import ClientError
 from django.test import SimpleTestCase
 
-from .aws import _sesv2_items
+from .aws.ses import _sesv2_items
 from .aws.autoscaling import _autoscaling_optional
 
 

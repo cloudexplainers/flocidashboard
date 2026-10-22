@@ -318,7 +318,7 @@ class SESActionsApiTests(SimpleTestCase):
 
 
 class SESInventoryTests(SimpleTestCase):
-    @patch('dashboard.aws._ses_mailbox')
+    @patch('dashboard.aws.ses._ses_mailbox')
     @patch('dashboard.aws._paginate')
     @patch('dashboard.aws.FlociClientFactory')
     def test_inventory_surfaces_v2_configuration_set_options(self, factory_mock, paginate_mock, mailbox_mock):
