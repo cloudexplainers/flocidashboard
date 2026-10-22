@@ -87,6 +87,7 @@ When a test patches a function that a lab module calls, patch it where it's look
 | What | Command | Needs Floci? |
 | --- | --- | --- |
 | System checks | `python manage.py check` | No |
+| Lint (CI pins ruff 0.15.10) | `ruff check .` | No |
 | Unit tests (about 1,100, a few seconds) | `python manage.py test --noinput` | No |
 | Live compatibility tests | `python manage.py test dashboard.integration_tests --noinput` | Yes |
 | Playwright, mocked API | `npm run test:e2e` (in `frontend/`) | Barely; see below |

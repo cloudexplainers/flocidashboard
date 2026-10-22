@@ -36,6 +36,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: python -m pip install -r requirements.lock
       - run: python -m pip check
+      - run: python -m pip install ruff==0.15.10 && ruff check .
       - run: npm ci && npm run build && npm audit
         working-directory: frontend
       - run: python manage.py check && python manage.py makemigrations --check --dry-run
