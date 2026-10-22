@@ -28,7 +28,7 @@ services:
     build:
       context: .
     ports:
-      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${DASHBOARD_PORT:-8000}:8000"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${DASHBOARD_PORT:-8001}:8000"
     environment:
       DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
       DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,dashboard}

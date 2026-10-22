@@ -14,7 +14,7 @@ For product direction and open ideas, see [`ROADMAP.md`](./ROADMAP.md). For lab 
 
 ## Getting set up
 
-The quickest path is Docker, which starts Floci on port 4566 and the dashboard on 8000:
+The quickest path is Docker, which starts Floci on port 4566 and the dashboard on 8001:
 
 ```bash
 docker compose up -d
@@ -27,7 +27,7 @@ python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.lock
 python manage.py migrate
-DJANGO_DEBUG=true python manage.py runserver 127.0.0.1:8000
+DJANGO_DEBUG=true python manage.py runserver 127.0.0.1:8001
 ```
 
 `DEBUG` is off by default. Turn it on for local development, or pass `--insecure` to `runserver` so it still serves the built UI.

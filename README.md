@@ -26,9 +26,9 @@ cd flocidashboard
 docker compose up -d
 ```
 
-Open [http://localhost:8000](http://localhost:8000). Compose starts Floci on port **4566** and the dashboard on **8000**, with persistent volumes and a shared `floci_default` network for spawned containers.
+Open [http://localhost:8001](http://localhost:8001). Compose starts Floci on port **4566** and the dashboard on **8001**, with persistent volumes and a shared `floci_default` network for spawned containers.
 
-If that page shows a different app, another local server is already using port 8000. Stop it, or set `DASHBOARD_PORT` in `.env` and open that port instead.
+The dashboard uses 8001 rather than Django's usual 8000 so it doesn't collide with other local Django projects. If that page shows a different app, another local server is already using port 8001. Stop it, or set `DASHBOARD_PORT` in `.env` and open that port instead.
 
 Ports are published on `127.0.0.1` only, so other machines on your network can't reach the dashboard or Floci. The dashboard can run AWS CLI commands, so only set `HOST_BIND_ADDRESS=0.0.0.0` in `.env` on a network you trust. Django runs with `DEBUG` off; its secret key is generated on first start and kept in the dashboard data volume.
 
@@ -57,7 +57,7 @@ export FLOCI_AWS_PROFILE=''
 export DJANGO_DEBUG=true   # tracebacks and static files from runserver
 
 python manage.py migrate
-python manage.py runserver 127.0.0.1:8000
+python manage.py runserver 127.0.0.1:8001
 ```
 
 The repository includes built frontend assets, so Node.js is only needed when rebuilding the UI. Use **Node.js 22.12+**; Docker and CI use Node.js 26.

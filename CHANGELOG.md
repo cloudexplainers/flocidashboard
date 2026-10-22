@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The dashboard now defaults to host port 8001 (in Compose, `.env.example`, the docs, and the Vite dev proxy) so it doesn't collide with other local Django projects on 8000. Set `DASHBOARD_PORT` to change it.
 - Split `dashboard/aws.py` (11.6k lines) into a `dashboard/aws/` package with one inventory module per service; shared client plumbing and `list_resources` stay in `__init__.py`.
 - Docker Compose now publishes the dashboard and Floci ports on `127.0.0.1` only (set `HOST_BIND_ADDRESS` to change it). Django runs with `DEBUG` off by default, and the hard-coded secret key is replaced by one generated per install and stored next to the dashboard database.
 - Polished the AWS service consoles, including Route 53, Cognito, CloudTrail investigation workflows, session identity switching, and the AWS CLI console.
