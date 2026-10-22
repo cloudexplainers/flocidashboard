@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from botocore.config import Config
+from botocore.exceptions import ClientError, ConnectionClosedError
 
 from .aws import FlociClientFactory, _clean_response
 
@@ -101,7 +103,12 @@ def create_cluster(
     if clean_tags:
         kwargs['tags'] = clean_tags
 
-    response = _client(long_running=True).create_cluster(**kwargs)
+    try:
+        response = _client(long_running=True).create_cluster(**kwargs)
+    except ConnectionClosedError:
+        response = _find_created_cluster(kwargs['name'])
+        if response is None:
+            raise
     cluster = response.get('cluster', {})
     return {
         'name': cluster.get('name') or kwargs['name'],
@@ -111,6 +118,21 @@ def create_cluster(
         'version': cluster.get('version'),
         'response': _clean_response(response),
     }
+
+
+def _find_created_cluster(name: str, attempts: int = 5) -> dict[str, Any] | None:
+    # On Linux, Floci can drop the connection while it attaches its own container to the
+    # cluster's new VPC network, even though the cluster was created. Look the cluster up
+    # rather than resending the create.
+    for attempt in range(attempts):
+        try:
+            return _client().describe_cluster(name=name)
+        except ClientError as exc:
+            if exc.response.get('Error', {}).get('Code') != 'ResourceNotFoundException':
+                raise
+        if attempt + 1 < attempts:
+            time.sleep(1)
+    return None
 
 
 def delete_cluster(name: str) -> dict[str, Any]:
