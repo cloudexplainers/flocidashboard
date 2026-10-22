@@ -77,8 +77,9 @@ Labs are curated, multi-step AWS workflows. The dashboard runs each step through
 2. **Use the shared helpers** in `monolith.py`, such as the `_<service>_client()` functions, `_error_code`, `_json_text`, and `_wait_for_verification`. Get boto3 clients through those helpers rather than calling `FlociClientFactory` directly, so tests can patch one place.
 3. **Register a new service module** in `monolith.py`: add a branch to `labs_for_service`, `run_lab_step`, `lab_status`, and `reset_lab`, add it to the re-export list at the end of the file, and add the service to `LAB_BATCH_ORDER`.
 4. **Add the lab to the curriculum** in `frontend/src/labCurriculum.ts` with the right `stepCount`. The e2e suite fails if the catalog and the curriculum disagree.
-5. **Make it repeatable.** Labs use fixed resource names, so every step must cope with leftovers from an earlier run, and `reset` must remove everything the lab created.
-6. **Test it.** Add unit tests in `dashboard/tests_labs.py`. `LabsRegistryAuditTests` checks that every step has a runner and a status entry. Then run `check_labs` for the service against the disposable emulator (see below).
+5. **Tag it for the certification tracks** in `LAB_EXAM_TAGS` in `dashboard/labs/exams.py`, using the exam guide's task statement IDs; the first task per exam is the lab's main focus. A lab that fits no CLF or SAA task still needs an entry (`_tags()`). `dashboard/tests_exams.py` fails on untagged labs and unknown task IDs. See [`docs/certification-coverage.md`](./docs/certification-coverage.md) for how labs map to the exams.
+6. **Make it repeatable.** Labs use fixed resource names, so every step must cope with leftovers from an earlier run, and `reset` must remove everything the lab created.
+7. **Test it.** Add unit tests in `dashboard/tests_labs.py`. `LabsRegistryAuditTests` checks that every step has a runner and a status entry. Then run `check_labs` for the service against the disposable emulator (see below).
 
 When a test patches a function that a lab module calls, patch it where it's looked up, for example `patch('dashboard.labs.kms_labs._verify_kms_lab_key')`. `patch('dashboard.labs.FlociClientFactory')` still covers every lab module.
 

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added exam study tracks for AWS Certified Cloud Practitioner (CLF-C02) and Solutions Architect – Associate (SAA-C03):
+  - **Track switcher:** the labs page switches between Levels and each exam (`/labs/?track=SAA-C03`).
+  - **Exam view:** labs are grouped by domain and task statement, with progress weighted by each domain's share of the exam.
+  - **Concept cards:** objectives without a lab (pricing, support plans, data ingestion, and so on) get short study cards, each pointing to the planned lab when there is one.
+  - **Badges and filter:** lab cards and headers show exam badges such as `SAA 2.1`, and the filter accepts them.
+  - **API:** tags, guides, and cards come from `dashboard/labs/exams.py` and `/api/labs/exams/`.
 - Re-leveled the lab curriculum so core Associate-exam topics come early:
   - **Into Level 1:** the inline-policy lab.
   - **Into Level 2:** IAM roles, STS session policies, instance profiles, the EC2 instance-role lab, S3 Block Public Access and bucket policies, and the VPC and security-group/network-ACL labs.

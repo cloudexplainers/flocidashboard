@@ -14,14 +14,51 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import Modal from '@cloudscape-design/components/modal';
 import Alert from '@cloudscape-design/components/alert';
 import SegmentedControl from '@cloudscape-design/components/segmented-control';
-import { fetchLabsCatalog, fetchLabsProgress, fetchLabStatus, runLabStep, resetLab, resetAllLabs } from '../api/client';
-import { LabDefinition, LabStep } from '../types';
+import { fetchLabExams, fetchLabsCatalog, fetchLabsProgress, fetchLabStatus, runLabStep, resetLab, resetAllLabs } from '../api/client';
+import { ConceptCard, ExamTracksResponse, LabDefinition, LabExamTag, LabStep } from '../types';
+import { ExamTrackView, examTagLabel } from '../components/ExamTrackView';
 import { CodeSnippet } from '../components/CodeSnippet';
 import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab } from '../labCurriculum';
 import { LabCompletionMap, readLabCompletion, writeLabCompletion } from '../labCompletion';
 
+const TRACK_STORAGE_KEY = 'floci_labs_study_track';
+const LEVELS_TRACK = 'levels';
+
+function initialTrack(): string {
+  const fromUrl = new URLSearchParams(window.location.search).get('track');
+  if (fromUrl) return fromUrl;
+  try {
+    return localStorage.getItem(TRACK_STORAGE_KEY) || LEVELS_TRACK;
+  } catch {
+    return LEVELS_TRACK;
+  }
+}
+
+/** Primary tags first, then by exam and task. */
+function sortedTags(tags: LabExamTag[] = []): LabExamTag[] {
+  return [...tags].sort(
+    (a, b) => Number(b.primary) - Number(a.primary) || a.exam.localeCompare(b.exam) || a.task.localeCompare(b.task, undefined, { numeric: true }),
+  );
+}
+
 export const LabsConsole: React.FC = () => {
   const [allLabsList, setAllLabsList] = useState<LabDefinition[]>([]);
+  const [examData, setExamData] = useState<ExamTracksResponse | null>(null);
+  const [examError, setExamError] = useState<string | null>(null);
+  const [track, setTrackState] = useState<string>(initialTrack);
+
+  const setTrack = (next: string) => {
+    setTrackState(next);
+    try {
+      localStorage.setItem(TRACK_STORAGE_KEY, next);
+    } catch {
+      // ignore
+    }
+    const url = new URL(window.location.href);
+    if (next === LEVELS_TRACK) url.searchParams.delete('track');
+    else url.searchParams.set('track', next);
+    window.history.replaceState(null, '', url.pathname + url.search);
+  };
   const [completedLabsMap, setCompletedLabsMap] = useState<LabCompletionMap>(readLabCompletion);
 
   // Persist completion and let the sidebar know whenever it changes.
@@ -79,6 +116,11 @@ export const LabsConsole: React.FC = () => {
       const data = await fetchLabsCatalog();
       const flattened = (data.services || []).flatMap((s) => s.labs);
       setAllLabsList(flattened);
+
+      setExamError(null);
+      fetchLabExams()
+        .then(setExamData)
+        .catch((err) => setExamError(err?.message || 'Could not load the exam study tracks.'));
 
       // Check URL query parameters for direct lab link
       const params = new URLSearchParams(window.location.search);
@@ -200,7 +242,7 @@ export const LabsConsole: React.FC = () => {
       const url = new URL(window.location.href);
       url.searchParams.delete('lab');
       url.searchParams.delete('service');
-      window.history.pushState(null, '', url.pathname);
+      window.history.pushState(null, '', url.pathname + url.search);
     }
   };
 
@@ -351,9 +393,20 @@ export const LabsConsole: React.FC = () => {
       l.title.toLowerCase().includes(filterText.toLowerCase()) ||
       l.service.toLowerCase().includes(filterText.toLowerCase()) ||
       l.description.toLowerCase().includes(filterText.toLowerCase()) ||
+      (l.exams || []).some((tag) => examTagLabel(tag).toLowerCase().includes(filterText.toLowerCase())) ||
       String(curItem?.id).includes(filterText);
     return levelMatch && textMatch;
   });
+
+  // Exam study tracks
+  const selectedExam = examData?.exams.find((exam) => exam.code === track);
+  // An unknown ?track= value falls back to the level view once exams have loaded.
+  const showExamTrack = track !== LEVELS_TRACK && (Boolean(selectedExam) || (!examData && !examError) || Boolean(examError));
+  const conceptsByKey: Record<string, ConceptCard> = Object.fromEntries((examData?.concepts || []).map((card) => [card.key, card]));
+  const openLabByKey = (service: string, key: string) => {
+    const lab = allLabsList.find((item) => item.service === service && item.key === key);
+    if (lab) openLab(lab);
+  };
 
   // Active lab curriculum metadata
   const currentCurriculum = activeLab ? getCurriculumItem(activeLab.service, activeLab.key) : undefined;
@@ -412,6 +465,11 @@ export const LabsConsole: React.FC = () => {
                   <Badge color={currentLevel.color}>{currentLevel.badge}</Badge>
                 )}
                 <Badge color="blue">{activeLab.service.toUpperCase()}</Badge>
+                {sortedTags(activeLab.exams).map((tag) => (
+                  <span key={`${tag.exam}-${tag.task}`} title={`${tag.exam} task ${tag.task}${tag.primary ? ' (main focus)' : ''}`}>
+                    <Badge color={tag.primary ? 'green' : 'grey'}>{examTagLabel(tag)}</Badge>
+                  </span>
+                ))}
                 <span style={{ fontSize: '18px', fontWeight: 600 }}>{activeLab.title}</span>
                 {isLabComplete && <StatusIndicator type="success">Completed</StatusIndicator>}
               </div>
@@ -589,118 +647,147 @@ export const LabsConsole: React.FC = () => {
         }
       >
         <SpaceBetween size="m">
-          {/* Level Filter Segmented Control */}
           <div style={{ overflowX: 'auto', paddingBottom: '4px' }}>
             <SegmentedControl
-              selectedId={selectedLevelId}
-              onChange={({ detail }) => setSelectedLevelId(detail.selectedId)}
+              label="Study track"
+              selectedId={showExamTrack ? track : LEVELS_TRACK}
+              onChange={({ detail }) => setTrack(detail.selectedId)}
               options={[
-                { id: 'all', text: `All ${LAB_COUNT} Labs` },
-                ...LAB_CURRICULUM.map((lvl) => ({
-                  id: lvl.id,
-                  text: `${lvl.title} (${lvl.labs.length})`,
-                })),
+                { id: LEVELS_TRACK, text: 'Levels' },
+                ...(examData?.exams || []).map((exam) => ({ id: exam.code, text: `${exam.code} ${exam.short_title}` })),
               ]}
             />
           </div>
 
-          <TextFilter
-            filteringText={filterText}
-            filteringPlaceholder={`Filter labs by number (#1-#${LAB_COUNT}), service (S3, IAM, EC2, EKS), or keyword...`}
-            onChange={({ detail }) => setFilterText(detail.filteringText)}
-          />
+          {showExamTrack ? (
+            selectedExam ? (
+              <ExamTrackView exam={selectedExam} concepts={conceptsByKey} completed={completedLabsMap} onOpenLab={openLabByKey} />
+            ) : examError ? (
+              <Alert type="error" action={<Button onClick={loadCatalog}>Retry</Button>}>
+                Could not load the exam study tracks: {examError}
+              </Alert>
+            ) : (
+              <StatusIndicator type="loading">Loading exam study track</StatusIndicator>
+            )
+          ) : (
+            <>
+              {/* Level Filter Segmented Control */}
+              <div style={{ overflowX: 'auto', paddingBottom: '4px' }}>
+                <SegmentedControl
+                  selectedId={selectedLevelId}
+                  onChange={({ detail }) => setSelectedLevelId(detail.selectedId)}
+                  options={[
+                    { id: 'all', text: `All ${LAB_COUNT} Labs` },
+                    ...LAB_CURRICULUM.map((lvl) => ({
+                      id: lvl.id,
+                      text: `${lvl.title} (${lvl.labs.length})`,
+                    })),
+                  ]}
+                />
+              </div>
 
-          <Cards
-            cardDefinition={{
-              header: (item) => {
-                const isComplete = Boolean(completedLabsMap[`${item.service}:${item.key}`]);
-                const curItem = getCurriculumItem(item.service, item.key);
-                const curLevel = getLevelForLab(item.service, item.key);
+              <TextFilter
+                filteringText={filterText}
+                filteringPlaceholder={`Filter labs by number (#1-#${LAB_COUNT}), service (S3, IAM, EC2, EKS), exam task (SAA 2.1), or keyword...`}
+                onChange={({ detail }) => setFilterText(detail.filteringText)}
+              />
 
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      {curItem && (
-                        <Badge color="grey">#{curItem.id}</Badge>
-                      )}
-                      {curLevel && (
-                        <Badge color={curLevel.color}>{curLevel.badge}</Badge>
-                      )}
-                      <Badge color="blue">{item.service.toUpperCase()}</Badge>
-                      {isComplete && <Badge color="green">✓ COMPLETE</Badge>}
-                    </div>
-                    <Button variant="inline-link" onClick={() => openLab(item)}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '15px' }}>
-                        {isComplete && <StatusIndicator type="success" />}
-                        <strong style={{ color: isComplete ? '#4ec9b0' : 'inherit' }}>{item.title}</strong>
-                      </span>
-                    </Button>
-                  </div>
-                );
-              },
-              sections: [
-                {
-                  id: 'description',
-                  content: (item) => {
+              <Cards
+                cardDefinition={{
+                  header: (item) => {
                     const isComplete = Boolean(completedLabsMap[`${item.service}:${item.key}`]);
+                    const curItem = getCurriculumItem(item.service, item.key);
+                    const curLevel = getLevelForLab(item.service, item.key);
+
                     return (
-                      <div
-                        style={{
-                          borderRadius: '6px',
-                          padding: isComplete ? '8px 10px' : undefined,
-                          border: isComplete ? '1px solid #1d8102' : undefined,
-                          background: isComplete ? 'rgba(29, 129, 2, 0.08)' : undefined,
-                        }}
-                      >
-                        {item.description}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {curItem && (
+                            <Badge color="grey">#{curItem.id}</Badge>
+                          )}
+                          {curLevel && (
+                            <Badge color={curLevel.color}>{curLevel.badge}</Badge>
+                          )}
+                          <Badge color="blue">{item.service.toUpperCase()}</Badge>
+                          {sortedTags(item.exams).filter((tag) => tag.primary).map((tag) => (
+                            <Badge key={`${tag.exam}-${tag.task}`} color="grey">{examTagLabel(tag)}</Badge>
+                          ))}
+                          {isComplete && <Badge color="green">✓ COMPLETE</Badge>}
+                        </div>
+                        <Button variant="inline-link" onClick={() => openLab(item)}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '15px' }}>
+                            {isComplete && <StatusIndicator type="success" />}
+                            <strong style={{ color: isComplete ? '#4ec9b0' : 'inherit' }}>{item.title}</strong>
+                          </span>
+                        </Button>
                       </div>
                     );
                   },
-                },
-                {
-                  id: 'steps',
-                  header: 'Runnable Steps',
-                  content: (item) => {
-                    const count = item.step_count || item.steps?.length || 1;
-                    return `${count} ${count === 1 ? 'step' : 'steps'} (CLI / Boto3 / Terraform)`;
-                  },
-                },
-                {
-                  id: 'action',
-                  content: (item) => {
-                    const isComplete = Boolean(completedLabsMap[`${item.service}:${item.key}`]);
-                    return (
-                      <Button
-                        variant={isComplete ? 'normal' : 'primary'}
-                        iconName={isComplete ? 'status-positive' : 'caret-right-filled'}
-                        onClick={() => openLab(item)}
-                      >
-                        {isComplete ? 'Review Completed Lab' : 'Start Lab Lesson'}
-                      </Button>
-                    );
-                  },
-                },
-              ],
-            }}
-            items={filteredLabs}
-            loading={loading && allLabsList.length === 0}
-            loadingText="Loading lab curriculum"
-            cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 3 }]}
-            empty={
-              catalogError ? (
-                <Box textAlign="center" color="inherit">
-                  <b>Lab catalog unavailable</b>
-                  <p>{catalogError}</p>
-                  <Button onClick={loadCatalog}>Retry</Button>
-                </Box>
-              ) : (
-                <Box textAlign="center" color="inherit">
-                  <b>No matching labs found</b>
-                  <p>Try searching for a different keyword or level filter.</p>
-                </Box>
-              )
-            }
-          />
+                  sections: [
+                    {
+                      id: 'description',
+                      content: (item) => {
+                        const isComplete = Boolean(completedLabsMap[`${item.service}:${item.key}`]);
+                        return (
+                          <div
+                            style={{
+                              borderRadius: '6px',
+                              padding: isComplete ? '8px 10px' : undefined,
+                              border: isComplete ? '1px solid #1d8102' : undefined,
+                              background: isComplete ? 'rgba(29, 129, 2, 0.08)' : undefined,
+                            }}
+                          >
+                            {item.description}
+                          </div>
+                        );
+                      },
+                    },
+                    {
+                      id: 'steps',
+                      header: 'Runnable Steps',
+                      content: (item) => {
+                        const count = item.step_count || item.steps?.length || 1;
+                        return `${count} ${count === 1 ? 'step' : 'steps'} (CLI / Boto3 / Terraform)`;
+                      },
+                    },
+                    {
+                      id: 'action',
+                      content: (item) => {
+                        const isComplete = Boolean(completedLabsMap[`${item.service}:${item.key}`]);
+                        return (
+                          <Button
+                            variant={isComplete ? 'normal' : 'primary'}
+                            iconName={isComplete ? 'status-positive' : 'caret-right-filled'}
+                            onClick={() => openLab(item)}
+                          >
+                            {isComplete ? 'Review Completed Lab' : 'Start Lab Lesson'}
+                          </Button>
+                        );
+                      },
+                    },
+                  ],
+                }}
+                items={filteredLabs}
+                loading={loading && allLabsList.length === 0}
+                loadingText="Loading lab curriculum"
+                cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 3 }]}
+                empty={
+                  catalogError ? (
+                    <Box textAlign="center" color="inherit">
+                      <b>Lab catalog unavailable</b>
+                      <p>{catalogError}</p>
+                      <Button onClick={loadCatalog}>Retry</Button>
+                    </Box>
+                  ) : (
+                    <Box textAlign="center" color="inherit">
+                      <b>No matching labs found</b>
+                      <p>Try searching for a different keyword or level filter.</p>
+                    </Box>
+                  )
+                }
+              />
+            </>
+          )}
         </SpaceBetween>
       </Container>
 
