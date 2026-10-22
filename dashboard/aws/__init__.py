@@ -735,40 +735,6 @@ def _error_code(exc: Exception) -> Optional[str]:
     return None
 
 
-def cur_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    cur = factory.client('cur')
-    operations = set(cur.meta.service_model.operation_names)
-
-    report_definitions = _safe_value(
-        lambda: _operation_items(cur, 'describe_report_definitions', 'ReportDefinitions'),
-        [],
-    ) if 'DescribeReportDefinitions' in operations else []
-
-    return {
-        'summary': {
-            'report_definitions': len(report_definitions),
-            'available_sdk_operations': len(operations),
-        },
-        'report_definitions': _clean_response(report_definitions),
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'DescribeReportDefinitions',
-                'PutReportDefinition',
-                'ModifyReportDefinition',
-                'DeleteReportDefinition',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.17 adds Cost and Usage Reports support under the cur service name.',
-            'Report definitions connect billing export metadata to local S3-style delivery settings.',
-        ],
-    }
-
-
 def emr_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     emr = factory.client('emr')
@@ -6919,27 +6885,6 @@ def list_pricing_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ]
 
 
-def list_cur_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    cur = factory.client('cur')
-    operations = set(cur.meta.service_model.operation_names)
-
-    if 'DescribeReportDefinitions' not in operations:
-        return []
-
-    return [
-        {
-            'type': 'report_definition',
-            'name': report.get('ReportName'),
-            's3_bucket': report.get('S3Bucket'),
-            'time_unit': report.get('TimeUnit'),
-        }
-        for report in _safe_value(
-            lambda: _operation_items(cur, 'describe_report_definitions', 'ReportDefinitions'),
-            [],
-        )
-    ]
-
-
 def list_emr_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     emr = factory.client('emr')
     operations = set(emr.meta.service_model.operation_names)
@@ -7366,7 +7311,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('pipes-resources', 'EventBridge Pipes resources', list_pipes_resources),
         ('pricing-resources', 'AWS Price List resources', list_pricing_resources),
         ('costexplorer-resources', 'Cost Explorer resources', costexplorer.list_costexplorer_resources),
-        ('cur-resources', 'Cost and Usage Reports', list_cur_resources),
+        ('cur-resources', 'Cost and Usage Reports', cur.list_cur_resources),
         ('bcmdataexports-resources', 'BCM Data Exports', bcmdataexports.list_bcmdataexports_resources),
         ('memorydb-resources', 'MemoryDB resources', list_memorydb_resources),
         ('neptune-resources', 'Neptune resources', list_neptune_resources),
@@ -7447,6 +7392,7 @@ from . import (  # noqa: E402
     cognito,
     config,
     costexplorer,
+    cur,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -7472,4 +7418,5 @@ from .codepipeline import codepipeline_inventory  # noqa: E402
 from .cognito import cognito_inventory  # noqa: E402
 from .config import config_inventory  # noqa: E402
 from .costexplorer import costexplorer_inventory  # noqa: E402
+from .cur import cur_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
