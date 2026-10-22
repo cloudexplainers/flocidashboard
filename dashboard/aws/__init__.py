@@ -636,61 +636,6 @@ def s3vectors_inventory() -> dict[str, Any]:
     }
 
 
-def rdsdata_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    rdsdata = factory.client('rds-data')
-    operations = set(rdsdata.meta.service_model.operation_names)
-
-    return {
-        'summary': {
-            'statements': 0,
-            'transactions': 0,
-            'available_sdk_operations': len(operations),
-        },
-        'statement_operations': [
-            {'name': operation}
-            for operation in [
-                'ExecuteStatement',
-                'BatchExecuteStatement',
-            ]
-            if operation in operations
-        ],
-        'transaction_operations': [
-            {'name': operation}
-            for operation in [
-                'BeginTransaction',
-                'CommitTransaction',
-                'RollbackTransaction',
-            ]
-            if operation in operations
-        ],
-        'request_fields': [
-            {'name': 'resourceArn', 'description': 'RDS cluster ARN for the Data API target.'},
-            {'name': 'secretArn', 'description': 'Secret ARN used by the Data API request.'},
-            {'name': 'database', 'description': 'Optional database name.'},
-            {'name': 'sql', 'description': 'SQL statement for ExecuteStatement or BatchExecuteStatement.'},
-            {'name': 'transactionId', 'description': 'Transaction token returned by BeginTransaction.'},
-        ],
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'ExecuteStatement',
-                'BatchExecuteStatement',
-                'BeginTransaction',
-                'CommitTransaction',
-                'RollbackTransaction',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.31 adds PostgreSQL support to the RDS Data API, extending the MySQL-backed flow introduced in 1.5.25.',
-            'Floci 1.5.25 adds RDS Data API support under the rds-data service name.',
-            'RDS Data API is request-oriented rather than catalog-oriented, so this page surfaces supported calls and required request fields.',
-        ],
-    }
-
-
 def transcribe_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     transcribe = factory.client('transcribe')
@@ -2588,25 +2533,6 @@ def list_wafv2_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     return resources
 
 
-def list_rdsdata_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    operations = set(factory.client('rds-data').meta.service_model.operation_names)
-    return [
-        {
-            'type': 'operation',
-            'name': operation,
-            'status': 'supported',
-        }
-        for operation in [
-            'ExecuteStatement',
-            'BatchExecuteStatement',
-            'BeginTransaction',
-            'CommitTransaction',
-            'RollbackTransaction',
-        ]
-        if operation in operations
-    ]
-
-
 def list_s3vectors_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     s3vectors = factory.client('s3vectors')
     operations = set(s3vectors.meta.service_model.operation_names)
@@ -2778,7 +2704,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('ecr-resources', 'ECR resources', ecr.list_ecr_resources),
         ('glue-resources', 'Glue resources', glue.list_glue_resources),
         ('rds-resources', 'RDS resources', rds.list_rds_resources),
-        ('rdsdata-resources', 'RDS Data API operations', list_rdsdata_resources),
+        ('rdsdata-resources', 'RDS Data API operations', rdsdata.list_rdsdata_resources),
         ('route53-resources', 'Route 53 resources', list_route53_resources),
         ('iam-users', 'IAM users', iam.list_iam_users),
         ('iam-roles', 'IAM roles', iam.list_iam_roles),
@@ -2875,6 +2801,7 @@ from . import (  # noqa: E402
     pipes,
     pricing,
     rds,
+    rdsdata,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -2926,4 +2853,5 @@ from .opensearch import opensearch_inventory  # noqa: E402
 from .pipes import pipes_inventory  # noqa: E402
 from .pricing import pricing_inventory  # noqa: E402
 from .rds import rds_inventory  # noqa: E402
+from .rdsdata import rdsdata_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
