@@ -6347,104 +6347,6 @@ def ses_inventory() -> dict[str, Any]:
     }
 
 
-def cloudfront_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    cloudfront = factory.client('cloudfront')
-    operations = set(cloudfront.meta.service_model.operation_names)
-
-    def nested(operation: str, method: str, container_key: str, **kwargs) -> list[Any]:
-        return _safe_value(
-            lambda: _nested_operation_items(cloudfront, method, container_key, **kwargs),
-            [],
-        ) if operation in operations else []
-
-    distributions = nested('ListDistributions', 'list_distributions', 'DistributionList')
-
-    def distribution_configuration(distribution):
-        if 'GetDistributionConfig' not in operations:
-            return distribution
-        try:
-            response = cloudfront.get_distribution_config(Id=distribution['Id'])
-            return {**distribution, **response.get('DistributionConfig', {}), 'ETag': response.get('ETag')}
-        except (ClientError, BotoCoreError, ValueError) as exc:
-            return {**distribution, 'configuration_error': str(exc)}
-
-    if distributions:
-        with ThreadPoolExecutor(max_workers=min(8, len(distributions))) as executor:
-            distributions = list(executor.map(distribution_configuration, distributions))
-
-    streaming_distributions = nested(
-        'ListStreamingDistributions',
-        'list_streaming_distributions',
-        'StreamingDistributionList',
-    )
-    origin_access_identities = nested(
-        'ListCloudFrontOriginAccessIdentities',
-        'list_cloud_front_origin_access_identities',
-        'CloudFrontOriginAccessIdentityList',
-    )
-    cache_policies = nested('ListCachePolicies', 'list_cache_policies', 'CachePolicyList')
-    origin_request_policies = nested(
-        'ListOriginRequestPolicies',
-        'list_origin_request_policies',
-        'OriginRequestPolicyList',
-    )
-    response_headers_policies = nested(
-        'ListResponseHeadersPolicies',
-        'list_response_headers_policies',
-        'ResponseHeadersPolicyList',
-    )
-    functions = nested('ListFunctions', 'list_functions', 'FunctionList')
-    key_groups = nested('ListKeyGroups', 'list_key_groups', 'KeyGroupList')
-    public_keys = nested('ListPublicKeys', 'list_public_keys', 'PublicKeyList')
-
-    return {
-        'summary': {
-            'distributions': len(distributions),
-            'streaming_distributions': len(streaming_distributions),
-            'origin_access_identities': len(origin_access_identities),
-            'cache_policies': len(cache_policies),
-            'origin_request_policies': len(origin_request_policies),
-            'response_headers_policies': len(response_headers_policies),
-            'functions': len(functions),
-            'key_groups': len(key_groups),
-            'public_keys': len(public_keys),
-            'available_sdk_operations': len(operations),
-        },
-        'distributions': _clean_response(distributions),
-        'streaming_distributions': _clean_response(streaming_distributions),
-        'origin_access_identities': _clean_response(origin_access_identities),
-        'cache_policies': _clean_response(cache_policies),
-        'origin_request_policies': _clean_response(origin_request_policies),
-        'response_headers_policies': _clean_response(response_headers_policies),
-        'functions': _clean_response(functions),
-        'key_groups': _clean_response(key_groups),
-        'public_keys': _clean_response(public_keys),
-        'supported_from_sdk': [
-            operation
-            for operation in [
-                'CreateDistribution',
-                'GetDistribution',
-                'ListDistributions',
-                'UpdateDistribution',
-                'DeleteDistribution',
-                'CreateInvalidation',
-                'ListInvalidations',
-                'ListCachePolicies',
-                'ListOriginRequestPolicies',
-                'ListResponseHeadersPolicies',
-            ]
-            if operation in operations
-        ],
-        'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Floci 1.5.18 adds CloudFront service emulation for distributions, origins, behaviors, and the management API.',
-            'Floci 1.5.28 honors the configured domain suffix for generated distribution domains.',
-            'This page focuses on local CloudFront management inventory so CDN infrastructure created by IaC is visible in the dashboard.',
-        ],
-    }
-
-
 def _ecr_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
     try:
         return _clean_response(loader())
@@ -7491,58 +7393,6 @@ def list_ses_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
                 for message in messages
                 if isinstance(message, dict)
             )
-    return resources
-
-
-def list_cloudfront_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    cloudfront = factory.client('cloudfront')
-    operations = set(cloudfront.meta.service_model.operation_names)
-    resources: list[dict[str, Any]] = []
-
-    if 'ListDistributions' in operations:
-        resources.extend(
-            {
-                'type': 'distribution',
-                'id': distribution.get('Id'),
-                'arn': distribution.get('ARN'),
-                'domain_name': distribution.get('DomainName'),
-                'status': distribution.get('Status'),
-                'enabled': distribution.get('Enabled'),
-            }
-            for distribution in _safe_value(
-                lambda: _nested_operation_items(cloudfront, 'list_distributions', 'DistributionList'),
-                [],
-            )
-        )
-
-    if 'ListCachePolicies' in operations:
-        resources.extend(
-            {
-                'type': 'cache_policy',
-                'id': (policy.get('CachePolicy') or {}).get('Id'),
-                'name': ((policy.get('CachePolicy') or {}).get('CachePolicyConfig') or {}).get('Name'),
-                'policy_type': policy.get('Type'),
-            }
-            for policy in _safe_value(
-                lambda: _nested_operation_items(cloudfront, 'list_cache_policies', 'CachePolicyList'),
-                [],
-            )
-        )
-
-    if 'ListOriginRequestPolicies' in operations:
-        resources.extend(
-            {
-                'type': 'origin_request_policy',
-                'id': (policy.get('OriginRequestPolicy') or {}).get('Id'),
-                'name': ((policy.get('OriginRequestPolicy') or {}).get('OriginRequestPolicyConfig') or {}).get('Name'),
-                'policy_type': policy.get('Type'),
-            }
-            for policy in _safe_value(
-                lambda: _nested_operation_items(cloudfront, 'list_origin_request_policies', 'OriginRequestPolicyList'),
-                [],
-            )
-        )
-
     return resources
 
 
@@ -9175,7 +9025,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('backup-resources', 'Backup resources', backup.list_backup_resources),
         ('batch-resources', 'AWS Batch resources', batch.list_batch_resources),
         ('bedrockruntime-resources', 'Bedrock Runtime operations', bedrockruntime.list_bedrockruntime_resources),
-        ('cloudfront-resources', 'CloudFront resources', list_cloudfront_resources),
+        ('cloudfront-resources', 'CloudFront resources', cloudfront.list_cloudfront_resources),
         ('cloudmap-resources', 'Cloud Map resources', list_cloudmap_resources),
         ('cloudtrail-resources', 'CloudTrail trails', list_cloudtrail_resources),
         ('codebuild-resources', 'CodeBuild resources', list_codebuild_resources),
@@ -9265,6 +9115,7 @@ from . import (  # noqa: E402
     bedrockruntime,
     cloudcontrol,
     cloudformation,
+    cloudfront,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -9280,4 +9131,5 @@ from .bcmdataexports import bcmdataexports_inventory  # noqa: E402
 from .bedrockruntime import bedrockruntime_inventory  # noqa: E402
 from .cloudcontrol import cloudcontrol_inventory  # noqa: E402
 from .cloudformation import cloudformation_inventory  # noqa: E402
+from .cloudfront import cloudfront_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
