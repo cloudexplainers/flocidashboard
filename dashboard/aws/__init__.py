@@ -2445,124 +2445,6 @@ def dynamodb_inventory() -> dict[str, Any]:
     }
 
 
-def _cloudwatch_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
-    try:
-        return _clean_response(loader())
-    except ClientError as exc:
-        if _error_code(exc) in empty_codes:
-            return None
-        return {'error': str(exc)}
-    except (BotoCoreError, ValueError, json.JSONDecodeError) as exc:
-        return {'error': str(exc)}
-
-
-def cloudwatch_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    logs = factory.client('logs')
-    cloudwatch = factory.client('cloudwatch')
-
-    log_groups = _paginate(logs, 'describe_log_groups', 'logGroups')
-
-    def log_group_detail(group: dict[str, Any]) -> dict[str, Any]:
-        name = group.get('logGroupName')
-        streams = _cloudwatch_optional(
-            lambda: _paginate(logs, 'describe_log_streams', 'logStreams', logGroupName=name),
-            {'ResourceNotFoundException'},
-        )
-        stream_details = []
-
-        if isinstance(streams, list):
-            for stream in streams:
-                stream_name = stream.get('logStreamName')
-                events = _cloudwatch_optional(
-                    lambda: logs.get_log_events(
-                        logGroupName=name,
-                        logStreamName=stream_name,
-                        limit=10,
-                        startFromHead=False,
-                    ).get('events', []),
-                    {'ResourceNotFoundException'},
-                )
-                stream_details.append({
-                    **stream,
-                    'recent_events': events,
-                })
-
-        return {
-            'name': name,
-            'arn': group.get('arn'),
-            'created': group.get('creationTime'),
-            'retention_days': group.get('retentionInDays'),
-            'stored_bytes': group.get('storedBytes'),
-            'metric_filter_count': group.get('metricFilterCount'),
-            'tags': _cloudwatch_optional(
-                lambda: logs.list_tags_log_group(logGroupName=name).get('tags', {}),
-                {'ResourceNotFoundException'},
-            ),
-            'streams': stream_details,
-            'stream_count': len(stream_details),
-        }
-
-    detailed_log_groups = [log_group_detail(group) for group in log_groups]
-    metrics = _paginate(cloudwatch, 'list_metrics', 'Metrics')
-    alarms = _paginate(cloudwatch, 'describe_alarms', 'MetricAlarms')
-
-    return {
-        'summary': {
-            'log_groups': len(detailed_log_groups),
-            'log_streams': sum(group.get('stream_count') or 0 for group in detailed_log_groups),
-            'recent_log_events': sum(
-                len(stream.get('recent_events') or [])
-                for group in detailed_log_groups
-                for stream in group.get('streams', [])
-            ),
-            'metrics': len(metrics),
-            'alarms': len(alarms),
-        },
-        'log_groups': detailed_log_groups,
-        'metrics': _clean_response(metrics),
-        'alarms': _clean_response(alarms),
-        'logs_supported': [
-            'CreateLogGroup',
-            'DeleteLogGroup',
-            'DescribeLogGroups',
-            'CreateLogStream',
-            'DeleteLogStream',
-            'DescribeLogStreams',
-            'PutLogEvents',
-            'GetLogEvents',
-            'FilterLogEvents',
-            'PutRetentionPolicy',
-            'DeleteRetentionPolicy',
-            'TagLogGroup',
-            'UntagLogGroup',
-            'ListTagsLogGroup',
-            'StartQuery',
-            'GetQueryResults',
-        ],
-        'metrics_supported': [
-            'PutMetricData',
-            'ListMetrics',
-            'GetMetricStatistics',
-            'GetMetricData',
-            'PutMetricAlarm',
-            'DescribeAlarms',
-            'DeleteAlarms',
-            'SetAlarmState',
-        ],
-        'configuration': {
-            'logs_max_events_per_query': 10000,
-            'logs_protocol': 'JSON 1.1, X-Amz-Target: Logs.*',
-            'metrics_protocol': 'Query XML and JSON 1.1',
-        },
-        'notes': [
-            'Floci 1.5.31 adds CloudWatch Logs Insights query support for local log analysis workflows.',
-            'Floci 1.5.23 accepts CloudWatch Logs log group ARNs through logGroupIdentifier where AWS allows either a name or ARN.',
-            'Floci 1.5.23 also fixes rpc-v2-cbor timestamp list tagging for GetMetricData decoding.',
-        ],
-    }
-
-
 def config_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     config = factory.client('config')
@@ -7342,40 +7224,6 @@ def list_secrets(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ]
 
 
-def list_log_groups(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    return [
-        {
-            'name': group.get('logGroupName'),
-            'arn': group.get('arn'),
-            'retention': group.get('retentionInDays'),
-        }
-        for group in factory.client('logs').get_paginator('describe_log_groups').paginate().build_full_result().get('logGroups', [])
-    ]
-
-
-def list_cloudwatch_metrics(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    cloudwatch = factory.client('cloudwatch')
-    resources = [
-        {
-            'type': 'metric',
-            'namespace': metric.get('Namespace'),
-            'name': metric.get('MetricName'),
-            'dimensions': metric.get('Dimensions'),
-        }
-        for metric in _safe_value(lambda: _paginate(cloudwatch, 'list_metrics', 'Metrics'), [])
-    ]
-    resources.extend(
-        {
-            'type': 'alarm',
-            'name': alarm.get('AlarmName'),
-            'arn': alarm.get('AlarmArn'),
-            'state': alarm.get('StateValue'),
-        }
-        for alarm in _safe_value(lambda: _paginate(cloudwatch, 'describe_alarms', 'MetricAlarms'), [])
-    )
-    return resources
-
-
 def list_config_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     config = factory.client('config')
     operations = set(config.meta.service_model.operation_names)
@@ -8733,8 +8581,8 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('lambda-functions', 'Lambda functions', list_lambda_functions),
         ('kms-keys', 'KMS keys', list_kms_keys),
         ('secrets', 'Secrets Manager secrets', list_secrets),
-        ('log-groups', 'CloudWatch log groups', list_log_groups),
-        ('cloudwatch-metrics', 'CloudWatch metrics and alarms', list_cloudwatch_metrics),
+        ('log-groups', 'CloudWatch log groups', cloudwatch.list_log_groups),
+        ('cloudwatch-metrics', 'CloudWatch metrics and alarms', cloudwatch.list_cloudwatch_metrics),
         ('cognito-resources', 'Cognito resources', list_cognito_resources),
         ('eventbridge-resources', 'EventBridge resources', list_eventbridge_resources),
     ]
@@ -8774,6 +8622,7 @@ from . import (  # noqa: E402
     cloudfront,
     cloudmap,
     cloudtrail,
+    cloudwatch,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -8792,4 +8641,5 @@ from .cloudformation import cloudformation_inventory  # noqa: E402
 from .cloudfront import cloudfront_inventory  # noqa: E402
 from .cloudmap import cloudmap_inventory  # noqa: E402
 from .cloudtrail import cloudtrail_inventory  # noqa: E402
+from .cloudwatch import cloudwatch_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
