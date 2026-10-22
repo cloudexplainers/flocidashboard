@@ -1661,124 +1661,6 @@ def secretsmanager_inventory() -> dict[str, Any]:
     }
 
 
-def _eventbridge_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
-    try:
-        return _clean_response(loader())
-    except ClientError as exc:
-        if _error_code(exc) in empty_codes:
-            return None
-        return {'error': str(exc)}
-    except (BotoCoreError, ValueError, json.JSONDecodeError) as exc:
-        return {'error': str(exc)}
-
-
-def eventbridge_inventory() -> dict[str, Any]:
-    factory = FlociClientFactory()
-    events = factory.client('events')
-    buses = _safe_value(lambda: _operation_items(events, 'list_event_buses', 'EventBuses'), [])
-
-    if not buses:
-        buses = [{'Name': 'default'}]
-
-    def bus_name(bus: dict[str, Any]) -> str:
-        return bus.get('Name') or bus.get('Arn') or 'default'
-
-    def bus_detail(bus: dict[str, Any]) -> dict[str, Any]:
-        name = bus_name(bus)
-        details = _eventbridge_optional(
-            lambda: events.describe_event_bus(Name=name),
-            {'ResourceNotFoundException'},
-        )
-        rules = _eventbridge_optional(
-            lambda: _operation_items(events, 'list_rules', 'Rules', EventBusName=name),
-            {'ResourceNotFoundException'},
-        )
-        rule_details = []
-
-        if isinstance(rules, list):
-            for rule in rules:
-                rule_name = rule.get('Name')
-                targets = _eventbridge_optional(
-                    lambda: _operation_items(
-                        events,
-                        'list_targets_by_rule',
-                        'Targets',
-                        Rule=rule_name,
-                        EventBusName=name,
-                    ),
-                    {'ResourceNotFoundException'},
-                )
-                described_rule = _eventbridge_optional(
-                    lambda: events.describe_rule(Name=rule_name, EventBusName=name),
-                    {'ResourceNotFoundException'},
-                )
-                rule_details.append({
-                    'name': rule_name,
-                    'arn': rule.get('Arn'),
-                    'state': rule.get('State'),
-                    'description': rule.get('Description'),
-                    'schedule_expression': rule.get('ScheduleExpression'),
-                    'event_pattern': rule.get('EventPattern'),
-                    'role_arn': rule.get('RoleArn'),
-                    'managed_by': rule.get('ManagedBy'),
-                    'details': described_rule,
-                    'targets': targets,
-                    'target_count': len(targets) if isinstance(targets, list) else 0,
-                })
-
-        return {
-            'name': name,
-            'arn': bus.get('Arn') or (details.get('Arn') if isinstance(details, dict) else None),
-            'description': bus.get('Description') or (details.get('Description') if isinstance(details, dict) else None),
-            'policy': bus.get('Policy') or (details.get('Policy') if isinstance(details, dict) else None),
-            'details': details,
-            'rules': rule_details,
-            'rule_count': len(rule_details),
-            'target_count': sum(rule.get('target_count') or 0 for rule in rule_details),
-        }
-
-    detailed_buses = [bus_detail(bus) for bus in buses]
-
-    return {
-        'summary': {
-            'event_buses': len(detailed_buses),
-            'rules': sum(bus.get('rule_count') or 0 for bus in detailed_buses),
-            'targets': sum(bus.get('target_count') or 0 for bus in detailed_buses),
-            'enabled_rules': sum(
-                1
-                for bus in detailed_buses
-                for rule in bus.get('rules', [])
-                if rule.get('state') == 'ENABLED'
-            ),
-        },
-        'event_buses': detailed_buses,
-        'supported': [
-            'CreateEventBus',
-            'DeleteEventBus',
-            'DescribeEventBus',
-            'ListEventBuses',
-            'PutRule',
-            'DeleteRule',
-            'DescribeRule',
-            'ListRules',
-            'EnableRule',
-            'DisableRule',
-            'PutTargets',
-            'RemoveTargets',
-            'ListTargetsByRule',
-            'PutEvents',
-        ],
-        'notes': [
-            'The default event bus is named default and accepts AWS service events.',
-            'Custom event buses are for application events.',
-            'Floci 1.5.31 can deliver EventBridge events to Data Firehose delivery stream targets.',
-            'Floci 1.5.28 syncs EventBridge tags to Resource Groups Tagging discovery.',
-            'Floci 1.5.22 preserves the PutEvents call region and account through pattern matching and delivered event envelopes.',
-            'Floci 1.5.21 fixes rule tagging on custom buses whose name contains event-bus.',
-        ],
-    }
-
-
 def firehose_inventory() -> dict[str, Any]:
     factory = FlociClientFactory()
     firehose = factory.client('firehose')
@@ -4534,57 +4416,6 @@ def list_secrets(factory: FlociClientFactory) -> list[dict[str, Any]]:
     ]
 
 
-def list_eventbridge_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
-    events = factory.client('events')
-    resources: list[dict[str, Any]] = []
-    buses = _safe_value(lambda: _paginate(events, 'list_event_buses', 'EventBuses'), [])
-
-    if not buses:
-        buses = [{'Name': 'default'}]
-
-    for bus in buses:
-        name = bus.get('Name') or 'default'
-        resources.append({
-            'type': 'event_bus',
-            'name': name,
-            'arn': bus.get('Arn'),
-        })
-        rules = _safe_value(lambda name=name: _paginate(events, 'list_rules', 'Rules', EventBusName=name), [])
-        resources.extend(
-            {
-                'type': 'rule',
-                'event_bus': name,
-                'name': rule.get('Name'),
-                'arn': rule.get('Arn'),
-                'state': rule.get('State'),
-            }
-            for rule in rules
-        )
-        for rule in rules:
-            rule_name = rule.get('Name')
-            resources.extend(
-                {
-                    'type': 'target',
-                    'event_bus': name,
-                    'rule': rule_name,
-                    'id': target.get('Id'),
-                    'arn': target.get('Arn'),
-                }
-                for target in _safe_value(
-                    lambda name=name, rule_name=rule_name: _paginate(
-                        events,
-                        'list_targets_by_rule',
-                        'Targets',
-                        Rule=rule_name,
-                        EventBusName=name,
-                    ),
-                    [],
-                )
-            )
-
-    return resources
-
-
 def list_firehose_resources(factory: FlociClientFactory) -> list[dict[str, Any]]:
     firehose = factory.client('firehose')
     stream_names = _safe_value(lambda: _paginate(firehose, 'list_delivery_streams', 'DeliveryStreamNames'), [])
@@ -5276,7 +5107,7 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('log-groups', 'CloudWatch log groups', cloudwatch.list_log_groups),
         ('cloudwatch-metrics', 'CloudWatch metrics and alarms', cloudwatch.list_cloudwatch_metrics),
         ('cognito-resources', 'Cognito resources', cognito.list_cognito_resources),
-        ('eventbridge-resources', 'EventBridge resources', list_eventbridge_resources),
+        ('eventbridge-resources', 'EventBridge resources', eventbridge.list_eventbridge_resources),
     ]
 
     if service_keys is not None:
@@ -5332,6 +5163,7 @@ from . import (  # noqa: E402
     elasticbeanstalk,
     elasticloadbalancing,
     emr,
+    eventbridge,
     s3,
 )
 from .acm import acm_inventory  # noqa: E402
@@ -5368,4 +5200,5 @@ from .elasticache import elasticache_inventory  # noqa: E402
 from .elasticbeanstalk import elasticbeanstalk_inventory  # noqa: E402
 from .elasticloadbalancing import elasticloadbalancing_inventory  # noqa: E402
 from .emr import emr_inventory  # noqa: E402
+from .eventbridge import eventbridge_inventory  # noqa: E402
 from .s3 import create_s3_bucket, s3_inventory  # noqa: E402
