@@ -68,3 +68,24 @@ Left as is:
 - Key pairs, volumes, snapshots, Elastic IPs, NAT gateways, network ACLs, launch templates and flow logs have backend routes but no dedicated tables in this console. They are listed in the inventory and the generic workbench. Building them out is a larger redesign.
 - Floci stores security group rules but local Docker networking does not enforce them; the rule dialog says so.
 
+## IAM
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | Create user, delete user, create/delete policy, attach/detach policies, access keys and group membership all went through the inventory endpoint and did nothing while reporting success. | Fixed: each calls its IAM endpoint (`CreateUser`, `DeleteUser`, `CreatePolicy`, `Attach*Policy`, `CreateAccessKey`, `AddUserToGroup` and so on). Delete role and group now surface errors. |
+| High | Every user and role was shown with an invented attached policy (`AdministratorAccess` for users, `AWSLambdaBasicExecutionRole` for roles), because the console read `AttachedPolicies` while the API returns `attached_policies`. For a learning tool this taught the wrong permissions. | Fixed: real attached managed policies and inline policies (inline documents open on click). |
+| High | Every role showed a made-up Lambda trust policy, because the console read `assume_role_policy_document` while the API returns `trust_policy`. | Fixed: real trust policy, and a "Trusted entities" column derived from it, as in the Roles list. |
+| High | Every policy showed an `Allow *:*` document, and an empty policy list was backfilled with five invented AWS managed policies and fake attachment counts. | Fixed: documents come from `GetPolicy` + `GetPolicyVersion`; only real policies are listed, with real attachment counts and versions. |
+| High | Group membership was never shown (the console read `Users` while the API returns `users`), and removing a user from a group was not awaited or refreshed. | Fixed. |
+| High | The policy simulator read `results`, but the API returns `evaluations`, so it never showed results. It also offered the account root, which `SimulatePrincipalPolicy` does not accept. | Fixed: users and roles only; results show allowed / explicit deny / implicit deny and matched statements. |
+| Medium | Fallbacks invented values: user "Alice", user ID `AIDA0123456789EXAMPLE`, today's date as creation date. | Removed. Missing values show "-". |
+| Medium | No confirmation for deleting users, roles, policies, groups or access keys. | Fixed: typed-name confirmations that say what the delete also removes. Access keys must be deactivated before deletion, as in the console. |
+| Medium | Create user silently added a dashboard-only inline policy. | Kept (Floci needs it to resolve the user's identity in this dashboard), but it is now an explicit checkbox that says it is not AWS behavior. |
+| Low | Labels and structure differed from the console ("Add User", "Trust Relationships", "IAM Policies"). | Fixed: User groups / Users / Roles / Policies, "Trusted entities", "Security credentials", max session duration in hours, Console access, Last used. |
+| Low | Delete policy errors were labeled "Create managed policy". | Fixed in `iam_views.py`. |
+
+Left as is:
+- Only customer managed policies are listed. The inventory does not enumerate AWS managed policies, so they can be attached by ARN but not browsed.
+- Policy versions, permissions boundaries, login profiles and tags have backend routes but no editors here.
+- Identity providers, Access Analyzer and account settings are not emulated.
+

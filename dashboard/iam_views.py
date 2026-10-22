@@ -275,7 +275,8 @@ def iam_managed_policies_create(request):
             path=body.get('path') or None,
         ))
     except Exception as exc:
-        return handle_action_error(exc, service='iam', operation='create_managed_policy')
+        operation = 'delete_managed_policy' if request.method == 'DELETE' else 'create_managed_policy'
+        return handle_action_error(exc, service='iam', operation=operation)
 
 
 @require_http_methods(['POST', 'DELETE'])

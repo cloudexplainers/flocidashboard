@@ -536,12 +536,9 @@ export async function createIamRole(roleName: string, trustTemplate: string = 'l
   });
 }
 
-export async function deleteIamRole(roleName: string): Promise<any> {
-  const res = await fetch(`/api/iam/roles/${encodeURIComponent(roleName)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+/** DeleteRole. With force, detaches policies and removes the role from instance profiles first, as the console does. */
+export async function deleteIamRole(roleName: string, force: boolean = true): Promise<any> {
+  return requestJson(`/api/iam/roles/${encodeURIComponent(roleName)}/`, { method: 'DELETE', json: { force }, errorMessage: 'Failed to delete role' });
 }
 
 export async function createIamGroup(groupName: string): Promise<any> {
@@ -1359,62 +1356,77 @@ export async function putEvents(entries: any[]): Promise<any> {
 // Phase 2: Core Service Consoles Expansion API Helpers
 // ----------------------------------------------------
 
-// IAM Additional APIs
+// IAM users, policies, access keys and group membership
+const iamPrincipal = (type: 'user' | 'role' | 'group', name: string) => `/api/iam/principals/${type}/${encodeURIComponent(name)}`;
+
+/** CreateUser. The dashboard also adds a GetCallerIdentity inline policy so the user can sign in to this console. */
+export async function createIamUser(userName: string, addBaselinePolicy: boolean = true): Promise<{ user_name: string; arn: string; baseline_policy: string | null }> {
+  return requestJson('/api/iam/users/', { method: 'POST', json: { user_name: userName, add_baseline_policy: addBaselinePolicy }, errorMessage: 'Failed to create user' });
+}
+
+/** DeleteUser. With force, first removes access keys, login profile, policies and group memberships, as the console does. */
+export async function deleteIamUser(userName: string, force: boolean = true): Promise<any> {
+  return requestJson(`/api/iam/users/${encodeURIComponent(userName)}/`, { method: 'DELETE', json: { force }, errorMessage: 'Failed to delete user' });
+}
+
+export async function deleteIamGroup(groupName: string, force: boolean = true): Promise<any> {
+  return requestJson(`/api/iam/groups/${encodeURIComponent(groupName)}/`, { method: 'DELETE', json: { force }, errorMessage: 'Failed to delete group' });
+}
+
 export async function createIamPolicy(policyName: string, policyDocument: any, description: string = ''): Promise<any> {
-  return await executeServiceAction('iam', 'create_policy', {
-    policy_name: policyName,
-    policy_document: typeof policyDocument === 'string' ? policyDocument : JSON.stringify(policyDocument),
-    description,
-  });
+  let document = policyDocument;
+  if (typeof document === 'string') {
+    try {
+      document = JSON.parse(document);
+    } catch {
+      throw new Error('Policy document is not valid JSON.');
+    }
+  }
+  return requestJson('/api/iam/policies/', { method: 'POST', json: { name: policyName, document, description }, errorMessage: 'Failed to create policy' });
 }
 
 export async function deleteIamPolicy(policyArn: string): Promise<any> {
-  return await executeServiceAction('iam', 'delete_policy', { policy_arn: policyArn });
+  return requestJson('/api/iam/policies/', { method: 'DELETE', json: { policy_arn: policyArn }, errorMessage: 'Failed to delete policy' });
 }
 
-export async function fetchIamUserAccessKeys(userName: string): Promise<any[]> {
-  try {
-    const res = await executeServiceAction('iam', 'list_access_keys', { user_name: userName });
-    return res.access_keys || res.AccessKeyMetadata || [];
-  } catch {
-    return [];
-  }
+/** GetPolicy plus GetPolicyVersion for the default version. */
+export async function fetchIamPolicyDocument(policyArn: string): Promise<{ default_version: string; document: any }> {
+  return requestJson('/api/iam/policies/document/', { method: 'POST', json: { policy_arn: policyArn }, errorMessage: 'Failed to read policy document' });
+}
+
+/** GetUserPolicy, GetRolePolicy or GetGroupPolicy. */
+export async function fetchIamInlinePolicyDocument(type: 'user' | 'role' | 'group', principal: string, policyName: string): Promise<{ document: any }> {
+  return requestJson(`${iamPrincipal(type, principal)}/inline-policies/${encodeURIComponent(policyName)}/document/`, { errorMessage: 'Failed to read inline policy' });
 }
 
 export async function createIamUserAccessKey(userName: string): Promise<any> {
-  return await executeServiceAction('iam', 'create_access_key', { user_name: userName });
+  return requestJson(`/api/iam/users/${encodeURIComponent(userName)}/access-keys/`, { method: 'POST', errorMessage: 'Failed to create access key' });
 }
 
 export async function deleteIamUserAccessKey(userName: string, accessKeyId: string): Promise<any> {
-  return await executeServiceAction('iam', 'delete_access_key', { user_name: userName, access_key_id: accessKeyId });
+  return requestJson(`/api/iam/users/${encodeURIComponent(userName)}/access-keys/${encodeURIComponent(accessKeyId)}/`, { method: 'DELETE', errorMessage: 'Failed to delete access key' });
 }
 
 export async function updateIamAccessKeyState(userName: string, accessKeyId: string, status: 'Active' | 'Inactive'): Promise<any> {
-  return await executeServiceAction('iam', 'update_access_key', { user_name: userName, access_key_id: accessKeyId, status });
+  return requestJson(`/api/iam/users/${encodeURIComponent(userName)}/access-keys/${encodeURIComponent(accessKeyId)}/`, { method: 'PUT', json: { status }, errorMessage: 'Failed to update access key' });
 }
 
-export async function attachIamUserPolicy(userName: string, policyArn: string): Promise<any> {
-  return await executeServiceAction('iam', 'attach_user_policy', { user_name: userName, policy_arn: policyArn });
+/** AttachUserPolicy / AttachRolePolicy / AttachGroupPolicy. */
+export async function attachIamPolicy(type: 'user' | 'role' | 'group', principal: string, policyArn: string): Promise<any> {
+  return requestJson(`${iamPrincipal(type, principal)}/attached-policies/`, { method: 'POST', json: { policy_arn: policyArn }, errorMessage: 'Failed to attach policy' });
 }
 
-export async function detachIamUserPolicy(userName: string, policyArn: string): Promise<any> {
-  return await executeServiceAction('iam', 'detach_user_policy', { user_name: userName, policy_arn: policyArn });
-}
-
-export async function attachIamRolePolicy(roleName: string, policyArn: string): Promise<any> {
-  return await executeServiceAction('iam', 'attach_role_policy', { role_name: roleName, policy_arn: policyArn });
-}
-
-export async function detachIamRolePolicy(roleName: string, policyArn: string): Promise<any> {
-  return await executeServiceAction('iam', 'detach_role_policy', { role_name: roleName, policy_arn: policyArn });
+/** DetachUserPolicy / DetachRolePolicy / DetachGroupPolicy. */
+export async function detachIamPolicy(type: 'user' | 'role' | 'group', principal: string, policyArn: string): Promise<any> {
+  return requestJson(`${iamPrincipal(type, principal)}/attached-policies/`, { method: 'DELETE', json: { policy_arn: policyArn }, errorMessage: 'Failed to detach policy' });
 }
 
 export async function addUserToIamGroup(groupName: string, userName: string): Promise<any> {
-  return await executeServiceAction('iam', 'add_user_to_group', { group_name: groupName, user_name: userName });
+  return requestJson(`/api/iam/groups/${encodeURIComponent(groupName)}/members/`, { method: 'POST', json: { user_name: userName }, errorMessage: 'Failed to add user to group' });
 }
 
 export async function removeUserFromIamGroup(groupName: string, userName: string): Promise<any> {
-  return await executeServiceAction('iam', 'remove_user_from_group', { group_name: groupName, user_name: userName });
+  return requestJson(`/api/iam/groups/${encodeURIComponent(groupName)}/members/`, { method: 'DELETE', json: { user_name: userName }, errorMessage: 'Failed to remove user from group' });
 }
 
 // DynamoDB Additional APIs

@@ -522,7 +522,7 @@ test('REST method tree opens request testing for the selected path', async ({ pa
 test('IAM trust summaries preserve principals, actions, and conditions', async ({ page }) => {
   await inventory(page, 'iam', { roles: [{ RoleName: 'worker-role', Arn: 'arn:aws:iam::123456789012:role/worker-role', AssumeRolePolicyDocument: { Statement: [{ Effect: 'Allow', Principal: { Service: 'lambda.amazonaws.com' }, Action: 'sts:AssumeRole', Condition: { StringEquals: { 'aws:SourceAccount': '123456789012' } } }] } }] });
   await page.goto('/iam/roles');
-  await page.getByRole('tab', { name: 'Trust Relationships', exact: true }).click();
+  await page.getByRole('tab', { name: 'Trust relationships', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Policy statement summary', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Service: lambda.amazonaws.com', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'sts:AssumeRole', exact: true })).toBeVisible();
