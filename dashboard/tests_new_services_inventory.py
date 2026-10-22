@@ -97,7 +97,7 @@ class NewServiceInventoryHelperTests(SimpleTestCase):
             'BrokerId': 'broker-1',
             'BrokerName': 'orders',
             'BrokerArn': 'arn:aws:amazonmq:us-east-1:000000000000:broker:orders:broker-1',
-            'EngineType': 'RabbitMQ',
+            'EngineType': 'ActiveMQ',
             'BrokerState': 'RUNNING',
         }
         mq.list_users.return_value = {'Users': [{'Username': 'app'}]}

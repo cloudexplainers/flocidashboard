@@ -109,3 +109,22 @@ class WorkbenchFieldDefaultsTests(SimpleTestCase):
 
         transfer = next(item for item in SERVICES if item.key == 'transfer')
         self.assertTrue(all(action.path.startswith('/api/transfer/') for action in transfer.actions))
+
+
+class AmazonMqUserCountTests(SimpleTestCase):
+    def test_rabbitmq_user_count_is_unknown_not_zero(self):
+        from unittest.mock import patch
+
+        from dashboard.aws.amazonmq import amazonmq_inventory
+
+        mq = MagicMock()
+        mq.meta.service_model.operation_names = ['ListBrokers', 'DescribeBroker', 'ListUsers']
+        mq.can_paginate.return_value = False
+        mq.list_brokers.return_value = {'BrokerSummaries': [{'BrokerId': 'b-1', 'BrokerName': 'events', 'EngineType': 'RABBITMQ'}]}
+        mq.describe_broker.return_value = {'BrokerId': 'b-1', 'EngineType': 'RABBITMQ'}
+        with patch('dashboard.aws.FlociClientFactory') as factory:
+            factory.return_value.client.return_value = mq
+            result = amazonmq_inventory()
+
+        self.assertIsNone(result['brokers'][0]['user_count'])
+        mq.list_users.assert_not_called()

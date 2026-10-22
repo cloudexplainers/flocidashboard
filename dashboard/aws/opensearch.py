@@ -161,6 +161,7 @@ def opensearch_inventory() -> dict[str, Any]:
             'ListTags',
         ],
         'notes': [
+            'Endpoint is the container address Floci reports. From your machine, use the host port Floci publishes for the domain (9400-9499).',
             'Floci OpenSearch supports mock metadata mode and real container-backed domains exposed on ports 9400-9499.',
             'Supported interactive workflows include domain lifecycle, config updates, upgrades, tags, versions, and instance type limits.',
             'Real mode picks an OpenSearch or Elasticsearch image from the requested EngineVersion and marks the domain ready after cluster health is green or yellow.',

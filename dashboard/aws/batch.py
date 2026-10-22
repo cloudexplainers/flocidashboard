@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from dashboard import aws as core
 from dashboard.aws import _clean_response, _safe_value
 
+
+
+def _epoch_ms(value: Any) -> str | None:
+    if not isinstance(value, (int, float)):
+        return value
+    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).isoformat().replace('+00:00', 'Z')
 
 def batch_inventory() -> dict[str, Any]:
     factory = core.FlociClientFactory()
@@ -49,9 +56,10 @@ def batch_inventory() -> dict[str, Any]:
                         'job_name': summary.get('jobName'),
                         'job_queue': queue_name,
                         'status': summary.get('status') or status,
-                        'created_at': summary.get('createdAt'),
-                        'started_at': summary.get('startedAt'),
-                        'stopped_at': summary.get('stoppedAt'),
+                        # Batch reports epoch milliseconds.
+                        'created_at': _epoch_ms(summary.get('createdAt')),
+                        'started_at': _epoch_ms(summary.get('startedAt')),
+                        'stopped_at': _epoch_ms(summary.get('stoppedAt')),
                     })
 
     return {

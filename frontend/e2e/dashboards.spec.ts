@@ -444,7 +444,7 @@ test('generic workbench fills only the selected resource and its parents, and de
   await dialog.getByLabel('Confirmation text').fill('delete');
   await dialog.getByRole('button', { name: 'Delete user', exact: true }).click();
   await expect.poll(() => deleted).toBe('DELETE');
-  await page.getByRole('button', { name: 'How Floci emulates this service', exact: true }).click();
+  await expect(page.getByText('How Floci emulates this service', { exact: true })).toBeVisible();
   await expect(page.getByText('Floci Transfer Family covers the management-plane API only.')).toBeVisible();
   await expect(page.getByText(/example changelog line/)).toHaveCount(0);
 });
