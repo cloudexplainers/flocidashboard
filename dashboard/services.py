@@ -1349,6 +1349,11 @@ FIREHOSE_ACTIONS = (
         'create',
         fields=(
             action_field('name', 'Delivery stream name', required=True),
+            action_field('s3_bucket_arn', 'S3 bucket', required=True, help_text='Destination bucket name or ARN. Source is Direct PUT.'),
+            action_field('role_arn', 'IAM role ARN', required=True, help_text='Role Firehose assumes to write to the bucket.'),
+            action_field('prefix', 'S3 bucket prefix'),
+            action_field('buffering_size_mb', 'Buffer size (MiB)', field_type='number', help_text='1-128. Default 5.'),
+            action_field('buffering_interval_seconds', 'Buffer interval (seconds)', field_type='number', help_text='0-900. Default 300.'),
             action_field('tags', 'Tags', field_type='array'),
         ),
         success_message='Delivery stream created',
@@ -1740,8 +1745,6 @@ TRANSFER_ACTIONS = (
         confirm='Delete this Transfer user?',
         success_message='User deleted',
     ),
-    action('update_user', 'Update user', 'PATCH', '/api/iam/users/{user}/', 'update', fields=(action_field('new_name', 'New user name'), action_field('new_path', 'New path')), success_message='User updated'),
-    action('create_login_profile', 'Create login profile', 'POST', '/api/iam/users/{user}/login-profile/', 'create', fields=(action_field('password', 'Password', required=True), action_field('password_reset_required', 'Require password reset', field_type='boolean')), success_message='Login profile created'),
     action(
         'import_ssh_public_key',
         'Import SSH public key',

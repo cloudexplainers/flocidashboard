@@ -65,3 +65,20 @@ class RdsFamilyEngineFilterTests(SimpleTestCase):
             result = neptune_inventory()
 
         self.assertEqual([item['DBClusterIdentifier'] for item in result['clusters']], ['graph'])
+
+
+class FirehoseCreateTests(SimpleTestCase):
+    def test_create_requires_s3_destination(self):
+        from unittest.mock import patch
+
+        from dashboard.firehose_api import create_delivery_stream
+
+        with self.assertRaisesMessage(ValueError, 'S3 bucket ARN'):
+            create_delivery_stream('orders')
+        with patch('dashboard.firehose_api._client') as client:
+            client.return_value.create_delivery_stream.return_value = {'DeliveryStreamARN': 'arn'}
+            create_delivery_stream('orders', s3_bucket_arn='lake', role_arn='arn:aws:iam::000000000000:role/fh')
+        kwargs = client.return_value.create_delivery_stream.call_args.kwargs
+        self.assertEqual(kwargs['DeliveryStreamType'], 'DirectPut')
+        self.assertEqual(kwargs['ExtendedS3DestinationConfiguration']['BucketARN'], 'arn:aws:s3:::lake')
+        self.assertEqual(kwargs['ExtendedS3DestinationConfiguration']['BufferingHints'], {'SizeInMBs': 5, 'IntervalInSeconds': 300})

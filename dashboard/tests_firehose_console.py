@@ -35,7 +35,10 @@ class FirehoseActionsApiTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['name'], 'orders')
-        create_mock.assert_called_once_with('orders', tags=[{'Key': 'env', 'Value': 'local'}])
+        create_mock.assert_called_once_with(
+            'orders', tags=[{'Key': 'env', 'Value': 'local'}], s3_bucket_arn='', role_arn='', prefix='',
+            buffering_size_mb=None, buffering_interval_seconds=None,
+        )
 
     def test_create_delivery_stream_rejects_invalid_json(self):
         response = self.client.post(

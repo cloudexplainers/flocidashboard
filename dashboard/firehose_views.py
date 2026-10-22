@@ -16,6 +16,11 @@ def firehose_delivery_streams_create(request):
         return JsonResponse(create_delivery_stream(
             body.get('name') or '',
             tags=body.get('tags') or [],
+            s3_bucket_arn=body.get('s3_bucket_arn') or '',
+            role_arn=body.get('role_arn') or '',
+            prefix=body.get('prefix') or '',
+            buffering_size_mb=body.get('buffering_size_mb'),
+            buffering_interval_seconds=body.get('buffering_interval_seconds'),
         ))
     except Exception as exc:
         return handle_action_error(exc, service='firehose', operation='create_delivery_stream')

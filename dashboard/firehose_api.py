@@ -43,9 +43,42 @@ def _object(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
-def create_delivery_stream(name: str, *, tags: Any = None) -> dict[str, Any]:
+def create_delivery_stream(
+    name: str,
+    *,
+    tags: Any = None,
+    s3_bucket_arn: str = '',
+    role_arn: str = '',
+    prefix: str = '',
+    buffering_size_mb: Any = None,
+    buffering_interval_seconds: Any = None,
+) -> dict[str, Any]:
+    """Create a Direct PUT stream with an Amazon S3 destination, as the console does.
+
+    AWS requires a destination. Floci accepts a stream without one, and then
+    PutRecord succeeds while the records go nowhere, so a destination is required here.
+    """
     clean_name = _required(name, 'Delivery stream name')
-    kwargs: dict[str, Any] = {'DeliveryStreamName': clean_name}
+    bucket_arn = _required(s3_bucket_arn, 'S3 bucket ARN')
+    if not bucket_arn.startswith('arn:aws:s3:::'):
+        bucket_arn = f'arn:aws:s3:::{bucket_arn}'
+    destination: dict[str, Any] = {
+        'RoleARN': _required(role_arn, 'IAM role ARN'),
+        'BucketARN': bucket_arn,
+        # Console defaults: 5 MiB buffer size, 300 second buffer interval.
+        'BufferingHints': {
+            'SizeInMBs': _bounded_int(buffering_size_mb, 'Buffer size', 5, 1, 128),
+            'IntervalInSeconds': _bounded_int(buffering_interval_seconds, 'Buffer interval', 300, 0, 900),
+        },
+        'CompressionFormat': 'UNCOMPRESSED',
+    }
+    if (prefix or '').strip():
+        destination['Prefix'] = prefix.strip()
+    kwargs: dict[str, Any] = {
+        'DeliveryStreamName': clean_name,
+        'DeliveryStreamType': 'DirectPut',
+        'ExtendedS3DestinationConfiguration': destination,
+    }
     if tags:
         if not isinstance(tags, list):
             raise ValueError('Tags must be a JSON array')
@@ -57,6 +90,18 @@ def create_delivery_stream(name: str, *, tags: Any = None) -> dict[str, Any]:
         'arn': response.get('DeliveryStreamARN'),
         'response': _clean_response(response),
     }
+
+
+def _bounded_int(value: Any, label: str, default: int, minimum: int, maximum: int) -> int:
+    if value in (None, ''):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f'{label} must be a whole number') from None
+    if not minimum <= number <= maximum:
+        raise ValueError(f'{label} must be between {minimum} and {maximum}')
+    return number
 
 
 def delete_delivery_stream(name: str) -> dict[str, Any]:
