@@ -20,6 +20,9 @@ import Alert from '@cloudscape-design/components/alert';
 import Badge from '@cloudscape-design/components/badge';
 import Grid from '@cloudscape-design/components/grid';
 import ColumnLayout from '@cloudscape-design/components/column-layout';
+import Tiles from '@cloudscape-design/components/tiles';
+import ConfirmActionModal from '../components/ConfirmActionModal';
+import { formatAwsDate } from '../format';
 import {
   fetchServiceInventory,
   createSqsQueue,
@@ -45,7 +48,31 @@ interface QueueItem {
   ReceiveMessageWaitTimeSeconds?: string | number;
   Policy?: string;
   RedrivePolicy?: string;
+  RedriveAllowPolicy?: string;
   Type?: string;
+  ContentBasedDeduplication?: string;
+  SqsManagedSseEnabled?: string;
+  KmsMasterKeyId?: string;
+  DeadLetterSourceQueues?: string[];
+}
+
+/** Seconds as the SQS console shows durations ("30 seconds", "4 days"). */
+export function formatSqsDuration(value?: string | number): string {
+  if (value === undefined || value === '') return '-';
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds)) return String(value);
+  const units: Array<[number, string]> = [[86400, 'day'], [3600, 'hour'], [60, 'minute']];
+  for (const [size, unit] of units) {
+    if (seconds >= size && seconds % size === 0) return `${seconds / size} ${unit}${seconds / size === 1 ? '' : 's'}`;
+  }
+  return `${seconds} second${seconds === 1 ? '' : 's'}`;
+}
+
+function describeEncryption(queue: QueueItem): string {
+  if (queue.KmsMasterKeyId) return `SSE-KMS (${queue.KmsMasterKeyId})`;
+  if (queue.SqsManagedSseEnabled === 'true') return 'Amazon SQS key (SSE-SQS)';
+  if (queue.SqsManagedSseEnabled === 'false') return 'Disabled';
+  return '-';
 }
 
 interface SqsMessageItem {
@@ -79,18 +106,22 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
   const [newQueueName, setNewQueueName] = useState('');
   const [isFifo, setIsFifo] = useState(false);
   const [visibilityTimeoutInput, setVisibilityTimeoutInput] = useState('30');
+  const [retentionInput, setRetentionInput] = useState('345600');
+  const [delayInput, setDelayInput] = useState('0');
+  const [waitTimeInput, setWaitTimeInput] = useState('0');
+  const [contentDedup, setContentDedup] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Send Message state
-  const [sendBody, setSendBody] = useState('{\n  "event": "order_placed",\n  "order_id": "ord-9821",\n  "amount": 49.99\n}');
+  const [sendBody, setSendBody] = useState('');
   const [sendDelay, setSendDelay] = useState('0');
-  const [messageGroupId, setMessageGroupId] = useState('group-1');
+  const [messageGroupId, setMessageGroupId] = useState('');
   const [messageDeduplicationId, setMessageDeduplicationId] = useState('');
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<any>(null);
 
   // Receive / Poll Messages state
-  const [maxReceiveCount, setMaxReceiveCount] = useState('5');
+  const [maxReceiveCount, setMaxReceiveCount] = useState('10');
   const [pollVisibilityTimeout, setPollVisibilityTimeout] = useState('0'); // default 0 for peek
   const [pollWaitTime, setPollWaitTime] = useState('0');
   const [polling, setPolling] = useState(false);
@@ -127,28 +158,33 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
           return {
             QueueName: name,
             QueueUrl: q,
-            ApproximateNumberOfMessages: 0,
             Type: name.endsWith('.fifo') ? 'FIFO' : 'Standard',
           };
         }
         const name = q.QueueName || q.name || (q.QueueUrl || '').split('/').pop() || 'Unnamed';
         const attrs = q.attributes || q.Attributes || {};
+        const count = (value: unknown) => (value === undefined || value === null || value === '' ? undefined : Number(value));
         return {
           QueueName: name,
           QueueUrl: q.QueueUrl || q.url || '',
           QueueArn: attrs.QueueArn || q.QueueArn || q.arn,
-          ApproximateNumberOfMessages: Number(attrs.ApproximateNumberOfMessages || q.ApproximateNumberOfMessages || 0),
-          ApproximateNumberOfMessagesNotVisible: Number(attrs.ApproximateNumberOfMessagesNotVisible || 0),
-          ApproximateNumberOfMessagesDelayed: Number(attrs.ApproximateNumberOfMessagesDelayed || 0),
+          ApproximateNumberOfMessages: count(attrs.ApproximateNumberOfMessages ?? q.ApproximateNumberOfMessages ?? q.approximate_messages),
+          ApproximateNumberOfMessagesNotVisible: count(attrs.ApproximateNumberOfMessagesNotVisible ?? q.approximate_not_visible),
+          ApproximateNumberOfMessagesDelayed: count(attrs.ApproximateNumberOfMessagesDelayed ?? q.approximate_delayed),
           CreatedTimestamp: attrs.CreatedTimestamp ? new Date(Number(attrs.CreatedTimestamp) * 1000).toISOString() : undefined,
-          VisibilityTimeout: attrs.VisibilityTimeout || '30',
-          MessageRetentionPeriod: attrs.MessageRetentionPeriod || '345600',
-          MaximumMessageSize: attrs.MaximumMessageSize || '262144',
-          DelaySeconds: attrs.DelaySeconds || '0',
-          ReceiveMessageWaitTimeSeconds: attrs.ReceiveMessageWaitTimeSeconds || '0',
+          VisibilityTimeout: attrs.VisibilityTimeout,
+          MessageRetentionPeriod: attrs.MessageRetentionPeriod,
+          MaximumMessageSize: attrs.MaximumMessageSize,
+          DelaySeconds: attrs.DelaySeconds,
+          ReceiveMessageWaitTimeSeconds: attrs.ReceiveMessageWaitTimeSeconds,
           Policy: attrs.Policy || '',
           RedrivePolicy: attrs.RedrivePolicy || '',
-          Type: name.endsWith('.fifo') ? 'FIFO' : 'Standard',
+          RedriveAllowPolicy: attrs.RedriveAllowPolicy || '',
+          Type: attrs.FifoQueue === 'true' || q.fifo || name.endsWith('.fifo') ? 'FIFO' : 'Standard',
+          ContentBasedDeduplication: attrs.ContentBasedDeduplication,
+          SqsManagedSseEnabled: attrs.SqsManagedSseEnabled,
+          KmsMasterKeyId: attrs.KmsMasterKeyId,
+          DeadLetterSourceQueues: q.dead_letter_source_queues || [],
         };
       });
       setQueues(list);
@@ -176,11 +212,21 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
     if (isFifo && !finalName.endsWith('.fifo')) {
       finalName += '.fifo';
     }
+    if (!/^[A-Za-z0-9_-]{1,80}$/.test(finalName.replace(/\.fifo$/, ''))) {
+      setActionAlert({ type: 'error', message: 'A queue name can have up to 80 characters: alphanumeric characters, hyphens (-), and underscores (_).' });
+      return;
+    }
     setCreating(true);
     setActionAlert(null);
     try {
-      const timeout = visibilityTimeoutInput ? parseInt(visibilityTimeoutInput, 10) : 30;
-      await createSqsQueue(finalName, isFifo, timeout);
+      const number = (value: string) => (value.trim() === '' ? undefined : Number(value));
+      await createSqsQueue(finalName, isFifo, {
+        visibilityTimeout: number(visibilityTimeoutInput),
+        messageRetentionPeriod: number(retentionInput),
+        delaySeconds: number(delayInput),
+        receiveWaitTime: number(waitTimeInput),
+        contentBasedDeduplication: isFifo ? contentDedup : undefined,
+      });
       setActionAlert({ type: 'success', message: `Queue "${finalName}" created successfully.` });
       setCreateModalOpen(false);
       setNewQueueName('');
@@ -229,11 +275,23 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
 
   const handleSendMessage = async () => {
     if (!activeQueue) return;
+    if (!sendBody) {
+      setActionAlert({ type: 'error', message: 'Message body is required.' });
+      return;
+    }
+    if (activeQueue.Type === 'FIFO' && !messageGroupId.trim()) {
+      setActionAlert({ type: 'error', message: 'Message group ID is required for FIFO queues.' });
+      return;
+    }
+    if (activeQueue.Type === 'FIFO' && activeQueue.ContentBasedDeduplication !== 'true' && !messageDeduplicationId.trim()) {
+      setActionAlert({ type: 'error', message: 'Message deduplication ID is required because content-based deduplication is off for this queue.' });
+      return;
+    }
     const generation = selectionGeneration.current;
     setSending(true);
     setSendResult(null);
     try {
-      const delay = sendDelay ? parseInt(sendDelay, 10) : undefined;
+      const delay = activeQueue.Type === 'FIFO' || !sendDelay ? undefined : parseInt(sendDelay, 10);
       const res = await sendSqsMessage(
         activeQueue.QueueName,
         sendBody,
@@ -243,7 +301,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
       );
       if (generation !== selectionGeneration.current) return;
       setSendResult(res);
-      setActionAlert({ type: 'success', message: `Message published to "${activeQueue.QueueName}" (ID: ${res.message_id || 'OK'}).` });
+      setActionAlert({ type: 'success', message: `Your message has been sent and is ready to be received. Message ID: ${res.message_id}` });
       await loadData();
     } catch (err: any) {
       if (generation === selectionGeneration.current) setActionAlert({ type: 'error', message: err.message || 'Failed to send message.' });
@@ -257,7 +315,8 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
     const generation = selectionGeneration.current;
     setPolling(true);
     try {
-      const maxNum = maxReceiveCount ? parseInt(maxReceiveCount, 10) : 5;
+      const maxNum = maxReceiveCount ? parseInt(maxReceiveCount, 10) : 10;
+      if (!(maxNum >= 1 && maxNum <= 10)) throw new Error('Maximum message count must be between 1 and 10.');
       const visTimeout = pollVisibilityTimeout ? parseInt(pollVisibilityTimeout, 10) : 0;
       const waitTime = pollWaitTime ? parseInt(pollWaitTime, 10) : 0;
       const res = await receiveSqsMessages(activeQueue.QueueName, maxNum, visTimeout, waitTime);
@@ -363,29 +422,32 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
           {
             id: 'type',
             header: 'Type',
-            cell: (item) => (
-              <Badge color={item.Type === 'FIFO' ? 'blue' : 'grey'}>{item.Type || 'Standard'}</Badge>
-            ),
-          },
-          {
-            id: 'messages',
-            header: 'Messages available',
-            cell: (item) => item.ApproximateNumberOfMessages ?? 0,
-          },
-          {
-            id: 'inFlight',
-            header: 'In flight',
-            cell: (item) => item.ApproximateNumberOfMessagesNotVisible ?? 0,
-          },
-          {
-            id: 'delayed',
-            header: 'Delayed',
-            cell: (item) => item.ApproximateNumberOfMessagesDelayed ?? 0,
+            cell: (item) => item.Type || 'Standard',
           },
           {
             id: 'created',
             header: 'Created',
-            cell: (item) => item.CreatedTimestamp ? item.CreatedTimestamp.split('T')[0] : 'N/A',
+            cell: (item) => formatAwsDate(item.CreatedTimestamp),
+          },
+          {
+            id: 'messages',
+            header: 'Messages available',
+            cell: (item) => item.ApproximateNumberOfMessages ?? '-',
+          },
+          {
+            id: 'inFlight',
+            header: 'Messages in flight',
+            cell: (item) => item.ApproximateNumberOfMessagesNotVisible ?? '-',
+          },
+          {
+            id: 'encryption',
+            header: 'Encryption',
+            cell: (item) => describeEncryption(item),
+          },
+          {
+            id: 'dedup',
+            header: 'Content-based deduplication',
+            cell: (item) => (item.Type === 'FIFO' ? (item.ContentBasedDeduplication === 'true' ? 'Enabled' : 'Disabled') : '-'),
           },
         ]}
         items={filteredQueues}
@@ -423,9 +485,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
               variant="h2"
               description={`URL: ${activeQueue.QueueUrl}`}
               actions={
-                <SpaceBetween direction="horizontal" size="xs">
-                  <Badge color={activeQueue.Type === 'FIFO' ? 'blue' : 'grey'}>{activeQueue.Type}</Badge>
-                </SpaceBetween>
+                <Badge color={activeQueue.Type === 'FIFO' ? 'blue' : 'grey'}>{activeQueue.Type}</Badge>
               }
             >
               Queue: {activeQueue.QueueName}
@@ -446,7 +506,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                       {/* Send Message Card */}
                       <Container header={<Header variant="h3">Send message</Header>}>
                         <SpaceBetween size="m">
-                          <FormField label="Message body" description="JSON or text payload for the consumer.">
+                          <FormField label="Message body" description="Up to the queue's maximum message size. Plain text; JSON is sent as text.">
                             <Textarea
                               value={sendBody}
                               onChange={({ detail }) => setSendBody(detail.value)}
@@ -455,9 +515,10 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                             />
                           </FormField>
                           <ColumnLayout columns={2}>
-                            <FormField label="Delivery delay (seconds)" description="0 to 900 seconds">
+                            <FormField label="Delivery delay (seconds)" description={activeQueue.Type === 'FIFO' ? 'FIFO queues support only a queue-level delay; per-message delay is not allowed.' : '0 to 900 seconds'}>
                               <Input
-                                value={sendDelay}
+                                value={activeQueue.Type === 'FIFO' ? '' : sendDelay}
+                                disabled={activeQueue.Type === 'FIFO'}
                                 onChange={({ detail }) => setSendDelay(detail.value)}
                                 type="number"
                               />
@@ -473,7 +534,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                             )}
                           </ColumnLayout>
                           {activeQueue.Type === 'FIFO' && (
-                            <FormField label="Deduplication ID" description="Optional if Content-Based Deduplication is on">
+                            <FormField label="Message deduplication ID" description={activeQueue.ContentBasedDeduplication === 'true' ? 'Optional: content-based deduplication is on for this queue.' : 'Required: content-based deduplication is off for this queue.'}>
                               <Input
                                 value={messageDeduplicationId}
                                 onChange={({ detail }) => setMessageDeduplicationId(detail.value)}
@@ -511,14 +572,14 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                                 type="number"
                               />
                             </FormField>
-                            <FormField label="Visibility timeout (s)" description="0 makes messages immediately visible again; receiving still increments the receive count.">
+                            <FormField label="Visibility timeout override (s)" description="0 makes messages visible again immediately (the console's default behavior). Receiving still increments ApproximateReceiveCount.">
                               <Input
                                 value={pollVisibilityTimeout}
                                 onChange={({ detail }) => setPollVisibilityTimeout(detail.value)}
                                 type="number"
                               />
                             </FormField>
-                            <FormField label="Wait time (s)" description="0-20 (Long polling)">
+                            <FormField label="Wait time (s)" description="0 to 20. Above 0 is long polling.">
                               <Input
                                 value={pollWaitTime}
                                 onChange={({ detail }) => setPollWaitTime(detail.value)}
@@ -536,7 +597,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                           </Button>
 
                           <Table
-                            header={<Header variant="h3" counter={`(${receivedMessages.length})`}>Received Messages</Header>}
+                            header={<Header variant="h3" counter={`(${receivedMessages.length})`}>Messages</Header>}
                             columnDefinitions={[
                               {
                                 id: 'id',
@@ -549,7 +610,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                               },
                               {
                                 id: 'body',
-                                header: 'Body Preview',
+                                header: 'Body',
                                 cell: (msg) => (
                                   <code style={{ fontSize: '11px' }}>
                                     {msg.Body ? (msg.Body.length > 35 ? `${msg.Body.substring(0, 35)}...` : msg.Body) : ''}
@@ -557,8 +618,18 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                                 ),
                               },
                               {
+                                id: 'sent',
+                                header: 'Sent',
+                                cell: (msg) => (msg.Attributes?.SentTimestamp ? formatAwsDate(Number(msg.Attributes.SentTimestamp)) : '-'),
+                              },
+                              {
+                                id: 'receives',
+                                header: 'Receive count',
+                                cell: (msg) => msg.Attributes?.ApproximateReceiveCount ?? '-',
+                              },
+                              {
                                 id: 'actions',
-                                header: 'Action',
+                                header: 'Actions',
                                 cell: (msg) => (
                                   <Button
                                     iconName="remove"
@@ -571,7 +642,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                               },
                             ]}
                             items={receivedMessages}
-                            empty={<Box textAlign="center" color="inherit">No messages in local peek buffer. Click "Poll for messages".</Box>}
+                            empty={<Box textAlign="center" color="inherit">No messages received. Choose "Poll for messages".</Box>}
                           />
                         </SpaceBetween>
                       </Container>
@@ -587,17 +658,20 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                     <KeyValuePairs
                       columns={3}
                       items={[
-                        { label: 'Queue URL', value: activeQueue.QueueUrl },
-                        { label: 'Queue ARN', value: activeQueue.QueueArn || 'Not reported' },
-                        { label: 'Queue Type', value: activeQueue.Type || 'Standard' },
-                        { label: 'Visibility timeout', value: `${activeQueue.VisibilityTimeout ?? 30} seconds` },
-                        { label: 'Message retention period', value: `${Number(activeQueue.MessageRetentionPeriod || 345600) / 86400} days (${activeQueue.MessageRetentionPeriod || 345600}s)` },
-                        { label: 'Maximum message size', value: `${Number(activeQueue.MaximumMessageSize || 262144) / 1024} KB` },
-                        { label: 'Delivery delay', value: `${activeQueue.DelaySeconds || 0} seconds` },
-                        { label: 'Receive message wait time', value: `${activeQueue.ReceiveMessageWaitTimeSeconds || 0} seconds (Long polling)` },
-                        { label: 'Messages available', value: String(activeQueue.ApproximateNumberOfMessages ?? 0) },
-                        { label: 'Messages in flight', value: String(activeQueue.ApproximateNumberOfMessagesNotVisible ?? 0) },
-                        { label: 'Messages delayed', value: String(activeQueue.ApproximateNumberOfMessagesDelayed ?? 0) },
+                        { label: 'URL', value: activeQueue.QueueUrl },
+                        { label: 'ARN', value: activeQueue.QueueArn || '-' },
+                        { label: 'Type', value: activeQueue.Type || 'Standard' },
+                        { label: 'Created', value: formatAwsDate(activeQueue.CreatedTimestamp) },
+                        { label: 'Encryption', value: describeEncryption(activeQueue) },
+                        { label: 'Content-based deduplication', value: activeQueue.Type === 'FIFO' ? (activeQueue.ContentBasedDeduplication === 'true' ? 'Enabled' : 'Disabled') : '-' },
+                        { label: 'Visibility timeout', value: formatSqsDuration(activeQueue.VisibilityTimeout) },
+                        { label: 'Message retention period', value: formatSqsDuration(activeQueue.MessageRetentionPeriod) },
+                        { label: 'Maximum message size', value: activeQueue.MaximumMessageSize ? `${Number(activeQueue.MaximumMessageSize) / 1024} KB` : '-' },
+                        { label: 'Delivery delay', value: formatSqsDuration(activeQueue.DelaySeconds) },
+                        { label: 'Receive message wait time', value: formatSqsDuration(activeQueue.ReceiveMessageWaitTimeSeconds) },
+                        { label: 'Messages available', value: String(activeQueue.ApproximateNumberOfMessages ?? '-') },
+                        { label: 'Messages in flight', value: String(activeQueue.ApproximateNumberOfMessagesNotVisible ?? '-') },
+                        { label: 'Messages delayed', value: String(activeQueue.ApproximateNumberOfMessagesDelayed ?? '-') },
                       ]}
                     />
                   </SpaceBetween>
@@ -608,26 +682,25 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                 label: 'Dead-letter queue (DLQ)',
                 content: (
                   <SpaceBetween size="m">
-                    <Alert header="Dead-Letter Queue Redrive">
-                      When enabled, unconsumed messages exceeding the maximum receive count are redirected to a designated DLQ for debugging and redrive processing.
-                    </Alert>
-                    <KeyValuePairs
-                      columns={2}
-                      items={[
-                        {
-                          label: 'DLQ Redrive Status',
-                          value: activeQueue.RedrivePolicy ? (
-                            <StatusIndicator type="success">Configured</StatusIndicator>
-                          ) : (
-                            <StatusIndicator type="stopped">Disabled</StatusIndicator>
-                          ),
-                        },
-                        {
-                          label: 'Redrive Policy Details',
-                          value: activeQueue.RedrivePolicy || 'None configured on this queue.',
-                        },
-                      ]}
-                    />
+                    <Box>A dead-letter queue receives messages that consumers failed to process after the maximum number of receives.</Box>
+                    {(() => {
+                      let redrive: any = null;
+                      try { redrive = activeQueue.RedrivePolicy ? JSON.parse(activeQueue.RedrivePolicy) : null; } catch { redrive = null; }
+                      let allow: any = null;
+                      try { allow = activeQueue.RedriveAllowPolicy ? JSON.parse(activeQueue.RedriveAllowPolicy) : null; } catch { allow = null; }
+                      return (
+                        <KeyValuePairs
+                          columns={2}
+                          items={[
+                            { label: 'Dead-letter queue', value: redrive ? <StatusIndicator type="success">Enabled</StatusIndicator> : <StatusIndicator type="stopped">Disabled</StatusIndicator> },
+                            { label: 'Dead-letter queue ARN', value: redrive?.deadLetterTargetArn || '-' },
+                            { label: 'Maximum receives', value: redrive?.maxReceiveCount ?? '-' },
+                            { label: 'Redrive allow policy', value: allow ? `${allow.redrivePermission}${allow.sourceQueueArns ? `: ${allow.sourceQueueArns.join(', ')}` : ''}` : 'Not set (allow all)' },
+                            { label: 'Source queues using this queue as a DLQ', value: activeQueue.DeadLetterSourceQueues?.length ? activeQueue.DeadLetterSourceQueues.join(', ') : '-' },
+                          ]}
+                        />
+                      );
+                    })()}
                   </SpaceBetween>
                 ),
               },
@@ -636,7 +709,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                 label: 'Access policy & permissions',
                 content: (
                   <SpaceBetween size="m">
-                    <Header variant="h3">Queue Access Policy (JSON)</Header>
+                    <Header variant="h3" description="Defines who can access the queue.">Access policy</Header>
                     <PolicySummary document={activeQueue.Policy || undefined} />
                     <textarea
                       readOnly
@@ -669,7 +742,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
         <Modal
           visible={true}
           onDismiss={() => setInspectMessage(null)}
-          header={`Message Details: ${inspectMessage.MessageId}`}
+          header={`Message: ${inspectMessage.MessageId}`}
           closeAriaLabel="Close modal"
           footer={
             <Box float="right">
@@ -680,7 +753,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                   onClick={() => handleDeleteMessage(inspectMessage)}
                   loading={deletingMessageId === inspectMessage.MessageId}
                 >
-                  Delete message from queue
+                  Delete
                 </Button>
                 <Button variant="link" onClick={() => setInspectMessage(null)}>
                   Close
@@ -694,10 +767,14 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
               columns={2}
               items={[
                 { label: 'Message ID', value: inspectMessage.MessageId },
-                { label: 'MD5 Of Body', value: inspectMessage.MD5OfBody },
+                { label: 'MD5 of message body', value: inspectMessage.MD5OfBody },
+                { label: 'Sent', value: inspectMessage.Attributes?.SentTimestamp ? formatAwsDate(Number(inspectMessage.Attributes.SentTimestamp)) : '-' },
+                { label: 'First received', value: inspectMessage.Attributes?.ApproximateFirstReceiveTimestamp ? formatAwsDate(Number(inspectMessage.Attributes.ApproximateFirstReceiveTimestamp)) : '-' },
+                { label: 'Receive count', value: inspectMessage.Attributes?.ApproximateReceiveCount ?? '-' },
+                { label: 'Message group ID', value: inspectMessage.Attributes?.MessageGroupId || '-' },
               ]}
             />
-            <FormField label="Raw Message Body">
+            <FormField label="Body">
               <textarea
                 readOnly
                 rows={6}
@@ -713,7 +790,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
               />
             </FormField>
             {inspectMessage.Attributes && (
-              <FormField label="System Attributes">
+              <FormField label="Attributes">
                 <pre style={{ fontSize: '11px', background: '#0e1823', padding: '8px', borderRadius: '4px' }}>
                   {JSON.stringify(inspectMessage.Attributes, null, 2)}
                 </pre>
@@ -723,101 +800,80 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
         </Modal>
       )}
 
-      {/* Create Queue Modal */}
       <Modal
         visible={createModalOpen}
         onDismiss={() => setCreateModalOpen(false)}
-        header="Create SQS Queue"
+        header="Create queue"
+        size="large"
         closeAriaLabel="Close modal"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setCreateModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleCreateQueue} loading={creating}>
-                Create queue
-              </Button>
+              <Button variant="link" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+              <Button variant="primary" onClick={handleCreateQueue} loading={creating} disabled={!newQueueName.trim()}>Create queue</Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="m">
-          <FormField label="Queue name" description="Letters, numbers, hyphens, and underscores. (For FIFO queues, .fifo is auto-appended).">
-            <Input
-              value={newQueueName}
-              onChange={({ detail }) => setNewQueueName(detail.value)}
-              placeholder="e.g. checkout-orders"
+          <FormField label="Type" description="You can't change the queue type after you create a queue.">
+            <Tiles
+              value={isFifo ? 'fifo' : 'standard'}
+              onChange={({ detail }) => setIsFifo(detail.value === 'fifo')}
+              items={[
+                { value: 'standard', label: 'Standard', description: 'At-least-once delivery, message ordering isn\'t preserved.' },
+                { value: 'fifo', label: 'FIFO', description: 'First-in-first-out delivery, message ordering is preserved. Exactly-once processing.' },
+              ]}
             />
           </FormField>
-          <Checkbox
-            checked={isFifo}
-            onChange={({ detail }) => setIsFifo(detail.checked)}
-          >
-            FIFO queue (First-In-First-Out, exactly-once processing)
-          </Checkbox>
-          <FormField label="Default visibility timeout (seconds)" description="Time message is hidden after consumer receives it (default 30s).">
-            <Input
-              value={visibilityTimeoutInput}
-              onChange={({ detail }) => setVisibilityTimeoutInput(detail.value)}
-              type="number"
-            />
+          <FormField label="Name" constraintText={`A queue name is case-sensitive and can have up to 80 characters. You can use alphanumeric characters, hyphens (-), and underscores (_).${isFifo ? ' The name of a FIFO queue must end with the .fifo suffix (added for you).' : ''}`}>
+            <Input value={newQueueName} onChange={({ detail }) => setNewQueueName(detail.value)} placeholder={isFifo ? 'MyQueue.fifo' : 'MyQueue'} />
           </FormField>
+          <ColumnLayout columns={2}>
+            <FormField label="Visibility timeout (seconds)" constraintText="Should be between 0 seconds and 12 hours (43200).">
+              <Input value={visibilityTimeoutInput} onChange={({ detail }) => setVisibilityTimeoutInput(detail.value)} type="number" />
+            </FormField>
+            <FormField label="Message retention period (seconds)" constraintText="Should be between 1 minute (60) and 14 days (1209600).">
+              <Input value={retentionInput} onChange={({ detail }) => setRetentionInput(detail.value)} type="number" />
+            </FormField>
+            <FormField label="Delivery delay (seconds)" constraintText="Should be between 0 seconds and 15 minutes (900).">
+              <Input value={delayInput} onChange={({ detail }) => setDelayInput(detail.value)} type="number" />
+            </FormField>
+            <FormField label="Receive message wait time (seconds)" constraintText="Should be between 0 and 20 seconds.">
+              <Input value={waitTimeInput} onChange={({ detail }) => setWaitTimeInput(detail.value)} type="number" />
+            </FormField>
+          </ColumnLayout>
+          {isFifo && (
+            <Checkbox checked={contentDedup} onChange={({ detail }) => setContentDedup(detail.checked)} description="SQS uses a SHA-256 hash of the message body as the deduplication ID, so senders don't have to provide one.">
+              Content-based deduplication
+            </Checkbox>
+          )}
         </SpaceBetween>
       </Modal>
 
-      {/* Purge Queue Modal */}
-      <Modal
+      <ConfirmActionModal
         visible={purgeModalOpen}
+        header={`Purge queue: ${activeQueue?.QueueName}`}
+        confirmLabel="Purge"
+        confirmationText="purge"
+        loading={purging}
+        onConfirm={handlePurgeQueue}
         onDismiss={() => setPurgeModalOpen(false)}
-        header="Purge SQS Queue"
-        closeAriaLabel="Close modal"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setPurgeModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handlePurgeQueue} loading={purging}>
-                Purge all messages
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
       >
-        <SpaceBetween size="m">
-          <Alert type="warning" header="Destructive Operation">
-            Are you sure you want to purge all messages in <strong>{activeQueue?.QueueName}</strong>? All pending, in-flight, and delayed messages will be permanently deleted.
-          </Alert>
-        </SpaceBetween>
-      </Modal>
+        Purging deletes all messages in the queue, including in-flight and delayed messages, and can't be undone. SQS allows one purge every 60 seconds per queue.
+      </ConfirmActionModal>
 
-      {/* Delete Queue Modal */}
-      <Modal
+      <ConfirmActionModal
         visible={deleteModalOpen}
+        header={`Delete queue: ${activeQueue?.QueueName}`}
+        confirmLabel="Delete"
+        confirmationText="confirm"
+        loading={deletingQueue}
+        onConfirm={handleDeleteQueue}
         onDismiss={() => setDeleteModalOpen(false)}
-        header="Delete SQS Queue"
-        closeAriaLabel="Close modal"
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button variant="link" onClick={() => setDeleteModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleDeleteQueue} loading={deletingQueue}>
-                Delete queue
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
       >
-        <SpaceBetween size="m">
-          <Alert type="error" header="Permanent Deletion">
-            Are you sure you want to delete queue <strong>{activeQueue?.QueueName}</strong>? Any remaining messages will be lost.
-          </Alert>
-        </SpaceBetween>
-      </Modal>
+        Deleting this queue also deletes the messages in it. Lambda event source mappings or SNS subscriptions that use the queue stop working.
+      </ConfirmActionModal>
     </SpaceBetween>
   );
 };
-

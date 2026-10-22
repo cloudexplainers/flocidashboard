@@ -128,3 +128,18 @@ Left as is:
 
 `createCognitoIdentityPool` also used the broken action path, and the dashboard had no route for it. A `POST /api/cognito/identity-pools/` route (`CreateIdentityPool`) now exists; Floci supports Cognito identity pools.
 
+## SQS
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | Delete queue and delete message ignored HTTP errors, so a failed delete (for example a queue that no longer exists) was reported as deleted. | Fixed. |
+| High | Creating a FIFO queue silently turned on content-based deduplication. AWS leaves it off by default, and it changes whether senders must supply a deduplication ID. | Fixed: it is an explicit option, off by default. Send checks for a group ID and, when needed, a deduplication ID. |
+| Medium | Attributes missing from the API were filled with defaults (visibility timeout 30, 256 KB max size, 0 messages), so the console could show values the queue did not report. Floci actually reports a 1 MiB maximum, which AWS adopted in 2025. | Fixed: values come from `GetQueueAttributes`; missing values show "-". |
+| Medium | Purge and delete used plain confirmations. | Fixed: typed "purge" and "confirm", as in the console. |
+| Medium | Per-message delivery delay was offered for FIFO queues, which SQS rejects. | Fixed: disabled for FIFO, with the reason. |
+| Medium | Create queue offered only a name, a FIFO checkbox and visibility timeout. | Fixed: Standard/FIFO type tiles (with "can't change later"), retention, delivery delay, receive wait time and content-based deduplication, with AWS ranges validated client- and server-side. |
+| Low | Encryption, content-based deduplication, redrive allow policy and DLQ source queues were not shown; durations were raw seconds. | Fixed: SSE-SQS/SSE-KMS, durations like "4 days", parsed redrive policy, message sent time and receive count. |
+
+Left as is:
+- Editing queue attributes, access policy, redrive policy and starting a DLQ redrive have backend routes (`/attributes/`, `/redrive/`) but no editors in this console.
+

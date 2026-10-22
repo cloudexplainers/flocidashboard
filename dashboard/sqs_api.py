@@ -26,16 +26,37 @@ def get_queue_url(name: str) -> str:
     return _sqs_client().get_queue_url(QueueName=queue_name)['QueueUrl']
 
 
-def create_queue(name: str, *, fifo: bool = False, visibility_timeout: int | None = None) -> dict[str, Any]:
+def create_queue(
+    name: str,
+    *,
+    fifo: bool = False,
+    visibility_timeout: int | None = None,
+    content_based_deduplication: bool = False,
+    message_retention_period: int | None = None,
+    delay_seconds: int | None = None,
+    receive_wait_time: int | None = None,
+) -> dict[str, Any]:
     queue_name = validate_queue_name(name)
     if fifo and not queue_name.endswith('.fifo'):
         raise ValueError('FIFO queue names must end with .fifo')
     attributes: dict[str, str] = {}
     if fifo or queue_name.endswith('.fifo'):
         attributes['FifoQueue'] = 'true'
-        attributes['ContentBasedDeduplication'] = 'true'
-    if visibility_timeout is not None:
-        attributes['VisibilityTimeout'] = str(int(visibility_timeout))
+        # Off by default, as in the console; on means SQS derives the deduplication ID from a SHA-256 of the body.
+        attributes['ContentBasedDeduplication'] = 'true' if content_based_deduplication else 'false'
+    limits = {
+        'VisibilityTimeout': (visibility_timeout, 0, 43200),
+        'MessageRetentionPeriod': (message_retention_period, 60, 1209600),
+        'DelaySeconds': (delay_seconds, 0, 900),
+        'ReceiveMessageWaitTimeSeconds': (receive_wait_time, 0, 20),
+    }
+    for attribute, (value, low, high) in limits.items():
+        if value is None or value == '':
+            continue
+        number = int(value)
+        if number < low or number > high:
+            raise ValueError(f'{attribute} must be between {low} and {high} seconds')
+        attributes[attribute] = str(number)
 
     payload: dict[str, Any] = {'QueueName': queue_name}
     if attributes:

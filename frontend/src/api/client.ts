@@ -848,20 +848,31 @@ export async function fetchResourceGraph(scenario: string = 'eventbridge-applica
 }
 
 // SQS Operational APIs
-export async function createSqsQueue(name: string, fifo: boolean = false, visibilityTimeout?: number): Promise<any> {
+/** CreateQueue. Omitted settings use the SQS defaults (30 s visibility, 4 days retention, no delay, short polling). */
+export async function createSqsQueue(name: string, fifo: boolean = false, settings: {
+  visibilityTimeout?: number;
+  messageRetentionPeriod?: number;
+  delaySeconds?: number;
+  receiveWaitTime?: number;
+  contentBasedDeduplication?: boolean;
+} = {}): Promise<any> {
   return requestJson('/api/sqs/queues/', {
     method: 'POST',
-    json: { name, fifo, visibility_timeout: visibilityTimeout },
+    json: {
+      name,
+      fifo,
+      visibility_timeout: settings.visibilityTimeout,
+      message_retention_period: settings.messageRetentionPeriod,
+      delay_seconds: settings.delaySeconds,
+      receive_wait_time: settings.receiveWaitTime,
+      content_based_deduplication: settings.contentBasedDeduplication,
+    },
     errorMessage: 'Failed to create queue',
   });
 }
 
 export async function deleteSqsQueue(queueName: string): Promise<any> {
-  const res = await fetch(`/api/sqs/queues/${encodeURIComponent(queueName)}/`, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': getCsrfToken() },
-  });
-  return await res.json();
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/`, { method: 'DELETE', errorMessage: 'Failed to delete queue' });
 }
 
 export async function purgeSqsQueue(queueName: string): Promise<any> {
@@ -905,12 +916,7 @@ export async function receiveSqsMessages(
 }
 
 export async function deleteSqsMessage(queueName: string, receiptHandle: string): Promise<any> {
-  const res = await fetch(`/api/sqs/queues/${encodeURIComponent(queueName)}/messages/delete/`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-    body: JSON.stringify({ receipt_handle: receiptHandle }),
-  });
-  return await res.json();
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/messages/delete/`, { method: 'DELETE', json: { receipt_handle: receiptHandle }, errorMessage: 'Failed to delete message' });
 }
 
 // SNS Operational APIs

@@ -31,7 +31,21 @@ class SQSQueuesApiTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['name'], 'orders')
-        create_mock.assert_called_once_with('orders', fifo=False, visibility_timeout=None)
+        create_mock.assert_called_once_with(
+            'orders', fifo=False, visibility_timeout=None, content_based_deduplication=False,
+            message_retention_period=None, delay_seconds=None, receive_wait_time=None,
+        )
+
+    @patch('dashboard.sqs_api._sqs_client')
+    def test_fifo_queue_leaves_content_based_deduplication_off_by_default(self, client_mock):
+        from .sqs_api import create_queue
+
+        client_mock.return_value.create_queue.return_value = {'QueueUrl': 'http://local/q.fifo'}
+
+        create_queue('q.fifo', fifo=True)
+
+        attributes = client_mock.return_value.create_queue.call_args.kwargs['Attributes']
+        self.assertEqual(attributes['ContentBasedDeduplication'], 'false')
 
     @patch('dashboard.sqs_views.delete_queue')
     def test_delete_queue_success(self, delete_mock):

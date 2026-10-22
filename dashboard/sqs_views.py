@@ -28,7 +28,11 @@ def sqs_queues_create(request):
         return JsonResponse(create_queue(
             body.get('name') or body.get('queue_name') or '',
             fifo=bool(body.get('fifo')),
-            visibility_timeout=body.get('visibility_timeout') or None,
+            visibility_timeout=body.get('visibility_timeout'),
+            content_based_deduplication=body.get('content_based_deduplication') is True,
+            message_retention_period=body.get('message_retention_period'),
+            delay_seconds=body.get('delay_seconds'),
+            receive_wait_time=body.get('receive_wait_time'),
         ))
     except Exception as exc:
         return handle_action_error(exc, service='sqs', operation='create_queue')
