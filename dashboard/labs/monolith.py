@@ -218,7 +218,7 @@ def next_lab_batch(service_key: str, lab_key: str) -> dict[str, Any] | None:
     if batch_index + 1 >= len(LAB_BATCH_ORDER):
         return {
             'title': 'All learning batches complete',
-            'summary': 'You have completed all 17 AWS service lab batches in Floci.',
+            'summary': f'You have completed all {len(LAB_BATCH_ORDER)} AWS service lab batches in Floci.',
             'service': None,
             'lab': None,
             'lab_title': None,

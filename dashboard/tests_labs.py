@@ -14,7 +14,7 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 
-from .labs import labs_for_service, reset_lab, run_lab_step
+from .labs import labs_for_service, next_lab_batch, reset_lab, run_lab_step
 from .labs.registry import LAB_BATCH_ORDER, all_labs
 from .labs.runner import run_lab_step as facade_run_lab_step
 from .labs.types import Lab, LabStep, ResetResult, StepResult, VerificationResult
@@ -74,6 +74,15 @@ class LabsRegistryAuditTests(SimpleTestCase):
         if f"service_key == '{service_key}'" in target_source:
             return f'{branch}\n{self._expanded_branch_source(target_source, service_key, lab_key)}'
         return f'{branch}\n{inspect.getsource(module)}'
+
+    def test_final_batch_completion_counts_every_batch(self):
+        last_service = LAB_BATCH_ORDER[-1]['service']
+        last_lab = labs_for_service(last_service)[-1]['key']
+
+        result = next_lab_batch(last_service, last_lab)
+
+        self.assertEqual(result['title'], 'All learning batches complete')
+        self.assertIn(f'all {len(LAB_BATCH_ORDER)} AWS service lab batches', result['summary'])
 
     def test_every_batch_service_has_labs(self):
         for batch in LAB_BATCH_ORDER:
