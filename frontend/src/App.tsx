@@ -242,7 +242,7 @@ export const App: React.FC = () => {
     if (currentView === 'cloudwatch') {
       const alarm = new URLSearchParams(activeSubView.split('?')[1] || '').get('alarm');
       return [{ text: 'AWS Management Console', href: 'home' }, { text: 'CloudWatch', href: 'cloudwatch' },
-        { text: activeSubView.includes('/metrics') ? 'Metrics' : activeSubView.includes('/logs') ? 'Log groups' : 'Alarms', href: activeSubView.split('?')[0] }, ...(alarm ? [{ text: alarm, href: activeSubView }] : [])];
+        { text: activeSubView.includes('/metrics') ? 'Metrics' : activeSubView.includes('/logs') ? 'Log groups' : activeSubView.includes('/dashboards') ? 'Dashboards' : 'Alarms', href: activeSubView.split('?')[0] }, ...(alarm ? [{ text: alarm, href: activeSubView }] : [])];
     }
     if (currentView === 'secretsmanager') {
       const secret = new URLSearchParams(activeSubView.split('?')[1] || '').get('secret');
@@ -559,6 +559,7 @@ export const App: React.FC = () => {
           { type: 'link' as const, text: 'Event buses', href: 'eventbridge/buses' },
           { type: 'link' as const, text: 'Pattern tester', href: `eventbridge/tester${query}` },
           { type: 'link' as const, text: 'Send events', href: `eventbridge/send${query}` },
+          { type: 'link' as const, text: 'Archives and replays', href: 'eventbridge/archives' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },
         ];
@@ -567,6 +568,7 @@ export const App: React.FC = () => {
         return [
           { type: 'link' as const, text: 'Alarms', href: 'cloudwatch/alarms', icon: <AwsServiceIcon service="cloudwatch" size={18} /> },
           { type: 'link' as const, text: 'Metrics', href: 'cloudwatch/metrics' },
+          { type: 'link' as const, text: 'Dashboards', href: 'cloudwatch/dashboards' },
           { type: 'link' as const, text: 'Log groups', href: 'cloudwatch/logs' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },

@@ -3,6 +3,7 @@ import {
   EventTarget,
 } from "../components/EventBridgeTargets";
 import { EventPatternTester } from "../components/EventPatternTester";
+import { EventBridgeArchives } from "../components/EventBridgeArchives";
 import { useSession } from "../components/SessionContext";
 import { CodeSnippet } from "../components/CodeSnippet";
 import React, { useState, useEffect, useRef } from "react";
@@ -1017,6 +1018,16 @@ const EventBridgeWorkspace: React.FC<Props> = ({
                   empty={<Box textAlign="center">No event buses found.</Box>}
                 />
               </SpaceBetween>
+            ),
+          },
+          {
+            id: "archives",
+            label: "Archives and replays",
+            content: (
+              <EventBridgeArchives
+                buses={buses.map((bus) => bus.Name)}
+                rules={rules.map((rule) => ({ name: rule.Name, arn: rule.Arn, bus: rule.EventBusName }))}
+              />
             ),
           },
           {

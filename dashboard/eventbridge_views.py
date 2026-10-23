@@ -6,8 +6,9 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
-from .eventbridge_api import (create_event_bus, delete_event_bus, delete_rule, put_event,
-                              put_rule, put_target, remove_target, set_rule_state)
+from .eventbridge_api import (cancel_replay, create_archive, create_event_bus, delete_archive,
+                              delete_event_bus, delete_rule, list_archives_and_replays, put_event,
+                              put_rule, put_target, remove_target, set_rule_state, start_replay)
 
 
 @require_http_methods(['POST'])
@@ -90,3 +91,36 @@ def eventbridge_sample_events(request):
         return JsonResponse(get_sample_events())
     except Exception as exc:
         return handle_action_error(exc, service='eventbridge', operation='get_sample_events')
+
+
+@require_http_methods(['GET'])
+def eventbridge_archives(request):
+    try:
+        return JsonResponse(list_archives_and_replays())
+    except Exception as exc:
+        return handle_action_error(exc, service='eventbridge', operation='list_archives')
+
+
+@require_http_methods(['POST'])
+def eventbridge_archives_create(request):
+    return _action(request, 'create_archive', lambda b: create_archive(
+        b.get('name', ''), b.get('event_bus_name', ''), event_pattern=b.get('event_pattern'),
+        retention_days=b.get('retention_days', 0), description=b.get('description') or ''))
+
+
+@require_http_methods(['POST'])
+def eventbridge_archives_delete(request):
+    return _action(request, 'delete_archive', lambda b: delete_archive(b.get('name', '')))
+
+
+@require_http_methods(['POST'])
+def eventbridge_replays_start(request):
+    return _action(request, 'start_replay', lambda b: start_replay(
+        b.get('name', ''), b.get('archive_name', ''), start_time=b.get('start_time'), end_time=b.get('end_time'),
+        destination_bus=b.get('destination_bus') or '', rule_arns=b.get('rule_arns') or None,
+        description=b.get('description') or ''))
+
+
+@require_http_methods(['POST'])
+def eventbridge_replays_cancel(request):
+    return _action(request, 'cancel_replay', lambda b: cancel_replay(b.get('name', '')))

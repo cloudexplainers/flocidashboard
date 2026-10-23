@@ -1150,6 +1150,10 @@ EVENTBRIDGE_ACTIONS = (
         ),
         success_message='Pattern evaluated',
     ),
+    action('create_archive', 'Create archive', 'POST', '/api/eventbridge/archives/create/', 'create', fields=(action_field('name', 'Archive name', required=True), action_field('event_bus_name', 'Source event bus'), action_field('event_pattern', 'Event pattern JSON', field_type='textarea'), action_field('retention_days', 'Retention days (0 = indefinitely)', field_type='number', default=0), action_field('description', 'Description'))),
+    action('delete_archive', 'Delete archive', 'POST', '/api/eventbridge/archives/delete/', 'delete', safety='destructive', confirm='Delete this archive and the events it holds?', fields=(action_field('name', 'Archive name', required=True),)),
+    action('start_replay', 'Start replay', 'POST', '/api/eventbridge/replays/start/', 'execute', fields=(action_field('name', 'Replay name', required=True), action_field('archive_name', 'Archive name', required=True), action_field('start_time', 'Event start time (ISO 8601)', required=True), action_field('end_time', 'Event end time (ISO 8601)', required=True), action_field('destination_bus', 'Destination event bus'), action_field('description', 'Description'))),
+    action('cancel_replay', 'Cancel replay', 'POST', '/api/eventbridge/replays/cancel/', 'update', safety='destructive', confirm='Cancel this replay?', fields=(action_field('name', 'Replay name', required=True),)),
 )
 
 

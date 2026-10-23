@@ -209,3 +209,55 @@ class CloudWatchConsoleOperationsTests(SimpleTestCase):
         response = self.client.get('/api/cloudwatch/metric-statistics/', {'namespace': 'App', 'metric_name': 'Errors', 'statistic': 'Sum'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(factory.return_value.client.return_value.get_metric_statistics.call_args.kwargs['Statistics'], ['Sum'])
+
+
+class CloudWatchDashboardAndSubscriptionTests(SimpleTestCase):
+    def send(self, method, url, body):
+        return getattr(self.client, method)(url, data=json.dumps(body), content_type='application/json')
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_list_dashboards_includes_bodies(self, factory):
+        cloudwatch = factory.return_value.client.return_value
+        cloudwatch.list_dashboards.return_value = {'DashboardEntries': [{'DashboardName': 'ops', 'Size': 20}]}
+        cloudwatch.get_dashboard.return_value = {'DashboardBody': '{"widgets": []}'}
+        response = self.client.get(reverse('dashboard:cloudwatch-dashboards'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['dashboards'][0]['body'], '{"widgets": []}')
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_put_dashboard_validates_widgets(self, factory):
+        cloudwatch = factory.return_value.client.return_value
+        cloudwatch.put_dashboard.return_value = {'DashboardValidationMessages': []}
+        ok = self.send('put', reverse('dashboard:cloudwatch-dashboards'), {'dashboard_name': 'ops', 'dashboard_body': {'widgets': []}})
+        self.assertEqual(ok.status_code, 200)
+        cloudwatch.put_dashboard.assert_called_once_with(DashboardName='ops', DashboardBody='{"widgets": []}')
+        bad = self.send('put', reverse('dashboard:cloudwatch-dashboards'), {'dashboard_name': 'ops', 'dashboard_body': '{"title": 1}'})
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn('widgets', bad.json()['error'])
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_delete_dashboard(self, factory):
+        response = self.send('delete', reverse('dashboard:cloudwatch-dashboards'), {'dashboard_name': 'ops'})
+        self.assertEqual(response.status_code, 200)
+        factory.return_value.client.return_value.delete_dashboards.assert_called_once_with(DashboardNames=['ops'])
+
+    @patch('dashboard.cloudwatch_console_views.FlociClientFactory')
+    def test_subscription_filters_list_put_delete(self, factory):
+        logs = factory.return_value.client.return_value
+        logs.describe_subscription_filters.return_value = {'subscriptionFilters': [
+            {'filterName': 'errors', 'filterPattern': 'ERROR', 'destinationArn': 'arn:aws:kinesis:x:stream/s'}]}
+        listed = self.client.get(reverse('dashboard:cloudwatch-subscription-filters'), {'log_group_name': '/app'})
+        self.assertEqual(listed.json()['subscription_filters'][0]['filter_name'], 'errors')
+        put = self.send('put', reverse('dashboard:cloudwatch-subscription-filters'), {
+            'log_group_name': '/app', 'filter_name': 'errors', 'filter_pattern': 'ERROR',
+            'destination_arn': 'arn:aws:kinesis:x:stream/s', 'role_arn': 'arn:role/r'})
+        self.assertEqual(put.status_code, 200)
+        logs.put_subscription_filter.assert_called_once_with(
+            logGroupName='/app', filterName='errors', filterPattern='ERROR',
+            destinationArn='arn:aws:kinesis:x:stream/s', roleArn='arn:role/r', distribution='ByLogStream')
+        deleted = self.send('delete', reverse('dashboard:cloudwatch-subscription-filters'), {'log_group_name': '/app', 'filter_name': 'errors'})
+        self.assertEqual(deleted.status_code, 200)
+
+    def test_subscription_filters_require_log_group(self):
+        response = self.client.get(reverse('dashboard:cloudwatch-subscription-filters'))
+        self.assertEqual(response.status_code, 400)

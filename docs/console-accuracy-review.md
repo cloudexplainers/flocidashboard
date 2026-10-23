@@ -953,10 +953,22 @@ new S3 tests, and a new live test (`dashboards.live.spec.ts`) that turns on Obje
 then enforces against a delete, and creates a lifecycle rule, a replication rule and a tiering configuration through
 the console, checking each against Floci 2.3.0 with the SDK.
 
+## Floci features the console didn't show (2026-10-23)
+
+The audit listed twelve features Floci 2.3.0 implements that the console didn't expose. Each was checked live on a
+throwaway Floci 2.3.0 before it got a console form, and the live checks are kept as `ConsoleFeatureLiveTests` in
+`dashboard/integration_tests.py`.
+
+| Feature | Where | Floci 2.3.0 | Console says |
+| --- | --- | --- | --- |
+| EventBridge archives and replays | EventBridge, Archives and replays tab | Archives record matching events (`EventCount` goes up) and a replay sends them back to the source bus, where rules deliver them to targets again; a rule filter on the replay is honored. Replayed events lack the `replay-name` field, `DescribeReplay` drops `FilterArns`, and a replay is COMPLETED as soon as it starts, so `CancelReplay` always finds nothing to cancel. Replay names can't be reused. | Floci note on the tab |
+| CloudWatch dashboards | CloudWatch, Dashboards tab | `PutDashboard`, `ListDashboards`, `GetDashboard` and `DeleteDashboards` work; a body that isn't JSON is refused. Floci draws nothing. | The console draws text and metric widgets (metric rows, including `.` and `...` shorthand, chart through the existing metric statistics endpoint); other widget types show their JSON |
+| Logs subscription filters | CloudWatch, Log groups tab, under the selected group | Filters are stored and matching events are delivered, gzip-compressed, to Kinesis streams and Lambda functions as they arrive. Floci accepts more than the two filters AWS allows per log group. | The console stops at two filters and says why |
+
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
-| EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
+| Lambda async destinations, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
 | Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration (`main` applies it; the Management tab note says it never runs), ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
 | Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |
