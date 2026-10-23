@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import ConfirmActionModal from "../components/ConfirmActionModal";
 import Table from "../components/ResourceTable";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -969,39 +970,19 @@ export const ECRConsole: React.FC<ECRConsoleProps> = ({
           )}
         </SpaceBetween>
       </Modal>
-      <Modal
+      <ConfirmActionModal
         visible={!!confirmation}
         onDismiss={() => !busy && setConfirmation(null)}
-        header={
-          confirmation === "repository" ? "Delete repository" : "Delete images"
-        }
-        footer={
-          <Box float="right">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Button
-                variant="link"
-                disabled={busy}
-                onClick={() => setConfirmation(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                loading={busy}
-                onClick={deleteResources}
-              >
-                Delete
-              </Button>
-            </SpaceBetween>
-          </Box>
-        }
+        header={confirmation === "repository" ? "Delete repository" : "Delete images"}
+        confirmLabel="Delete"
+        confirmationText="delete"
+        loading={busy}
+        onConfirm={deleteResources}
       >
-        <Alert type="warning">
-          {confirmation === "repository"
-            ? `Permanently delete repository "${repository?.name}" and all of its images?`
-            : `Permanently delete ${selectedImages.length} selected images from "${repository?.name}"? Deleting an image by digest removes all of its tags.`}
-        </Alert>
-      </Modal>
+        {confirmation === "repository"
+          ? `Permanently delete repository "${repository?.name}" and all of its images?`
+          : `Permanently delete ${selectedImages.length} selected images from "${repository?.name}"? Deleting an image by digest removes all of its tags.`}
+      </ConfirmActionModal>
     </SpaceBetween>
   );
 };

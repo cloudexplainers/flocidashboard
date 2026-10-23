@@ -1451,6 +1451,8 @@ test('ECR handles missing resources, failed loads, and partial image deletion wi
   await page.getByRole('table').getByRole('checkbox').first().check();
   await page.getByRole('button', { name: 'Delete images', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Deleting an image by digest removes all of its tags.');
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await page.getByRole('dialog').getByLabel('Confirmation text').fill('delete');
   await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByText(/Some images could not be deleted/)).toBeVisible();
   expect(deletion.repository_name).toBe('team/backend');
