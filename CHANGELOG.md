@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Floci gap fixes (see "Floci gap fixes" in `docs/console-accuracy-review.md`):
+  - **Says what Floci doesn't apply:** consoles note where Floci stores a setting without enforcing or running it: SQS, KMS, ECR, Secrets Manager and Backup policies (only S3, SNS and Lambda policies are evaluated), CloudWatch alarm actions, Auto Scaling policies, scheduled actions and lifecycle hooks, DynamoDB point-in-time restore, Route 53 routing policies and health checks, KMS automatic rotation, CloudFront caching, NAT gateways, Config evaluations and more.
+  - **S3 anonymous access:** a bucket's Permissions tab tests whether an unsigned request can list it and warns that, with `FLOCI_SERVICES_S3_ENFORCE_AUTH=false` (the Compose default), Block Public Access and bucket policies don't stop anonymous reads or writes.
+  - **RDS snapshots:** take a manual DB snapshot of a PostgreSQL database, restore it to a new instance, or delete it, from the new Snapshots tab.
+  - **Fixed:** Cloud Map "Discover instances" works (botocore no longer adds the `data-` host prefix); CloudTrail's note now says S3 data events reach the trail bucket and `LookupEvents` returns nothing; Settings shows auth flags it can't see as "Not known" instead of "Permissive".
+  - **Removed:** Cloud Map "Update instance health" (Floci doesn't implement it) and 170 inventory notes that described old Floci releases.
+
 - Backend accuracy review (see "Backend API review" in `docs/console-accuracy-review.md`):
   - **Incomplete lists are named:** when Floci doesn't return a list (often an operation it doesn't implement), or the dashboard shows only part of one, every console now shows a "Some lists are incomplete" warning instead of presenting the list as empty.
   - **No invented results:** the EKS kubeconfig and ECR push commands are built from what Floci reports, with the configured Region and `--endpoint-url`; ECR "Inject mock image tag" reports Floci's error instead of a made-up image; CodeDeploy's no-op "Simulate lifecycle event" is removed; IAM's account-root trust policy, assume-role by name and Cognito pool ARNs use the real account.

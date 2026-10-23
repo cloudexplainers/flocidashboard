@@ -584,3 +584,104 @@ pass on the branch and again on the merged `main`. `check_labs` on the disposabl
 SQS (9), Cognito (2) and EKS (1) labs, whose backend code changed. Kinesis shard count keeps its help text
 ("Defaults to 1") rather than a form default, because a default would be sent with On-demand streams too.
 The emulator was stopped afterwards and the containers it started were removed.
+
+# Floci gap fixes
+
+A read-only audit compared Floci's source (the `2.3.0` tag the dashboard targets, and `main`) with every console
+and found where the dashboard implies behavior Floci doesn't have. This pass fixed what it found, after checking
+each finding against current `main`: the backend review had already removed the invented ECR image, the
+CodeDeploy lifecycle simulation and the placeholder EKS kubeconfig, and made inventories report lists Floci
+doesn't return instead of showing "(0)". Those are not repeated here.
+
+The rule this pass applies: where Floci stores a setting but doesn't apply it, the console says so next to the
+setting, in a "How Floci emulates this" info note (`frontend/src/components/FlociNote.tsx`, `data-testid="floci-note"`),
+an action description in the generic workbench, or an inventory note. Notes describe what Floci does without
+version numbers, except where `main` already behaves differently (alarm actions, DynamoDB restore), because
+Compose pulls `floci/floci:latest`.
+
+## Labeled
+
+| Console | What it now says | Floci source (2.3.0) |
+| --- | --- | --- |
+| SQS (queue access policy, Edit queue) | The policy is stored and returned but not evaluated; a Deny blocks nothing, and SNS delivers to the queue regardless. Floci enforces resource policies only for S3, SNS and Lambda. | `ResourcePolicyProvider` is implemented only by `lambda/`, `s3/` and `sns/` (also on `main`). |
+| KMS (key policy, grants, rotation) | The key policy is not evaluated; with IAM enforcement on, only identity policies are checked. Grants are stored, not evaluated. Automatic rotation is recorded but never runs and the period is ignored; on-demand rotation does create new key material. | No KMS policy provider; `docs/services/kms.md` "Grant Support Scope"; `KmsService.enableKeyRotation` sets a flag and nothing schedules rotation. |
+| ECR (lifecycle policy, repository policy, scan on push) | Lifecycle rules don't expire images; the repository policy is not evaluated; no images are scanned. | `docs/services/ecr.md` "Not Implemented". |
+| Secrets Manager | New read-only "Resource permissions" tab shows the secret's resource policy with the same note. | Live: a Deny-all `GetSecretValue` resource policy still returned the value. |
+| Backup (workbench) | Recovery points hold no data; plan schedules never run; vault notifications aren't published and vault access policies aren't evaluated. | `BackupService` schedules only job state transitions; `docs/services/backup.md` "Not Yet Supported". |
+| CloudWatch (alarm detail) | Floci evaluates the alarm and changes its state, but runs only Application Auto Scaling actions; SNS, EC2 and EC2 Auto Scaling actions don't run in 2.3.0 (`main` adds SNS). | The only `AlarmActionHandler` is `applicationautoscaling/ScalingPolicyAlarmActionHandler`; `AlarmSnsNotifier` exists on `main` only. |
+| Auto Scaling (workbench) | Floci scales only through desired capacity. Scaling policies, scheduled actions and lifecycle hooks are stored and never run; the save actions say so in their description and success message. The inventory no longer lists notification configurations and `DescribeTags` as supported. | `AutoScalingService` "accept and remember" comments; `completeLifecycleAction` "Stored-only"; the reconciler never reads hooks; live `UnsupportedOperation` for the notification and tag calls. |
+| DynamoDB (Capacity and backups) | The PITR text no longer promises restore to any second: PITR is recorded, but 2.3.0 has no `RestoreTableToPointInTime` or `CreateBackup` (`main` adds both). The inventory notes that replicas are reported `ACTIVE` but nothing is replicated. | Live on 2.3.0 (audit). |
+| Route 53 (records) | Routing policies and health checks are stored but not applied: the DNS server answers private zones only and returns every value; `GetHealthCheckStatus` always reports success. | `Route53Controller.getHealthCheckStatus` returns a fixed "Success: HTTP Status Code 200"; `docs/services/route53.md`. |
+| CloudTrail | The old note said Floci records no activity and doesn't store event selectors; both were wrong. Now: `LookupEvents` is always empty (no management events), and a logging trail delivers matching S3 data events to its bucket under `AWSLogs/` (about every 60 seconds by default). | `CloudTrailJsonHandler.lookupEvents` returns an empty array; `docs/services/cloudtrail.md`. |
+| Config (workbench) | "Start rule evaluation" records the request but evaluates nothing; compliance comes only from `PutEvaluations`. The old note ("always INSUFFICIENT_DATA") was also wrong. | `docs/services/config.md` "Deviations". |
+| CloudFront | No caching (cache policies and TTLs change nothing), instant Deployed/Completed, functions stored but never run. Signed URLs are enforced. | `docs/services/cloudfront.md`; functions appear only in XML serialization. |
+| RDS (Modify) | Every change applies at once whatever "Apply immediately" says. | `docs/services/rds.md` "Modifying a DB instance". |
+| EC2 | Security group rules: not enforced unless `FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true` (the old text said never). NAT gateway create: recorded, routes nothing. | `docs/services/ec2.md`. |
+| Cloud Map, Cognito identity pools, AppSync, IAM | Every Cloud Map instance stays HEALTHY; identity pools can't vend credentials (`GetId`, `GetCredentialsForIdentity` missing); HTTP data sources don't resolve; access-key usage is never recorded. | `docs/services/cloudmap.md`, `cognitoidentity.md`, `appsync.md`, `iam.md`. |
+| Inventory notes (workbench and inventory-only pages) | API Gateway keys and usage plans not enforced; WAF filters no traffic; Cost Explorer costs are synthesized; Pricing is a bundled snapshot; MQ is RabbitMQ only; OpenSearch security settings not enforced; Glue crawler schedules never run; IoT topic authorization not enforced; CodeDeploy `ContinueDeployment` is a no-op; Firehose adds a newline per record; Classic Load Balancers serve no traffic; EMR runs no Hadoop or Spark. | The matching `docs/services/*.md` lines at 2.3.0. |
+
+170 inventory notes of the form "Floci 1.5.x adds ..." were deleted. They were release-changelog lines about older
+versions; the workbench already hid them. A unit test now keeps them out.
+
+## Hidden, removed or fixed
+
+| Finding | Change |
+| --- | --- |
+| Cloud Map "Discover instances" always failed: botocore sent `DiscoverInstances` to `data-localhost:4566`. | `FlociClientFactory` sets `inject_host_prefix=False` for every client. Safe because Floci serves every operation on one endpoint; the only other prefixed operations the botocore models have that matter here (Logs `StartLiveTail`, Step Functions `StartSyncExecution`, S3 `WriteGetObjectResponse`) would hit equally unresolvable hosts. No lab calls any of them. Checked live: discovery works. |
+| Cloud Map "Update instance health" called `UpdateInstanceCustomHealthStatus`, which Floci answers with `UnknownOperationException` (also on `main`). | Action, route and helper removed; the inventory lists it under "Not emulated". |
+| Settings showed S3, IAM and signature enforcement from the dashboard's own environment. Compose passes those variables only to Floci, so in Docker it showed IAM enforcement as "Permissive" while Floci enforced it. | Unset flags show "Not known (not set for the dashboard)", and the panel says Floci doesn't report its configuration. The top-nav identity panel does the same. |
+
+ECR "Inject mock image tag" stays: since the backend review it reports Floci's `UnsupportedOperation` and its
+description says why. Other operations Floci rejects are reached only by inventory loaders, which already report
+them in the "Some lists are incomplete" warning.
+
+## S3 anonymous access
+
+`docker-compose.yml` starts Floci with `FLOCI_SERVICES_S3_ENFORCE_AUTH=false`. With that setting Floci allows
+every unsigned request: an unsigned `GET` read an object from a bucket with Block Public Access fully on, and an
+unsigned `PUT` wrote one (checked on the disposable emulator). Bucket policies and ACLs never apply to anonymous
+callers. The console now:
+
+- tests it per bucket: the Permissions tab sends an unsigned `ListObjectsV2` with `MaxKeys=0`
+  (`GET /api/s3/buckets/<bucket>/anonymous-access/`) and, when Floci allows it, shows a warning above Block
+  Public Access that names the setting. When Floci refuses, it says so in one line.
+- says next to the bucket list that the Access column follows Block Public Access and bucket policies as in AWS,
+  but Floci applies them to unsigned requests only with enforcement on.
+
+`docker-compose.yml` and the owner's Floci were not changed. To turn enforcement on, set
+`FLOCI_SERVICES_S3_ENFORCE_AUTH=true` in `.env` and run `docker compose up -d floci` (add it to the dashboard
+service too if Settings should show it). Checked on a separate throwaway Floci with enforcement on:
+
+- Presigned URLs, signed with `test` or IAM keys, still work. The presigned-URL lab passes either way, but today it
+  would also pass if signing were broken, because unsigned reads succeed.
+- Unsigned reads of a private object get `403 AccessDenied`; with a public-read bucket policy (and Block Public
+  Access off) they succeed, as in AWS, and a website endpoint served the bucket. Plain object links that aren't
+  presigned therefore need such a policy; website endpoints without one were not checked.
+- The dashboard's own calls are signed, and no lab makes unsigned S3 requests, so labs are unaffected. The
+  Block Public Access lab could then add a step proving that an anonymous request is refused.
+
+## Added
+
+RDS manual snapshots: a Snapshots tab (also in the side navigation) lists DB snapshots and offers Restore
+snapshot (to a new DB instance, optional class) and Delete snapshot (typed confirmation); a database's header
+has Take snapshot. Backed by `POST /api/rds/snapshots/`, `DELETE /api/rds/snapshots/<id>/` and
+`POST /api/rds/snapshots/<id>/restore/`, and by `DescribeDBSnapshots` in the inventory. A Floci note says what a
+snapshot is there: a `pg_dumpall` of the database, PostgreSQL only.
+
+Checked in source (`RdsService.createDbSnapshot` / `restoreDbInstanceFromDbSnapshot`) and live on 2.3.0: a row
+written to a PostgreSQL instance was present in the instance restored from its snapshot; a MySQL snapshot
+returns `InvalidDBInstanceState` ("not supported for engine MYSQL"), which the console shows. Snapshots are
+`available` at once and only `manual` snapshots exist.
+
+## Recommended next work
+
+| Item | Why not here |
+| --- | --- |
+| RDS point-in-time restore, read replicas (PostgreSQL), promote, Aurora `FailoverDBCluster`, cluster snapshots | Real at 2.3.0 and Wave 1 exam topics (SAA 2.2, 3.3), but each needs its own forms and checks; PITR restore also needs a note that Floci restores the latest data whatever time is asked. |
+| CloudTrail log-file viewer | Trails already have an event-selector editor; a view that lists and unzips the `AWSLogs/` files in the trail bucket would make the audit topic (CLF 2.x, SAA 1.x) usable without the S3 console. |
+| ELBv2 target-group attributes (stickiness, deregistration delay), listener and rule edits; Auto Scaling instance refresh and `SetInstanceHealth` | HA web tier (Wave 1). Check that the reconciler replaces Unhealthy instances before building the Auto Scaling part. |
+| S3 lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication config (configuration only) | S3 data protection (Wave 1). Each needs its own label. |
+| EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
+| Show inventory `notes` on dedicated consoles | Only the generic workbench renders them, so notes added to dedicated consoles' loaders (DynamoDB replicas, Secrets Manager rotation) are visible only through the API. |
+| Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration, ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
+| Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |
