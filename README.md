@@ -1,4 +1,4 @@
-# Floci Dashboard 2.0.1
+# Floci Dashboard 2.0.2
 
 A local console for inspecting, testing, and learning AWS workflows with [Floci](https://floci.io/). Built with Django, React, TypeScript, Vite, and AWS’s Cloudscape design system.
 
