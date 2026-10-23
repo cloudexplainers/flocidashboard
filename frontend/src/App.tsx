@@ -410,6 +410,8 @@ export const App: React.FC = () => {
               { type: 'link' as const, text: 'Subnets', href: 'ec2/subnets' },
               { type: 'link' as const, text: 'Route tables', href: 'ec2/routes' },
               { type: 'link' as const, text: 'Gateways and endpoints', href: 'ec2/gateways' },
+              { type: 'link' as const, text: 'Elastic IPs', href: 'ec2/elastic_ips' },
+              { type: 'link' as const, text: 'NAT gateways', href: 'ec2/nat_gateways' },
             ],
           },
           { type: 'divider' as const },

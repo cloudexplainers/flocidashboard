@@ -304,7 +304,8 @@ def ec2_routes(request, route_table_id: str):
 @require_http_methods(['POST'])
 def ec2_elastic_ips_allocate(request):
     try:
-        return JsonResponse(allocate_elastic_ip())
+        body = parse_json_body(request) if request.body and request.content_type == 'application/json' else {}
+        return JsonResponse(allocate_elastic_ip(name=body.get('name'), tags=body.get('tags')))
     except Exception as exc:
         return handle_action_error(exc, service='ec2', operation='allocate_elastic_ip')
 
@@ -326,6 +327,7 @@ def ec2_elastic_ip_association(request, allocation_id: str):
             instance_id=body.get('instance_id'),
             association_id=body.get('association_id'),
             disassociate=request.method == 'DELETE',
+            allow_reassociation=bool(body.get('allow_reassociation')),
         ))
     except Exception as exc:
         operation = 'disassociate_elastic_ip' if request.method == 'DELETE' else 'associate_elastic_ip'
@@ -338,8 +340,10 @@ def ec2_nat_gateways_create(request):
         body = parse_json_body(request)
         return JsonResponse(create_nat_gateway(
             body.get('subnet_id', ''),
-            body.get('allocation_id', ''),
+            body.get('allocation_id') or None,
             connectivity_type=body.get('connectivity_type') or 'public',
+            name=body.get('name'),
+            tags=body.get('tags'),
         ))
     except Exception as exc:
         return handle_action_error(exc, service='ec2', operation='create_nat_gateway')

@@ -680,6 +680,151 @@ test('EC2 network navigation supports direct links and browser history', async (
   await expect(page.getByText('rtb-review', { exact: true })).toBeVisible();
 });
 
+test('EC2 Elastic IPs table shows instance and NAT associations and guards release and reassociation', async ({ page }) => {
+  let allocated = false;
+  const requests: Array<{ method: string; path: string; body: any }> = [];
+  await page.route('**/api/ec2/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/ec2/') {
+      return route.fulfill({ json: {
+        instances: [{ InstanceId: 'i-web', State: { Name: 'running' }, Tags: [{ Key: 'Name', Value: 'web' }] }, { InstanceId: 'i-gone', State: { Name: 'terminated' } }],
+        addresses: [
+          { AllocationId: 'eipalloc-free', PublicIp: '54.0.0.1', Domain: 'vpc', Tags: [{ Key: 'Name', Value: 'spare' }] },
+          { AllocationId: 'eipalloc-web', PublicIp: '54.0.0.2', Domain: 'vpc', InstanceId: 'i-web', AssociationId: 'eipassoc-web', NetworkInterfaceId: 'eni-web', PrivateIpAddress: '10.0.1.5', Tags: [] },
+          // Floci leaves NAT gateway associations out of DescribeAddresses.
+          { AllocationId: 'eipalloc-nat', PublicIp: '54.0.0.3', Domain: 'vpc', Tags: [] },
+          ...(allocated ? [{ AllocationId: 'eipalloc-new', PublicIp: '54.0.0.4', Domain: 'vpc', Tags: [{ Key: 'Name', Value: 'fresh' }] }] : []),
+        ],
+        nat_gateways: [{ NatGatewayId: 'nat-review', State: 'available', ConnectivityType: 'public', SubnetId: 'subnet-public', VpcId: 'vpc-review',
+          NatGatewayAddresses: [{ AllocationId: 'eipalloc-nat', PublicIp: '54.0.0.3', PrivateIp: '10.0.0.9', NetworkInterfaceId: 'eni-nat', AssociationId: 'eipassoc-nat', IsPrimary: true }] }],
+      } });
+    }
+    requests.push({ method: request.method(), path, body: request.postDataJSON() });
+    if (path === '/api/ec2/elastic-ips/' && request.method() === 'POST') {
+      allocated = true;
+      return route.fulfill({ json: { allocation_id: 'eipalloc-new', public_ip: '54.0.0.4', domain: 'vpc' } });
+    }
+    return route.fulfill({ json: { association_id: 'eipassoc-new' } });
+  });
+
+  await page.goto('/ec2/elastic_ips');
+  await expect(page.getByRole('heading', { name: /^Elastic IP addresses/ })).toBeVisible();
+  await expect(page.getByText('How Floci 2.3.0 handles Elastic IPs')).toBeVisible();
+  const table = page.getByRole('table', { name: 'Elastic IP addresses' });
+  await expect(table.getByRole('row', { name: /54\.0\.0\.2/ })).toContainText('Instance i-web');
+  await expect(table.getByRole('row', { name: /54\.0\.0\.3/ })).toContainText('NAT gateway nat-review');
+  await expect(table.getByRole('row', { name: /54\.0\.0\.3/ })).toContainText('eipassoc-nat');
+
+  // An associated address can't be released; a NAT gateway's address can't be disassociated either.
+  await page.getByRole('button', { name: '54.0.0.3', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: /Release Elastic IP address/ })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('menuitem', { name: /Disassociate Elastic IP address/ })).toHaveAttribute('aria-disabled', 'true');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'nat-review', exact: true }).click();
+  await expect(page).toHaveURL(/\/ec2\/nat_gateways$/);
+  await expect(page.getByRole('heading', { name: 'nat-review', exact: true })).toBeVisible();
+  await page.goBack();
+
+  // Moving an associated address needs AllowReassociation, as in AWS.
+  await page.getByRole('button', { name: '54.0.0.2', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Associate Elastic IP address', exact: true }).click();
+  const associate = page.getByRole('dialog', { name: 'Associate Elastic IP address' });
+  await associate.getByRole('button', { name: /Choose an instance/ }).click();
+  await expect(page.getByRole('option', { name: /i-gone/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /i-web/ }).click();
+  await expect(associate.getByText(/associated with i-web\. Allow reassociation/)).toBeVisible();
+  await expect(associate.getByRole('button', { name: 'Associate', exact: true })).toBeDisabled();
+  await associate.getByRole('checkbox', { name: 'Allow this Elastic IP address to be reassociated' }).check();
+  await associate.getByRole('button', { name: 'Associate', exact: true }).click();
+  expect(requests.at(-1)).toEqual({ method: 'PUT', path: '/api/ec2/elastic-ips/eipalloc-web/association/', body: { instance_id: 'i-web', allow_reassociation: true } });
+
+  // Allocation sends the Name tag and selects the new address.
+  await page.getByRole('button', { name: 'Allocate Elastic IP address', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Allocate Elastic IP address' }).getByPlaceholder('web-eip').fill('fresh');
+  await page.getByRole('button', { name: 'Allocate', exact: true }).click();
+  expect(requests.at(-1)).toEqual({ method: 'POST', path: '/api/ec2/elastic-ips/', body: { name: 'fresh' } });
+  await expect(page.getByText('Elastic IP address 54.0.0.4 allocated (eipalloc-new).')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '54.0.0.4 (fresh)', exact: true })).toBeVisible();
+
+  // A free address can be released after confirmation.
+  await page.getByRole('button', { name: '54.0.0.1', exact: true }).click();
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Release Elastic IP address', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Release Elastic IP addresses' }).getByRole('button', { name: 'Release', exact: true }).click();
+  expect(requests.at(-1)).toMatchObject({ method: 'DELETE', path: '/api/ec2/elastic-ips/eipalloc-free/' });
+});
+
+test('EC2 NAT gateways table creates public and private gateways, shows routes, and confirms deletion', async ({ page }) => {
+  const requests: Array<{ method: string; path: string; body: any }> = [];
+  await page.route('**/api/ec2/**', async route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    if (path === '/api/ec2/') {
+      return route.fulfill({ json: {
+        subnets: [{ SubnetId: 'subnet-public', VpcId: 'vpc-review', AvailabilityZone: 'eu-west-1a', CidrBlock: '10.0.0.0/24', Tags: [{ Key: 'Name', Value: 'public-a' }] }],
+        addresses: [
+          { AllocationId: 'eipalloc-used', PublicIp: '54.0.0.3', Domain: 'vpc' },
+          { AllocationId: 'eipalloc-free', PublicIp: '54.0.0.5', Domain: 'vpc' },
+          { AllocationId: 'eipalloc-instance', PublicIp: '54.0.0.6', Domain: 'vpc', InstanceId: 'i-web', AssociationId: 'eipassoc-web' },
+        ],
+        nat_gateways: [{ NatGatewayId: 'nat-review', State: 'available', ConnectivityType: 'public', SubnetId: 'subnet-public', VpcId: 'vpc-review', CreateTime: '2026-10-23T10:00:00Z',
+          Tags: [{ Key: 'Name', Value: 'egress-a' }],
+          NatGatewayAddresses: [{ AllocationId: 'eipalloc-used', PublicIp: '54.0.0.3', PrivateIp: '10.0.0.9', NetworkInterfaceId: 'eni-nat', IsPrimary: true }] }],
+        route_tables: [{ RouteTableId: 'rtb-private', VpcId: 'vpc-review', Tags: [{ Key: 'Name', Value: 'private-a' }],
+          Routes: [{ DestinationCidrBlock: '10.0.0.0/16', GatewayId: 'local', State: 'active' }, { DestinationCidrBlock: '0.0.0.0/0', NatGatewayId: 'nat-review', State: 'active' }] }],
+      } });
+    }
+    requests.push({ method: request.method(), path, body: request.postDataJSON() });
+    if (request.method() === 'POST' && requests.length === 2) return route.fulfill({ status: 400, json: { error: 'InvalidSubnet: subnet is full' } });
+    return route.fulfill({ json: { nat_gateway_id: 'nat-new', deleted: true } });
+  });
+
+  await page.goto('/ec2/nat_gateways');
+  await expect(page.getByText('Floci 2.3.0 stores NAT gateways but routes no traffic through them')).toBeVisible();
+  const row = page.getByRole('table', { name: 'NAT gateways' }).getByRole('row', { name: /nat-review/ });
+  await expect(row).toContainText('egress-a');
+  await expect(row).toContainText('Available');
+  await expect(row).toContainText('54.0.0.3');
+  await expect(row).toContainText('10.0.0.9');
+
+  await page.getByRole('button', { name: 'nat-review', exact: true }).click();
+  await page.getByRole('tab', { name: 'Route tables (1)', exact: true }).click();
+  await expect(page.getByRole('row', { name: /rtb-private/ })).toContainText('0.0.0.0/0');
+
+  // Public: only unassociated addresses are offered, and one is required.
+  await page.getByRole('button', { name: 'Create NAT gateway', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create NAT gateway' });
+  await dialog.getByPlaceholder('my-nat-gateway').fill('egress-b');
+  await dialog.getByRole('button', { name: /Elastic IP allocation ID/ }).click();
+  await expect(page.getByRole('option', { name: /eipalloc-used/ })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: /eipalloc-instance/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /eipalloc-free/ }).click();
+  await dialog.getByRole('button', { name: 'Create NAT gateway', exact: true }).click();
+  expect(requests[0]).toEqual({ method: 'POST', path: '/api/ec2/nat-gateways/', body: { name: 'egress-b', subnet_id: 'subnet-public', connectivity_type: 'public', allocation_id: 'eipalloc-free' } });
+  await expect(page.getByText('NAT gateway nat-new created.')).toBeVisible();
+
+  // Private: no Elastic IP field, and a server error is shown in place.
+  await page.getByRole('button', { name: 'Create NAT gateway', exact: true }).click();
+  await dialog.getByRole('radio', { name: /Private/ }).check();
+  await expect(dialog.getByRole('button', { name: /Elastic IP allocation ID/ })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Create NAT gateway', exact: true }).click();
+  expect(requests[1]).toEqual({ method: 'POST', path: '/api/ec2/nat-gateways/', body: { subnet_id: 'subnet-public', connectivity_type: 'private' } });
+  await expect(page.getByText('InvalidSubnet: subnet is full')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+
+  await page.getByRole('button', { name: 'nat-review', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete NAT gateway', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Delete NAT gateway' });
+  await expect(confirm).toContainText('rtb-private 0.0.0.0/0');
+  await expect(confirm.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await confirm.getByRole('textbox').fill('delete');
+  await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+  expect(requests[2]).toMatchObject({ method: 'DELETE', path: '/api/ec2/nat-gateways/nat-review/' });
+});
+
 test('home provides a connection recovery action and CloudWatch summarizes alarm health', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Review connection settings', exact: true }).click();

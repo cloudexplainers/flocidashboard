@@ -352,8 +352,20 @@ def change_route(route_table_id: str, destination_cidr: str, gateway_id: str | N
     return {'route_table_id': table, 'destination_cidr': destination, 'gateway_id': gateway_id, 'deleted': delete}
 
 
-def allocate_elastic_ip() -> dict[str, Any]:
-    response = _ec2_client().allocate_address(Domain='vpc')
+def _tag_specifications(resource_type: str, name: str | None, tags: Any) -> list[dict[str, Any]]:
+    tag_list = _tag_list(tags)
+    cleaned_name = (name or '').strip()
+    if cleaned_name:
+        tag_list = [tag for tag in tag_list if tag['Key'] != 'Name'] + [{'Key': 'Name', 'Value': cleaned_name}]
+    return [{'ResourceType': resource_type, 'Tags': tag_list}] if tag_list else []
+
+
+def allocate_elastic_ip(*, name: str | None = None, tags: Any = None) -> dict[str, Any]:
+    params: dict[str, Any] = {'Domain': 'vpc'}
+    specifications = _tag_specifications('elastic-ip', name, tags)
+    if specifications:
+        params['TagSpecifications'] = specifications
+    response = _ec2_client().allocate_address(**params)
     return {'allocation_id': response.get('AllocationId'), 'public_ip': response.get('PublicIp'), 'domain': response.get('Domain')}
 
 
@@ -363,23 +375,55 @@ def release_elastic_ip(allocation_id: str) -> dict[str, Any]:
     return {'allocation_id': allocation, 'released': True}
 
 
-def set_elastic_ip_association(allocation_id: str, *, instance_id: str | None = None, association_id: str | None = None, disassociate: bool = False) -> dict[str, Any]:
+def set_elastic_ip_association(
+    allocation_id: str,
+    *,
+    instance_id: str | None = None,
+    association_id: str | None = None,
+    disassociate: bool = False,
+    allow_reassociation: bool = False,
+) -> dict[str, Any]:
     allocation = _required(allocation_id, 'Allocation ID')
     if disassociate:
         association = _required(association_id or '', 'Association ID')
         _ec2_client().disassociate_address(AssociationId=association)
         return {'allocation_id': allocation, 'association_id': association, 'disassociated': True}
     instance = _required(instance_id or '', 'Instance ID')
-    response = _ec2_client().associate_address(AllocationId=allocation, InstanceId=instance)
+    params: dict[str, Any] = {'AllocationId': allocation, 'InstanceId': instance}
+    if allow_reassociation:
+        params['AllowReassociation'] = True
+    response = _ec2_client().associate_address(**params)
     return {'allocation_id': allocation, 'instance_id': instance, 'association_id': response.get('AssociationId')}
 
 
-def create_nat_gateway(subnet_id: str, allocation_id: str, *, connectivity_type: str = 'public') -> dict[str, Any]:
-    response = _ec2_client().create_nat_gateway(
-        SubnetId=_required(subnet_id, 'Subnet ID'),
-        AllocationId=_required(allocation_id, 'Allocation ID'),
-        ConnectivityType=connectivity_type or 'public',
-    )
+NAT_CONNECTIVITY_TYPES = ('public', 'private')
+
+
+def create_nat_gateway(
+    subnet_id: str,
+    allocation_id: str | None = None,
+    *,
+    connectivity_type: str = 'public',
+    name: str | None = None,
+    tags: Any = None,
+) -> dict[str, Any]:
+    connectivity = (connectivity_type or 'public').strip().lower()
+    if connectivity not in NAT_CONNECTIVITY_TYPES:
+        raise ValueError('Connectivity type must be public or private')
+    allocation = (allocation_id or '').strip()
+    # AWS requires an Elastic IP for a public NAT gateway and rejects one on a private gateway.
+    # Floci 2.3.0 accepts a public gateway without one, so check it here.
+    if connectivity == 'public' and not allocation:
+        raise ValueError('A public NAT gateway needs an Elastic IP allocation ID')
+    if connectivity == 'private' and allocation:
+        raise ValueError('Elastic IP addresses cannot be associated with private NAT gateways')
+    params: dict[str, Any] = {'SubnetId': _required(subnet_id, 'Subnet ID'), 'ConnectivityType': connectivity}
+    if allocation:
+        params['AllocationId'] = allocation
+    specifications = _tag_specifications('natgateway', name, tags)
+    if specifications:
+        params['TagSpecifications'] = specifications
+    response = _ec2_client().create_nat_gateway(**params)
     gateway = response.get('NatGateway', {})
     return {'nat_gateway': gateway, 'nat_gateway_id': gateway.get('NatGatewayId')}
 

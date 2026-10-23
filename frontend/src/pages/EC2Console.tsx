@@ -19,6 +19,7 @@ import Box from '@cloudscape-design/components/box';
 import Alert from '@cloudscape-design/components/alert';
 import Multiselect from '@cloudscape-design/components/multiselect';
 import ConfirmActionModal from '../components/ConfirmActionModal';
+import { ElasticIpsPanel, NatGatewaysPanel } from './EC2AddressingPanels';
 import { formatAwsDate } from '../format';
 import {
   fetchServiceInventory,
@@ -46,6 +47,17 @@ export function instanceStateIndicator(state: string): StatusType {
   if (state === 'stopped') return 'stopped';
   return 'info';
 }
+
+/** Network views shown inside the VPC tab, each with its own deep link (ec2/<view>). */
+const NETWORK_VIEWS: Record<string, string> = {
+  vpcs: 'VPCs',
+  subnets: 'Subnets',
+  routes: 'Route tables',
+  gateways: 'Gateways and endpoints',
+  elastic_ips: 'Elastic IPs',
+  nat_gateways: 'NAT gateways',
+};
+const isNetworkView = (tab?: string) => Boolean(tab && tab in NETWORK_VIEWS);
 
 const tagName = (tags?: Array<{ Key: string; Value: string }>) => tags?.find(tag => tag.Key === 'Name')?.Value;
 
@@ -107,12 +119,12 @@ interface EC2ConsoleProps {
 export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }) => {
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [selectedTabId, setSelectedTabId] = useState(['vpcs', 'subnets', 'routes', 'gateways'].includes(activeTab || '') ? 'vpcs' : activeTab || 'instances');
+  const [selectedTabId, setSelectedTabId] = useState(isNetworkView(activeTab) ? 'vpcs' : activeTab || 'instances');
 
   useEffect(() => {
     if (activeTab) {
-      setSelectedTabId(['vpcs', 'subnets', 'routes', 'gateways'].includes(activeTab) ? 'vpcs' : activeTab);
-      if (['vpcs', 'subnets', 'routes', 'gateways'].includes(activeTab)) setNetworkView(activeTab);
+      setSelectedTabId(isNetworkView(activeTab) ? 'vpcs' : activeTab);
+      if (isNetworkView(activeTab)) setNetworkView(activeTab);
     }
   }, [activeTab]);
 
@@ -121,7 +133,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
   const [selectedInstances, setSelectedInstances] = useState<InstanceItem[]>([]);
   const [instanceFilter, setInstanceFilter] = useState('');
   const [instanceDetailTab, setInstanceDetailTab] = useState('details');
-  const [networkView, setNetworkView] = useState(['subnets', 'routes', 'gateways'].includes(activeTab || '') ? activeTab! : 'vpcs');
+  const [networkView, setNetworkView] = useState(isNetworkView(activeTab) ? activeTab! : 'vpcs');
   const [launchModalOpen, setLaunchModalOpen] = useState(false);
   const [images, setImages] = useState<any[]>([]);
   const [instanceTypes, setInstanceTypes] = useState<any[]>([]);
@@ -149,6 +161,9 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
   const [routeTables, setRouteTables] = useState<any[]>([]);
   const [internetGateways, setInternetGateways] = useState<any[]>([]);
   const [vpcEndpoints, setVpcEndpoints] = useState<any[]>([]);
+  const [addresses, setAddresses] = useState<any[]>([]);
+  const [natGateways, setNatGateways] = useState<any[]>([]);
+  const [natFocusId, setNatFocusId] = useState<string>();
   const [createVpcOpen, setCreateVpcOpen] = useState(false);
   const [vpcCidr, setVpcCidr] = useState('10.0.0.0/16');
   const [vpcName, setVpcName] = useState('');
@@ -234,6 +249,8 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
       setRouteTables(ec2Data.route_tables || ec2Data.RouteTables || []);
       setInternetGateways(ec2Data.internet_gateways || ec2Data.InternetGateways || []);
       setVpcEndpoints(ec2Data.vpc_endpoints || ec2Data.VpcEndpoints || []);
+      setAddresses(ec2Data.addresses || ec2Data.Addresses || []);
+      setNatGateways(ec2Data.nat_gateways || ec2Data.NatGateways || []);
 
       // Map Security Groups
       const sgList = ec2Data.security_groups || ec2Data.SecurityGroups || [];
@@ -631,8 +648,8 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
             id: 'vpcs',
             content: (
               <SpaceBetween size="l">
-                <Select ariaLabel="Network resource type" selectedOption={{ value: networkView, label: ({ vpcs: 'VPCs', subnets: 'Subnets', routes: 'Route tables', gateways: 'Gateways and endpoints' } as Record<string, string>)[networkView] }}
-                  options={[{ value: 'vpcs', label: 'VPCs' }, { value: 'subnets', label: 'Subnets' }, { value: 'routes', label: 'Route tables' }, { value: 'gateways', label: 'Gateways and endpoints' }]}
+                <Select ariaLabel="Network resource type" selectedOption={{ value: networkView, label: NETWORK_VIEWS[networkView] }}
+                  options={Object.entries(NETWORK_VIEWS).map(([value, label]) => ({ value, label }))}
                   onChange={({ detail }) => { setNetworkView(detail.selectedOption.value!); onTabChange?.(detail.selectedOption.value!); }} />
                 {networkView === 'vpcs' && <>
                 {/* VPCs */}
@@ -766,6 +783,29 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                   </Container>
                 </Grid>
                 </>}
+                {networkView === 'elastic_ips' && (
+                  <ElasticIpsPanel
+                    addresses={addresses}
+                    natGateways={natGateways}
+                    instances={instances}
+                    loading={loading}
+                    onChanged={loadData}
+                    onMessage={setActionMessage}
+                    onOpenNatGateway={id => { setNatFocusId(id); setNetworkView('nat_gateways'); onTabChange?.('nat_gateways'); }}
+                  />
+                )}
+                {networkView === 'nat_gateways' && (
+                  <NatGatewaysPanel
+                    natGateways={natGateways}
+                    addresses={addresses}
+                    subnets={subnets}
+                    routeTables={routeTables}
+                    loading={loading}
+                    focusId={natFocusId}
+                    onChanged={loadData}
+                    onMessage={setActionMessage}
+                  />
+                )}
               </SpaceBetween>
             ),
           },
