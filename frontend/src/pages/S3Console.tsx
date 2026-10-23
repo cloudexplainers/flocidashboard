@@ -955,7 +955,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                       />
                     </Container>
 
-                    <Container header={<Header variant="h3" description="Object Lock prevents objects from being deleted or overwritten. It can only be enabled when the bucket is created.">Object Lock</Header>}>
+                    <Container header={<Header variant="h3" description="Object Lock prevents object versions from being deleted or overwritten. It can be enabled when the bucket is created or later on a versioned bucket, and cannot be turned off.">Object Lock</Header>}>
                       <KeyValuePairs columns={2} items={[{ label: 'Object Lock', value: activeBucket.ObjectLock ? 'Enabled' : 'Disabled' }]} />
                     </Container>
 
