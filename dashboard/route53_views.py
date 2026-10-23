@@ -7,6 +7,9 @@ from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
 from .route53_api import (
+    associate_vpc,
+    disassociate_vpc,
+    list_vpc_choices,
     change_record_set,
     change_tags,
     create_health_check,
@@ -25,6 +28,8 @@ def route53_hosted_zones_create(request):
             body.get('name', ''),
             body.get('caller_reference', ''),
             comment=body.get('comment', ''),
+            vpc_id=body.get('vpc_id') or '',
+            vpc_region=body.get('vpc_region') or '',
         ))
     except Exception as exc:
         return handle_action_error(exc, service='route53', operation='create_hosted_zone')
@@ -105,3 +110,23 @@ def route53_tags_change(request, resource_type: str, resource_id: str):
         ))
     except Exception as exc:
         return handle_action_error(exc, service='route53', operation='change_tags')
+
+
+@require_http_methods(['GET'])
+def route53_vpc_choices(request):
+    try:
+        return JsonResponse(list_vpc_choices())
+    except Exception as exc:
+        return handle_action_error(exc, service='route53', operation='describe_vpcs')
+
+
+@require_http_methods(['POST', 'DELETE'])
+def route53_hosted_zone_vpcs(request, zone_id: str):
+    operation = 'disassociate_vpc_from_hosted_zone' if request.method == 'DELETE' else 'associate_vpc_with_hosted_zone'
+    try:
+        body = parse_json_body(request)
+        if request.method == 'DELETE':
+            return JsonResponse(disassociate_vpc(zone_id, body.get('vpc_id', ''), body.get('vpc_region') or ''))
+        return JsonResponse(associate_vpc(zone_id, body.get('vpc_id', ''), body.get('vpc_region') or '', body.get('comment') or ''))
+    except Exception as exc:
+        return handle_action_error(exc, service='route53', operation=operation)

@@ -645,6 +645,7 @@ export const App: React.FC = () => {
           { type: 'link' as const, text: 'Invalidations', href: 'cloudfront/invalidations' },
           { type: 'link' as const, text: 'Origins & Behaviors', href: 'cloudfront/origins' },
           { type: 'link' as const, text: 'Cache Policies', href: 'cloudfront/cache-policies' },
+          { type: 'link' as const, text: 'Origin access', href: 'cloudfront/origin-access' },
           { type: 'link' as const, text: 'Functions', href: 'cloudfront/functions' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },

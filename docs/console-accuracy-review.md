@@ -955,8 +955,8 @@ the console, checking each against Floci 2.3.0 with the SDK.
 
 ## Floci features the console didn't show (2026-10-23)
 
-The audit listed twelve features Floci 2.3.0 implements that the console didn't expose. Each was checked live on a
-throwaway Floci 2.3.0 before it got a console form, and the live checks are kept as `ConsoleFeatureLiveTests` in
+The audit listed twelve features Floci 2.3.0 implements that the console didn't expose; all twelve are now in the
+console. Each was checked live on a throwaway Floci 2.3.0 before it got a console form, and the live checks are kept as `ConsoleFeatureLiveTests` in
 `dashboard/integration_tests.py`.
 
 | Feature | Where | Floci 2.3.0 | Console says |
@@ -972,11 +972,12 @@ throwaway Floci 2.3.0 before it got a console form, and the live checks are kept
 | Step Functions versions and aliases | Step Functions, state machine, Versions and aliases tab | Weighted alias routing is honored, executions record the version and alias, and a version an alias still routes to can't be deleted. | The alias form allows one version or two with weights adding up to 100 |
 | DynamoDB export to S3 | DynamoDB, table, Exports to S3 tab | Full exports in DynamoDB JSON with the AWS manifest files, done in seconds. No point-in-time recovery needed (AWS requires it); ION and incremental exports are unsupported; a missing bucket gives FAILED with S3NoSuchBucket. | The console requires PITR, as AWS does, and offers only full DynamoDB JSON exports |
 | Kinesis resharding | Kinesis workbench: Update shard count, Split shard, Merge shards | `UpdateShardCount` (with the 2x limit and the on-demand refusal), `SplitShard` and `MergeShards` work. A split hash key equal to the shard's starting key is accepted (AWS refuses it). | Split defaults to the middle of the range and checks the key; merge checks the shards are adjacent |
+| Route 53 private-zone VPC association | Route 53, Create hosted zone (Private) and the zone's VPCs tab | `AssociateVPCWithHostedZone` and `DisassociateVPCFromHostedZone` work. Floci doesn't check that the VPC exists, lets the last VPC be removed (AWS refuses), and refuses VPCs on public zones as AWS does. Its DNS server answers a private zone's A records to any client, associated or not. | The console checks the VPC exists, keeps at least one VPC, and the Floci note says resolution isn't limited to the VPCs |
+| CloudFront origin access control | CloudFront, Origin access tab, and Create distribution (S3 origins) | Create, list, get and delete work, distributions keep `OriginAccessControlId`, and deleting a control in use is refused. `UpdateOriginAccessControl` returns 405. The bucket policy isn't checked against the distribution. | No edit (create a new control instead); the tab shows which distributions use each control and the bucket policy statement to add |
 
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
-| Route 53 private-zone VPC association, CloudFront OAC | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
 | Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration (`main` applies it; the Management tab note says it never runs), ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
 | Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |

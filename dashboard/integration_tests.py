@@ -295,3 +295,40 @@ class ConsoleFeatureLiveTests(SimpleTestCase):
         self.call('post', f'{base}/shard-count/', {'target_shard_count': 2})
         # AWS allows at most double the current count; Floci enforces it too.
         self.call('post', f'{base}/shard-count/', {'target_shard_count': 8}, expect=400)
+
+    def test_route53_private_zone_vpc_association(self):
+        ec2, route53 = self.factory.client('ec2'), self.factory.client('route53')
+        vpcs = [ec2.create_vpc(CidrBlock=cidr)['Vpc']['VpcId'] for cidr in ('10.61.0.0/16', '10.62.0.0/16')]
+        for vpc in vpcs:
+            self.addCleanup(lambda vpc=vpc: ec2.delete_vpc(VpcId=vpc))
+        self.call('post', '/api/route53/hosted-zones/', {
+            'name': f'{self.name}.internal', 'caller_reference': self.name, 'vpc_id': 'vpc-0000000000missing'}, expect=400)
+        zone = self.call('post', '/api/route53/hosted-zones/', {
+            'name': f'{self.name}.internal', 'caller_reference': self.name, 'vpc_id': vpcs[0]})['hosted_zone']
+        zone_id = zone['Id'].rsplit('/', 1)[-1]
+        self.addCleanup(lambda: route53.delete_hosted_zone(Id=zone_id))
+        self.assertTrue(zone['Config']['PrivateZone'])
+        path = f'/api/route53/hosted-zones/{zone_id}/vpcs/'
+        self.call('delete', path, {'vpc_id': vpcs[0]}, expect=400)
+        associated = self.call('post', path, {'vpc_id': vpcs[1]})['vpcs']
+        self.assertEqual({item['VPCId'] for item in associated}, set(vpcs))
+        self.call('post', path, {'vpc_id': vpcs[1]}, expect=400)
+        remaining = self.call('delete', path, {'vpc_id': vpcs[0]})['vpcs']
+        self.assertEqual([item['VPCId'] for item in remaining], [vpcs[1]])
+        self.assertIn(vpcs[0], [vpc['vpc_id'] for vpc in self.call('get', '/api/route53/vpcs/')['vpcs']])
+
+    def test_cloudfront_origin_access_control(self):
+        cloudfront = self.factory.client('cloudfront')
+        control = self.call('post', '/api/cloudfront/origin-access-controls/', {'name': self.name})['origin_access_control']
+        created = self.call('post', '/api/cloudfront/distributions/', {
+            'caller_reference': self.name, 'origin_id': 's3', 'origin_domain_name': f'{self.name}.s3.amazonaws.com',
+            'origin_access_control_id': control['Id']})['distribution']
+        controls = self.call('get', '/api/cloudfront/origin-access-controls/')['origin_access_controls']
+        listed = next(item for item in controls if item['Id'] == control['Id'])
+        self.assertEqual(listed['UsedBy'], [created['Id']])
+        # In use: Floci refuses the delete, as AWS does.
+        self.call('delete', f"/api/cloudfront/origin-access-controls/{control['Id']}/", expect=409)
+        config = cloudfront.get_distribution_config(Id=created['Id'])
+        cloudfront.update_distribution(Id=created['Id'], IfMatch=config['ETag'], DistributionConfig={**config['DistributionConfig'], 'Enabled': False})
+        cloudfront.delete_distribution(Id=created['Id'], IfMatch=cloudfront.get_distribution(Id=created['Id'])['ETag'])
+        self.call('delete', f"/api/cloudfront/origin-access-controls/{control['Id']}/")
