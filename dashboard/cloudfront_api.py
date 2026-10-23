@@ -76,6 +76,7 @@ def _distribution_config(
     origin_protocol_policy: str = 'https-only',
     http_port: int = 80,
     https_port: int = 443,
+    origin_access_control_id: str = '',
 ) -> dict[str, Any]:
     clean_origin_id = _required(origin_id, 'Origin ID')
     config: dict[str, Any] = {
@@ -119,6 +120,10 @@ def _distribution_config(
         origin['CustomOriginConfig'] = {'HTTPPort': ports[0], 'HTTPSPort': ports[1], 'OriginProtocolPolicy': origin_protocol_policy}
     elif origin_type != 's3':
         raise ValueError('Origin type must be s3 or custom')
+    if origin_access_control_id:
+        if origin_type == 'custom':
+            raise ValueError('Origin access control applies to S3 origins only')
+        origin['OriginAccessControlId'] = str(origin_access_control_id).strip()
     if cache_policy_id:
         behavior = config['DefaultCacheBehavior']
         behavior['CachePolicyId'] = cache_policy_id
@@ -145,6 +150,7 @@ def create_distribution(
     origin_protocol_policy: str = 'https-only',
     http_port: int = 80,
     https_port: int = 443,
+    origin_access_control_id: str = '',
 ) -> dict[str, Any]:
     response = _client().create_distribution(DistributionConfig=_distribution_config(
         caller_reference,
@@ -159,6 +165,7 @@ def create_distribution(
         origin_protocol_policy=origin_protocol_policy,
         http_port=http_port,
         https_port=https_port,
+        origin_access_control_id=origin_access_control_id,
     ))
     return {'distribution': _clean_response(response.get('Distribution', {})), 'etag': response.get('ETag'), 'response': _clean_response(response)}
 
@@ -253,6 +260,65 @@ def create_origin_access_identity(caller_reference: str, *, comment: str = '') -
         },
     )
     return {'origin_access_identity': _clean_response(response.get('CloudFrontOriginAccessIdentity', {})), 'etag': response.get('ETag'), 'response': _clean_response(response)}
+
+
+OAC_ORIGIN_TYPES = {'s3', 'mediastore', 'lambda', 'mediapackagev2'}
+OAC_SIGNING_BEHAVIORS = {'always', 'never', 'no-override'}
+
+
+def list_origin_access_controls() -> dict[str, Any]:
+    client = _client()
+    controls: list[dict[str, Any]] = []
+    marker = ''
+    while True:
+        kwargs = {'Marker': marker} if marker else {}
+        page = client.list_origin_access_controls(**kwargs).get('OriginAccessControlList', {})
+        controls.extend(_clean_response(item) for item in page.get('Items', []) or [])
+        marker = page.get('NextMarker') or ''
+        if not page.get('IsTruncated') or not marker:
+            break
+    used_by: dict[str, list[str]] = {}
+    distributions = client.list_distributions().get('DistributionList', {}).get('Items', []) or []
+    for distribution in distributions:
+        for origin in distribution.get('Origins', {}).get('Items', []) or []:
+            control_id = origin.get('OriginAccessControlId')
+            if control_id:
+                used_by.setdefault(control_id, []).append(distribution.get('Id', ''))
+    for control in controls:
+        control['UsedBy'] = used_by.get(control.get('Id', ''), [])
+    return {'origin_access_controls': controls}
+
+
+def create_origin_access_control(
+    name: str,
+    *,
+    description: str = '',
+    origin_type: str = 's3',
+    signing_behavior: str = 'always',
+) -> dict[str, Any]:
+    clean_name = _required(name, 'Name')
+    if len(clean_name) > 64:
+        raise ValueError('Name must be 64 characters or fewer')
+    if origin_type not in OAC_ORIGIN_TYPES:
+        raise ValueError('Origin type must be s3, mediastore, lambda or mediapackagev2')
+    if signing_behavior not in OAC_SIGNING_BEHAVIORS:
+        raise ValueError('Signing behavior must be always, never or no-override')
+    response = _client().create_origin_access_control(OriginAccessControlConfig={
+        'Name': clean_name,
+        'Description': description or '',
+        'SigningProtocol': 'sigv4',
+        'SigningBehavior': signing_behavior,
+        'OriginAccessControlOriginType': origin_type,
+    })
+    return {'origin_access_control': _clean_response(response.get('OriginAccessControl', {})), 'etag': response.get('ETag')}
+
+
+def delete_origin_access_control(control_id: str, *, if_match: str = '') -> dict[str, Any]:
+    client = _client()
+    clean_id = _required(control_id, 'Origin access control ID')
+    etag = if_match or client.get_origin_access_control(Id=clean_id).get('ETag', '')
+    client.delete_origin_access_control(Id=clean_id, IfMatch=etag)
+    return {'deleted': clean_id}
 
 
 def create_function(name: str, code: str, *, comment: str = '', runtime: str = 'cloudfront-js-1.0') -> dict[str, Any]:

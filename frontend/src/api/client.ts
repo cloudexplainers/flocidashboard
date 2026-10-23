@@ -1957,6 +1957,7 @@ export async function createCloudFrontDistribution(params: {
   origin_protocol_policy?: string;
   http_port?: number;
   https_port?: number;
+  origin_access_control_id?: string;
 }): Promise<any> {
   return requestJson('/api/cloudfront/distributions/', {
     method: 'POST',
@@ -1973,6 +1974,7 @@ export async function createCloudFrontDistribution(params: {
       origin_protocol_policy: params.origin_protocol_policy,
       http_port: params.http_port,
       https_port: params.https_port,
+      origin_access_control_id: params.origin_access_control_id,
     },
     ignoreErrorField: true,
   });

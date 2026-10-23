@@ -18,7 +18,7 @@ class Route53ApiTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['hosted_zone']['Id'], '/hostedzone/Z123')
-        create_mock.assert_called_once_with('example.com', 'ref-1', comment='local')
+        create_mock.assert_called_once_with('example.com', 'ref-1', comment='local', vpc_id='', vpc_region='')
 
     @patch('dashboard.route53_views.delete_hosted_zone')
     def test_delete_hosted_zone_success(self, delete_mock):

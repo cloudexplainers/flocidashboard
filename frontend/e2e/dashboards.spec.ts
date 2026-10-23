@@ -4783,3 +4783,85 @@ test('DynamoDB exports list a failed export and start a new one to S3', async ({
   expect(started).toEqual({ s3_bucket: 'analytics-exports', s3_prefix: 'orders' });
   await expect(page.getByRole('row', { name: /analytics-exports/ })).toContainText('IN_PROGRESS');
 });
+
+test('Route 53 creates a private hosted zone on a VPC and manages its VPC associations', async ({ page }) => {
+  let zones: any[] = [];
+  let createdZone: any;
+  const vpcCalls: any[] = [];
+  await page.route('**/api/route53/', route => route.fulfill({ json: { hosted_zones: zones, notes: [] } }));
+  await page.route('**/api/route53/vpcs/', route => route.fulfill({ json: { region: 'eu-west-1', vpcs: [
+    { vpc_id: 'vpc-app', cidr_block: '10.0.0.0/16', name: 'app' }, { vpc_id: 'vpc-data', cidr_block: '10.1.0.0/16', name: 'data' }] } }));
+  await page.route('**/api/route53/hosted-zones/', route => {
+    createdZone = route.request().postDataJSON();
+    zones = [{ Id: '/hostedzone/ZPRIV', Name: 'corp.internal.', Config: { PrivateZone: true }, ResourceRecordSetCount: 2, records: [], vpcs: [{ VPCId: createdZone.vpc_id, VPCRegion: createdZone.vpc_region }] }];
+    return route.fulfill({ json: { hosted_zone: { Id: '/hostedzone/ZPRIV' } } });
+  });
+  await page.route('**/api/route53/hosted-zones/ZPRIV/vpcs/', route => {
+    const body = route.request().postDataJSON();
+    vpcCalls.push([route.request().method(), body.vpc_id]);
+    const zone = zones[0];
+    zone.vpcs = route.request().method() === 'POST' ? [...zone.vpcs, { VPCId: body.vpc_id, VPCRegion: 'eu-west-1' }] : zone.vpcs.filter((vpc: any) => vpc.VPCId !== body.vpc_id);
+    return route.fulfill({ json: { zone_id: 'ZPRIV', vpcs: zone.vpcs } });
+  });
+  await page.goto('/route53/');
+  await page.getByRole('button', { name: 'Create hosted zone' }).first().click();
+  const create = page.getByRole('dialog', { name: 'Create hosted zone' });
+  await create.getByLabel('Domain name').fill('corp.internal');
+  await create.getByText('Private hosted zone', { exact: true }).click();
+  await expect(create.getByRole('button', { name: 'Create hosted zone' })).toBeDisabled();
+  await create.getByRole('button', { name: /VPC for private hosted zone/ }).click();
+  await create.getByRole('option', { name: /vpc-app/ }).click();
+  await create.getByRole('button', { name: 'Create hosted zone' }).click();
+  await expect.poll(() => createdZone).toMatchObject({ name: 'corp.internal', vpc_id: 'vpc-app', vpc_region: 'eu-west-1' });
+  await page.getByRole('tab', { name: /VPCs \(1\)/ }).click();
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'to any client' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Disassociate vpc-app' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Associate VPC', exact: true }).click();
+  const associate = page.getByRole('dialog', { name: 'Associate VPC with hosted zone' });
+  await associate.getByRole('button', { name: /VPC to associate/ }).click();
+  await expect(associate.getByRole('option', { name: /vpc-app/ })).toHaveCount(0);
+  await associate.getByRole('option', { name: /vpc-data/ }).click();
+  await associate.getByRole('button', { name: 'Associate VPC', exact: true }).click();
+  await expect(page.getByText('vpc-data associated.', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Disassociate vpc-app' }).click();
+  await page.getByRole('dialog', { name: 'Disassociate VPC' }).getByRole('button', { name: 'Disassociate' }).click();
+  await expect(page.getByText('vpc-app disassociated.')).toBeVisible();
+  expect(vpcCalls).toEqual([['POST', 'vpc-data'], ['DELETE', 'vpc-app']]);
+});
+
+test('CloudFront origin access controls are created, chosen for an S3 origin and protected while in use', async ({ page }) => {
+  await inventory(page, 'cloudfront', { distributions: [] });
+  let controls: any[] = [{ Id: 'OAC-USED', Name: 'assets-oac', SigningBehavior: 'always', OriginAccessControlOriginType: 's3', UsedBy: ['D-ASSETS'] }];
+  let createdControl: any; let distribution: any;
+  await page.route('**/api/cloudfront/origin-access-controls/', route => {
+    if (route.request().method() === 'POST') {
+      createdControl = route.request().postDataJSON();
+      controls = [...controls, { Id: 'OAC-NEW', Name: createdControl.name, SigningBehavior: createdControl.signing_behavior, OriginAccessControlOriginType: createdControl.origin_type, UsedBy: [] }];
+      return route.fulfill({ json: { origin_access_control: { Id: 'OAC-NEW' } } });
+    }
+    return route.fulfill({ json: { origin_access_controls: controls } });
+  });
+  await page.route('**/api/cloudfront/distributions/', route => { distribution = route.request().postDataJSON(); return route.fulfill({ json: { distribution: { Id: 'D-NEW' } } }); });
+  await page.goto('/cloudfront/origin-access');
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'UpdateOriginAccessControl' })).toBeVisible();
+  await expect(page.getByRole('row', { name: /assets-oac/ })).toContainText('D-ASSETS');
+  await page.getByRole('row', { name: /assets-oac/ }).getByRole('radio').check();
+  await expect(page.getByTestId('oac-bucket-policy')).toContainText('cloudfront.amazonaws.com');
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Delete origin access control' })).toContainText('D-ASSETS still use this control');
+  await page.getByRole('dialog', { name: 'Delete origin access control' }).getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('button', { name: 'Create control setting' }).click();
+  const create = page.getByRole('dialog', { name: 'Create origin access control' });
+  await create.getByLabel('Name').fill('media-oac');
+  await create.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(page.getByText('Origin access control "media-oac" created.', { exact: false })).toBeVisible();
+  expect(createdControl).toEqual({ name: 'media-oac', description: '', origin_type: 's3', signing_behavior: 'always' });
+  await page.goto('/cloudfront/distributions');
+  await page.getByRole('button', { name: 'Create Distribution', exact: true }).first().click();
+  const dist = page.getByRole('dialog', { name: 'Create CloudFront Distribution' });
+  await dist.getByLabel('Origin domain').fill('media.s3.amazonaws.com');
+  await dist.getByRole('button', { name: /Origin access control/ }).click();
+  await dist.getByRole('option', { name: /media-oac/ }).click();
+  await dist.getByRole('button', { name: 'Create Distribution', exact: true }).click();
+  await expect.poll(() => distribution).toMatchObject({ origin_domain_name: 'media.s3.amazonaws.com', origin_type: 's3', origin_access_control_id: 'OAC-NEW' });
+});

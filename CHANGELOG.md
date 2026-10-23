@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- More Floci features the console didn't show (Route 53, CloudFront):
+  - **Route 53 private hosted zones:** Create hosted zone offers a private zone on a VPC, and private zones get a VPCs tab to associate and disassociate VPCs (at least one stays, as on AWS). A Floci note says its DNS server answers private zones to any client.
+  - **CloudFront origin access control:** a new Origin access tab lists controls with the distributions that use them, creates and deletes them, and shows the S3 bucket policy to add; Create distribution can attach one to an S3 origin. A Floci note says Floci can't edit a control.
+
 - More Floci features the console didn't show (Lambda, Step Functions, DynamoDB, Kinesis):
   - **Lambda async destinations:** a new Asynchronous invocation tab on each function shows and edits retry attempts, maximum event age and on-success/on-failure destinations, with the AWS limits Floci doesn't check.
   - **Step Functions versions and aliases:** a new Versions and aliases tab publishes and deletes versions and creates, edits and deletes aliases, including two-version weighted routing for canary releases.

@@ -13,7 +13,10 @@ from .cloudfront_api import (
     create_invalidation,
     list_invalidations,
     get_invalidation,
+    create_origin_access_control,
     create_origin_access_identity,
+    delete_origin_access_control,
+    list_origin_access_controls,
     delete_distribution,
     delete_function,
     publish_function,
@@ -36,7 +39,7 @@ def cloudfront_distributions_create(request):
             aliases=body.get('aliases'),
             viewer_protocol_policy=body.get('viewer_protocol_policy') or 'redirect-to-https',
             cache_policy_id=body.get('cache_policy_id', ''),
-            **{key: body[key] for key in ('origin_type', 'origin_protocol_policy', 'http_port', 'https_port') if key in body},
+            **{key: body[key] for key in ('origin_type', 'origin_protocol_policy', 'http_port', 'https_port', 'origin_access_control_id') if key in body},
         ))
     except Exception as exc:
         return handle_action_error(exc, service='cloudfront', operation='create_distribution')
@@ -104,6 +107,34 @@ def cloudfront_origin_access_identities_create(request):
         ))
     except Exception as exc:
         return handle_action_error(exc, service='cloudfront', operation='create_origin_access_identity')
+
+
+@require_http_methods(['GET', 'POST'])
+def cloudfront_origin_access_controls(request):
+    if request.method == 'GET':
+        try:
+            return JsonResponse(list_origin_access_controls())
+        except Exception as exc:
+            return handle_action_error(exc, service='cloudfront', operation='list_origin_access_controls')
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(create_origin_access_control(
+            body.get('name', ''),
+            description=body.get('description', ''),
+            origin_type=body.get('origin_type') or 's3',
+            signing_behavior=body.get('signing_behavior') or 'always',
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudfront', operation='create_origin_access_control')
+
+
+@require_http_methods(['DELETE'])
+def cloudfront_origin_access_control_detail(request, control_id: str):
+    try:
+        body = parse_json_body(request) if request.body else {}
+        return JsonResponse(delete_origin_access_control(control_id, if_match=body.get('if_match', '')))
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudfront', operation='delete_origin_access_control')
 
 
 @require_http_methods(['POST'])

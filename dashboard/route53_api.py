@@ -60,7 +60,7 @@ def _tags(value: Any) -> list[dict[str, str]]:
     return tags
 
 
-def create_hosted_zone(name: str, caller_reference: str, *, comment: str = '') -> dict[str, Any]:
+def create_hosted_zone(name: str, caller_reference: str, *, comment: str = '', vpc_id: str = '', vpc_region: str = '') -> dict[str, Any]:
     zone_name = _required(name, 'Hosted zone name')
     if not zone_name.endswith('.'):
         zone_name = f'{zone_name}.'
@@ -68,8 +68,16 @@ def create_hosted_zone(name: str, caller_reference: str, *, comment: str = '') -
         'Name': zone_name,
         'CallerReference': _required(caller_reference, 'Caller reference'),
     }
+    config: dict[str, Any] = {}
     if comment:
-        kwargs['HostedZoneConfig'] = {'Comment': comment}
+        config['Comment'] = comment
+    if (vpc_id or '').strip():
+        # A private hosted zone: created with its first VPC.
+        region = (vpc_region or '').strip() or FlociClientFactory().region
+        kwargs['VPC'] = {'VPCRegion': region, 'VPCId': _existing_vpc(vpc_id, region)}
+        config['PrivateZone'] = True
+    if config:
+        kwargs['HostedZoneConfig'] = config
     response = _client().create_hosted_zone(**kwargs)
     return {
         'hosted_zone': _clean_response(response.get('HostedZone', {})),
@@ -177,3 +185,58 @@ def change_tags(resource_type: str, resource_id: str, *, add_tags: Any = None, r
         RemoveTagKeys=keys,
     )
     return {'resource_type': resource_type, 'resource_id': resource_id, 'added_tags': tags, 'removed_tag_keys': keys, 'response': _clean_response(response)}
+
+
+def _existing_vpc(vpc_id: str, region: str) -> str:
+    """Route 53 refuses a VPC that doesn't exist; Floci accepts any ID, so this checks it."""
+    from botocore.exceptions import ClientError
+    clean = _required(vpc_id, 'VPC ID')
+    factory = FlociClientFactory()
+    factory.region = region
+    try:
+        found = factory.client('ec2').describe_vpcs(VpcIds=[clean]).get('Vpcs', [])
+    except ClientError as exc:
+        if 'NotFound' in exc.response.get('Error', {}).get('Code', ''):
+            found = []
+        else:
+            raise
+    if not found:
+        raise ValueError(f'VPC {clean} does not exist in {region}')
+    return clean
+
+
+def list_vpc_choices() -> dict[str, Any]:
+    """VPCs in the dashboard's Region, for associating with a private hosted zone."""
+    factory = FlociClientFactory()
+    vpcs = factory.client('ec2').describe_vpcs().get('Vpcs', [])
+    return {'region': factory.region, 'vpcs': [{
+        'vpc_id': vpc.get('VpcId'),
+        'cidr_block': vpc.get('CidrBlock'),
+        'name': next((tag['Value'] for tag in vpc.get('Tags', []) if tag.get('Key') == 'Name'), ''),
+        'is_default': bool(vpc.get('IsDefault')),
+    } for vpc in vpcs]}
+
+
+def associate_vpc(zone_id: str, vpc_id: str, vpc_region: str = '', comment: str = '') -> dict[str, Any]:
+    clean_id = _required(zone_id, 'Hosted zone ID')
+    region = (vpc_region or '').strip() or FlociClientFactory().region
+    kwargs: dict[str, Any] = {'HostedZoneId': clean_id, 'VPC': {'VPCRegion': region, 'VPCId': _existing_vpc(vpc_id, region)}}
+    if comment:
+        kwargs['Comment'] = comment
+    zone = _client().get_hosted_zone(Id=clean_id)
+    if any(vpc.get('VPCId') == kwargs['VPC']['VPCId'] for vpc in zone.get('VPCs', [])):
+        raise ValueError(f"{kwargs['VPC']['VPCId']} is already associated with this hosted zone")
+    response = _client().associate_vpc_with_hosted_zone(**kwargs)
+    return {'zone_id': clean_id, 'change_info': _clean_response(response.get('ChangeInfo', {})), 'vpcs': _clean_response(_client().get_hosted_zone(Id=clean_id).get('VPCs', []))}
+
+
+def disassociate_vpc(zone_id: str, vpc_id: str, vpc_region: str = '') -> dict[str, Any]:
+    clean_id = _required(zone_id, 'Hosted zone ID')
+    clean_vpc = _required(vpc_id, 'VPC ID')
+    region = (vpc_region or '').strip() or FlociClientFactory().region
+    vpcs = _client().get_hosted_zone(Id=clean_id).get('VPCs', [])
+    # AWS keeps at least one VPC on a private zone (LastVPCAssociation); Floci lets the last one go.
+    if len(vpcs) <= 1:
+        raise ValueError('A private hosted zone must keep at least one VPC. Associate another VPC first, or delete the zone.')
+    response = _client().disassociate_vpc_from_hosted_zone(HostedZoneId=clean_id, VPC={'VPCRegion': region, 'VPCId': clean_vpc})
+    return {'zone_id': clean_id, 'change_info': _clean_response(response.get('ChangeInfo', {})), 'vpcs': _clean_response(_client().get_hosted_zone(Id=clean_id).get('VPCs', []))}

@@ -29,6 +29,8 @@ import {
   publishCloudFrontFunction,
 } from '../api/client';
 import { FlociNote } from '../components/FlociNote';
+import { CloudFrontOriginAccessControls } from '../components/CloudFrontOriginAccessControls';
+import { serviceRequest } from '../api/client';
 
 interface CloudFrontConsoleProps {
   activeTab?: string;
@@ -84,6 +86,8 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
     .filter((policy: any) => policy?.Id && !MANAGED_CACHE_POLICIES.some(option => option.value === policy.Id))
     .map((policy: any) => ({ value: policy.Id as string, label: (policy.CachePolicyConfig?.Name || policy.Id) as string, description: 'Custom policy' }));
   const [originType, setOriginType] = useState('s3');
+  const [oacId, setOacId] = useState('');
+  const [oacOptions, setOacOptions] = useState<{ label: string; value: string; description?: string }[]>([]);
   const [creatingDist, setCreatingDist] = useState(false);
 
   // Create Invalidation Modal
@@ -171,6 +175,15 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
     } catch (error: any) { if (latestDistribution.current === distribution) setInvalidationError(error.message); }
   };
 
+  const openCreateDistribution = () => {
+    setOacId('');
+    setCreateDistOpen(true);
+    serviceRequest('cloudfront', 'origin-access-controls/').then((result: any) => {
+      const controls = Array.isArray(result?.origin_access_controls) ? result.origin_access_controls : [];
+      setOacOptions(controls.filter((control: any) => (control.OriginAccessControlOriginType || 's3') === 's3').map((control: any) => ({ label: control.Name || control.Id, value: control.Id, description: control.Id })));
+    }).catch(() => setOacOptions([]));
+  };
+
   // Actions
   const handleCreateDistribution = async () => {
     if (!originDomain.trim()) return;
@@ -183,6 +196,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         comment: distComment.trim() || undefined,
         viewer_protocol_policy: viewerProtocolPolicy.value,
         ...(cachePolicyId ? { cache_policy_id: cachePolicyId } : {}),
+        ...(originType === 's3' && oacId ? { origin_access_control_id: oacId } : {}),
         enabled: true,
       });
       setActionMessage({ type: 'success', text: 'Distribution creation accepted. Check the reported deployment status.' });
@@ -295,7 +309,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
             <Button iconName="refresh" loading={loading} onClick={() => { loadData(); setInvalidationRevision(value => value + 1); }}>
               Refresh
             </Button>
-            <Button variant="primary" iconName="add-plus" onClick={() => setCreateDistOpen(true)}>
+            <Button variant="primary" iconName="add-plus" onClick={openCreateDistribution}>
               Create Distribution
             </Button>
           </SpaceBetween>
@@ -350,7 +364,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                   <Header
                     variant="h2"
                     actions={
-                      <Button variant="primary" iconName="add-plus" onClick={() => setCreateDistOpen(true)}>
+                      <Button variant="primary" iconName="add-plus" onClick={openCreateDistribution}>
                         Create Distribution
                       </Button>
                     }
@@ -556,6 +570,11 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
             ),
           },
           {
+            label: 'Origin access',
+            id: 'origin-access',
+            content: <CloudFrontOriginAccessControls />,
+          },
+          {
             label: `Functions (${(data.functions || []).length})`,
             id: 'functions',
             content: (
@@ -621,6 +640,16 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
           {actionMessage?.type === 'error' && <Alert type="error">{actionMessage.text}</Alert>}
           <FormField label="Origin type"><Select selectedOption={{ label: originType === 's3' ? 'Amazon S3' : 'Custom HTTP origin', value: originType }} options={[{ label: 'Amazon S3', value: 's3' }, { label: 'Custom HTTP origin', value: 'custom' }]} onChange={({ detail }) => setOriginType(detail.selectedOption.value!)} /></FormField>
           {originType === 'custom' && <Box>Origin connections use HTTPS on port 443.</Box>}
+          {originType === 's3' && (
+            <FormField label="Origin access" description="Origin access control lets only this distribution read a private bucket. Add the bucket policy shown on the Origin access tab.">
+              <Select
+                ariaLabel="Origin access control"
+                selectedOption={oacOptions.find(option => option.value === oacId) || { label: 'Public bucket (no origin access control)', value: '' }}
+                options={[{ label: 'Public bucket (no origin access control)', value: '' }, ...oacOptions]}
+                onChange={({ detail }) => setOacId(detail.selectedOption.value || '')}
+              />
+            </FormField>
+          )}
           <FormField label="Origin domain" description="Hostname of the S3 bucket or custom web server, without a scheme, port, or path.">
             <Input value={originDomain} onChange={({ detail }) => setOriginDomain(detail.value)} placeholder="assets.example.com" />
           </FormField>

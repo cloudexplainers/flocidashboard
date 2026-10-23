@@ -19,6 +19,8 @@ import TextFilter from '@cloudscape-design/components/text-filter';
 import { deleteConsoleResource, fetchConsoleInventory, postConsoleAction } from '../api/client';
 import ConfirmActionModal from '../components/ConfirmActionModal';
 import { FlociNote } from '../components/FlociNote';
+import RadioGroup from '@cloudscape-design/components/radio-group';
+import { Route53ZoneVpcs, useVpcChoices, vpcOption } from '../components/Route53ZoneVpcs';
 
 interface Route53ConsoleProps { resourcePath?: string; onNavigate?: (path: string) => void; }
 const zoneId = (zone: any) => String(zone.Id || zone.id || '').replace('/hostedzone/', '');
@@ -51,6 +53,9 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
   const [zoneName, setZoneName] = useState('');
   const [zoneComment, setZoneComment] = useState('');
   const [creatingZone, setCreatingZone] = useState(false);
+  const [zoneType, setZoneType] = useState<'public' | 'private'>('public');
+  const [zoneVpcId, setZoneVpcId] = useState('');
+  const zoneVpcChoices = useVpcChoices(createZoneOpen && zoneType === 'private');
 
   // Create Record Modal
   const [createRecordOpen, setCreateRecordOpen] = useState(false);
@@ -76,7 +81,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
   useEffect(() => { setRecordFilter(''); setTypeFilter('all'); setCreateRecordOpen(false); setEditingRecord(null); }, [selectedId]);
 
   const handleCreateZone = async () => {
-    if (!zoneName.trim()) return;
+    if (!zoneName.trim() || (zoneType === 'private' && !zoneVpcId)) return;
     setCreatingZone(true);
     setActionMessage(null);
     try {
@@ -84,11 +89,14 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
         name: zoneName.trim(),
         caller_reference: `floci-${Date.now()}`,
         comment: zoneComment,
+        ...(zoneType === 'private' ? { vpc_id: zoneVpcId, vpc_region: zoneVpcChoices.region } : {}),
       });
       setActionMessage({ type: 'success', text: `Hosted zone "${zoneName.trim()}" created.` });
       setCreateZoneOpen(false);
       setZoneName('');
       setZoneComment('');
+      setZoneType('public');
+      setZoneVpcId('');
       await loadData();
       if (result.hosted_zone) selectZone(zoneId(result.hosted_zone));
     } catch (err: any) {
@@ -311,6 +319,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
               { label: 'Name servers', value: activeZone.delegation_set?.NameServers?.join(' · ') || 'Not reported' },
               { label: 'Associated VPCs', value: activeZone.vpcs?.map((vpc: any) => `${vpc.VPCId} (${vpc.VPCRegion})`).join(' · ') || 'None reported' },
             ]} /> },
+            ...(activeZone.PrivateZone === true ? [{ id: 'vpcs', label: `VPCs (${(activeZone.vpcs || []).length})`, content: <Route53ZoneVpcs zoneId={activeZone.Id} vpcs={activeZone.vpcs || []} onChanged={loadData} /> }] : []),
           ]} />
         </SpaceBetween>
       </Container>}
@@ -342,7 +351,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
               <Button variant="link" onClick={() => setCreateZoneOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" disabled={!zoneName.trim()} loading={creatingZone} onClick={handleCreateZone}>
+              <Button variant="primary" disabled={!zoneName.trim() || (zoneType === 'private' && !zoneVpcId)} loading={creatingZone} onClick={handleCreateZone}>
                 Create hosted zone
               </Button>
             </SpaceBetween>
@@ -365,6 +374,30 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
               placeholder="Primary production DNS zone"
             />
           </FormField>
+
+          <FormField label="Type">
+            <RadioGroup
+              value={zoneType}
+              onChange={({ detail }) => setZoneType(detail.value as 'public' | 'private')}
+              items={[
+                { value: 'public', label: 'Public hosted zone', description: 'Routes traffic on the internet.' },
+                { value: 'private', label: 'Private hosted zone', description: 'Routes traffic within one or more VPCs.' },
+              ]}
+            />
+          </FormField>
+          {zoneType === 'private' && (
+            <FormField label="VPC to associate" description={zoneVpcChoices.region ? `VPCs in ${zoneVpcChoices.region}. You can add more VPCs after the zone is created.` : undefined} errorText={zoneVpcChoices.error || undefined}>
+              <Select
+                ariaLabel="VPC for private hosted zone"
+                statusType={zoneVpcChoices.loading ? 'loading' : 'finished'}
+                placeholder="Choose a VPC"
+                empty="No VPCs in this Region"
+                selectedOption={zoneVpcChoices.vpcs.map(vpcOption).find(option => option.value === zoneVpcId) || null}
+                options={zoneVpcChoices.vpcs.map(vpcOption)}
+                onChange={({ detail }) => setZoneVpcId(detail.selectedOption.value || '')}
+              />
+            </FormField>
+          )}
         </SpaceBetween>
       </Modal>
 
