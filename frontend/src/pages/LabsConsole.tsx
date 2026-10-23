@@ -399,7 +399,7 @@ export const LabsConsole: React.FC = () => {
   });
 
   // Exam study tracks
-  const selectedExam = examData?.exams.find((exam) => exam.code === track);
+  const selectedExam = examData?.exams?.find((exam) => exam.code === track);
   // An unknown ?track= value falls back to the level view once exams have loaded.
   const showExamTrack = track !== LEVELS_TRACK && (Boolean(selectedExam) || (!examData && !examError) || Boolean(examError));
   const conceptsByKey: Record<string, ConceptCard> = Object.fromEntries((examData?.concepts || []).map((card) => [card.key, card]));
