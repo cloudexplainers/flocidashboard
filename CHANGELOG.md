@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- RDS and Aurora resilience:
+  - **Console:** a database's Actions menu adds Create read replica, Promote and Restore to point in time (latest restorable time or a custom UTC time); a cluster's Actions menu adds Add reader, Failover (to a chosen reader or the one RDS picks) and Take snapshot. The Snapshots tab lists cluster snapshots, which restore to a new cluster or delete after typed confirmation. A database's Configuration tab shows its replication role, source, replicas, replication status and latest restorable time.
+  - **Says what Floci doesn't do:** point-in-time restore copies the source as it is now whatever time you choose; a replica gets one copy of its PostgreSQL source and isn't updated afterwards (and accepts writes); Multi-AZ runs no standby; a failover moves only the writer role, because a cluster's instances share one database; cluster snapshots are Aurora PostgreSQL only.
+  - **New lab (SAA 2.2, 3.3):** "Design resilient databases with read replicas, point-in-time restore, and Aurora failover", 10 steps. It checks the replica link on both ends, the restored instance, the promotion, the writer and reader roles, an order row written through the Data API that survives the failover, and the cluster snapshot. The catalog is now 67 labs and 385 steps.
+
 - Floci gap fixes (see "Floci gap fixes" in `docs/console-accuracy-review.md`):
   - **Says what Floci doesn't apply:** consoles note where Floci stores a setting without enforcing or running it: SQS, KMS, ECR, Secrets Manager and Backup policies (only S3, SNS and Lambda policies are evaluated), CloudWatch alarm actions, Auto Scaling policies, scheduled actions and lifecycle hooks, DynamoDB point-in-time restore, Route 53 routing policies and health checks, KMS automatic rotation, CloudFront caching, NAT gateways, Config evaluations and more.
   - **S3 anonymous access:** a bucket's Permissions tab tests whether an unsigned request can list it and warns that, with `FLOCI_SERVICES_S3_ENFORCE_AUTH=false` (the Compose default), Block Public Access and bucket policies don't stop anonymous reads or writes.

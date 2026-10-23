@@ -673,11 +673,34 @@ written to a PostgreSQL instance was present in the instance restored from its s
 returns `InvalidDBInstanceState` ("not supported for engine MYSQL"), which the console shows. Snapshots are
 `available` at once and only `manual` snapshots exist.
 
+## RDS and Aurora resilience (2026-10-23)
+
+The top item of the recommended next work (below) is done. The RDS console now offers Restore to point in time, Create read replica
+and Promote on a database, Add reader, Failover and Take snapshot on a cluster, and a Cluster snapshots table
+(restore to a new cluster, delete) on the Snapshots tab. Backed by `POST /api/rds/instances/<id>/restore-point-in-time/`,
+`.../read-replicas/`, `.../promote/`, `POST /api/rds/clusters/<id>/instances/`, `.../failover/`, and
+`/api/rds/cluster-snapshots/` (create, delete, `restore/`). The inventory adds `DescribeDBClusterSnapshots`, the
+replica links, `StatusInfos` and `LatestRestorableTime`. The lab `rds/aurora-resilience` (SAA 2.2, 3.3) uses all of it.
+
+Checked in `RdsService.java` and `docs/services/rds.md` at `2.3.0`, then live on the disposable emulator:
+
+| Behavior | Floci 2.3.0 | Console says |
+| --- | --- | --- |
+| Point-in-time restore | Checks the window (`InvalidRestoreFault` outside it, `PointInTimeRestoreNotEnabled` with retention 0), then copies the source with `pg_dumpall`: a restore to an earlier time held a row written later. PostgreSQL only. | Note in the restore dialog |
+| Read replica | One `pg_dumpall` copy at creation; a later write to the source never reached the replica, and the replica accepted a write. Links (`ReadReplicaSourceDBInstanceIdentifier`, `StatusInfos`, the source's list) are reported. MySQL/MariaDB refused; a source needs backups. | Notes in the dialog and the Configuration tab |
+| Promote | Clears both links, sets retention (1 day by default), reboots. | Nothing to label |
+| Multi-AZ | Stored and reported; no standby, no `SecondaryAvailabilityZone`. | Note in the Configuration tab |
+| Aurora failover | Only `IsClusterWriter` moves; the instances share one database, so data and connections stay. No reader: `InvalidDBClusterStateFault`. The `AvailabilityZone` a cluster instance asks for is ignored. | Notes in the Failover and Add reader dialogs |
+| Cluster snapshots | Available at once; restore creates a cluster without instances that holds the data. Aurora MySQL refused. | Note on the Snapshots tab and in the dialog |
+
+The lab writes its order row with the RDS Data API through the cluster (as AWS allows for Aurora), using the
+secret `--manage-master-user-password` creates; Floci doesn't report `HttpEndpointEnabled`, so the lab passes
+`--enable-http-endpoint` for fidelity only. `check_labs --service rds` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
-| RDS point-in-time restore, read replicas (PostgreSQL), promote, Aurora `FailoverDBCluster`, cluster snapshots | Real at 2.3.0 and Wave 1 exam topics (SAA 2.2, 3.3), but each needs its own forms and checks; PITR restore also needs a note that Floci restores the latest data whatever time is asked. |
 | CloudTrail log-file viewer | Trails already have an event-selector editor; a view that lists and unzips the `AWSLogs/` files in the trail bucket would make the audit topic (CLF 2.x, SAA 1.x) usable without the S3 console. |
 | ELBv2 target-group attributes (stickiness, deregistration delay), listener and rule edits; Auto Scaling instance refresh and `SetInstanceHealth` | HA web tier (Wave 1). Check that the reconciler replaces Unhealthy instances before building the Auto Scaling part. |
 | S3 lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication config (configuration only) | S3 data protection (Wave 1). Each needs its own label. |
