@@ -107,7 +107,9 @@ def backup_inventory() -> dict[str, Any]:
             'Backup jobs are simulated and transition from CREATED to RUNNING to COMPLETED after the configured delay.',
             'When a job completes, Floci creates a recovery point in the target vault and increments the vault recovery-point counter.',
             'Supported resource type codes include S3, RDS, DynamoDB, EFS, EC2, EBS, Aurora, DocumentDB, Neptune, FSx, and VirtualMachine.',
-            'Restore jobs, copy jobs, report plans, framework operations, legal holds, vault notifications, and vault access policies are not yet supported.',
+            'A recovery point is metadata only: Floci copies no data, so there is nothing to restore. Restore jobs, copy jobs, report plans, frameworks and legal holds are not supported.',
+            'Backup plan schedules never run. Start a backup job yourself to create a recovery point.',
+            'Vault notifications are stored but never published to SNS. Vault access policies are stored but not evaluated: a Deny does not block any vault operation.',
         ],
     }
 

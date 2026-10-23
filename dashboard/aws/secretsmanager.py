@@ -39,6 +39,10 @@ def secretsmanager_inventory() -> dict[str, Any]:
             lambda: core._paginate(client, 'list_secret_version_ids', 'Versions', SecretId=secret_id),
             {'ResourceNotFoundException'},
         )
+        policy = _secrets_optional(
+            lambda: client.get_resource_policy(SecretId=secret_id),
+            {'ResourceNotFoundException'},
+        )
         return {
             'name': metadata.get('Name'),
             'arn': metadata.get('ARN'),
@@ -56,6 +60,11 @@ def secretsmanager_inventory() -> dict[str, Any]:
             'version_ids_to_stages': metadata.get('VersionIdsToStages'),
             'tags': metadata.get('Tags', []),
             'versions': versions,
+            # ResourcePolicy is absent when the secret has none; a failed read keeps its error.
+            'resource_policy': (
+                policy if isinstance(policy, dict) and policy.get('error')
+                else (policy or {}).get('ResourcePolicy')
+            ),
         }
 
     if len(secrets) > 1:
@@ -99,6 +108,8 @@ def secretsmanager_inventory() -> dict[str, Any]:
             'value_display': 'Secret values are retrieved only on explicit request.',
         },
         'notes': [
+            'Rotation invokes the rotation Lambda function for real.',
+            'Resource policies are stored and returned, but Floci does not evaluate them: a Deny does not block GetSecretValue.',
         ],
     }
 

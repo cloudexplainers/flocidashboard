@@ -33,6 +33,7 @@ import {
   receiveSqsMessages,
   deleteSqsMessage,
 } from '../api/client';
+import { FlociNote, RESOURCE_POLICY_NOT_ENFORCED } from '../components/FlociNote';
 
 interface QueueItem {
   QueueName: string;
@@ -717,6 +718,7 @@ export const SQSConsole: React.FC<{ resourcePath?: string; onNavigate?: (path: s
                 content: (
                   <SpaceBetween size="m">
                     <Header variant="h3" description="Defines who can access the queue.">Access policy</Header>
+                    <FlociNote>{RESOURCE_POLICY_NOT_ENFORCED} SNS also delivers to subscribed queues whether or not this policy allows it.</FlociNote>
                     <PolicySummary document={activeQueue.Policy || undefined} />
                     <textarea
                       readOnly

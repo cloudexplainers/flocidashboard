@@ -22,6 +22,7 @@ import { executeKmsAction } from "../api/client";
 import { useSession } from "../components/SessionContext";
 import { KmsCryptoTools } from "../components/KmsCryptoTools";
 import { KmsKey, kmsKeys, kmsDate, kmsStateLabel, canRotateKmsKey } from "./kmsResources";
+import { FlociNote } from '../components/FlociNote';
 
 interface KMSConsoleProps {
   activeTab?: string;
@@ -655,6 +656,12 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
                           The key policy is unavailable. Refresh to retry.
                         </Alert>
                       )}
+                      <FlociNote>
+                        Floci stores the key policy and returns it, but doesn&apos;t
+                        evaluate it: a Deny here doesn&apos;t stop Encrypt, Decrypt or
+                        any other call. With IAM enforcement on, Floci checks only
+                        identity (IAM) policies.
+                      </FlociNote>
                       <FormField
                         label="Key policy JSON"
                         description="The key policy controls access to this KMS key."
@@ -749,6 +756,12 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
                         managed symmetric encryption keys with AWS_KMS origin.
                         Manage multi-Region rotation on the primary key.
                       </Box>
+                      <FlociNote>
+                        Floci records whether automatic rotation is on, but never
+                        rotates the key on a schedule and ignores a rotation period.
+                        On-demand rotation (RotateKeyOnDemand) does create new key
+                        material, and older ciphertext still decrypts.
+                      </FlociNote>
                       <Button
                         loading={busy}
                         disabled={
@@ -781,6 +794,7 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
                     header={
                       <Header
                         variant="h2"
+                        description="Floci stores and lists grants, but doesn't evaluate them when it authorizes Encrypt, Decrypt and other cryptographic calls."
                         counter={`(${key.grants.length})`}
                         actions={
                           <Button

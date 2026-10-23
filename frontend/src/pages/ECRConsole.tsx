@@ -35,6 +35,7 @@ import {
   putEcrLifecyclePolicy,
   runEcrGarbageCollection,
 } from "../api/client";
+import { FlociNote, RESOURCE_POLICY_NOT_ENFORCED } from '../components/FlociNote';
 
 interface ECRConsoleProps {
   activeTab?: string;
@@ -695,6 +696,10 @@ export const ECRConsole: React.FC<ECRConsoleProps> = ({
                               repository.
                             </Alert>
                           )}
+                          <FlociNote>
+                            Floci stores the lifecycle policy and returns it, but
+                            doesn&apos;t apply it: no images expire.
+                          </FlociNote>
                           <FormField
                             label="Lifecycle policy JSON"
                             description="Define rules to expire images automatically."
@@ -761,6 +766,10 @@ export const ECRConsole: React.FC<ECRConsoleProps> = ({
                               },
                             ]}
                           />
+                          <Box variant="small" color="text-body-secondary">
+                            Floci records the scan-on-push setting but doesn&apos;t scan
+                            images, so no scan findings are produced.
+                          </Box>
                           <Button
                             loading={busy}
                             disabled={!repository.mutability || loading}
@@ -798,11 +807,14 @@ export const ECRConsole: React.FC<ECRConsoleProps> = ({
                     <Container
                       header={<Header variant="h2">Repository policy</Header>}
                     >
+                      <SpaceBetween size="m">
+                      <FlociNote>{RESOURCE_POLICY_NOT_ENFORCED}</FlociNote>
                       {repository.policy ? (
                         <CodeSnippet language="json" code={repository.policy} />
                       ) : (
                         <Box>No repository policy is configured.</Box>
                       )}
+                      </SpaceBetween>
                     </Container>
                   ),
                 },

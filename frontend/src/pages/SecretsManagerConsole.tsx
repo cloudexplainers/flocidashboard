@@ -17,6 +17,7 @@ import Tabs from "@cloudscape-design/components/tabs";
 import Textarea from "@cloudscape-design/components/textarea";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import Table from "../components/ResourceTable";
+import { CodeSnippet } from "../components/CodeSnippet";
 import { secretsRequest } from "../api/client";
 import { useSession } from "../components/SessionContext";
 import {
@@ -26,6 +27,7 @@ import {
   secretPath,
   secretResources,
 } from "./secretResources";
+import { FlociNote, RESOURCE_POLICY_NOT_ENFORCED } from "../components/FlociNote";
 
 type Props = { resourcePath?: string; onNavigate?: (path: string) => void };
 const Field = ({
@@ -68,6 +70,14 @@ const Stages = ({ stages }: { stages: string[] }) => (
       : "—"}
   </SpaceBetween>
 );
+
+function prettyJson(text: string): string {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+}
 
 export const SecretsManagerConsole: React.FC<Props> = (props) => {
   const { identity, details } = useSession();
@@ -548,6 +558,38 @@ const SecretWorkspace: React.FC<Props> = ({
                             {secret.rotationRules.Duration}
                           </Field>
                         </ColumnLayout>
+                      </Container>
+                    ),
+                  },
+                  {
+                    id: "permissions",
+                    label: "Resource permissions",
+                    content: (
+                      <Container
+                        header={
+                          <Header
+                            variant="h2"
+                            description="A resource policy on the secret controls which principals can access it."
+                          >
+                            Resource permissions
+                          </Header>
+                        }
+                      >
+                        <SpaceBetween size="m">
+                          <FlociNote>{RESOURCE_POLICY_NOT_ENFORCED}</FlociNote>
+                          {secret.resourcePolicyError ? (
+                            <Alert type="warning">
+                              {secret.resourcePolicyError}
+                            </Alert>
+                          ) : secret.resourcePolicy ? (
+                            <CodeSnippet
+                              language="json"
+                              code={prettyJson(secret.resourcePolicy)}
+                            />
+                          ) : (
+                            <Box>No resource policy is attached to this secret.</Box>
+                          )}
+                        </SpaceBetween>
                       </Container>
                     ),
                   },

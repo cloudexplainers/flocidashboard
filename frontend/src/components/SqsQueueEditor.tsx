@@ -13,6 +13,7 @@ import ColumnLayout from '@cloudscape-design/components/column-layout';
 import Header from '@cloudscape-design/components/header';
 import RadioGroup from '@cloudscape-design/components/radio-group';
 import { setSqsQueueAttributes, startSqsRedrive } from '../api/client';
+import { FlociNote, RESOURCE_POLICY_NOT_ENFORCED } from './FlociNote';
 
 export interface EditableQueue {
   QueueName: string;
@@ -170,6 +171,7 @@ export function SqsQueueEditor({ queue, queues, visible, onDismiss, onSaved }: {
         <FormField label="Access policy" description="JSON policy document. Leave empty for no queue policy." errorText={policyError}>
           <Textarea ariaLabel="Access policy JSON" rows={8} value={policy} onChange={({ detail }) => setPolicy(detail.value)} />
         </FormField>
+        <FlociNote>{RESOURCE_POLICY_NOT_ENFORCED}</FlociNote>
       </SpaceBetween>
     </Modal>
   );

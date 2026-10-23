@@ -22,6 +22,8 @@ export interface SecretResource {
   tags: { Key: string; Value: string }[];
   versions: SecretVersion[];
   versionsError?: string;
+  resourcePolicy?: string;
+  resourcePolicyError?: string;
 }
 export function secretResources(data: any): SecretResource[] {
   return (Array.isArray(data.secrets) ? data.secrets : []).map((s: any) => {
@@ -62,6 +64,9 @@ export function secretResources(data: any): SecretResource[] {
       tags: s.tags || s.Tags || [],
       versions,
       versionsError: s.versions?.error,
+      resourcePolicy:
+        typeof s.resource_policy === "string" ? s.resource_policy : undefined,
+      resourcePolicyError: s.resource_policy?.error,
     };
   });
 }
