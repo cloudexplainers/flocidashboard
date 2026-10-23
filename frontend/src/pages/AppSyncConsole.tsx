@@ -1213,17 +1213,12 @@ const AppSyncWorkspace: React.FC<Props> = ({
                     void mutate(
                       "key",
                       async () => {
-                        const seconds = expiry.trim()
-                          ? Number(expiry)
-                          : undefined;
-                        if (
-                          seconds !== undefined &&
-                          (!Number.isInteger(seconds) ||
-                            seconds <= Date.now() / 1000)
-                        )
-                          throw new Error(
-                            "Expiry must be a future Unix timestamp in seconds.",
-                          );
+                        // The console asks for days until expiry (1-365, default 7).
+                        // AppSync takes seconds since the epoch, rounded down to the hour.
+                        const days = Number(expiry.trim() || "7");
+                        if (!Number.isInteger(days) || days < 1 || days > 365)
+                          throw new Error("Enter a whole number of days from 1 to 365.");
+                        const seconds = Math.floor((Date.now() / 1000 + days * 86400) / 3600) * 3600;
                         return createAppSyncApiKey(apiId, description, seconds);
                       },
                       "API key generated.",
@@ -1386,11 +1381,13 @@ const AppSyncWorkspace: React.FC<Props> = ({
                 />
               </FormField>
               <FormField
-                label="Expires (Unix seconds, optional)"
-                description="Leave empty to use the service’s default expiration."
+                label="Expires after (days)"
+                description="1 to 365 days. The default is 7 days."
               >
                 <Input
+                  type="number"
                   value={expiry}
+                  placeholder="7"
                   onChange={({ detail }) => setExpiry(detail.value)}
                 />
               </FormField>

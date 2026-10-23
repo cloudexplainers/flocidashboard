@@ -347,7 +347,7 @@ const AthenaWorkspace: React.FC<Props> = ({
                 setCreateOpen(true);
               }}
             >
-              Create Workgroup
+              Create workgroup
             </Button>
           </SpaceBetween>
         }
@@ -935,7 +935,7 @@ const AthenaWorkspace: React.FC<Props> = ({
                 disabled={!wgName.trim()}
                 onClick={create}
               >
-                Create Workgroup
+                Create workgroup
               </Button>
             </SpaceBetween>
           </Box>
@@ -943,19 +943,19 @@ const AthenaWorkspace: React.FC<Props> = ({
       >
         <SpaceBetween size="m">
           {createError && <Alert type="error">{createError}</Alert>}
-          <FormField label="Workgroup Name">
+          <FormField label="Workgroup name">
             <Input
               value={wgName}
               onChange={({ detail }) => setWgName(detail.value)}
             />
           </FormField>
-          <FormField label="Description">
+          <FormField label="Description - optional">
             <Input
               value={wgDescription}
               onChange={({ detail }) => setWgDescription(detail.value)}
             />
           </FormField>
-          <FormField label="Output Location (S3 URI)">
+          <FormField label="Location of query result - optional" description="S3 path where Athena saves query results, such as s3://query-results-bucket/folder/.">
             <Input
               value={wgOutput}
               onChange={({ detail }) => setWgOutput(detail.value)}
