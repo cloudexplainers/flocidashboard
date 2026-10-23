@@ -11,6 +11,7 @@ from urllib.request import urlopen
 from botocore.exceptions import ClientError
 
 from dashboard.aws import _clean_response
+from . import s3_data_protection_labs as data_protection
 from .monolith import (
     AWS_ACCOUNT_ID,
     _error_code,
@@ -3570,10 +3571,15 @@ LABS = [
     S3_CORS_LAB,
     S3_OBJECT_NOTIFICATIONS_LAB,
     S3_MULTIPART_UPLOAD_LAB,
+    data_protection.LAB,
 ]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 's3' and lab_key == 'data-protection-tiers':
+        from .s3_data_protection_labs import run_step as data_protection_run_step
+        return data_protection_run_step(step_key)
+
     if service_key == 's3' and lab_key == 'create-bucket':
         runners = {
             'create-bucket': _run_s3_create_bucket,
@@ -3708,6 +3714,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 's3' and lab_key == 'data-protection-tiers':
+        from .s3_data_protection_labs import status as data_protection_status
+        return data_protection_status()
+
     if service_key == 's3' and lab_key == 'create-bucket':
         verification = _verify_s3_bucket()
         verified = verification.get('status') == 'passed'
@@ -4147,6 +4157,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 's3' and lab_key == 'data-protection-tiers':
+        from .s3_data_protection_labs import reset as data_protection_reset
+        return data_protection_reset()
+
     if service_key == 's3' and lab_key == 'create-bucket':
         return _reset_s3_create_bucket()
 
