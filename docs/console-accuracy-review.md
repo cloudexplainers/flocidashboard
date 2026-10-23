@@ -843,6 +843,30 @@ reset):
 The console still has no Elastic IP or NAT gateway tables (see "EC2 and VPC" above); they show in the inventory and
 the generic workbench. `check_labs --service ec2 --lab nat-three-tier` passed on 2.3.0.
 
+## KMS key management lab (2026-10-23)
+
+`kms/key-management` (SAA 1.3), 8 steps, in `dashboard/labs/kms_key_management_labs.py` (dispatched from
+`kms_labs.py`). It closes Level 4 and covers Wave 1 item W1-5 with its own key (`alias/lab-orders-cmk`), roles
+`lab-kms-key-admin` and `lab-kms-orders-app`, and bucket `lab-kms-orders-records`, so `kms/key-alias-encrypt-decrypt`
+stays the short introduction.
+
+Checked live on a throwaway Floci 2.3.0 with IAM enforcement on (a full run, a second run over the leftovers,
+deliberately broken setups, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Key policy | Stored and returned as sent. Not evaluated: a Deny for the caller was ignored, and a policy without the root statement didn't stop an IAM-allowed user. Accepts malformed JSON, a policy that locks everyone out, and principals that don't exist (AWS refuses all three). | The step checks the root statement and the admin/user split itself |
+| IAM for KMS | Enforced: a user with no IAM policy got `AccessDeniedException` on Encrypt and GenerateDataKey. | Mentioned in the key policy step |
+| Grants | Stored and listed with constraints and the retiring principal; revoke and retire work. A user whose only permission was a grant (with or without the grant token) was still refused. | Note in the step and its result |
+| Rotation | `EnableKeyRotation` accepts 90-2560 days and drops the period; `GetKeyRotationStatus` returns only the flag and nothing rotates on a schedule. `RotateKeyOnDemand` adds new key material, and ciphertext from before it still decrypts. `ListKeyRotations` is `UnsupportedOperation`. | Note in the step and its result |
+| Data keys and context | `GenerateDataKey` returns a real 32-byte key whose `CiphertextBlob` decrypts back to it. A wrong or missing encryption context is `InvalidCiphertextException`. | The decrypt step proves the refusal |
+| Key states | Encrypt is `DisabledException` while disabled and `KMSInvalidStateException` while pending deletion. `CancelKeyDeletion` returns the key to Enabled; AWS leaves it Disabled. | The step enables the key either way and names the difference |
+| SSE-KMS on S3 | `PutBucketEncryption` with a KMS key and Bucket Key is stored. An upload without headers isn't reported as encrypted; with explicit headers it is. S3 never calls KMS: an unknown key ID is accepted, an object stays readable after its key is disabled, and a user without `kms:Decrypt` can download it. | Note in the step and its result |
+
+Python's standard library has no AES, so the envelope steps encrypt the record with an HMAC-SHA256 keystream and tag
+as a stand-in for AES-256-GCM, and the explanation says so. The KMS console already shows the key policy, rotation and
+grants the lab creates. `check_labs --service kms` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
