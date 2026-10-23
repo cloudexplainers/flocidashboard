@@ -50,7 +50,7 @@ test('directory search and empty results', async ({ page }) => {
   await filter.fill('S3');
   await expect(page.getByRole('button', { name: 'Start Lab Lesson' }).first()).toBeVisible();
   await filter.fill('SAA 4.4');
-  await expect(page.getByRole('button', { name: 'Start Lab Lesson' })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Start Lab Lesson' })).toHaveCount(3);
 });
 
 test('catalog tags every lab with valid exam tasks', async ({ request }) => {
