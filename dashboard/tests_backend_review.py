@@ -207,3 +207,67 @@ class VisibleDefaultsTests(SimpleTestCase):
     def test_scaling_adjustment_is_required(self):
         self.assertTrue(self._field('autoscaling', 'put_scaling_policy', 'scaling_adjustment').required)
         self.assertIsNone(self._field('autoscaling', 'put_scaling_policy', 'cooldown').default)
+
+
+class InventedRegistryAndClusterValuesTests(SimpleTestCase):
+    def test_ecr_push_commands_use_floci_repository_uri_and_login_endpoint(self):
+        from dashboard.ecr_api import get_push_commands
+
+        client = MagicMock()
+        client.describe_repositories.return_value = {'repositories': [{'repositoryUri': '000000000000.dkr.ecr.eu-west-1.localhost:4566/web'}]}
+        client.get_authorization_token.return_value = {'authorizationData': [{'proxyEndpoint': 'http://000000000000.dkr.ecr.eu-west-1.localhost:4566'}]}
+        factory = MagicMock(region='eu-west-1')
+
+        with patch('dashboard.ecr_api._client', return_value=client), \
+                patch('dashboard.ecr_api.FlociClientFactory', return_value=factory), \
+                patch('dashboard.ecr_api.public_endpoint_url', return_value='http://localhost:4566'):
+            data = get_push_commands('web')
+
+        commands = '\n'.join(data['commands']['mac_linux'])
+        self.assertEqual(data['registry_uri'], '000000000000.dkr.ecr.eu-west-1.localhost:4566/web')
+        self.assertIn('--region eu-west-1 --endpoint-url http://localhost:4566', commands)
+        self.assertIn('docker login --username AWS --password-stdin http://000000000000.dkr.ecr.eu-west-1.localhost:4566', commands)
+        self.assertIn('docker push 000000000000.dkr.ecr.eu-west-1.localhost:4566/web:latest', commands)
+        self.assertNotIn('us-east-1', commands)
+
+    def test_ecr_push_commands_for_missing_repository_is_404(self):
+        client = MagicMock()
+        client.describe_repositories.side_effect = client_error('RepositoryNotFoundException', 'DescribeRepositories', status=400)
+
+        with patch('dashboard.ecr_api._client', return_value=client):
+            response = self.client.get('/api/ecr/repositories/missing/push-commands/')
+
+        self.assertEqual(response.status_code, 404)
+
+    def _kubeconfig(self, cluster=None, error=None):
+        from dashboard.eks_api import get_kubeconfig
+
+        client = MagicMock()
+        if error:
+            client.describe_cluster.side_effect = error
+        else:
+            client.describe_cluster.return_value = {'cluster': cluster}
+        with patch('dashboard.eks_api._client', return_value=client), \
+                patch('dashboard.eks_api.FlociClientFactory', return_value=MagicMock(region='eu-west-1')), \
+                patch('dashboard.eks_api.public_endpoint_url', return_value='http://localhost:4566'):
+            return get_kubeconfig('demo')
+
+    def test_kubeconfig_for_missing_cluster_raises(self):
+        with self.assertRaises(ClientError):
+            self._kubeconfig(error=client_error('ResourceNotFoundException', 'DescribeCluster', status=404))
+
+    def test_kubeconfig_without_endpoint_is_not_filled_with_placeholders(self):
+        with self.assertRaisesRegex(ValueError, 'status CREATING'):
+            self._kubeconfig({'name': 'demo', 'status': 'CREATING', 'arn': 'arn:aws:eks:eu-west-1:000000000000:cluster/demo'})
+
+    def test_kubeconfig_uses_reported_values_and_configured_region(self):
+        data = self._kubeconfig({
+            'name': 'demo', 'status': 'ACTIVE', 'endpoint': 'https://localhost:6443',
+            'certificateAuthority': {'data': 'Q0E='}, 'arn': 'arn:aws:eks:eu-west-1:000000000000:cluster/demo',
+        })
+
+        self.assertIn('server: https://localhost:6443', data['kubeconfig_yaml'])
+        self.assertIn('certificate-authority-data: Q0E=', data['kubeconfig_yaml'])
+        self.assertIn('- eu-west-1', data['kubeconfig_yaml'])
+        self.assertIn('- http://localhost:4566', data['kubeconfig_yaml'])
+        self.assertNotIn('us-east-1', data['aws_cli_command'])

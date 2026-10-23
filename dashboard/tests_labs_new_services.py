@@ -146,7 +146,10 @@ class NewServiceLabsLifecycleTests(TestCase):
 
         mock_ec2.describe_subnets.return_value = {'Subnets': [{'SubnetId': 'subnet-1'}, {'SubnetId': 'subnet-2'}]}
         mock_eks.create_cluster.return_value = {'cluster': {'name': 'lab-k8s-cluster', 'status': 'ACTIVE', 'endpoint': 'https://eks.local'}}
-        mock_eks.describe_cluster.return_value = {'cluster': {'name': 'lab-k8s-cluster', 'status': 'ACTIVE', 'endpoint': 'https://eks.local'}}
+        mock_eks.describe_cluster.return_value = {'cluster': {
+            'name': 'lab-k8s-cluster', 'status': 'ACTIVE', 'endpoint': 'https://eks.local',
+            'certificateAuthority': {'data': 'Q0E='}, 'arn': 'arn:aws:eks:us-east-1:000000000000:cluster/lab-k8s-cluster',
+        }}
         mock_eks.create_nodegroup.return_value = {'nodegroup': {'nodegroupName': 'lab-workers', 'status': 'ACTIVE'}}
         mock_eks.describe_nodegroup.return_value = {'nodegroup': {'nodegroupName': 'lab-workers', 'status': 'ACTIVE'}}
         mock_eks.create_fargate_profile.return_value = {'fargateProfile': {'fargateProfileName': 'lab-fargate-profile', 'status': 'ACTIVE'}}
@@ -180,8 +183,9 @@ class NewServiceLabsLifecycleTests(TestCase):
         res4 = run_lab_step('eks', 'control-plane-nodegroup', 'create-fargate-profile')
         self.assertTrue(res4['verified'])
 
-        # Step 5: Generate kubeconfig
-        res5 = run_lab_step('eks', 'control-plane-nodegroup', 'generate-kubeconfig')
+        # Step 5: Generate kubeconfig (built from the cluster Floci describes)
+        with patch('dashboard.eks_api._client', return_value=mock_eks):
+            res5 = run_lab_step('eks', 'control-plane-nodegroup', 'generate-kubeconfig')
         self.assertTrue(res5['verified'])
 
         # Status check

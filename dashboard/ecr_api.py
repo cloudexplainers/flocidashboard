@@ -8,7 +8,7 @@ from typing import Any
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from .aws import FlociClientFactory, _clean_response
+from .aws import FlociClientFactory, _clean_response, public_endpoint_url
 
 
 def _client():
@@ -262,17 +262,35 @@ def get_push_commands(
     repository_name: str,
     *,
     registry_id: str | None = None,
-    region: str = 'us-east-1',
+    region: str | None = None,
 ) -> dict[str, Any]:
+    """Push commands for a repository, built from the URI and login endpoint Floci reports.
+
+    Floci serves images at the repository's repositoryUri
+    (<account>.dkr.ecr.<region>.localhost:<port>/<repo> by default) and returns the
+    docker login address as GetAuthorizationToken's proxyEndpoint.
+    """
     repo = _required(repository_name, 'Repository name')
-    endpoint_url = FlociClientFactory().endpoint_url
-    domain = endpoint_url.replace('http://', '').replace('https://', '').rstrip('/')
-    registry_uri = f'{domain}/ecr/{repo}'
+    factory = FlociClientFactory()
+    clean_region = (region or '').strip() or factory.region
+    client = _client()
+    describe_kwargs: dict[str, Any] = {'repositoryNames': [repo]}
+    if registry_id:
+        describe_kwargs['registryId'] = registry_id
+    repositories = client.describe_repositories(**describe_kwargs).get('repositories') or []
+    registry_uri = (repositories[0].get('repositoryUri') if repositories else '') or ''
+    if not registry_uri:
+        raise ValueError(f'Floci did not return a repository URI for {repo}')
+    auth = (client.get_authorization_token().get('authorizationData') or [{}])[0]
+    login_endpoint = auth.get('proxyEndpoint') or registry_uri.split('/', 1)[0]
+    # The AWS CLI must talk to Floci, not AWS.
+    cli_endpoint = public_endpoint_url()
+    login = f'aws ecr get-login-password --region {clean_region} --endpoint-url {cli_endpoint}'
 
     commands = {
         'mac_linux': [
             '# 1. Retrieve an authentication token and authenticate your Docker client to your registry.',
-            f'aws ecr get-login-password --region {region} | docker login --username AWS --password-stdin {endpoint_url}',
+            f'{login} | docker login --username AWS --password-stdin {login_endpoint}',
             '# 2. Build your Docker image using the following command.',
             f'docker build -t {repo} .',
             '# 3. After the build completes, tag your image so you can push the image to this repository.',
@@ -282,7 +300,7 @@ def get_push_commands(
         ],
         'windows_powershell': [
             '# 1. Authenticate Docker client',
-            f'(Get-ECRLoginCommand).Password | docker login --username AWS --password-stdin {endpoint_url}',
+            f'{login} | docker login --username AWS --password-stdin {login_endpoint}',
             '# 2. Build image',
             f'docker build -t {repo} .',
             '# 3. Tag image',
@@ -292,7 +310,7 @@ def get_push_commands(
         ],
         'podman': [
             '# 1. Authenticate Podman client',
-            f'aws ecr get-login-password --region {region} | podman login -u AWS --password-stdin {endpoint_url}',
+            f'{login} | podman login -u AWS --password-stdin {login_endpoint}',
             '# 2. Build image',
             f'podman build -t {repo} .',
             '# 3. Tag and push',
@@ -304,6 +322,8 @@ def get_push_commands(
     return {
         'repository_name': repo,
         'registry_uri': registry_uri,
+        'login_endpoint': login_endpoint,
+        'region': clean_region,
         'commands': commands,
     }
 

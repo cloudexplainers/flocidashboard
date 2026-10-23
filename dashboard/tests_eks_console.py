@@ -279,7 +279,7 @@ class EKSApiHelperTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('aws_cli_command', response.json())
-        kube_mock.assert_called_once_with('local', region='us-east-1')
+        kube_mock.assert_called_once_with('local', region=None)
 
 
 class EKSInventoryCapabilityTests(SimpleTestCase):

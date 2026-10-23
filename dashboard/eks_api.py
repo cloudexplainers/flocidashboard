@@ -8,7 +8,7 @@ from typing import Any
 from botocore.config import Config
 from botocore.exceptions import ClientError, ConnectionClosedError
 
-from .aws import FlociClientFactory, _clean_response
+from .aws import FlociClientFactory, _clean_response, public_endpoint_url
 
 
 def _client(*, long_running: bool = False):
@@ -303,19 +303,25 @@ def list_tags(resource_arn: str) -> dict[str, Any]:
     }
 
 
-def get_kubeconfig(cluster_name: str, *, region: str = 'us-east-1') -> dict[str, Any]:
+def get_kubeconfig(cluster_name: str, *, region: str | None = None) -> dict[str, Any]:
+    """A kubeconfig built from the cluster Floci describes.
+
+    A missing cluster raises (404), and a cluster without an endpoint or
+    certificate yet is reported instead of filled with placeholders.
+    """
     clean_name = _required(cluster_name, 'Cluster name')
-    endpoint_url = FlociClientFactory().endpoint_url
+    clean_region = (region or '').strip() or FlociClientFactory().region
 
-    try:
-        response = _client().describe_cluster(name=clean_name)
-        cluster = response.get('cluster', {})
-    except Exception:
-        cluster = {}
-
-    server_endpoint = cluster.get('endpoint') or f'{endpoint_url}/eks/{clean_name}'
-    ca_data = cluster.get('certificateAuthority', {}).get('data') or 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCg=='
-    arn = cluster.get('arn') or f'arn:aws:eks:{region}:000000000000:cluster/{clean_name}'
+    cluster = _client().describe_cluster(name=clean_name).get('cluster') or {}
+    server_endpoint = cluster.get('endpoint')
+    ca_data = (cluster.get('certificateAuthority') or {}).get('data')
+    arn = cluster.get('arn')
+    if not (server_endpoint and ca_data and arn):
+        status = cluster.get('status') or 'unknown'
+        raise ValueError(
+            f'Cluster {clean_name} has no API endpoint and certificate yet (status {status}). '
+            'Wait until it is ACTIVE, then try again.'
+        )
 
     kubeconfig_yaml = f"""apiVersion: v1
 clusters:
@@ -338,11 +344,13 @@ users:
       apiVersion: client.authentication.k8s.io/v1beta1
       args:
       - --region
-      - {region}
+      - {clean_region}
       - eks
       - get-token
       - --cluster-name
       - {clean_name}
+      - --endpoint-url
+      - {public_endpoint_url()}
       command: aws
 """
 
@@ -350,7 +358,7 @@ users:
         'cluster_name': clean_name,
         'cluster_arn': arn,
         'endpoint': server_endpoint,
-        'aws_cli_command': f'aws eks update-kubeconfig --name {clean_name} --region {region}',
+        'aws_cli_command': f'aws eks update-kubeconfig --name {clean_name} --region {clean_region} --endpoint-url {public_endpoint_url()}',
         'kubeconfig_yaml': kubeconfig_yaml,
     }
 

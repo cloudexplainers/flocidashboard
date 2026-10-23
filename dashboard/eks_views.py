@@ -125,7 +125,7 @@ def eks_cluster_kubeconfig(request, cluster_name: str = ''):
         if not cluster_name:
             body = parse_json_body(request) if request.method == 'POST' else {}
             cluster_name = body.get('cluster_name') or body.get('name') or request.GET.get('cluster_name') or ''
-        region = request.GET.get('region', 'us-east-1')
+        region = request.GET.get('region') or None
         return JsonResponse(get_kubeconfig(cluster_name, region=region))
     except Exception as exc:
         return handle_action_error(exc, service='eks', operation='get_kubeconfig')

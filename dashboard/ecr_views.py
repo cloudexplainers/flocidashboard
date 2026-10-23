@@ -160,7 +160,7 @@ def ecr_push_commands(request, name: str = ''):
         if not name:
             body = parse_json_body(request) if request.method == 'POST' else {}
             name = body.get('repository_name') or request.GET.get('repository_name') or ''
-        region = request.GET.get('region', 'us-east-1')
+        region = request.GET.get('region') or None
         return JsonResponse(get_push_commands(name, region=region))
     except Exception as exc:
         return handle_action_error(exc, service='ecr', operation='get_push_commands')

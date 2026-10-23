@@ -234,7 +234,7 @@ class ECRApiHelperTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('commands', response.json())
-        cmds_mock.assert_called_once_with('my-app', region='us-east-1')
+        cmds_mock.assert_called_once_with('my-app', region=None)
 
     @patch('dashboard.ecr_views.put_mock_image')
     def test_put_mock_image_endpoint(self, mock_img):
