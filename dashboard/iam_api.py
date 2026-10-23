@@ -39,15 +39,22 @@ TRUST_POLICY_TEMPLATES = {
             'Action': 'sts:AssumeRole',
         }],
     },
-    'account-root': {
+}
+
+
+def _account_root_trust_policy() -> dict[str, Any]:
+    # Trust the caller's own account, as the console's "This account" option does.
+    account = _sts_client().get_caller_identity().get('Account')
+    if not account:
+        raise ValueError('Floci did not return the caller account for the account-root trust policy')
+    return {
         'Version': '2012-10-17',
         'Statement': [{
             'Effect': 'Allow',
-            'Principal': {'AWS': 'arn:aws:iam::000000000000:root'},
+            'Principal': {'AWS': f'arn:aws:iam::{account}:root'},
             'Action': 'sts:AssumeRole',
         }],
-    },
-}
+    }
 
 
 def _iam_client():
@@ -203,6 +210,8 @@ def trust_policy_from_template(template: str, document: Any = None) -> dict[str,
     if document:
         return policy_document(document)
     key = (template or '').strip() or 'lambda'
+    if key == 'account-root':
+        return _account_root_trust_policy()
     if key not in TRUST_POLICY_TEMPLATES:
         raise ValueError('Trust template must be lambda, ec2, account-root, or custom JSON')
     return TRUST_POLICY_TEMPLATES[key]

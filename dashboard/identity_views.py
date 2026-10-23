@@ -162,7 +162,10 @@ def identity_assume_role(request):
             role_name = match[3].split('/')[-1]
         else:
             role_name = validate_name(body.get('role_name') or '', 'Role name')
-            account_id = body.get('account_id') or '000000000000'
+            # Default to the caller's own account rather than assuming Floci's default one.
+            account_id = (body.get('account_id') or '').strip() or (
+                FlociClientFactory(identity=request.session.get(RUNTIME_IDENTITY_SESSION_KEY)).client('sts').get_caller_identity().get('Account') or ''
+            )
             if not re.fullmatch(r'\d{12}', account_id):
                 raise ValueError('Account ID must contain 12 digits.')
             role_arn = f'arn:aws:iam::{account_id}:role/{role_name}'

@@ -366,22 +366,9 @@ def put_mock_image(
     if image_digest:
         kwargs['imageDigest'] = image_digest.strip()
 
-    try:
-        response = _client().put_image(**kwargs)
-        image_data = _clean_response(response.get('image', {}))
-    except Exception:
-        digest = image_digest or ('sha256:' + hashlib.sha256(f'{repo}:{clean_tag}'.encode()).hexdigest())
-        image_data = {
-            'repositoryName': repo,
-            'imageId': {
-                'imageTag': clean_tag,
-                'imageDigest': digest,
-            },
-            'imageManifest': image_manifest,
-            'imageSizeInBytes': 28141620,
-            'simulated': True,
-            'note': 'Image tag simulated locally in workbench',
-        }
+    # Errors propagate: Floci 2.3.0 has no PutImage, and a failed write must not look published.
+    response = _client().put_image(**kwargs)
+    image_data = _clean_response(response.get('image', {}))
 
     return {
         'repository_name': repo,

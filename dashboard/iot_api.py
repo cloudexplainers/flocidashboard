@@ -192,7 +192,8 @@ def create_topic_rule(
     payload: dict[str, Any] = {
         'sql': clean_sql,
         'ruleDisabled': rule_disabled,
-        'actions': actions or [{'republish': {'topic': 'republish/alerts', 'roleArn': 'arn:aws:iam::000000000000:role/iot-role'}}],
+        # A rule with no actions is valid; don't add one the user didn't ask for.
+        'actions': actions or [],
     }
     if description:
         payload['description'] = description.strip()

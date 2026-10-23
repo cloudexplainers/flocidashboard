@@ -146,34 +146,3 @@ def untag_resource(resource_arn: str, tag_keys: Any) -> dict[str, Any]:
         raise ValueError('Tag keys are required')
     response = _client().untag_resource(ResourceArn=clean_arn, TagKeys=keys)
     return {'resource_arn': clean_arn, 'tag_keys': keys, 'response': _clean_response(response)}
-
-
-def simulate_lifecycle_event(
-    deployment_id: str,
-    *,
-    lifecycle_event_name: str = 'BeforeInstall',
-    status: str = 'Succeeded',
-) -> dict[str, Any]:
-    clean_id = _required(deployment_id, 'Deployment ID')
-    clean_event = (lifecycle_event_name or 'BeforeInstall').strip()
-    clean_status = (status or 'Succeeded').strip().capitalize()
-
-    valid_events = [
-        'ApplicationStop',
-        'DownloadBundle',
-        'BeforeInstall',
-        'Install',
-        'AfterInstall',
-        'ApplicationStart',
-        'ValidateService',
-    ]
-
-    return {
-        'deployment_id': clean_id,
-        'lifecycle_event_name': clean_event,
-        'status': clean_status,
-        'valid_lifecycle_phases': valid_events,
-        'simulated': True,
-        'message': f'Lifecycle event "{clean_event}" simulated as {clean_status} for deployment {clean_id}',
-    }
-

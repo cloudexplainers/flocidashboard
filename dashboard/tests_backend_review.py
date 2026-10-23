@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 
 def client_error(code: str, operation: str, message: str = 'boom', status: int = 400) -> ClientError:
@@ -271,3 +271,74 @@ class InventedRegistryAndClusterValuesTests(SimpleTestCase):
         self.assertIn('- eu-west-1', data['kubeconfig_yaml'])
         self.assertIn('- http://localhost:4566', data['kubeconfig_yaml'])
         self.assertNotIn('us-east-1', data['aws_cli_command'])
+
+
+class EcrPutImageTests(SimpleTestCase):
+    def test_put_image_failure_is_reported_not_simulated(self):
+        client = MagicMock()
+        client.put_image.side_effect = client_error('UnsupportedOperation', 'PutImage', 'Operation PutImage is not supported.')
+
+        with patch('dashboard.ecr_api._client', return_value=client):
+            response = self.client.post('/api/ecr/mock-image/', data=json.dumps({'repository_name': 'web', 'image_tag': 'v1'}), content_type='application/json')
+
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.content)
+        self.assertEqual(data['code'], 'UnsupportedOperation')
+        self.assertNotIn('image', data)
+
+
+class InventedAccountAndActionTests(SimpleTestCase):
+    def test_account_root_trust_policy_uses_caller_account(self):
+        from dashboard.iam_api import trust_policy_from_template
+
+        sts = MagicMock()
+        sts.get_caller_identity.return_value = {'Account': '111122223333'}
+        with patch('dashboard.iam_api._sts_client', return_value=sts):
+            document = trust_policy_from_template('account-root')
+
+        self.assertEqual(document['Statement'][0]['Principal'], {'AWS': 'arn:aws:iam::111122223333:root'})
+
+    def test_iot_rule_without_actions_gets_no_invented_action(self):
+        from dashboard.iot_api import create_topic_rule
+
+        client = MagicMock()
+        client.create_topic_rule.return_value = {}
+        with patch('dashboard.iot_api._iot_client', return_value=client):
+            create_topic_rule('alerts', "SELECT * FROM 'sensors/#'")
+
+        self.assertEqual(client.create_topic_rule.call_args.kwargs['topicRulePayload']['actions'], [])
+
+    def test_sqs_message_move_reports_only_floci_handle(self):
+        from dashboard.sqs_api import start_message_move_task
+
+        client = MagicMock()
+        client.start_message_move_task.return_value = {'TaskHandle': 'handle-1'}
+        with patch('dashboard.sqs_api._sqs_client', return_value=client):
+            data = start_message_move_task('arn:aws:sqs:eu-west-1:111122223333:dlq')
+
+        self.assertEqual(data['task_handle'], 'handle-1')
+        self.assertNotIn('status', data)
+
+    def test_codedeploy_simulated_lifecycle_endpoint_is_gone(self):
+        from dashboard.services import SERVICE_REGISTRY
+
+        self.assertNotIn('simulate_lifecycle_event', [action.name for action in SERVICE_REGISTRY['codedeploy'].actions])
+        self.assertEqual(self.client.post('/api/codedeploy/deployments/lifecycle/', data='{}', content_type='application/json').status_code, 404)
+
+
+class AssumeRoleAccountTests(TestCase):
+    @patch('dashboard.identity_views.FlociClientFactory')
+    def test_assume_role_by_name_uses_caller_account(self, factory_class):
+        factory = factory_class.return_value
+        factory.endpoint_url = 'http://localhost:4566'
+        factory.region = 'eu-west-1'
+        factory.credential_context.return_value = {'credential_source': 'session_identity'}
+        factory.identity.return_value = {'account': '111122223333', 'arn': 'arn:aws:iam::111122223333:user/alice', 'user_id': 'AIDA'}
+        factory.local_identity_hint.return_value = None
+        sts = factory.client.return_value
+        sts.get_caller_identity.return_value = {'Account': '111122223333'}
+        sts.assume_role.return_value = {'Credentials': {'AccessKeyId': 'ASIA', 'SecretAccessKey': 's', 'SessionToken': 't'}}
+
+        self.client.post('/api/session-identity/assume-role/', data=json.dumps({'role_name': 'App', 'session_name': 'review'}), content_type='application/json')
+
+        sts.assume_role.assert_called_once_with(RoleArn='arn:aws:iam::111122223333:role/App', RoleSessionName='review')

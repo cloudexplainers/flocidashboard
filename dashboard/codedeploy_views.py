@@ -17,7 +17,6 @@ from .codedeploy_api import (
     delete_deployment_group,
     get_deployment,
     put_lifecycle_event_hook_execution_status,
-    simulate_lifecycle_event,
     stop_deployment,
     tag_resource,
     untag_resource,
@@ -139,16 +138,3 @@ def codedeploy_tags(request):
     except Exception as exc:
         operation = 'untag_resource' if request.method == 'DELETE' else 'tag_resource'
         return handle_action_error(exc, service='codedeploy', operation=operation)
-
-
-@require_http_methods(['POST'])
-def codedeploy_lifecycle_simulate(request):
-    try:
-        body = parse_json_body(request)
-        return JsonResponse(simulate_lifecycle_event(
-            deployment_id=body.get('deployment_id') or '',
-            lifecycle_event_name=body.get('lifecycle_event_name') or 'BeforeInstall',
-            status=body.get('status') or 'Succeeded',
-        ))
-    except Exception as exc:
-        return handle_action_error(exc, service='codedeploy', operation='simulate_lifecycle_event')

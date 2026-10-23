@@ -829,19 +829,6 @@ CODEDEPLOY_ACTIONS = (
     action('delete_deployment_config', 'Delete deployment config', 'DELETE', '/api/codedeploy/deployment-configs/{config}/', 'delete', safety='destructive', confirm='Delete this custom deployment config?', success_message='Deployment config deleted'),
     action('tag_resource', 'Tag resource', 'POST', '/api/codedeploy/tags/', 'update', fields=(action_field('resource_arn', 'Resource ARN', required=True), action_field('tags', 'Tags JSON', required=True, field_type='array')), success_message='Resource tagged'),
     action('untag_resource', 'Untag resource', 'DELETE', '/api/codedeploy/tags/', 'update', fields=(action_field('resource_arn', 'Resource ARN', required=True), action_field('tag_keys', 'Tag keys JSON', required=True, field_type='array')), success_message='Resource untagged'),
-    action(
-        'simulate_lifecycle_event',
-        'Simulate lifecycle event',
-        'POST',
-        '/api/codedeploy/deployments/lifecycle/',
-        'execute',
-        fields=(
-            action_field('deployment_id', 'Deployment ID', required=True),
-            action_field('lifecycle_event_name', 'Lifecycle event (e.g. BeforeInstall, ValidateService)', required=True, default='BeforeInstall'),
-            action_field('status', 'Status (Succeeded/Failed)', default='Succeeded'),
-        ),
-        success_message='Lifecycle event simulated',
-    ),
 )
 
 
@@ -4328,6 +4315,7 @@ ECR_ACTIONS = (
         'POST',
         '/api/ecr/mock-image/',
         'create',
+        description='Calls PutImage with a placeholder manifest. Floci 2.3.0 does not implement PutImage, so it returns an error there; push a real image with the push commands instead.',
         fields=(
             action_field('repository_name', 'Repository name', required=True),
             action_field('image_tag', 'Image tag (e.g. latest, v1.0.0)', required=True),

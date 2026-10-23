@@ -167,21 +167,11 @@ def start_message_move_task(
     if max_number_of_messages_per_second is not None:
         payload['MaxNumberOfMessagesPerSecond'] = max(1, int(max_number_of_messages_per_second))
 
-    client = _sqs_client()
-    if 'StartMessageMoveTask' in client.meta.service_model.operation_names:
-        response = client.start_message_move_task(**payload)
-        return {
-            'task_handle': response.get('TaskHandle'),
-            'source_arn': clean_src,
-            'destination_arn': destination_arn,
-            'status': 'RUNNING',
-        }
+    response = _sqs_client().start_message_move_task(**payload)
     return {
-        'task_handle': f'task-{clean_src.split(":")[-1]}-{int(1000)}',
+        'task_handle': response.get('TaskHandle'),
         'source_arn': clean_src,
         'destination_arn': destination_arn,
-        'status': 'COMPLETED',
-        'simulated': True,
     }
 
 

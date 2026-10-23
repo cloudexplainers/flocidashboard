@@ -195,29 +195,3 @@ class CodeDeployActionsApiTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         untag_mock.assert_called_once_with('arn-1', ['env'])
-
-    @patch('dashboard.codedeploy_views.simulate_lifecycle_event')
-    def test_simulate_lifecycle_event_endpoint(self, sim_mock):
-        sim_mock.return_value = {
-            'deployment_id': 'd-123',
-            'lifecycle_event_name': 'BeforeInstall',
-            'status': 'Succeeded',
-        }
-
-        response = self.client.post(
-            reverse('dashboard:codedeploy-deployments-lifecycle'),
-            data=json.dumps({
-                'deployment_id': 'd-123',
-                'lifecycle_event_name': 'BeforeInstall',
-                'status': 'Succeeded',
-            }),
-            content_type='application/json',
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['status'], 'Succeeded')
-        sim_mock.assert_called_once_with(
-            deployment_id='d-123',
-            lifecycle_event_name='BeforeInstall',
-            status='Succeeded',
-        )

@@ -158,7 +158,6 @@ urlpatterns = [
     path('api/codedeploy/deployments/stop/', codedeploy_views.codedeploy_deployment_stop, name='codedeploy-deployment-stop'),
     path('api/codedeploy/deployments/continue/', codedeploy_views.codedeploy_deployment_continue, name='codedeploy-deployment-continue'),
     path('api/codedeploy/lifecycle-hooks/status/', codedeploy_views.codedeploy_lifecycle_hook_status, name='codedeploy-lifecycle-hook-status'),
-    path('api/codedeploy/deployments/lifecycle/', codedeploy_views.codedeploy_lifecycle_simulate, name='codedeploy-deployments-lifecycle'),
     path('api/codedeploy/tags/', codedeploy_views.codedeploy_tags, name='codedeploy-tags'),
     path('api/cloudfront/', views.cloudfront, name='cloudfront'),
     path('api/cloudfront/distributions/', cloudfront_views.cloudfront_distributions_create, name='cloudfront-distributions'),

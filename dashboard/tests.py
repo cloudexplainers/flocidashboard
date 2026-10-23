@@ -451,6 +451,7 @@ class DashboardIdentityApiTests(TestCase):
                 'Arn': 'arn:aws:sts::000000000000:assumed-role/CharlieSqsReadRole/floci-session',
             },
         }
+        sts.get_caller_identity.return_value = {'Account': '000000000000'}
         factory.client.return_value = sts
         factory_mock.return_value = factory
 
