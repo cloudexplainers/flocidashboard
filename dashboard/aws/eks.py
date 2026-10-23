@@ -247,11 +247,7 @@ def eks_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'Floci EKS Phase 1 supports cluster create, describe, list, delete, tag, untag, and list-tags operations through the REST JSON API.',
-            'Floci 1.5.22 makes real-mode cluster endpoints reachable and authenticable from the host.',
-            'Floci 1.5.23 seeds standard EKS cluster and node group managed IAM policies so common EKS provisioning modules can attach them without explicit local creation.',
             'Mock mode stores cluster metadata in-process and marks clusters ACTIVE immediately; real mode starts a k3s container per cluster.',
-            'Floci 1.5.24 adds managed node group create, describe, list, and delete support; the dashboard exposes node group create/delete flows and keeps the full inventory visible.',
-            'Floci 1.5.33 adds Fargate profile create, describe, list, and delete support; the dashboard exposes profile create/delete flows and keeps selector, subnet, role, health, and tag details visible.',
         ],
     }
 

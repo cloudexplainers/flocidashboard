@@ -102,8 +102,6 @@ def cloudfront_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.18 adds CloudFront service emulation for distributions, origins, behaviors, and the management API.',
-            'Floci 1.5.28 honors the configured domain suffix for generated distribution domains.',
             'This page focuses on local CloudFront management inventory so CDN infrastructure created by IaC is visible in the dashboard.',
         ],
     }

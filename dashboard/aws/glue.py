@@ -299,10 +299,6 @@ def glue_inventory() -> dict[str, Any]:
             'default': 'read_csv_auto',
         },
         'notes': [
-            'Floci 1.5.25 adds Glue partition APIs, column statistics, table statistics deletion, missing-table delete rejection, and deterministic GetPartitions ordering.',
-            'Floci 1.5.23 adds Glue user-defined functions and DeleteDatabase support.',
-            'Floci 1.5.23 enforces Glue table version checks and preserves Glue view table fields.',
-            'Floci 1.5.24 normalizes catalog names, preserves column parameters, supports UpdateDatabase and BatchDeleteTable, archives table versions, and exposes database tags.',
         ],
     }
 

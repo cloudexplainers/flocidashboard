@@ -63,7 +63,6 @@ def wafv2_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.25 adds AWS WAF v2 management API support as a Phase 1 service.',
             'WAF v2 APIs are scope-aware, so the dashboard checks both REGIONAL and CLOUDFRONT resource scopes.',
         ],
     }

@@ -437,7 +437,7 @@ IAM_STS_SESSION_POLICY_LAB = {
             'key': 'assume-role',
             'title': 'Assume the role with a session policy',
             'command': f'aws sts assume-role --role-arn arn:aws:iam::{AWS_ACCOUNT_ID}:role/{FLOCI_STS_SESSION_ROLE_NAME} --role-session-name {FLOCI_STS_SESSION_NAME} --policy file://session-policy.json',
-            'explanation': 'Requests temporary credentials with an inline STS session policy, exercising the session-policy enforcement path added in Floci 1.5.30.',
+            'explanation': 'Requests temporary credentials with an inline STS session policy; the session gets only the permissions that both the role policy and the session policy allow.',
             'artifact_label': 'session-policy.json',
             'artifact': json.dumps(FLOCI_STS_SESSION_POLICY, indent=2),
         },

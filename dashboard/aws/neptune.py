@@ -64,7 +64,6 @@ def neptune_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'Floci manages real Apache TinkerPop Gremlin Server Docker containers and proxies Gremlin connections to them.',
-            'Floci 1.5.27 can use a neo4j backend for openCypher queries when NEPTUNE_DB_TYPE selects it.',
             'The management API uses AWS-compatible Query XML through localhost:4566; the data plane is exposed as localhost:<proxy-port> over TCP/WebSocket.',
             'The first cluster claims the configured proxy base port, commonly 8182, and each additional cluster increments within the configured range.',
             'IAM database authentication, Neptune Analytics, serverless auto-pause/resume, snapshots, and restore operations are out of scope.',

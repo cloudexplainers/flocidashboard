@@ -208,11 +208,6 @@ def lambda_inventory() -> dict[str, Any]:
             'S3-based deployments support reactive hot reload when the source object changes.',
             'Bind-mount hot reload uses S3Bucket=hot-reload and requires explicit configuration.',
             'Reserved concurrency is enforced; provisioned concurrency is not implemented.',
-            'Floci 1.5.31 persists Lambda version counters and event-invoke configs, and mounts function code read-only for faster cold starts.',
-            'Floci 1.5.28 improves SQS event source mappings by carrying message attributes, FIFO system attributes, and persisted firstReceiveTimestamp, and resolves leading ./ handler paths inside packages.',
-            'Floci 1.5.18 uses a checkout/release Lambda port pool with clearer exhaustion errors during concurrent invocations.',
-            'Floci 1.5.19 adds Lambda layer publishing, lookup, version listing, and deletion.',
-            'Floci 1.5.22 supports path-style ECR image URIs and lets spawned containers resolve public localhost.floci.io hostnames.',
         ],
     }
 

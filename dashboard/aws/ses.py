@@ -348,19 +348,9 @@ def ses_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'Identity verification succeeds immediately in Floci.',
-            'Floci 1.5.30 implements SES v2 ContactList CRUD.',
             'Emails are always stored locally and can be inspected through /_aws/ses.',
-            'Floci 1.5.29 makes FromEmailAddress optional for SES v2 SendEmail.',
-            'Floci 1.5.28 publishes SNS notifications to identity feedback topics and implements SES v1 PutConfigurationSetDeliveryOptions.',
             'SMTP relay failures are logged but do not affect the SES API response.',
             'SES v1 and SES v2 share identity, template, and sent-message state.',
-            'Floci 1.5.27 adds SES v2 dedicated IP pools, configuration-set option groups, v1 configuration-set tracking, and reputation-metrics options.',
-            'Floci 1.5.25 persists inline options on SES v2 CreateConfigurationSet, keeps MAIL FROM attributes only when configured, and omits unknown identities from GetIdentityNotificationAttributes.',
-            'Floci 1.5.24 publishes SES events to Firehose, EventBridge, and CloudWatch destinations in addition to existing SNS event destination support.',
-            'Floci 1.5.22 publishes SES events to SNS configuration set destinations, adds v1 destination CRUD, and enforces suppression lists at send time with per-configuration-set overrides.',
-            'Floci 1.5.23 adds per-configuration-set sending toggles for SES v1 and SES v2.',
-            'Floci 1.5.21 adds SES v2 configuration set event destination operations.',
-            'Floci 1.5.17 adds SES v2 PutAccountSuppressionAttributes.',
         ],
     }
 

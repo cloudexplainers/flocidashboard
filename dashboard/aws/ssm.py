@@ -159,9 +159,6 @@ def ssm_inventory() -> dict[str, Any]:
             'Parameter values are intentionally not fetched; the page shows metadata, types, tiers, policies, and tags.',
             'Document details are expanded for the first 50 document identifiers to keep page loads bounded.',
             'AWS-owned patch baselines are shown separately from the per-operating-system defaults returned by GetDefaultPatchBaseline.',
-            'Floci 1.5.26 executes SendCommand in EC2 containers and adds patch baseline discovery APIs.',
-            'Floci 1.5.27 rejects send-command timeouts below the AWS minimum.',
-            'Floci 1.5.29 retains local service diagnostics on command failure.',
         ],
     }
 

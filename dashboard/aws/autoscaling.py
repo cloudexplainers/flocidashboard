@@ -245,8 +245,6 @@ def autoscaling_inventory() -> dict[str, Any]:
         'notes': [
             'This page uses the EC2 Auto Scaling SDK API and tolerates missing optional operations from local implementations.',
             'Group detail expands lifecycle hooks, warm pool data, instance refreshes, policies, activities, notifications, and tags when available.',
-            'Floci 1.5.27 rejects launch templates without image IDs.',
-            'Floci 1.5.26 adds group reconciliation and refresh behavior, preserves mixed instances policy parity, and validates mixed instances launch templates.',
         ],
     }
 

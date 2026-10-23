@@ -86,7 +86,6 @@ def pricing_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.15 adds AWS Price List service support under the pricing service name.',
             'Attribute values are sampled from the first 10 services and first 5 attributes per service to keep page loads bounded.',
             'Price lists are the AmazonS3 lists in effect today, in USD (ListPriceLists needs a service, date and currency).',
         ],

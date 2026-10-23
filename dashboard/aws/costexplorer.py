@@ -84,7 +84,6 @@ def costexplorer_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.16 adds Cost Explorer support under the ce service name.',
             'The dashboard samples the current month to keep Cost Explorer reads bounded.',
         ],
     }

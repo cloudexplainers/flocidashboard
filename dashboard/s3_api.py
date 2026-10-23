@@ -741,11 +741,5 @@ def s3_inventory_summary() -> dict[str, Any]:
         },
         'notes': [
             'Floci supports S3 bucket website hosting configuration and local website-style object serving.',
-            'Floci 1.5.28 supports bucket logging configuration and serves custom static-website error documents for missing keys.',
-            'Floci 1.5.25 makes conditional puts atomic and returns BadRequest for S3 dot-dot paths.',
-            'Floci 1.5.24 streams S3 range responses to keep large local object reads memory efficient.',
-            'Floci 1.5.24 rejects relative S3 object keys to match AWS object-key validation more closely.',
-            'Floci 1.5.22 enforces SSE-C customer keys for customer-provided encryption workflows.',
-            'Floci 1.5.21 rejects response-* overrides on unsigned S3 requests, matching AWS security behavior.',
         ],
     }

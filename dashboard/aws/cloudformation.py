@@ -188,18 +188,6 @@ def cloudformation_inventory() -> dict[str, Any]:
         'notes': [
             'CloudFormation actions use the Query XML protocol at the Floci root endpoint.',
             'Stacks can expose templates, events, resources, outputs, stack policies, and change sets.',
-            'Floci 1.5.30 adds StackSets with account-aware provisioning for multi-account CloudFormation patterns.',
-            'Floci 1.5.31 applies S3 Bucket CorsConfiguration from CloudFormation templates.',
-            'Floci 1.5.26 provisions EC2 instances, RDS resources, EKS clusters and node groups, CloudWatch Logs log groups, CloudWatch metric alarms, Auto Scaling groups and launch configurations, Kinesis streams, and Firehose delivery streams.',
-            'Floci 1.5.26 also adds Fn::GetAZs and Fn::Cidr intrinsics and creates API Gateway stages from inline StageName on AWS::ApiGateway::Deployment.',
-            'Floci 1.5.29 makes ECS resource deletion idempotent during CloudFormation stack delete.',
-            'Floci 1.5.28 fails stack delete when a managed resource cannot be deleted.',
-            'Floci 1.5.27 generates implicit API Gateway resources from SAM Api events and merges SAM Globals into resource properties.',
-            'Floci 1.5.27 also supports OAuth/callback settings in UserPoolClient resources and deletes EC2 security groups from stacks.',
-            'Floci 1.5.25 provisions Lambda-backed custom resources, Lambda layer versions, and EC2 VPC/subnet resources so cross-stack exports resolve locally.',
-            'Floci 1.5.22 provisions ECS and ELBv2 resources, persists stacks across restart, rolls back failed creates, and supports ApiGatewayV2 updates.',
-            'Floci 1.5.21 forwards AWS::ApiGatewayV2::Api properties to the API Gateway v2 service.',
-            'Floci 1.5.19 provisions SQS ContentBasedDeduplication, SNS to SQS subscriptions, Cognito UserPool resources, and Cognito UserPoolClient resources from templates.',
         ],
     }
 

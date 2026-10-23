@@ -56,3 +56,21 @@ class CloudMapTests(SimpleTestCase):
             data = cloudmap_inventory()
         self.assertNotIn('UpdateInstanceCustomHealthStatus', data['supported_from_sdk'])
         self.assertTrue(any('UpdateInstanceCustomHealthStatus' in item for item in data['not_supported']))
+
+
+class VersionClaimTests(SimpleTestCase):
+
+    def test_inventory_notes_carry_no_release_changelog_lines(self):
+        # Compose pulls floci/floci:latest, so "Floci 1.5.x adds ..." lines describe some other
+        # version than the one running. Notes say what Floci does, without version numbers.
+        import re
+        from pathlib import Path
+
+        pattern = re.compile(r"""^\s*['"]Floci \d+\.\d+\.\d+ """)
+        root = Path(__file__).resolve().parent
+        offenders = [
+            f'{path.relative_to(root)}:{number}'
+            for path in root.rglob('*.py') if 'tests' not in path.name
+            for number, line in enumerate(path.read_text().splitlines(), 1) if pattern.match(line)
+        ]
+        self.assertEqual(offenders, [])

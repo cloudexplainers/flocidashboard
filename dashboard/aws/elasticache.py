@@ -176,8 +176,6 @@ def elasticache_inventory() -> dict[str, Any]:
         'notes': [
             'Floci ElastiCache uses the AWS-compatible Query management API and Redis RESP for the data plane.',
             'CreateReplicationGroup starts a real Valkey or Redis Docker container and exposes it through a local TCP proxy port.',
-            'Floci 1.5.24 returns reachable Memcached configuration endpoints for local cache clients.',
-            'Floci 1.5.25 persists STS session secret keys so IAM-authenticated ElastiCache tokens validate across requests.',
             'Supported interactive workflows include replication-group lifecycle, ElastiCache users, user access strings, and IAM auth token validation.',
         ],
     }

@@ -94,7 +94,6 @@ def pipes_inventory() -> dict[str, Any]:
             'EventBridge Pipes uses a REST-JSON API against the local Floci endpoint.',
             'Pipe summaries are expanded with DescribePipe so source, enrichment, target, logging, role, KMS, and tag data are visible.',
             'Supported sources include SQS, Kinesis, DynamoDB streams, and Kafka topics.',
-            'Floci 1.5.28 adds Kafka pipe sources and polling support.',
             'Supported targets include Lambda, SQS, SNS, Kinesis, and Step Functions.',
         ],
     }

@@ -134,11 +134,6 @@ def kms_inventory() -> dict[str, Any]:
             'KMS uses JSON 1.1 with X-Amz-Target: TrentService.* against the local Floci endpoint.',
             'CreateKey accepts creation-time tag floci:override-id for deterministic local test key IDs.',
             'Floci strips reserved floci:* tags from stored resource tags and rejects adding them later.',
-            'Floci 1.5.18 adds KMS GenerateMac and VerifyMac support.',
-            'Floci 1.5.22 adds KMS GenerateRandom support.',
-            'Floci 1.5.24 expands key state and key description operations for closer AWS parity.',
-            'Floci 1.5.26 adds EnableKey support and improves RSA DIGEST signature wrapping.',
-            'Floci 1.5.21 enforces the RotateKeyOnDemand rotation limit.',
             'Grant lifecycle APIs are stored and queryable but are not evaluated during cryptographic operations.',
         ],
     }

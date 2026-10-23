@@ -142,8 +142,6 @@ def kafka_inventory() -> dict[str, Any]:
             'Floci emulates Amazon MSK by orchestrating one Redpanda container per cluster unless mock mode is enabled.',
             'CreateClusterV2 is mapped to provisioned cluster creation for local compatibility.',
             'Kafka API port 9092 is mapped to a dynamic host port, and GetBootstrapBrokers returns the local connection strings.',
-            'Floci 1.5.28 advertises externally reachable broker addresses for local clients.',
-            'Floci 1.5.25 populates currentBrokerSoftwareInfo in cluster describe responses.',
             'Each cluster gets a named Docker volume; in persistent modes the volume is retained on delete unless volume pruning is enabled.',
         ],
     }

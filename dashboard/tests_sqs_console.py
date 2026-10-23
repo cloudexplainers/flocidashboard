@@ -178,4 +178,3 @@ class SQSInventoryTests(SimpleTestCase):
         self.assertEqual(result['configuration']['max_message_size_bytes'], 1048576)
         self.assertEqual(result['summary']['delayed_messages'], 3)
         self.assertEqual(result['queues'][0]['approximate_delayed'], 3)
-        self.assertIn('ApproximateNumberOfMessagesDelayed', result['notes'][0])

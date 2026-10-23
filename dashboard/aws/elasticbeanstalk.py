@@ -60,8 +60,6 @@ def elasticbeanstalk_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.28 adds initial Elastic Beanstalk Query API support.',
-            'Floci 1.5.31 persists Elastic Beanstalk applications, versions, and environments across restart.',
             'Environments become Ready and Green immediately; Floci stores management-plane state but does not provision application infrastructure.',
             'Tags supplied during creation are stored internally but cannot be retrieved or updated through Floci’s supported Elastic Beanstalk operations.',
         ],

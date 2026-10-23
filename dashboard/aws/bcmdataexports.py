@@ -62,7 +62,6 @@ def bcmdataexports_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.17 adds BCM Data Exports support under the bcm-data-exports service name.',
             'BCM exports round out the local cost-services flow alongside Pricing, Cost Explorer, and CUR.',
         ],
     }

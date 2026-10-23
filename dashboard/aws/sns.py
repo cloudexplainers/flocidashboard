@@ -108,10 +108,6 @@ def sns_inventory() -> dict[str, Any]:
         ],
         'fanout': [
             'Floci supports SNS to SQS fan-out and delivers published messages immediately.',
-            'Floci 1.5.22 adds mocked iOS and Android mobile push platform endpoints.',
-            'Floci 1.5.19 creates SNS to SQS subscriptions from CloudFormation templates, preserves binary message attributes, and reports per-entry PublishBatch failures.',
-            'Floci 1.5.18 delivers http:// and https:// subscriptions with confirmation handshakes, message POSTs, and signature headers.',
-            'Floci 1.5.17 supports FilterPolicyScope=MessageBody for body-based subscription filtering.',
         ],
         'protocols': ['Query XML', 'JSON 1.0'],
     }

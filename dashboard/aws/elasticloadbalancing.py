@@ -215,11 +215,6 @@ def elasticloadbalancing_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'This page combines the AWS elbv2 and classic elb SDK APIs under the Elastic Load Balancing service name.',
-            'Floci 1.5.19 adds ELBv2 listener attribute and capacity reservation action families.',
-            'Floci 1.5.24 validates subnet VPC consistency when creating load balancers, matching AWS behavior more closely.',
-            'Floci 1.5.25 enforces ALB subnet availability-zone rules and improves ELBv2 target resolution and persistence.',
-            'Floci 1.5.28 omits the terminal SSL policy marker for closer AWS compatibility.',
-            'Floci 1.5.29 publishes ALB DNS names that resolve locally.',
             'Target health is fetched per target group; listener rules are fetched per listener.',
         ],
     }

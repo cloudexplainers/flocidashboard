@@ -108,10 +108,6 @@ def sqs_inventory() -> dict[str, Any]:
             'queue_url_format': f'{factory.endpoint_url.rstrip("/")}/000000000000/<queue-name>',
         },
         'notes': [
-            'Floci 1.5.25 aligns MaximumMessageSize with AWS at 1 MB and reports ApproximateNumberOfMessagesDelayed in GetQueueAttributes.',
-            'Floci 1.5.25 releases in-flight ReceiveMessage long polls when their queue is deleted.',
-            'Floci 1.5.19 applies ContentBasedDeduplication from CloudFormation templates and accepts bare queue names in QueueUrl fields.',
-            'Floci 1.5.18 supports StartMessageMoveTask, ListMessageMoveTasks, and CancelMessageMoveTask with async drain behavior.',
             'FIFO deduplication is scoped per MessageGroupId when DeduplicationScope=messageGroup.',
             'AWSTraceHeader is persisted and returned as an SQS system attribute.',
         ],

@@ -36,7 +36,6 @@ def cur_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.17 adds Cost and Usage Reports support under the cur service name.',
             'Report definitions connect billing export metadata to local S3-style delivery settings.',
         ],
     }

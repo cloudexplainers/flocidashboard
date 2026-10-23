@@ -137,10 +137,6 @@ def stepfunctions_inventory() -> dict[str, Any]:
         'protocol': 'JSON 1.1',
         'notes': [
             'Floci exposes Step Functions through the AmazonStatesService JSON 1.1 target.',
-            'Floci 1.5.31 supports Map ItemReader for S3-backed JSON datasets and resolves qualified Lambda function ARNs in lambda:invoke service integrations.',
-            'Floci 1.5.30 adds state machine version APIs, ECS runTask integration, ResultSelector, ResultPath wildcard projection, ArrayContains, and account-aware execution routing.',
-            'Floci 1.5.29 adds aws-sdk integrations for CloudFormation, EC2, and S3 PutObject.',
-            'Floci 1.5.28 returns no execution data through the SDK where AWS omits it.',
             'Execution histories are previewed with a small event limit on the dashboard.',
             'Task token callbacks are available for waitForTaskToken workflows.',
         ],

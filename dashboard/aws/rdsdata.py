@@ -55,8 +55,6 @@ def rdsdata_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.31 adds PostgreSQL support to the RDS Data API, extending the MySQL-backed flow introduced in 1.5.25.',
-            'Floci 1.5.25 adds RDS Data API support under the rds-data service name.',
             'RDS Data API is request-oriented rather than catalog-oriented, so this page surfaces supported calls and required request fields.',
         ],
     }

@@ -107,7 +107,6 @@ def transcribe_inventory() -> dict[str, Any]:
             'Floci Transcribe is a control-plane stub: jobs transition to COMPLETED immediately and vocabularies transition to READY immediately.',
             'StartTranscriptionJob accepts a media URI but performs no audio parsing or speech-to-text processing.',
             'LanguageCode defaults to en-US and MediaFormat defaults to mp4 when omitted.',
-            'Floci 1.5.29 persists vocabularies across restart; transcription job execution remains stubbed.',
             'Streaming, medical transcription, call analytics, and specialized Transcribe APIs are out of scope.',
         ],
     }

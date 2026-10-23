@@ -87,8 +87,6 @@ def cloudtrail_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.24 adds CloudTrail trail lifecycle support for local audit-log workflows.',
-            'Floci 1.5.30 allows empty LookupEvents responses so observability pipelines can poll safely before events exist.',
             'Floci persists trail configuration and logging state but does not record live API activity into trails.',
             'PutEventSelectors is accepted by Floci but selector payloads are not stored, so the dashboard does not expose that no-op control.',
         ],

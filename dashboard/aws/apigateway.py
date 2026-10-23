@@ -199,12 +199,6 @@ def apigateway_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'Floci supports API Gateway v1 REST APIs and API Gateway v2 HTTP APIs.',
-            'Floci 1.5.31 persists API key tags and adds the GetApiKey route.',
-            'Floci 1.5.22 implements REST API EndpointConfiguration and the ApiGatewayV2 CloudFormation update path.',
-            'Floci 1.5.21 implements the API Gateway v1 DeleteDeployment endpoint and returns JSON 404 errors for missing deployments.',
-            'Floci 1.5.19 fills REQUEST authorizer events for REST APIs, supports Lambda REQUEST authorizers on HTTP API v2 routes, and persists v1 UpdateStage methodSettings patch operations.',
-            'Floci 1.5.18 forwards API Gateway v2 HTTP API requests through ALB listeners.',
-            'Floci 1.5.17 adds API Gateway v1 account management endpoints and API Gateway v2 HTTP_PROXY integrations with request parameter mapping.',
             'The v1 execute plane is served under /restapis/{id}/{stage}/_user_request_/...',
             'This page shows management-plane resources; proxied traffic remains available through Floci directly.',
         ],

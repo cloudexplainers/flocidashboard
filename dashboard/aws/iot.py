@@ -64,8 +64,6 @@ def iot_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.28 adds AWS IoT Core service emulation for local MQTT-oriented IoT workflows.',
-            'Floci 1.5.29 aligns the IoT compatibility runner and MQTT lazy-startup coverage with the 1.5.28 service baseline.',
             'This read-only inspector focuses on registry, policy, certificate, topic rule, job, and role-alias inventory.',
         ],
     }

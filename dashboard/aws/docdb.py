@@ -51,7 +51,6 @@ def docdb_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.26 adds Amazon DocumentDB service emulation with cluster and instance lifecycle APIs.',
             'DocumentDB can run in mock mode or start a MongoDB-compatible data container for created clusters.',
         ],
     }

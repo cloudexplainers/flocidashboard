@@ -217,8 +217,6 @@ def codebuild_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'Floci CodeBuild stores project, report-group, and source-credential state and runs builds inside real Docker containers.',
-            'Floci 1.5.27 persists CodeBuild projects, report groups, and source credentials across restart.',
-            'Floci 1.5.28 creates the build working directory before running build phases.',
             'Buildspec install, pre_build, build, and post_build phases run sequentially, with output streamed to /aws/codebuild/<project> in CloudWatch Logs.',
             'NO_SOURCE builds skip source injection; S3 artifacts are copied from the build container and uploaded to an existing bucket.',
             'Build execution is asynchronous: StartBuild returns IN_PROGRESS and BatchGetBuilds can be polled until buildComplete is true.',

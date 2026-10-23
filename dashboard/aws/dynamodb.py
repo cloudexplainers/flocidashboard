@@ -141,10 +141,6 @@ def dynamodb_inventory() -> dict[str, Any]:
             'ListTagsOfResource',
         ],
         'notes': [
-            'Floci 1.5.28 returns exact 400 error messages for invalid expressions.',
-            'Floci 1.5.27 adds TableId, TableClass, OnDemandThroughput, deletion-protection fixes, stricter expression validation, ExclusiveStartKey validation, and scan cursor improvements.',
-            'Floci 1.5.17 adds DynamoDB PartiQL support for ExecuteStatement, ExecuteTransaction, and BatchExecuteStatement.',
-            'Floci 1.5.21 merges nested map paths correctly in ProjectionExpression.',
             'UpdateItem now honors the legacy Expected condition shape for compatibility with older clients.',
         ],
         'streams_supported': [

@@ -134,7 +134,6 @@ def scheduler_inventory() -> dict[str, Any]:
             'Schedules without an explicit group are placed in the default group.',
             'The default group cannot be deleted.',
             'State=DISABLED schedules and schedules outside StartDate/EndDate are skipped.',
-            'Floci 1.5.31 dispatches ECS targets to RunTask.',
             'FIFO SQS targets can carry MessageGroupId through Target.SqsParameters.',
         ],
     }

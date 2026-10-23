@@ -171,12 +171,7 @@ def rds_inventory() -> dict[str, Any]:
         'notes': [
             'RDS management uses Query XML and the data plane uses PostgreSQL or MySQL wire protocol.',
             'Floci manages real PostgreSQL, MySQL, and MariaDB Docker containers.',
-            'Floci 1.5.31 adds RDS mock mode so clusters and instances can be created without Docker for CI and fast unit-style tests.',
             'Instances expose local TCP proxy endpoints on localhost:<proxy-port>.',
-            'Floci 1.5.28 aligns CreateDBInstance/CreateDBCluster parameter group validation, subnet group placement, and requested database-name proxy handling with AWS behavior.',
-            'Floci 1.5.25 adds RDS provisioning lifecycle support for create, describe, modify, and delete flows.',
-            'Floci 1.5.25 persists STS session secret keys so RDS IAM database authentication validates across requests.',
-            'Floci 1.5.21 restores persisted runtime state on startup for local RDS resources.',
             'IAM database authentication is supported when enabled at instance creation time.',
         ],
     }

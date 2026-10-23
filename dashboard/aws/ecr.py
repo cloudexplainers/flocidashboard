@@ -161,7 +161,6 @@ def ecr_inventory() -> dict[str, Any]:
             'Repository URIs use loopback hostnames like <account>.dkr.ecr.<region>.localhost:<port>/<repo> by default.',
             'GetAuthorizationToken returns a docker login token, but the dashboard only displays proxy endpoints.',
             'Deleted image blobs are reclaimed by POST /_floci/ecr/gc.',
-            'Floci 1.5.19 publishes official Floci images to the AWS ECR Public Gallery as well as Docker Hub.',
         ],
     }
 

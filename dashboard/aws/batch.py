@@ -95,7 +95,6 @@ def batch_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.25 adds AWS Batch service support for local batch compute management workflows.',
             'The dashboard samples jobs from the first ten queues across common Batch job statuses to keep refreshes bounded.',
         ],
     }

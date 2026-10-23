@@ -122,9 +122,6 @@ def cloudwatch_inventory() -> dict[str, Any]:
             'metrics_protocol': 'Query XML and JSON 1.1',
         },
         'notes': [
-            'Floci 1.5.31 adds CloudWatch Logs Insights query support for local log analysis workflows.',
-            'Floci 1.5.23 accepts CloudWatch Logs log group ARNs through logGroupIdentifier where AWS allows either a name or ARN.',
-            'Floci 1.5.23 also fixes rpc-v2-cbor timestamp list tagging for GetMetricData decoding.',
         ],
     }
 

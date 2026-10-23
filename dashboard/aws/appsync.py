@@ -116,10 +116,6 @@ def appsync_inventory() -> dict[str, Any]:
             'TagResource, UntagResource, and ListTagsForResource',
         ],
         'notes': [
-            'Floci 1.5.22 adds AppSync Phase 1 management API emulation.',
-            'Floci 1.5.23 adds AppSync Phase 2 with Schema Registry support, model fixes, CRUDL completion, and AWS scalar type support.',
-            'Floci 1.5.28 adds AppSync Phase 3 with the $util runtime library for VTL resolvers.',
-            'Floci 1.5.29 adds AppSync Phase 4 with a full VTL engine for end-to-end resolver template evaluation.',
             'GraphQL workloads that depend on schema introspection and the full data-source surface should now work end to end against Floci.',
         ],
     }

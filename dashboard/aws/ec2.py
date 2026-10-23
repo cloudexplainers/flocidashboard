@@ -274,14 +274,6 @@ def ec2_inventory() -> dict[str, Any]:
             'Use ImportKeyPair with a real public key for working SSH access.',
             'Floci serves IMDS-compatible metadata on the configured host IMDS port, default 9169.',
             'Security group rules are stored and returned but local Docker networking handles enforcement.',
-            'Floci 1.5.30 adds VPC Flow Logs and publishes security-group TCP ingress ports on the host.',
-            'Floci 1.5.31 adds instance metadata catalog architecture parity plus registered images and snapshots support.',
-            'Floci 1.5.27 adds EC2 Network ACL support for VPC subnet traffic-control workflows.',
-            'Floci 1.5.28 adds a Java-built Ubuntu AMI guest image, instance type metadata catalog, VPC endpoint compatibility improvements, and persisted default egress security group rules.',
-            'Floci 1.5.26 adds Spot Instance request actions and embedded DNS support for instances.',
-            'Floci 1.5.25 embeds the EC2 image catalog in the native image and loads it lazily.',
-            'Floci 1.5.21 improves EC2 parity for VPC, subnet, and instance methods, subnet attributes, block-device attachTime, volume throughput, DescribeAddressesAttribute, and IAM instance profiles.',
-            'Floci 1.5.24 auto-creates the default security group and main route table when CreateVpc is used.',
         ],
     }
 

@@ -58,8 +58,6 @@ def memorydb_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.27 adds Amazon MemoryDB service emulation with mock mode.',
-            'Floci 1.5.28 models MemoryDB authentication through ACLs and users.',
             'This read-only inspector focuses on cluster, user, ACL, subnet group, parameter group, and snapshot inventory.',
         ],
     }

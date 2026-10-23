@@ -207,15 +207,7 @@ def cognito_inventory() -> dict[str, Any]:
             'Client secrets are intentionally omitted from dashboard output.',
             'floci:override-id can pin a user pool ID at creation time and is stripped from persisted tags.',
             'OAuth client_credentials is emulator-friendly and does not require a Cognito domain.',
-            'Floci 1.5.28 aligns sign-up confirmation, CUSTOM_AUTH trigger failures, and AdminGetUser lookup behavior with AWS.',
-            'Floci 1.5.29 adds Cognito overrides for client ID and secret.',
-            'Floci 1.5.26 aligns user pool client configuration APIs, validates missing clients more closely, and tightens password recovery behavior.',
-            'Floci 1.5.21 adds the OAuth2 userInfo endpoint plus custom schema attributes and attribute deletion APIs.',
-            'Floci 1.5.24 adds a verification code store and dispatcher so email/SMS signup and recovery codes can be inspected locally through SNS/SES-backed flows.',
-            'Floci 1.5.25 includes USERNAME in SRP PASSWORD_VERIFIER challenges for closer AWS client compatibility.',
             'Tokens use the local emulator base URL plus pool ID as issuer.',
-            'Floci 1.5.19 provisions UserPool and UserPoolClient resources from CloudFormation and includes user attributes in ID token claims.',
-            'Floci 1.5.17 fires PreSignUp and PostConfirmation Lambda triggers for local auth flows.',
         ],
     }
 

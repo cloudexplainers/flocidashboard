@@ -82,7 +82,6 @@ def emr_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.25 adds Amazon EMR management API support as a Phase 1 service.',
             'The dashboard inspects clusters, nested instance groups, and steps when those management APIs are available.',
         ],
     }

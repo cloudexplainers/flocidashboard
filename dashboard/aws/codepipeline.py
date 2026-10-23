@@ -71,7 +71,6 @@ def codepipeline_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.27 adds AWS CodePipeline emulation.',
             'This read-only inspector expands the first 50 pipelines with pipeline definition, state, and execution summaries when supported.',
         ],
     }

@@ -117,9 +117,6 @@ def config_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.18 adds AWS Config service emulation for configuration recording, compliance rules, and resource tracking workflows.',
-            'Floci 1.5.27 persists Config rules, conformance packs, recorders, delivery channels, and tags across restart.',
-            'Floci 1.5.28 read APIs expand Steampipe-oriented resource collection across supported services.',
             'This page shows the management-plane inventory most useful for checking local compliance and recorder setup.',
             'Compliance status always returns INSUFFICIENT_DATA because Floci stores resources but does not perform actual evaluation.',
         ],

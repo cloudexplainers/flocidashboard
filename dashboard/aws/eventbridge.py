@@ -121,10 +121,6 @@ def eventbridge_inventory() -> dict[str, Any]:
         'notes': [
             'The default event bus is named default and accepts AWS service events.',
             'Custom event buses are for application events.',
-            'Floci 1.5.31 can deliver EventBridge events to Data Firehose delivery stream targets.',
-            'Floci 1.5.28 syncs EventBridge tags to Resource Groups Tagging discovery.',
-            'Floci 1.5.22 preserves the PutEvents call region and account through pattern matching and delivered event envelopes.',
-            'Floci 1.5.21 fixes rule tagging on custom buses whose name contains event-bus.',
         ],
     }
 

@@ -99,9 +99,6 @@ def secretsmanager_inventory() -> dict[str, Any]:
             'value_display': 'Secret values are retrieved only on explicit request.',
         },
         'notes': [
-            'Floci 1.5.31 supports filters and pagination in BatchGetSecretValue.',
-            'Floci 1.5.27 implements automatic secret rotation lifecycle behavior.',
-            'Floci 1.5.28 registers AWSPENDING before invoking the rotation Lambda.',
         ],
     }
 

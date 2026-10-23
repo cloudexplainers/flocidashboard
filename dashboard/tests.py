@@ -1364,18 +1364,14 @@ class CloudFormationActionTests(SimpleTestCase):
 
     @patch('dashboard.aws._paginate')
     @patch('dashboard.aws.FlociClientFactory')
-    def test_inventory_notes_include_1_5_25_provisioning_coverage(self, factory_mock, paginate_mock):
+    def test_inventory_notes_make_no_version_claims(self, factory_mock, paginate_mock):
         cloudformation = MagicMock()
         factory_mock.return_value.client.return_value = cloudformation
         paginate_mock.return_value = []
 
         result = cloudformation_inventory()
 
-        self.assertTrue(any(
-            'Lambda-backed custom resources' in note and 'EC2 VPC/subnet resources' in note
-            for note in result['notes']
-        ))
-        self.assertIn('Lambda layer versions', ' '.join(result['notes']))
+        self.assertFalse([note for note in result['notes'] if re.match(r'Floci \d+\.\d+', note)])
 
     @patch('dashboard.cloudformation_views.describe_change_set')
     def test_describe_change_set_endpoint_uses_action_helper(self, describe_change_set):
@@ -1653,15 +1649,14 @@ class RDSActionTests(SimpleTestCase):
 
     @patch('dashboard.aws._paginate')
     @patch('dashboard.aws.FlociClientFactory')
-    def test_inventory_notes_include_provisioning_and_sts_iam_auth_context(self, factory_mock, paginate_mock):
+    def test_inventory_lists_supported_operations_without_version_claims(self, factory_mock, paginate_mock):
         rds = MagicMock()
         factory_mock.return_value.client.return_value = rds
         paginate_mock.return_value = []
 
         result = rds_inventory()
 
-        self.assertTrue(any('RDS provisioning lifecycle support' in note for note in result['notes']))
-        self.assertTrue(any('STS session secret keys' in note for note in result['notes']))
+        self.assertFalse([note for note in result['notes'] if re.match(r'Floci \d+\.\d+', note)])
         self.assertIn('CreateDBInstance', result['supported'])
         self.assertIn('ModifyDBInstance', result['supported'])
         self.assertIn('DeleteDBInstance', result['supported'])

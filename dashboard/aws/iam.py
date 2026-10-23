@@ -211,9 +211,6 @@ def iam_inventory() -> dict[str, Any]:
             for profile in instance_profiles
         ],
         'notes': [
-            'Floci 1.5.30 enforces AssumeRole trust policies when enforcement is enabled and evaluates STS session policies.',
-            'Floci 1.5.29 routes assumed-role credentials to the target account and adds the AmazonRDSEnhancedMonitoringRole managed policy.',
-            'Floci 1.5.28 makes IAM entity stores thread-safe under concurrent mutation and resolves AWS-managed policies from any account context.',
         ],
     }
 

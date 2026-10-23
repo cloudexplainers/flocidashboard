@@ -137,9 +137,6 @@ def athena_inventory() -> dict[str, Any]:
             'Mock mode makes queries transition to SUCCEEDED immediately with empty results.',
             'The DuckDB sidecar is started lazily on the first StartQueryExecution call.',
             'The dashboard only previews a few result rows for completed queries.',
-            'Floci 1.5.28 serializes timestamps as epoch seconds in GetWorkGroup and GetTableMetadata.',
-            'Floci 1.5.24 aligns CreateWorkGroup, DeleteWorkGroup, and ListWorkGroups behavior with AWS.',
-            'Floci 1.5.25 aligns GetWorkGroup behavior with AWS.',
         ],
     }
 

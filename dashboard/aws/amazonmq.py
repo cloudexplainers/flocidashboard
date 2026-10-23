@@ -82,7 +82,6 @@ def amazonmq_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci 1.5.30 adds the Amazon MQ broker control plane backed by RabbitMQ.',
             'The dashboard inspects brokers, users, and configurations when the local SDK model exposes those APIs.',
         ],
     }
