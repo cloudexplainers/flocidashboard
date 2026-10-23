@@ -400,3 +400,60 @@ class S3EmptyBucketTests(SimpleTestCase):
         data = json.loads(response.content)
         self.assertEqual(data['deleted_count'], 3)
         self.assertIn('1 of 4 objects could not be deleted', data['error'])
+
+
+class TruncationAndCognitoTests(SimpleTestCase):
+    def test_record_truncation_only_when_items_are_left_out(self):
+        from dashboard.aws import collect_load_errors, record_truncation
+
+        def loader():
+            record_truncation('GetPipeline', 'pipelines', 50, 50)
+            record_truncation('DescribeDocument', 'documents', 50, 73)
+
+        _, errors = collect_load_errors(loader)
+
+        self.assertEqual(errors, [{'operation': 'DescribeDocument', 'code': 'Truncated', 'error': 'Shown for the first 50 of 73 documents.'}])
+
+    def test_manual_page_limit_is_reported(self):
+        from dashboard.aws import _MANUAL_PAGE_LIMIT, _paginate, collect_load_errors
+
+        client = MagicMock()
+        client.can_paginate.return_value = False
+        pages = iter(range(10_000))
+        client.list_things.side_effect = lambda **_: {'items': [1], 'NextToken': f't{next(pages)}'}
+
+        items, errors = collect_load_errors(lambda: _paginate(client, 'list_things', 'items'))
+
+        self.assertEqual(len(items), _MANUAL_PAGE_LIMIT)
+        self.assertEqual(errors[0]['code'], 'Truncated')
+
+    def test_cognito_pages_users_and_uses_reported_pool_arn(self):
+        from dashboard.aws.cognito import cognito_inventory
+
+        client = MagicMock()
+        client.can_paginate.return_value = True
+
+        def full_result(operation):
+            results = {
+                'list_user_pools': {'UserPools': [{'Id': 'eu-west-1_abc', 'Name': 'pool'}]},
+                'list_users': {'Users': [{'Username': f'user-{index}'} for index in range(75)]},
+            }
+            paginator = MagicMock()
+            paginator.paginate.return_value.build_full_result.return_value = results.get(operation, {})
+            return paginator
+
+        client.get_paginator.side_effect = full_result
+        client.describe_user_pool.return_value = {'UserPool': {'Id': 'eu-west-1_abc', 'Arn': 'arn:aws:cognito-idp:eu-west-1:111122223333:userpool/eu-west-1_abc'}}
+        client.list_tags_for_resource.return_value = {'Tags': {}}
+        factory = MagicMock(region='eu-west-1', endpoint_url='http://floci:4566')
+        factory.client.return_value = client
+
+        with patch('dashboard.aws.FlociClientFactory', return_value=factory), \
+                patch('dashboard.aws.public_endpoint_url', return_value='http://localhost:4566'):
+            data = cognito_inventory()
+
+        pool = data['user_pools'][0] if 'user_pools' in data else data['pools'][0]
+        self.assertEqual(pool['arn'], 'arn:aws:cognito-idp:eu-west-1:111122223333:userpool/eu-west-1_abc')
+        client.list_tags_for_resource.assert_called_once_with(ResourceArn=pool['arn'])
+        self.assertEqual(len(pool['users']), 75)
+        self.assertTrue(pool['discovery_url'].startswith('http://localhost:4566/'))

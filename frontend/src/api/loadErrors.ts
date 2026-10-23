@@ -44,8 +44,12 @@ export function installLoadErrorHook() {
 
 export function describeLoadErrors(errors: LoadError[]): { unsupported: string[]; failed: string[] } {
   const unsupported = [...new Set(errors.filter(error => error.unsupported).map(error => error.operation))];
+  const text = (error: LoadError) => String(error.error || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
   const failed = errors
     .filter(error => !error.unsupported)
-    .map(error => `${error.operation}${error.code ? ` (${error.code})` : ''}: ${String(error.error || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)}`);
+    // Truncated: the dashboard showed only part of a list Floci returned.
+    .map(error => error.code === 'Truncated'
+      ? `${error.operation}: ${text(error)}`
+      : `${error.operation}${error.code ? ` (${error.code})` : ''}: ${text(error)}`);
   return { unsupported, failed };
 }

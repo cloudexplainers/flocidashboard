@@ -513,6 +513,14 @@ def _paginate(client, operation_name: str, result_key: str, **kwargs) -> list[An
             break
         seen.add(token)
         request[token_key] = token
+    else:
+        errors = _load_errors.get()
+        if errors is not None:
+            errors.append({
+                'operation': operation_name,
+                'code': 'Truncated',
+                'error': f'Stopped after {_MANUAL_PAGE_LIMIT} pages; more items may exist.',
+            })
     return items
 
 
@@ -565,6 +573,18 @@ def _record_load_error(exc: Exception) -> None:
     }
     if entry not in errors:
         errors.append(entry)
+
+
+def record_truncation(operation: str, what: str, shown: int, total: int) -> None:
+    """Note that an inventory shows only part of a list (details for the first N items)."""
+    errors = _load_errors.get()
+    if errors is None or total <= shown:
+        return
+    errors.append({
+        'operation': operation,
+        'code': 'Truncated',
+        'error': f'Shown for the first {shown} of {total} {what}.',
+    })
 
 
 def collect_load_errors(loader: Callable[[], Any]) -> tuple[Any, list[dict[str, Any]]]:

@@ -38,6 +38,7 @@ def codepipeline_inventory() -> dict[str, Any]:
         }
 
     pipeline_details = [pipeline_detail(pipeline) for pipeline in pipelines[:50]]
+    core.record_truncation('GetPipeline', 'pipelines (pipeline_summaries lists them all)', len(pipeline_details), len(pipelines))
 
     return {
         'summary': {

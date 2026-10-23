@@ -25,29 +25,30 @@ def _cognito_optional(loader: Callable[[], Any], empty_codes: set[str]) -> Any:
 def cognito_inventory() -> dict[str, Any]:
     factory = core.FlociClientFactory()
     cognito = factory.client('cognito-idp')
-    pools = _safe_value(lambda: cognito.list_user_pools(MaxResults=60).get('UserPools', []), [])
+    pools = _safe_value(lambda: core._paginate(cognito, 'list_user_pools', 'UserPools', MaxResults=60), [])
 
     def pool_detail(pool: dict[str, Any]) -> dict[str, Any]:
         pool_id = pool.get('Id')
-        pool_arn = f'arn:aws:cognito-idp:{factory.region}:000000000000:userpool/{pool_id}' if pool_id else None
         details = _cognito_optional(
             lambda: cognito.describe_user_pool(UserPoolId=pool_id).get('UserPool', {}),
             {'ResourceNotFoundException'},
         )
+        # The ARN Floci reports (it carries the real account), not one built from a fixed account.
+        pool_arn = details.get('Arn') if isinstance(details, dict) else None
         clients = _cognito_optional(
-            lambda: cognito.list_user_pool_clients(UserPoolId=pool_id, MaxResults=60).get('UserPoolClients', []),
+            lambda: core._paginate(cognito, 'list_user_pool_clients', 'UserPoolClients', UserPoolId=pool_id),
             {'ResourceNotFoundException'},
         )
         resource_servers = _cognito_optional(
-            lambda: cognito.list_resource_servers(UserPoolId=pool_id, MaxResults=50).get('ResourceServers', []),
+            lambda: core._paginate(cognito, 'list_resource_servers', 'ResourceServers', UserPoolId=pool_id, MaxResults=50),
             {'ResourceNotFoundException'},
         )
         users = _cognito_optional(
-            lambda: cognito.list_users(UserPoolId=pool_id, Limit=60).get('Users', []),
+            lambda: core._paginate(cognito, 'list_users', 'Users', UserPoolId=pool_id),
             {'ResourceNotFoundException'},
         )
         groups = _cognito_optional(
-            lambda: cognito.list_groups(UserPoolId=pool_id, Limit=60).get('Groups', []),
+            lambda: core._paginate(cognito, 'list_groups', 'Groups', UserPoolId=pool_id),
             {'ResourceNotFoundException'},
         )
         group_details = []
@@ -55,11 +56,13 @@ def cognito_inventory() -> dict[str, Any]:
             for group in groups:
                 group_name = group.get('GroupName')
                 group_users = _cognito_optional(
-                    lambda group_name=group_name: cognito.list_users_in_group(
+                    lambda group_name=group_name: core._paginate(
+                        cognito,
+                        'list_users_in_group',
+                        'Users',
                         UserPoolId=pool_id,
                         GroupName=group_name,
-                        Limit=60,
-                    ).get('Users', []),
+                    ),
                     {'ResourceNotFoundException', 'GroupNotFoundException'},
                 )
                 group_details.append({
@@ -124,8 +127,9 @@ def cognito_inventory() -> dict[str, Any]:
             'resource_servers': resource_servers,
             'users': user_details,
             'groups': group_details if isinstance(groups, list) else groups,
-            'discovery_url': f'{factory.endpoint_url.rstrip("/")}/{pool_id}/.well-known/openid-configuration' if pool_id else None,
-            'jwks_url': f'{factory.endpoint_url.rstrip("/")}/{pool_id}/.well-known/jwks.json' if pool_id else None,
+            # Browser-facing links use the public endpoint, not the container hostname.
+            'discovery_url': f'{core.public_endpoint_url()}/{pool_id}/.well-known/openid-configuration' if pool_id else None,
+            'jwks_url': f'{core.public_endpoint_url()}/{pool_id}/.well-known/jwks.json' if pool_id else None,
             'oauth_token_url': f'{factory.endpoint_url.rstrip("/")}/cognito-idp/oauth2/token',
             'oauth_userinfo_url': f'{factory.endpoint_url.rstrip("/")}/cognito-idp/oauth2/userInfo',
         }
@@ -219,7 +223,7 @@ def cognito_inventory() -> dict[str, Any]:
 def list_cognito_resources(factory: core.FlociClientFactory) -> list[dict[str, Any]]:
     cognito = factory.client('cognito-idp')
     resources: list[dict[str, Any]] = []
-    pools = _safe_value(lambda: cognito.list_user_pools(MaxResults=60).get('UserPools', []), [])
+    pools = _safe_value(lambda: core._paginate(cognito, 'list_user_pools', 'UserPools', MaxResults=60), [])
 
     for pool in pools:
         pool_id = pool.get('Id')
@@ -235,7 +239,7 @@ def list_cognito_resources(factory: core.FlociClientFactory) -> list[dict[str, A
                 'id': client.get('ClientId'),
                 'name': client.get('ClientName'),
             }
-            for client in _safe_value(lambda pool_id=pool_id: cognito.list_user_pool_clients(UserPoolId=pool_id, MaxResults=60).get('UserPoolClients', []), [])
+            for client in _safe_value(lambda pool_id=pool_id: core._paginate(cognito, 'list_user_pool_clients', 'UserPoolClients', UserPoolId=pool_id), [])
         )
         resources.extend(
             {
@@ -244,7 +248,7 @@ def list_cognito_resources(factory: core.FlociClientFactory) -> list[dict[str, A
                 'name': user.get('Username'),
                 'status': user.get('UserStatus'),
             }
-            for user in _safe_value(lambda pool_id=pool_id: cognito.list_users(UserPoolId=pool_id, Limit=60).get('Users', []), [])
+            for user in _safe_value(lambda pool_id=pool_id: core._paginate(cognito, 'list_users', 'Users', UserPoolId=pool_id), [])
         )
         resources.extend(
             {
@@ -252,7 +256,7 @@ def list_cognito_resources(factory: core.FlociClientFactory) -> list[dict[str, A
                 'pool_id': pool_id,
                 'name': group.get('GroupName'),
             }
-            for group in _safe_value(lambda pool_id=pool_id: cognito.list_groups(UserPoolId=pool_id, Limit=60).get('Groups', []), [])
+            for group in _safe_value(lambda pool_id=pool_id: core._paginate(cognito, 'list_groups', 'Groups', UserPoolId=pool_id), [])
         )
 
     return resources

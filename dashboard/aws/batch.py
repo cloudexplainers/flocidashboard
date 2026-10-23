@@ -36,6 +36,7 @@ def batch_inventory() -> dict[str, Any]:
     jobs: list[dict[str, Any]] = []
     job_statuses = ['SUBMITTED', 'PENDING', 'RUNNABLE', 'STARTING', 'RUNNING', 'SUCCEEDED', 'FAILED']
     if 'ListJobs' in operations:
+        core.record_truncation('ListJobs', 'job queues (jobs)', 10, len(job_queues))
         for queue in job_queues[:10]:
             queue_name = queue.get('jobQueueName') or queue.get('jobQueueArn')
             for status in job_statuses:
@@ -49,6 +50,7 @@ def batch_inventory() -> dict[str, Any]:
                     ),
                     [],
                 )
+                core.record_truncation('ListJobs', f'{status} jobs in {queue_name}', 25, len(summaries))
                 for summary in summaries[:25]:
                     jobs.append({
                         'name': summary.get('jobName') or summary.get('jobId'),

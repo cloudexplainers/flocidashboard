@@ -15,6 +15,7 @@ def s3vectors_inventory() -> dict[str, Any]:
 
     vector_buckets = _safe_value(lambda: core._operation_items(s3vectors, 'list_vector_buckets', 'vectorBuckets'), []) if 'ListVectorBuckets' in operations else []
     indexes: list[dict[str, Any]] = []
+    core.record_truncation('ListIndexes', 'vector buckets (indexes)', 50, len(vector_buckets))
     for bucket in vector_buckets[:50]:
         bucket_name = bucket.get('vectorBucketName') or bucket.get('name')
         if bucket_name and 'ListIndexes' in operations:

@@ -46,9 +46,9 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
   const partialLoadItems: FlashbarProps.MessageDefinition[] = partialLoad && partialLoadText ? [{
     type: 'warning',
     id: 'floci-partial-load',
-    header: 'Some lists were not returned by Floci',
+    header: 'Some lists are incomplete',
     content: <div data-testid="partial-load-warning">
-      These lists show as empty here, but Floci did not return them, so they are not known to be empty.
+      Floci did not return these lists in full. A list shown as empty here is not known to be empty.
       <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
         {partialLoadText.unsupported.length > 0 && <li>Not implemented by this Floci version: {partialLoadText.unsupported.join(', ')}</li>}
         {partialLoadText.failed.map(line => <li key={line}>{line}</li>)}

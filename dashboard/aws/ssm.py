@@ -91,6 +91,7 @@ def ssm_inventory() -> dict[str, Any]:
 
     parameter_details = [parameter_detail(parameter) for parameter in parameters]
     document_details = [document_detail(document) for document in documents[:50]]
+    core.record_truncation('DescribeDocument', 'documents', len(document_details), len(documents))
     parameter_types: dict[str, int] = {}
     for parameter in parameter_details:
         parameter_type = parameter.get('type') or 'Unknown'
