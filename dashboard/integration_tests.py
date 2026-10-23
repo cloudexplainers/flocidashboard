@@ -15,11 +15,23 @@ from .aws import FlociClientFactory
 from .services import SERVICES
 
 
+# Error codes Floci returns for an operation it doesn't implement. Inventories report
+# those lists under load_errors (and every console names them), so they are capability
+# gaps to keep visible, not failures. An empty code is a bare 404 (Route 53).
+UNIMPLEMENTED_CODES = {'UnsupportedOperation', 'UnknownOperationException', 'InvalidAction', '404', '405', ''}
+
+
 class FlociCompatibilityTests(SimpleTestCase):
+    def assert_load_errors(self, entries, service):
+        for entry in entries or []:
+            self.assertIn(entry.get('code'), UNIMPLEMENTED_CODES, f"{service}: {entry.get('operation')}: {entry.get('error')}")
+
     def assert_inventory_errors(self, data, service):
         if isinstance(data, dict):
             for key, value in data.items():
-                if key == 'error' and value:
+                if key == 'load_errors':
+                    self.assert_load_errors(value, service)
+                elif key == 'error' and value:
                     # Floci explicitly rejects Cloud Control types it cannot list.
                     # Keep those capability gaps visible; fail on other errors.
                     self.assertTrue(

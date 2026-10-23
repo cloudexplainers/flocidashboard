@@ -697,6 +697,31 @@ The lab writes its order row with the RDS Data API through the cluster (as AWS a
 secret `--manage-master-user-password` creates; Floci doesn't report `HttpEndpointEnabled`, so the lab passes
 `--enable-http-endpoint` for fidelity only. `check_labs --service rds` passed on 2.3.0.
 
+## HA web tier lab (2026-10-23)
+
+The top item of the recommended next work (below) is done: `elasticloadbalancing/ha-web-tier` (SAA 2.2, 2.1, 3.2,
+3.4), 12 steps, in `dashboard/labs/elasticloadbalancing_labs.py`. It is the first lab for the Elastic Load Balancing
+service and sits in Level 4 after the RDS resilience lab. It uses a launch template rather than a launch configuration,
+because AWS recommends templates and the instance refresh needs a new version.
+
+Checked live on a throwaway Floci 2.3.0 (two full runs over leftovers, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| ALB data plane | The listener runs on that port inside the Floci container (`ElbV2DataPlane`), and the load balancer DNS name (`<name>-<id>.elb.floci`) resolves to Floci inside instances. Eight requests from an instance alternated between the targets (round robin); with three targets, all three answered. | Load balancer and traffic steps |
+| Target health | New targets go `initial`, then `unhealthy` (`Target.FailedHealthChecks`) until user data starts the server, then `healthy` after the threshold: about a minute after launch. | The wait steps allow 180 s |
+| ASG with a target group | Instances are spread over the two subnets' zones and registered with the target group; set-desired-capacity 3 added a third healthy target. | Nothing to label |
+| Self-healing | A terminated instance was dropped from the group and the target group, and a replacement in the same zone was healthy within about 50 s. | Note: an instance set Unhealthy is not replaced (see "HA web tier controls") |
+| Target tracking policy | `PutScalingPolicy` stores and returns it; nothing evaluates it. | Note; the lab scales out by hand |
+| Instance refresh | Replaced all three instances at once (outage of about a minute) from `$Latest`, `Successful` in about 20 s, `MinHealthyPercentage` echoed only. | Note in the step |
+| Launch template versions | `CreateLaunchTemplateVersion` raises `LatestVersionNumber`, but `DescribeLaunchTemplateVersions` returns only the latest version, even when asked for version 1. | Note in the step; the template check accepts either release |
+| Ubuntu guest | `ami-ubuntu2204` has Perl but not curl in this environment, so the user data server and the request client are Perl one-liners. The lab shows the curl command a learner would run. | Explanation of the traffic step |
+
+The instance security group allows port 8080 only from the load balancer security group. Floci doesn't enforce
+security groups by default; with `FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true` the health checks come from the
+Floci container, not from a member of that group, which was not tested. `check_labs --service elasticloadbalancing`
+passed on 2.3.0 (a run takes about four minutes, most of it waiting for health checks).
+
 ## HA web tier controls (2026-10-23)
 
 The ELBv2 and Auto Scaling item of the recommended next work (below) is done. The Elastic Load Balancing console adds Health checks
@@ -724,8 +749,8 @@ targets behind an ALB, and an ASG of two instances):
 | Set instance health | `Unhealthy` is stored and reported; the reconciler never replaces the instance (watched 40 s) and the grace period is ignored. A stopped or terminated instance is replaced to keep the desired capacity (both checked). | Action description and success message; inventory note |
 
 The Elastic Load Balancing inventory notes no longer repeat what these tabs say inline, and two notes about how the
-dashboard loads the lists were dropped (see "Inventory notes on every console" below). No lab in this change. The HA
-web tier lab (W1-1) is the next step; see the recommended next work.
+dashboard loads the lists were dropped (see "Inventory notes on every console" below). No lab in this change; the HA
+web tier lab (W1-1) followed, see "HA web tier lab" below.
 
 ## Inventory notes on every console (2026-10-23)
 
@@ -774,7 +799,6 @@ listed.
 
 | Item | Why not here |
 | --- | --- |
-| HA web tier lab (W1-1): launch configuration with a web server in user data, ALB across two subnets, target group health check, ASG (min 2) attached to it; verify the ALB forwards to ASG instances, an instance refresh, and self-healing by terminating an instance | The console controls exist (above). Verify traffic from inside an instance (SSM `curl http://floci:<port>/`), since listener ports aren't published to the host. Teach that Set instance health Unhealthy doesn't trigger replacement in Floci. |
 | S3 lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication config (configuration only) | S3 data protection (Wave 1). Each needs its own label. |
 | EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
 | Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration, ELBv2 HTTPS and stickiness. Better still, detect support at run time. |

@@ -209,6 +209,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('stepfunctions', 'parallel-retry-workflow'): _tags(saa='2.1'),
     ('ecs', 'fargate-microservice'): _tags(clf='3.3', saa='2.1 3.2 4.2'),
     ('rds', 'aurora-resilience'): _tags(clf='3.4', saa='2.2 3.3'),
+    ('elasticloadbalancing', 'ha-web-tier'): _tags(clf='3.3 3.2', saa='2.2 2.1 3.2 3.4'),
     # Level 5
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
     ('ec2', 's3-gateway-endpoint'): _tags(clf='3.5', saa='1.2 3.4 4.4'),
@@ -325,8 +326,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Use multiple Regions for disaster recovery, business continuity, low latency for distant users, or data residency.',
             'Edge locations serve CloudFront, Route 53, and Global Accelerator close to users.',
         ],
-        'related_labs': [('ec2', 'vpc-public-private')],
-        'planned': 'W1-1 Highly available web tier; W1-6 Route 53 routing and failover',
+        'related_labs': [('ec2', 'vpc-public-private'), ('elasticloadbalancing', 'ha-web-tier')],
+        'planned': 'W1-6 Route 53 routing and failover',
     },
     {
         'key': 'hybrid-connectivity',
