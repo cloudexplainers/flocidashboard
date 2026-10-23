@@ -2167,6 +2167,10 @@ export async function postConsoleAction(path: string, payload: Record<string, un
   return data;
 }
 
+export async function deleteConsoleResource(path: string, errorMessage = 'Delete failed'): Promise<any> {
+  return requestJson(path, { method: 'DELETE', errorMessage });
+}
+
 /** Dedicated KMS endpoints; /api/kms/ is a read-only inventory, not an action dispatcher. */
 export async function executeKmsAction(action: string, payload: Record<string, any>): Promise<any> {
   const paths: Record<string, [string, string]> = {

@@ -16,7 +16,8 @@ import Tabs from '@cloudscape-design/components/tabs';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
-import { fetchConsoleInventory, postConsoleAction } from '../api/client';
+import { deleteConsoleResource, fetchConsoleInventory, postConsoleAction } from '../api/client';
+import ConfirmActionModal from '../components/ConfirmActionModal';
 
 interface Route53ConsoleProps { resourcePath?: string; onNavigate?: (path: string) => void; }
 const zoneId = (zone: any) => String(zone.Id || zone.id || '').replace('/hostedzone/', '');
@@ -42,6 +43,8 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
   const [recordFormError, setRecordFormError] = useState('');
   const [editingRecord, setEditingRecord] = useState<any>(null);
 
+  const [pendingDelete, setPendingDelete] = useState<{ kind: 'zone' } | { kind: 'record'; record: any } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   // Create Zone Modal
   const [createZoneOpen, setCreateZoneOpen] = useState(false);
   const [zoneName, setZoneName] = useState('');
@@ -81,7 +84,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
         caller_reference: `floci-${Date.now()}`,
         comment: zoneComment,
       });
-      setActionMessage({ type: 'success', text: `Hosted Zone "${zoneName.trim()}" created successfully.` });
+      setActionMessage({ type: 'success', text: `Hosted zone "${zoneName.trim()}" created.` });
       setCreateZoneOpen(false);
       setZoneName('');
       setZoneComment('');
@@ -91,6 +94,28 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
       setActionMessage({ type: 'error', text: err.message || 'Failed to create hosted zone' });
     } finally {
       setCreatingZone(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!activeZone || !pendingDelete) return;
+    setDeleting(true);
+    try {
+      if (pendingDelete.kind === 'zone') {
+        await deleteConsoleResource(`/api/route53/hosted-zones/${encodeURIComponent(activeZone.Id)}/`, 'Failed to delete hosted zone');
+        setActionMessage({ type: 'success', text: `Hosted zone "${activeZone.Name}" deleted.` });
+        selectZone('');
+      } else {
+        const result = await postConsoleAction(`/api/route53/hosted-zones/${encodeURIComponent(activeZone.Id)}/record-sets/`, { action: 'DELETE', record_set: pendingDelete.record });
+        setActionMessage({ type: 'success', text: `Record "${pendingDelete.record.Name}" (${pendingDelete.record.Type}) deleted. Change status: ${result.change_info?.Status || 'Not reported'}.` });
+      }
+      setPendingDelete(null);
+      await loadData();
+    } catch (err: any) {
+      setPendingDelete(null);
+      setActionMessage({ type: 'error', text: err.message || 'Delete failed' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -158,7 +183,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
                   Refresh
                 </Button>
                 <Button variant="primary" iconName="add-plus" onClick={() => setCreateZoneOpen(true)}>
-                  Create Hosted Zone
+                  Create hosted zone
                 </Button>
               </SpaceBetween>
             }
@@ -205,12 +230,12 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
             columnDefinitions={[
               {
                 id: 'name',
-                header: 'Domain Name',
+                header: 'Hosted zone name',
                 cell: (item) => <Button variant="inline-link" onClick={() => selectZone(item.Id)}>{item.Name}</Button>,
               },
               {
                 id: 'id',
-                header: 'Hosted Zone ID',
+                header: 'Hosted zone ID',
                 cell: (item) => <code>{item.Id}</code>,
                 width: 220,
               },
@@ -222,13 +247,13 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
               },
               {
                 id: 'records',
-                header: 'Record Count',
+                header: 'Record count',
                 cell: (item) => item.RecordCount ?? 'Not reported',
                 width: 140,
               },
               {
                 id: 'comment',
-                header: 'Comment',
+                header: 'Description',
                 cell: (item) => item.Comment,
               },
             ]}
@@ -248,7 +273,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
       </Container>
 
       {selectedId && !loading && !loadError && !activeZone && <Alert type="warning">Requested hosted zone was not found. Select an available zone.</Alert>}
-      {activeZone && <Container header={<Header variant="h2" description={`Hosted zone · ${activeZone.Id}`} actions={<Button onClick={() => selectZone('')}>Close zone</Button>}>{activeZone.Name}</Header>}>
+      {activeZone && <Container header={<Header variant="h2" description={`Hosted zone · ${activeZone.Id}`} actions={<SpaceBetween direction="horizontal" size="xs"><Button onClick={() => setPendingDelete({ kind: 'zone' })}>Delete zone</Button><Button onClick={() => selectZone('')}>Close zone</Button></SpaceBetween>}>{activeZone.Name}</Header>}>
         <SpaceBetween size="l">
           <KeyValuePairs columns={3} items={[
             { label: 'Zone type', value: activeZone.PrivateZone === true ? 'Private' : activeZone.PrivateZone === false ? 'Public' : 'Not reported' },
@@ -257,7 +282,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
           ]} />
           <Tabs activeTabId={tab} onChange={({ detail }) => selectZone(activeZone.Id, detail.activeTabId)} tabs={[
             { id: 'records', label: `Records (${records.length})`, content: <SpaceBetween size="m">
-              <Header variant="h3" actions={<Button variant="primary" onClick={() => openRecord()}>Create Record</Button>}>DNS records</Header>
+              <Header variant="h3" actions={<Button variant="primary" onClick={() => openRecord()}>Create record</Button>}>DNS records</Header>
               <TextFilter filteringText={recordFilter} filteringPlaceholder="Find records by name, value, or routing policy…" onChange={({ detail }) => setRecordFilter(detail.filteringText)} />
               <Select ariaLabel="Filter record type" selectedOption={{ value: typeFilter, label: typeFilter === 'all' ? 'All record types' : typeFilter }} options={[{ value: 'all', label: 'All record types' }, ...[...new Set(records.map(record => record.Type))].map(value => ({ value, label: value }))]} onChange={({ detail }) => setTypeFilter(detail.selectedOption.value!)} />
               <Table items={filteredRecords} columnDefinitions={[
@@ -267,7 +292,14 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
                 { id: 'TTL', header: 'TTL (seconds)', cell: (record: any) => record.AliasTarget ? 'Managed by target' : record.TTL ?? 'Not reported' },
                 { id: 'routing', header: 'Routing policy', cell: routingPolicy },
                 { id: 'value', header: 'Value / route traffic to', cell: (record: any) => <div style={{ overflowWrap: 'anywhere' }}>{record.AliasTarget?.DNSName || (record.ResourceRecords || []).map((value: any) => value.Value).join('\n') || 'Not reported'}</div> },
-                { id: 'edit', header: 'Actions', cell: (record: any) => <Button disabled={Boolean(record.AliasTarget)} onClick={() => openRecord(record)}>Edit</Button> },
+                { id: 'edit', header: 'Actions', cell: (record: any) => {
+                  // The zone apex NS and SOA records are managed by Route 53 and can't be deleted.
+                  const apexRecord = ['NS', 'SOA'].includes(record.Type) && record.Name === activeZone.Name;
+                  return <SpaceBetween direction="horizontal" size="xs">
+                    <Button disabled={Boolean(record.AliasTarget)} onClick={() => openRecord(record)}>Edit</Button>
+                    <Button disabled={apexRecord} onClick={() => setPendingDelete({ kind: 'record', record })}>Delete</Button>
+                  </SpaceBetween>;
+                } },
               ]} empty={<Box textAlign="center">{recordFilter || typeFilter !== 'all' ? 'No records match your filters.' : 'No records reported for this hosted zone.'}</Box>} />
               <Box variant="small">Alias targets and routing policies are shown as returned by the endpoint. Editing alias records is unavailable here.</Box>
             </SpaceBetween> },
@@ -281,11 +313,27 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
         </SpaceBetween>
       </Container>}
 
+      <ConfirmActionModal
+        visible={Boolean(pendingDelete)}
+        onDismiss={() => !deleting && setPendingDelete(null)}
+        header={pendingDelete?.kind === 'zone' ? 'Delete hosted zone' : 'Delete record'}
+        confirmLabel="Delete"
+        confirmationText={pendingDelete?.kind === 'zone' ? 'delete' : undefined}
+        loading={deleting}
+        onConfirm={handleDelete}
+      >
+        {pendingDelete?.kind === 'zone'
+          ? <>Delete <strong>{activeZone?.Name}</strong>? Route 53 deletes a hosted zone only after you delete every record except the default NS and SOA records.</>
+          : pendingDelete?.kind === 'record'
+            ? <>Delete the {pendingDelete.record.Type} record <strong>{pendingDelete.record.Name}</strong>{pendingDelete.record.SetIdentifier ? ` (${pendingDelete.record.SetIdentifier})` : ''}? DNS queries stop resolving it once the change propagates.</>
+            : null}
+      </ConfirmActionModal>
+
       {/* Create Hosted Zone Modal */}
       <Modal
         visible={createZoneOpen}
         onDismiss={() => setCreateZoneOpen(false)}
-        header="Create Hosted Zone"
+        header="Create hosted zone"
         footer={
           <Box float="right">
             <SpaceBetween direction="horizontal" size="xs">
@@ -293,14 +341,14 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
                 Cancel
               </Button>
               <Button variant="primary" disabled={!zoneName.trim()} loading={creatingZone} onClick={handleCreateZone}>
-                Create Zone
+                Create hosted zone
               </Button>
             </SpaceBetween>
           </Box>
         }
       >
         <SpaceBetween size="m">
-          <FormField label="Domain Name" description="Enter the fully qualified domain name (e.g. example.com or app.local).">
+          <FormField label="Domain name" description="The domain name you want to route traffic for, such as example.com.">
             <Input
               value={zoneName}
               onChange={({ detail }) => setZoneName(detail.value)}
@@ -308,7 +356,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
             />
           </FormField>
 
-          <FormField label="Comment (Optional)" description="Description or tags.">
+          <FormField label="Description - optional" description="This value lets you distinguish hosted zones that have the same name.">
             <Input
               value={zoneComment}
               onChange={({ detail }) => setZoneComment(detail.value)}
@@ -322,7 +370,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
       <Modal
         visible={createRecordOpen}
         onDismiss={() => setCreateRecordOpen(false)}
-        header={`${editingRecord ? 'Edit' : 'Create'} Record in ${activeZone?.Name}`}
+        header={`${editingRecord ? 'Edit record' : 'Create record'} in ${activeZone?.Name}`}
         size="large"
         footer={
           <Box float="right">
@@ -331,7 +379,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
                 Cancel
               </Button>
               <Button variant="primary" disabled={!recordName.trim()} loading={creatingRecord} onClick={handleCreateRecord}>
-                {editingRecord ? 'Save Record' : 'Create Record'}
+                {editingRecord ? 'Save' : 'Create records'}
               </Button>
             </SpaceBetween>
           </Box>
@@ -339,7 +387,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
       >
         <SpaceBetween size="m">
           {recordFormError && <Alert type="error">{recordFormError}</Alert>}
-          <FormField label="Record Name" description={`Use @ for the zone apex, a relative name, or a fully qualified name ending in a dot.`}>
+          <FormField label="Record name" description={`Use @ for the zone apex, a relative name, or a fully qualified name ending in a dot.`}>
             <Input
               disabled={Boolean(editingRecord)}
               value={recordName}
@@ -348,7 +396,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
             />
           </FormField>
 
-          <FormField label="Record Type">
+          <FormField label="Record type">
             <Select
               disabled={Boolean(editingRecord)}
               selectedOption={recordType}
@@ -358,12 +406,19 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
                 { label: 'AAAA - Routes traffic to an IPv6 address', value: 'AAAA' },
                 { label: 'CNAME - Routes traffic to another domain name', value: 'CNAME' },
                 { label: 'TXT - Verification and SPF records', value: 'TXT' },
-                { label: 'MX - Mail exchange records', value: 'MX' },
+                { label: 'MX - Specifies mail servers', value: 'MX' },
+                { label: 'NS - Name servers for a hosted zone', value: 'NS' },
+                { label: 'PTR - Maps an IP address to a domain name', value: 'PTR' },
+                { label: 'SRV - Application server host and port', value: 'SRV' },
+                { label: 'CAA - Restricts which CAs can issue certificates', value: 'CAA' },
+                { label: 'NAPTR - Used by DDDS applications', value: 'NAPTR' },
+                { label: 'SPF - Lists authorized email senders', value: 'SPF' },
+                { label: 'DS - Delegation signer for DNSSEC', value: 'DS' },
               ]}
             />
           </FormField>
 
-          <FormField label="TTL (Seconds)" description="Time to live cache duration in seconds.">
+          <FormField label="TTL (seconds)" description="How long resolvers cache this record.">
             <Input
               type="number"
               value={recordTtl}

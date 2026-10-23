@@ -1280,7 +1280,7 @@ test('Route 53 filters records and edits through the dedicated endpoint while pr
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Value', { exact: true }).fill('192.0.2.99');
-  await dialog.getByRole('button', { name: 'Save Record', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   expect(payload).toMatchObject({ action: 'UPSERT', record_set: { Name: 'www.example.test.', Type: 'A', TTL: 0, Weight: 10, SetIdentifier: 'primary', ResourceRecords: [{ Value: '192.0.2.99' }] } });
   await filter.fill('cdn.');
@@ -1295,15 +1295,35 @@ test('Route 53 creates records with relative dotted names and apex names without
   await page.route('**/api/route53/hosted-zones/ZPUBLIC/record-sets/', async route => { payloads.push(route.request().postDataJSON()); await route.fulfill({ json: { change_info: { Status: 'PENDING' } } }); });
   await page.goto('/route53?zone=ZPUBLIC');
   for (const name of ['api.dev', '@']) {
-    await page.getByRole('button', { name: 'Create Record', exact: true }).click();
+    await page.getByRole('button', { name: 'Create record', exact: true }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Record Name', { exact: true }).fill(name);
+    await dialog.getByLabel('Record name', { exact: true }).fill(name);
     await dialog.getByLabel('Value', { exact: true }).fill('192.0.2.5');
-    await dialog.getByRole('button', { name: 'Create Record', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Create records', exact: true }).click();
     await expect(dialog).not.toBeVisible();
   }
   expect(payloads.map(p => p.action)).toEqual(['CREATE', 'CREATE']);
   expect(payloads.map(p => p.record_set.Name)).toEqual(['api.dev.example.test.', 'example.test.']);
+});
+
+test('Route 53 deletes a record and asks for "delete" before deleting a hosted zone', async ({ page }) => {
+  await inventory(page, 'route53', dnsReviewInventory);
+  let recordChange: any = null;
+  let zoneDeleted = false;
+  await page.route('**/api/route53/hosted-zones/ZPUBLIC/record-sets/', async route => { recordChange = route.request().postDataJSON(); await route.fulfill({ json: { change_info: { Status: 'PENDING' } } }); });
+  await page.route('**/api/route53/hosted-zones/ZPUBLIC/', async route => { zoneDeleted = route.request().method() === 'DELETE'; await route.fulfill({ json: {} }); });
+  await page.goto('/route53?zone=ZPUBLIC');
+  const row = page.getByRole('row').filter({ hasText: 'www.example.test.' }).first();
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(() => recordChange?.action).toBe('DELETE');
+  expect(recordChange.record_set.Name).toBe('www.example.test.');
+  await page.getByRole('button', { name: 'Delete zone', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await dialog.getByLabel('Confirmation text').fill('delete');
+  await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(() => zoneDeleted).toBe(true);
 });
 
 test('Route 53 failed inventory never displays fabricated records or service health', async ({ page }) => {
