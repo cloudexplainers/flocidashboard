@@ -368,7 +368,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
           RestrictPublicBuckets: Boolean(config?.RestrictPublicBuckets),
         });
       }, () => setPab(null)),
-      settle(generation, () => probeS3AnonymousAccess(name), result => setAnonymousAccess({ allowed: result.anonymous_list_allowed, code: result.error_code }), () => setAnonymousAccess(null)),
+      settle(generation, () => probeS3AnonymousAccess(name), result => setAnonymousAccess(typeof result?.anonymous_list_allowed === 'boolean' ? { allowed: result.anonymous_list_allowed, code: result.error_code } : null), () => setAnonymousAccess(null)),
       settle(generation, () => fetchS3BucketEncryption(name), setEncryption, () => setEncryption(undefined)),
       settle(generation, () => fetchS3BucketTags(name), setBucketTags, () => setBucketTags([])),
     ]);

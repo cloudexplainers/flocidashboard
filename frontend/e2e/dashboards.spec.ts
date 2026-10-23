@@ -3676,3 +3676,114 @@ test('CloudTrail missing trails and failed reads never select a different trail'
   await page.goto('/cloudtrail/events');
   await expect(page.getByText('Lookup denied by policy', { exact: true })).toBeVisible();
 });
+
+// Floci gap fixes: where Floci stores configuration without applying it, the console says so.
+const rdsSnapshotFixture = { ...rdsFixture, instances: [...rdsFixture.instances, { name: 'shop-pg', engine: 'postgres', status: 'available' }], snapshots: [
+  { name: 'orders-before-upgrade', instance: 'orders-writer', status: 'available', type: 'manual', engine: 'postgres', created: '2026-10-22T10:00:00Z', allocated_storage: 20 },
+] };
+
+test('RDS snapshots list, restore to a new instance and delete only after typed confirmation', async ({ page }) => {
+  await inventory(page, 'rds', rdsSnapshotFixture);
+  const calls: { path: string; method: string; body: any }[] = [];
+  await page.route('**/api/rds/snapshots/**', route => {
+    const request = route.request();
+    calls.push({ path: new URL(request.url()).pathname, method: request.method(), body: request.postDataJSON() });
+    return route.fulfill({ json: request.method() === 'POST' ? { instance: { DBInstanceStatus: 'available' } } : {} });
+  });
+  await page.goto('/rds/snapshots');
+  await expect(page.getByRole('tab', { name: 'Snapshots (1)', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'Floci snapshots PostgreSQL instances only' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'orders-before-upgrade', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore snapshot', exact: true })).toBeDisabled();
+  await page.getByRole('radio').first().check();
+  await page.getByRole('button', { name: 'Restore snapshot', exact: true }).click();
+  const restore = page.getByRole('dialog', { name: 'Restore snapshot' });
+  await expect(restore.getByRole('textbox').first()).toHaveValue('orders-before-upgrade-restored');
+  await restore.getByRole('textbox').first().fill('orders-copy');
+  await restore.getByRole('button', { name: 'Restore DB instance', exact: true }).click();
+  await expect(page.getByText(/Restoring snapshot "orders-before-upgrade" to new DB instance orders-copy/)).toBeVisible();
+  expect(calls[0]).toEqual({ path: '/api/rds/snapshots/orders-before-upgrade/restore/', method: 'POST', body: { instance_identifier: 'orders-copy', db_instance_class: '' } });
+  await page.getByRole('radio').first().check();
+  await page.getByRole('button', { name: 'Delete snapshot', exact: true }).click();
+  const remove = page.getByRole('dialog', { name: 'Delete snapshot' });
+  await expect(remove.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await remove.getByRole('textbox').fill('delete me');
+  await remove.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(() => calls.length).toBe(2);
+  expect(calls[1]).toMatchObject({ path: '/api/rds/snapshots/orders-before-upgrade/', method: 'DELETE' });
+});
+
+test('RDS Take snapshot posts the instance and shows the error Floci returns', async ({ page }) => {
+  await inventory(page, 'rds', rdsSnapshotFixture);
+  const bodies: any[] = [];
+  await page.route('**/api/rds/snapshots/', route => {
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({ status: 400, json: { error: 'Operation CreateDBSnapshot is not supported for engine MARIADB.' } });
+  });
+  await page.goto('/rds/instances?db=other-db');
+  await page.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Take DB snapshot' });
+  await expect(dialog.getByRole('textbox')).toHaveValue('other-db-snapshot');
+  await expect(dialog.getByTestId('floci-note').filter({ visible: true, hasText: 'PostgreSQL instances only' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  await expect(page.getByText('Operation CreateDBSnapshot is not supported for engine MARIADB.')).toBeVisible();
+  expect(bodies).toEqual([{ instance_identifier: 'other-db', snapshot_identifier: 'other-db-snapshot' }]);
+});
+
+test('S3 warns when an unsigned request can list the bucket despite Block Public Access', async ({ page }) => {
+  await inventory(page, 's3', { buckets: [{ Name: 'private-data', public_access_block: { BlockPublicAcls: true, IgnorePublicAcls: true, BlockPublicPolicy: true, RestrictPublicBuckets: true } }, { Name: 'locked-down' }] });
+  await page.route('**/api/s3/buckets/*/anonymous-access/', route => {
+    const allowed = route.request().url().includes('/private-data/');
+    return route.fulfill({ json: { anonymous_list_allowed: allowed, status_code: allowed ? 200 : 403, error_code: allowed ? null : 'AccessDenied' } });
+  });
+  await page.goto('/s3/permissions?bucket=private-data');
+  await expect(page.getByTestId('s3-anonymous-access')).toContainText('FLOCI_SERVICES_S3_ENFORCE_AUTH=false');
+  await page.goto('/s3/permissions?bucket=locked-down');
+  await expect(page.getByText('Floci refused an unsigned list request for this bucket (AccessDenied).')).toBeVisible();
+  await expect(page.getByTestId('s3-anonymous-access')).toHaveCount(0);
+});
+
+test('resource policy editors say Floci stores the policy without evaluating it', async ({ page }) => {
+  await inventory(page, 'sqs', { queues: [{ name: 'Orders', url: 'http://local/Orders', attributes: { QueueArn: 'arn:aws:sqs:eu-west-1:123456789012:Orders' } }] });
+  await page.goto('/sqs/');
+  await page.getByRole('tab', { name: 'Access policy & permissions', exact: true }).click();
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: /doesn.t evaluate it/ })).toBeVisible();
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'SNS also delivers to subscribed queues' })).toBeVisible();
+  await inventory(page, 'kms', kmsFixture());
+  await page.goto('/kms/policy?key=key-app');
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'Floci stores the key policy' })).toBeVisible();
+  await inventory(page, 'secretsmanager', { secrets: [{ ...polishedSecret, resource_policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Deny","Principal":"*","Action":"secretsmanager:GetSecretValue","Resource":"*"}]}' }] });
+  await page.goto(secretDetailsUrl);
+  await page.getByRole('tab', { name: 'Resource permissions', exact: true }).click();
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'Floci enforces resource policies only for S3 buckets, SNS topics and Lambda functions' })).toBeVisible();
+  await expect(page.getByText('"Effect": "Deny"')).toBeVisible();
+  await inventory(page, 'ecr', ecrFixture);
+  await page.goto('/ecr/lifecycle?repository=team%2Fworker');
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'no images expire' })).toBeVisible();
+});
+
+test('consoles label alarm actions, PITR, routing policies and CloudTrail events Floci does not run', async ({ page }) => {
+  await inventory(page, 'cloudwatch', { alarms: [polishedAlarm] });
+  await page.goto(`/cloudwatch/alarms?alarm=${encodeURIComponent(polishedAlarm.AlarmName)}`);
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'of the actions it runs only Application Auto Scaling scaling policies' })).toBeVisible();
+  await inventory(page, 'dynamodb', { tables: [{ ...dynamoReviewTable, PointInTimeRecovery: true }] });
+  await page.goto('/dynamodb/items?table=Orders');
+  await page.getByRole('tab', { name: 'Capacity and backups', exact: true }).click();
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: /can.t restore a table/ })).toBeVisible();
+  await expect(page.getByText(/^Point-in-time recovery \(PITR\) provides continuous backups/)).toHaveCount(0);
+  await inventory(page, 'route53', { hosted_zones: dnsReviewInventory.hosted_zones });
+  await page.goto('/route53?zone=ZPUBLIC&tab=records');
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'GetHealthCheckStatus always reports success' })).toBeVisible();
+  await page.route('**/api/cloudtrail/events/?*', route => route.fulfill({ json: { events: [] } }));
+  await page.goto('/cloudtrail/events');
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'Floci records no management events' })).toBeVisible();
+});
+
+test('Settings reports auth flags the dashboard cannot see as not known', async ({ page }) => {
+  await page.route('**/api/settings/', route => route.fulfill({ json: { endpoint_url: 'http://local-floci:4566', service_auth: { s3_enforce_auth: null, iam_enforcement: true, validate_signatures: false } } }));
+  await page.goto('/settings');
+  await expect(page.getByText('Not known (not set for the dashboard)', { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(page.getByText('Enforced', { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(page.getByText('Off', { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(page.getByText('Permissive (Default)', { exact: true })).toHaveCount(0);
+});
