@@ -233,3 +233,67 @@ def get_random_password(options: Any = None) -> dict[str, Any]:
 
     response = _client().get_random_password(**clean_kwargs)
     return {'random_password': response.get('RandomPassword')}
+
+
+def _region_list(regions: Any) -> list[str]:
+    import re
+    if isinstance(regions, str):
+        regions = [regions]
+    if not isinstance(regions, list) or not regions:
+        raise ValueError('Choose at least one Region')
+    cleaned = []
+    for region in regions:
+        value = str(region or '').strip()
+        if not re.fullmatch(r'[a-z]{2}(-[a-z]+)+-\d', value):
+            raise ValueError(f'"{value}" is not a Region name such as us-west-2')
+        cleaned.append(value)
+    return cleaned
+
+
+def get_replication(secret_id: str) -> dict[str, Any]:
+    secret = _clean_required(secret_id, 'Secret')
+    detail = _client().describe_secret(SecretId=secret)
+    return {
+        'secret_id': secret,
+        'primary_region': detail.get('PrimaryRegion') or FlociClientFactory().region,
+        'replicas': [{
+            'region': item.get('Region'),
+            'status': item.get('Status'),
+            'status_message': item.get('StatusMessage') or '',
+            'kms_key_id': item.get('KmsKeyId') or '',
+            'last_accessed': item['LastAccessedDate'].isoformat() if hasattr(item.get('LastAccessedDate'), 'isoformat') else item.get('LastAccessedDate'),
+        } for item in detail.get('ReplicationStatus', [])],
+    }
+
+
+def replicate_secret(secret_id: str, regions: Any, *, force_overwrite: bool = False) -> dict[str, Any]:
+    secret = _clean_required(secret_id, 'Secret')
+    targets = _region_list(regions)
+    if FlociClientFactory().region in targets:
+        raise ValueError('A secret cannot be replicated to its own Region')
+    _client().replicate_secret_to_regions(
+        SecretId=secret, AddReplicaRegions=[{'Region': region} for region in targets],
+        ForceOverwriteReplicaSecret=force_overwrite is True)
+    return get_replication(secret)
+
+
+def remove_replica_regions(secret_id: str, regions: Any) -> dict[str, Any]:
+    secret = _clean_required(secret_id, 'Secret')
+    _client().remove_regions_from_replication(SecretId=secret, RemoveReplicaRegions=_region_list(regions))
+    return get_replication(secret)
+
+
+def promote_replica(secret_id: str, region: str) -> dict[str, Any]:
+    """StopReplicationToReplica, called in the replica's Region: the replica becomes a standalone secret."""
+    secret = _clean_required(secret_id, 'Secret')
+    target = _region_list([region])[0]
+    factory = FlociClientFactory()
+    factory.region = target
+    # A full ARN names the primary Region; the replica's ARN differs only in the Region field.
+    replica_id = secret
+    if secret.startswith('arn:'):
+        parts = secret.split(':')
+        parts[3] = target
+        replica_id = ':'.join(parts)
+    factory.client('secretsmanager').stop_replication_to_replica(SecretId=replica_id)
+    return {'secret_id': secret, 'promoted_region': target}

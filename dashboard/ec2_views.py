@@ -38,6 +38,9 @@ from .ec2_api import (
     delete_launch_template,
     instance_command_detail,
     import_key_pair,
+    list_key_pairs,
+    create_key_pair,
+    delete_key_pair,
     list_instance_commands,
     normalize_security_group_ids,
     reboot_instance,
@@ -119,6 +122,20 @@ def ec2_key_pairs_import(request):
         ))
     except Exception as exc:
         return handle_action_error(exc, service='ec2', operation='import_key_pair')
+
+
+@require_http_methods(['GET', 'POST', 'DELETE'])
+def ec2_key_pairs(request):
+    operation = {'GET': 'describe_key_pairs', 'POST': 'create_key_pair', 'DELETE': 'delete_key_pair'}[request.method]
+    try:
+        if request.method == 'GET':
+            return JsonResponse(list_key_pairs())
+        body = parse_json_body(request)
+        if request.method == 'DELETE':
+            return JsonResponse(delete_key_pair(body.get('key_name', '')))
+        return JsonResponse(create_key_pair(body.get('key_name', ''), body.get('key_type') or 'rsa'))
+    except Exception as exc:
+        return handle_action_error(exc, service='ec2', operation=operation)
 
 
 @require_http_methods(['PUT'])

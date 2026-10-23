@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- More Floci features the console didn't show (IAM, Secrets Manager, EC2):
+  - **IAM password policy:** a new Account settings page shows the account password policy (or that the IAM default applies) and edits it with the AWS limits. A Floci note says Floci enforces it on login profiles but accepts any password when no policy is set.
+  - **IAM credential report:** a new Credential report page generates the report, waits until it's ready, and lists and downloads it.
+  - **Secrets Manager replication:** the secret details get a Replication tab to replicate a secret to other Regions, remove replicas and promote a replica to a standalone secret.
+  - **EC2 key pairs:** a new Key Pairs page creates (private key shown once, with a .pem download), imports and deletes key pairs. A Floci note says ED25519 requests return RSA keys.
+
 - EC2 Elastic IP and NAT gateway tables (see "Elastic IP and NAT gateway tables" in `docs/console-accuracy-review.md`):
   - **Elastic IPs** (`/ec2/elastic_ips`): the console's columns, a filter and details, with Allocate (Name tag), Associate (with "Allow reassociation"), Disassociate and Release. The association column also shows NAT gateways, which Floci leaves out of `DescribeAddresses`.
   - **NAT gateways** (`/ec2/nat_gateways`): state, connectivity type, primary addresses, VPC and subnet, the route tables that target each gateway, Create (public with an unused Elastic IP, or private) and Delete with typed confirmation.

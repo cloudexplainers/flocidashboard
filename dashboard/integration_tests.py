@@ -187,3 +187,42 @@ class ConsoleFeatureLiveTests(SimpleTestCase):
         listed = self.call('get', f'/api/cloudwatch/subscription-filters/?log_group_name={group}')
         self.assertEqual([item['filter_name'] for item in listed['subscription_filters']], ['errors'])
         self.call('delete', '/api/cloudwatch/subscription-filters/', {'log_group_name': group, 'filter_name': 'errors'})
+
+    def test_iam_password_policy_is_enforced_and_credential_report_lists_users(self):
+        iam = self.factory.client('iam')
+        self.addCleanup(lambda: iam.delete_account_password_policy())
+        self.call('put', '/api/iam/password-policy/', {'minimum_password_length': 14, 'require_numbers': True})
+        self.assertEqual(self.call('get', '/api/iam/password-policy/')['policy']['MinimumPasswordLength'], 14)
+        iam.create_user(UserName=self.name)
+        self.addCleanup(lambda: iam.delete_user(UserName=self.name))
+        weak = self.call('post', f'/api/iam/users/{self.name}/login-profile/', {'password': 'short'}, expect=400)
+        self.assertIn('policy', weak['error'].lower())
+        for _ in range(10):
+            if self.call('post', '/api/iam/credential-report/')['state'] == 'COMPLETE':
+                break
+        # A report is reused for 4 hours, as on AWS, so a new user may not be in it yet.
+        users = [row['user'] for row in self.call('get', '/api/iam/credential-report/')['report']['rows']]
+        self.assertIn('<root_account>', users)
+
+    def test_secret_replication_and_promotion(self):
+        secrets = self.factory.client('secretsmanager')
+        arn = secrets.create_secret(Name=self.name, SecretString='v1')['ARN']
+        self.addCleanup(lambda: secrets.delete_secret(SecretId=arn, ForceDeleteWithoutRecovery=True))
+        path = f'/api/secretsmanager/secrets/{arn}/replication/'
+        data = self.call('post', path, {'regions': ['us-west-2']})
+        self.assertEqual([item['region'] for item in data['replicas']], ['us-west-2'])
+        west = FlociClientFactory()
+        west.region = 'us-west-2'
+        replica_arn = arn.replace(f':{self.factory.region}:', ':us-west-2:')
+        self.addCleanup(lambda: west.client('secretsmanager').delete_secret(SecretId=replica_arn, ForceDeleteWithoutRecovery=True))
+        self.assertEqual(west.client('secretsmanager').get_secret_value(SecretId=replica_arn)['SecretString'], 'v1')
+        self.call('post', f'{path}promote/', {'region': 'us-west-2'})
+        self.assertEqual(self.call('get', path)['replicas'], [])
+
+    def test_ec2_key_pair_create_and_delete(self):
+        created = self.call('post', '/api/ec2/key-pairs/', {'key_name': self.name})
+        self.addCleanup(lambda: self.factory.client('ec2').delete_key_pair(KeyName=self.name))
+        self.assertIn('PRIVATE KEY', created['key_material'])
+        names = [item['key_name'] for item in self.call('get', '/api/ec2/key-pairs/')['key_pairs']]
+        self.assertIn(self.name, names)
+        self.call('delete', '/api/ec2/key-pairs/', {'key_name': self.name})

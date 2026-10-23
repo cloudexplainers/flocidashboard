@@ -4575,3 +4575,128 @@ test('CloudWatch log groups list subscription filters and send new ones to the b
   expect(put).toMatchObject({ log_group_name: '/app/worker', filter_name: 'all-to-lambda', filter_pattern: '', distribution: 'ByLogStream' });
   await expect(page.getByRole('button', { name: 'Create subscription filter' })).toBeDisabled();
 });
+
+test('IAM account settings show the IAM default, then save a password policy with AWS limits', async ({ page }) => {
+  let policy: any = null;
+  let sent: any;
+  await page.route('**/api/iam/password-policy/', route => {
+    if (route.request().method() === 'PUT') {
+      sent = route.request().postDataJSON();
+      if (sent.minimum_password_length < 6) return route.fulfill({ status: 400, json: { error: 'Minimum password length must be from 6 to 128' } });
+      policy = { MinimumPasswordLength: sent.minimum_password_length, RequireSymbols: sent.require_symbols, RequireNumbers: sent.require_numbers, MaxPasswordAge: sent.max_password_age || undefined, AllowUsersToChangePassword: true };
+    }
+    return route.fulfill({ json: { policy } });
+  });
+  await page.goto('/iam/account');
+  await expect(page.getByText('This account uses the IAM default policy', { exact: false })).toBeVisible();
+  await expect(page.getByTestId('floci-note')).toContainText('PasswordPolicyViolation');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Minimum password length').fill('4');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Minimum password length must be from 6 to 128')).toBeVisible();
+  await page.getByLabel('Minimum password length').fill('14');
+  await page.getByText('Require at least one number').click();
+  await page.getByText('Require at least one non-alphanumeric character').click();
+  await page.getByText('Turn on password expiration').click();
+  await page.getByLabel('Expiration period (days)').fill('60');
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Password policy saved.')).toBeVisible();
+  expect(sent).toMatchObject({ minimum_password_length: 14, require_numbers: true, require_symbols: true, max_password_age: 60, password_reuse_prevention: 0 });
+  await expect(page.getByText('14 characters')).toBeVisible();
+  await expect(page.getByText('60 days')).toBeVisible();
+});
+
+test('IAM credential report generates until complete and lists every user', async ({ page }) => {
+  let generated = false;
+  let polls = 0;
+  await page.route('**/api/iam/credential-report/', route => {
+    if (route.request().method() === 'POST') { polls++; generated = polls > 1; return route.fulfill({ json: { state: generated ? 'COMPLETE' : 'STARTED' } }); }
+    if (!generated) return route.fulfill({ json: { report: null, reason: 'ReportNotPresent' } });
+    return route.fulfill({ json: { report: { generated_time: '2026-10-23T10:00:00+00:00', columns: ['user'], csv: 'user\n', rows: [
+      { user: '<root_account>', password_enabled: 'not_supported', mfa_active: 'false', access_key_1_active: 'false' },
+      { user: 'alice', password_enabled: 'true', mfa_active: 'false', access_key_1_active: 'true', access_key_1_last_rotated: '2026-10-01T00:00:00+00:00' },
+    ] } } });
+  });
+  await page.goto('/iam/credential_report');
+  await expect(page.getByText('No report yet. Generate one', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Download report' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Generate report' }).click();
+  await expect(page.getByRole('row', { name: /alice/ })).toContainText('2026-10-01');
+  expect(polls).toBe(2);
+  await expect(page.getByRole('button', { name: 'Download report' })).toBeEnabled();
+});
+
+test('Secrets Manager replication lists replicas, adds Regions and promotes after confirmation', async ({ page }) => {
+  await inventory(page, 'secretsmanager', { secrets: [{ Name: 'database-password', ARN: 'arn:aws:secretsmanager:us-east-1:000000000000:secret:database-password-AbCdEf' }] });
+  let replicas: any[] = [{ region: 'us-west-2', status: 'InSync', status_message: 'Replication succeeded.' }];
+  let added: any; let promoted: any;
+  await page.route('**/api/secretsmanager/secrets/**/replication/', route => {
+    if (route.request().method() === 'POST') { added = route.request().postDataJSON(); replicas = [...replicas, ...added.regions.map((region: string) => ({ region, status: 'InSync' }))]; }
+    return route.fulfill({ json: { primary_region: 'us-east-1', replicas } });
+  });
+  await page.route('**/api/secretsmanager/secrets/**/replication/promote/', route => { promoted = route.request().postDataJSON(); replicas = replicas.filter(item => item.region !== promoted.region); return route.fulfill({ json: { promoted_region: promoted.region } }); });
+  await page.goto('/secretsmanager/');
+  await page.getByRole('button', { name: 'database-password', exact: true }).click();
+  await page.getByRole('tab', { name: 'Replication' }).click();
+  await expect(page.getByText('Primary Region: us-east-1')).toBeVisible();
+  await expect(page.getByRole('row', { name: /us-west-2/ })).toContainText('InSync');
+  await page.getByRole('button', { name: 'Replicate secret to other Regions' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Replicate secret to other Regions' });
+  await dialog.getByRole('button', { name: /Choose Regions/ }).click();
+  await expect(dialog.getByRole('option', { name: 'us-east-1' })).toHaveCount(0);
+  await dialog.getByRole('option', { name: 'eu-west-1' }).click();
+  await dialog.getByRole('heading', { name: 'Replicate secret to other Regions' }).click();
+  await dialog.getByRole('button', { name: 'Replicate', exact: true }).click();
+  await expect(page.getByText('Replicated to eu-west-1.')).toBeVisible();
+  expect(added).toEqual({ regions: ['eu-west-1'], force_overwrite: false });
+  await page.getByRole('button', { name: 'Promote us-west-2' }).click();
+  await page.getByRole('dialog', { name: 'Promote replica' }).getByRole('button', { name: 'Promote replica' }).click();
+  await expect(page.getByText('The replica in us-west-2 is now a standalone secret.')).toBeVisible();
+  expect(promoted).toEqual({ region: 'us-west-2' });
+  await expect(page.getByRole('row', { name: /us-west-2/ })).toHaveCount(0);
+});
+
+test('EC2 key pairs create a key shown once, import a public key and delete with typed confirmation', async ({ page }) => {
+  let pairs: any[] = [{ key_name: 'existing', key_pair_id: 'key-1', fingerprint: 'aa:bb' }];
+  const requests: any[] = [];
+  await page.route('**/api/ec2/key-pairs/', route => {
+    const method = route.request().method();
+    if (method === 'POST') { const body = route.request().postDataJSON(); requests.push(['create', body]); pairs = [...pairs, { key_name: body.key_name, key_pair_id: 'key-2' }]; return route.fulfill({ json: { key_name: body.key_name, key_material: '-----BEGIN RSA PRIVATE KEY-----\nMIIE\n-----END RSA PRIVATE KEY-----', requested_key_type: body.key_type, returned_key_type: 'rsa' } }); }
+    if (method === 'DELETE') { const body = route.request().postDataJSON(); requests.push(['delete', body]); pairs = pairs.filter(item => item.key_name !== body.key_name); return route.fulfill({ json: { deleted: true } }); }
+    return route.fulfill({ json: { key_pairs: pairs } });
+  });
+  await page.route('**/api/ec2/key-pairs/import/', route => { requests.push(['import', route.request().postDataJSON()]); return route.fulfill({ json: { key_name: 'laptop' } }); });
+  await page.goto('/ec2/key_pairs');
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'RSA' })).toBeVisible();
+  await expect(page.getByRole('row', { name: /existing/ })).toContainText('aa:bb');
+  await page.getByRole('button', { name: 'Create key pair', exact: true }).click();
+  const create = page.getByRole('dialog', { name: 'Create key pair' });
+  await create.getByLabel('Name').fill('web-admin');
+  await create.getByText('ED25519', { exact: true }).click();
+  await create.getByRole('button', { name: 'Create key pair' }).click();
+  const shown = page.getByRole('dialog', { name: 'Key pair web-admin created' });
+  await expect(shown.getByText('BEGIN RSA PRIVATE KEY', { exact: false })).toBeVisible();
+  await expect(shown.getByText('You asked for ED25519, and Floci returned an RSA key.')).toBeVisible();
+  const download = page.waitForEvent('download');
+  await shown.getByRole('button', { name: 'Download .pem file' }).click();
+  expect((await download).suggestedFilename()).toBe('web-admin.pem');
+  await shown.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Import key pair', exact: true }).click();
+  const imp = page.getByRole('dialog', { name: 'Import key pair' });
+  await imp.getByLabel('Name').fill('laptop');
+  await imp.getByLabel('Public key').fill('ssh-ed25519 AAAAC3Nza laptop');
+  await imp.getByRole('button', { name: 'Import key pair' }).click();
+  await expect(page.getByText('Key pair "laptop" imported.')).toBeVisible();
+  await page.getByRole('row', { name: /existing/ }).getByRole('radio').check();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Delete key pair' });
+  await expect(confirm.getByRole('button', { name: 'Delete key pair' })).toBeDisabled();
+  await confirm.getByRole('textbox').fill('existing');
+  await confirm.getByRole('button', { name: 'Delete key pair' }).click();
+  await expect(page.getByText('Key pair "existing" deleted.')).toBeVisible();
+  expect(requests).toEqual([
+    ['create', { key_name: 'web-admin', key_type: 'ed25519' }],
+    ['import', { key_name: 'laptop', public_key_material: 'ssh-ed25519 AAAAC3Nza laptop' }],
+    ['delete', { key_name: 'existing' }],
+  ]);
+});

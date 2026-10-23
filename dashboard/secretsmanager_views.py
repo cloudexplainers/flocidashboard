@@ -9,6 +9,7 @@ from .actions import handle_action_error, parse_json_body
 from .secretsmanager_api import (
     create_secret, delete_secret, get_random_password, get_secret_value, put_secret_value,
     restore_secret, rotate_secret, tag_secret, untag_secret, update_secret, update_version_stage,
+    get_replication, promote_replica, remove_replica_regions, replicate_secret,
 )
 
 
@@ -105,3 +106,25 @@ def secretsmanager_random_password(request):
         return JsonResponse(get_random_password(parse_json_body(request)))
     except Exception as exc:
         return handle_action_error(exc, service='secretsmanager', operation='get_random_password')
+
+
+@require_http_methods(['GET', 'POST', 'DELETE'])
+def secretsmanager_secret_replication(request, secret_id: str):
+    operation = {'GET': 'describe_secret', 'POST': 'replicate_secret_to_regions', 'DELETE': 'remove_regions_from_replication'}[request.method]
+    try:
+        if request.method == 'GET':
+            return JsonResponse(get_replication(secret_id))
+        body = parse_json_body(request)
+        if request.method == 'DELETE':
+            return JsonResponse(remove_replica_regions(secret_id, body.get('regions')))
+        return JsonResponse(replicate_secret(secret_id, body.get('regions'), force_overwrite=body.get('force_overwrite') is True))
+    except Exception as exc:
+        return handle_action_error(exc, service='secretsmanager', operation=operation)
+
+
+@require_http_methods(['POST'])
+def secretsmanager_secret_promote(request, secret_id: str):
+    try:
+        return JsonResponse(promote_replica(secret_id, parse_json_body(request).get('region') or ''))
+    except Exception as exc:
+        return handle_action_error(exc, service='secretsmanager', operation='stop_replication_to_replica')

@@ -151,6 +151,45 @@ def import_key_pair(key_name: str, public_key_material: str) -> dict[str, Any]:
     }
 
 
+def list_key_pairs() -> dict[str, Any]:
+    pairs = _ec2_client().describe_key_pairs(IncludePublicKey=True).get('KeyPairs', [])
+    return {'key_pairs': [{
+        'key_name': item.get('KeyName'),
+        'key_pair_id': item.get('KeyPairId'),
+        'key_type': item.get('KeyType') or '',
+        'fingerprint': item.get('KeyFingerprint'),
+        'public_key': item.get('PublicKey') or '',
+        'create_time': item['CreateTime'].isoformat() if hasattr(item.get('CreateTime'), 'isoformat') else item.get('CreateTime'),
+        'tags': item.get('Tags') or [],
+    } for item in pairs]}
+
+
+def create_key_pair(key_name: str, key_type: str = 'rsa') -> dict[str, Any]:
+    """CreateKeyPair returns the private key once; the console shows it for download and never stores it."""
+    name = _required(key_name, 'Key name')
+    if len(name) > 255:
+        raise ValueError('Key name must be 255 characters or fewer')
+    kind = (key_type or 'rsa').strip().lower()
+    if kind not in ('rsa', 'ed25519'):
+        raise ValueError('Key type must be rsa or ed25519')
+    response = _ec2_client().create_key_pair(KeyName=name, KeyType=kind, KeyFormat='pem')
+    material = response.get('KeyMaterial') or ''
+    return {
+        'key_name': name,
+        'key_pair_id': response.get('KeyPairId'),
+        'fingerprint': response.get('KeyFingerprint'),
+        'requested_key_type': kind,
+        'key_material': material,
+        'returned_key_type': 'rsa' if 'RSA PRIVATE KEY' in material else ('ed25519' if 'OPENSSH PRIVATE KEY' in material else ''),
+    }
+
+
+def delete_key_pair(key_name: str) -> dict[str, Any]:
+    name = _required(key_name, 'Key name')
+    _ec2_client().delete_key_pair(KeyName=name)
+    return {'key_name': name, 'deleted': True}
+
+
 def update_instance_tags(instance_id: str, tags: Any) -> dict[str, Any]:
     instance = _required(instance_id, 'Instance ID')
     desired = _tag_list(tags)

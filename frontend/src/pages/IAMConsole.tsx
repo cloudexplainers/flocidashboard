@@ -1,4 +1,5 @@
 import { PolicySummary } from '../components/PolicySummary';
+import { CredentialReportPanel, PasswordPolicyPanel } from '../components/IAMAccountSecurity';
 import React, { useState, useEffect } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -930,6 +931,16 @@ export const IAMConsole: React.FC<IAMConsoleProps> = ({ activeTab, onTabChange }
                 )}
               </SpaceBetween>
             ),
+          },
+          {
+            label: 'Account settings',
+            id: 'account',
+            content: <PasswordPolicyPanel />,
+          },
+          {
+            label: 'Credential report',
+            id: 'credential_report',
+            content: <CredentialReportPanel />,
           },
           {
             label: 'Policy simulator',

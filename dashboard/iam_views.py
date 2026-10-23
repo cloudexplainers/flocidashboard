@@ -44,6 +44,11 @@ from .iam_api import (
     delete_instance_profile,
     delete_managed_policy,
     update_tags,
+    get_password_policy,
+    update_password_policy,
+    delete_password_policy,
+    generate_credential_report,
+    get_credential_report,
 )
 
 
@@ -331,4 +336,26 @@ def iam_group_membership(request, group_name: str):
         return JsonResponse(add_user_to_group(body.get('user_name', ''), group_name))
     except Exception as exc:
         operation = 'remove_user_from_group' if request.method == 'DELETE' else 'add_user_to_group'
+        return handle_action_error(exc, service='iam', operation=operation)
+
+
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def iam_password_policy(request):
+    operation = {'GET': 'get_account_password_policy', 'PUT': 'update_account_password_policy', 'DELETE': 'delete_account_password_policy'}[request.method]
+    try:
+        if request.method == 'GET':
+            return JsonResponse(get_password_policy())
+        if request.method == 'DELETE':
+            return JsonResponse(delete_password_policy())
+        return JsonResponse(update_password_policy(parse_json_body(request)))
+    except Exception as exc:
+        return handle_action_error(exc, service='iam', operation=operation)
+
+
+@require_http_methods(['GET', 'POST'])
+def iam_credential_report(request):
+    operation = 'generate_credential_report' if request.method == 'POST' else 'get_credential_report'
+    try:
+        return JsonResponse(generate_credential_report() if request.method == 'POST' else get_credential_report())
+    except Exception as exc:
         return handle_action_error(exc, service='iam', operation=operation)
