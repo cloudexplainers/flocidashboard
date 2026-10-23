@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from botocore.exceptions import ClientError
 
-from .aws import FlociClientFactory, _clean_response, _error_code, _paginate, public_endpoint_url
+from .aws import FlociClientFactory, _clean_response, _error_code, public_endpoint_url
 from .aws.s3 import _s3_bucket_location, _s3_bucket_objects, _s3_bucket_versions, _s3_optional
 
 MULTIPART_THRESHOLD = 5 * 1024 * 1024
@@ -148,18 +148,41 @@ def delete_s3_bucket(name: str) -> dict[str, str]:
 
 
 def empty_s3_bucket(name: str) -> dict[str, Any]:
+    """Delete every object version and delete marker, as the console's Empty does.
+
+    In a versioned bucket, deleting only current objects leaves old versions and
+    adds delete markers, so the bucket still can't be deleted. Per-key failures
+    come back in a 200 DeleteObjects response; they are returned as an error.
+    """
     s3 = _s3_client()
-    keys = _paginate(s3, 'list_objects_v2', 'Contents', Bucket=name)
-    if not keys:
-        return {'name': name, 'deleted_count': 0}
-
-    objects = [{'Key': item['Key']} for item in keys if item.get('Key')]
+    listing = _paginate_versions(s3, name)
+    objects = [
+        {'Key': item['Key'], 'VersionId': item['VersionId']} if item.get('VersionId') and item['VersionId'] != 'null'
+        else {'Key': item['Key']}
+        for item in listing
+        if item.get('Key')
+    ]
     deleted = 0
+    errors: list[dict[str, Any]] = []
     for chunk in _chunks(objects, 1000):
-        response = s3.delete_objects(Bucket=name, Delete={'Objects': chunk, 'Quiet': True})
+        response = s3.delete_objects(Bucket=name, Delete={'Objects': chunk, 'Quiet': False})
         deleted += len(response.get('Deleted', []))
+        errors.extend(response.get('Errors', []))
 
-    return {'name': name, 'deleted_count': deleted}
+    result: dict[str, Any] = {'name': name, 'deleted_count': deleted}
+    if errors:
+        result['errors'] = _clean_response(errors)
+        first = errors[0]
+        result['error'] = (
+            f'{len(errors)} of {len(objects)} objects could not be deleted '
+            f'(first: {first.get("Key")}: {first.get("Code")} {first.get("Message") or ""}).'
+        ).replace(' )', ')')
+    return result
+
+
+def _paginate_versions(s3, bucket: str) -> list[dict[str, Any]]:
+    result = s3.get_paginator('list_object_versions').paginate(Bucket=bucket).build_full_result()
+    return [*(result.get('Versions') or []), *(result.get('DeleteMarkers') or [])]
 
 
 def _chunks(values: list[Any], size: int) -> list[list[Any]]:
@@ -174,6 +197,7 @@ def list_s3_objects(
     continuation_token: str | None = None,
     max_keys: int = 100,
     versions: bool = False,
+    version_id_marker: str | None = None,
 ) -> dict[str, Any]:
     s3 = _s3_client()
 
@@ -188,6 +212,9 @@ def list_s3_objects(
             params['Prefix'] = prefix
         if continuation_token:
             params['KeyMarker'] = continuation_token
+            # A page can end part way through one key's versions; both markers are needed.
+            if version_id_marker:
+                params['VersionIdMarker'] = version_id_marker
 
         response = s3.list_object_versions(**params)
         items = []
@@ -232,6 +259,7 @@ def list_s3_objects(
             'objects': items,
             'is_truncated': response.get('IsTruncated', False),
             'next_continuation_token': response.get('NextKeyMarker'),
+            'next_version_id_marker': response.get('NextVersionIdMarker'),
             'key_count': len(items),
         }
 

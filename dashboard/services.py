@@ -3823,7 +3823,6 @@ OPENSEARCH_ACTIONS = (
         'update',
         fields=(
             action_field('domain_name', 'Domain name', required=True),
-            action_field('engine_version', 'Engine version'),
             action_field('cluster_config', 'Cluster config', field_type='object'),
             action_field('ebs_options', 'EBS options', field_type='object'),
         ),

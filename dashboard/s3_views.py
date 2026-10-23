@@ -135,7 +135,9 @@ def s3_bucket_empty(request, bucket_name: str):
     if err:
         return _json_error(err)
     try:
-        return JsonResponse(empty_s3_bucket(bucket_name))
+        result = empty_s3_bucket(bucket_name)
+        # Some objects were not deleted: not a success.
+        return JsonResponse(result, status=409 if result.get('error') else 200)
     except Exception as exc:
         return _handle_s3(exc)
 
@@ -164,6 +166,7 @@ def s3_bucket_objects(request, bucket_name: str):
                 continuation_token=token,
                 max_keys=max_keys,
                 versions=versions,
+                version_id_marker=request.GET.get('version_id_marker') or None,
             ))
         except Exception as exc:
             return _handle_s3(exc)

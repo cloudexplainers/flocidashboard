@@ -126,7 +126,7 @@ def update_domain_config(
 ) -> dict[str, Any]:
     kwargs: dict[str, Any] = {'DomainName': _required(domain_name, 'Domain name')}
     if engine_version:
-        kwargs['EngineVersion'] = engine_version
+        raise ValueError('UpdateDomainConfig cannot change the engine version; use Upgrade domain (UpgradeDomain).')
     cluster = _dict(cluster_config, 'Cluster config')
     if cluster:
         kwargs['ClusterConfig'] = cluster

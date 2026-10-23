@@ -929,6 +929,16 @@ test('S3 Show versions lists versions and delete markers and permanently deletes
   await expect.poll(() => deleteBody).toEqual({ keys: [{ key: 'a.txt', version_id: 'version-1' }] });
 });
 
+test('S3 says when Floci returned only part of a large bucket', async ({ page }) => {
+  await inventory(page, 's3', { buckets: [{ Name: 'big' }] });
+  await page.route('**/api/s3/buckets/big/objects/?*', route => route.fulfill({ json: { bucket: 'big', prefix: '', folders: [], is_truncated: true, key_count: 1, objects: [
+    { key: 'a.txt', name: 'a.txt', type: 'file', size: 2, last_modified: '2026-10-21T10:00:00Z' },
+  ] } }));
+  await page.goto('/s3/objects?bucket=big');
+  await expect(page.getByTestId('s3-truncated')).toContainText('Showing the first 1,000 objects');
+  await expect(page.getByText('(1+)', { exact: true })).toBeVisible();
+});
+
 test('S3 missing bucket link does not expose another bucket details', async ({ page }) => {
   await inventory(page, 's3', { buckets: [{ Name: 'available-bucket' }] });
   await page.goto('/s3/objects?bucket=missing-bucket');

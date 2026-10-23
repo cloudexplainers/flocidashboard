@@ -811,8 +811,10 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                     header={
                       <Header
                         variant="h3"
-                        counter={listing ? `(${(listing.folders || []).length + (listing.objects || []).length})` : undefined}
-                        description="Objects are the fundamental entities stored in Amazon S3. Prefixes ending in / are shown as folders."
+                        counter={listing ? `(${(listing.folders || []).length + (listing.objects || []).length}${listing.is_truncated ? '+' : ''})` : undefined}
+                        description={listing?.is_truncated
+                          ? <span data-testid="s3-truncated">Showing the first 1,000 {showVersions ? 'versions' : 'objects'} Floci returned; this {prefix ? 'folder' : 'bucket'} has more. Open a folder or use the CLI to see the rest.</span>
+                          : 'Objects are the fundamental entities stored in Amazon S3. Prefixes ending in / are shown as folders.'}
                         actions={
                           <SpaceBetween direction="horizontal" size="xs">
                             <Button iconName="refresh" ariaLabel="Refresh objects" onClick={() => loadObjects(activeBucket.Name, prefix)} />

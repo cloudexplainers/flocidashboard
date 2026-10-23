@@ -342,3 +342,61 @@ class AssumeRoleAccountTests(TestCase):
         self.client.post('/api/session-identity/assume-role/', data=json.dumps({'role_name': 'App', 'session_name': 'review'}), content_type='application/json')
 
         sts.assume_role.assert_called_once_with(RoleArn='arn:aws:iam::111122223333:role/App', RoleSessionName='review')
+
+
+class PagingAndParameterTests(SimpleTestCase):
+    def test_s3_version_listing_carries_both_markers(self):
+        from dashboard.s3_api import list_s3_objects
+
+        client = MagicMock()
+        client.list_object_versions.return_value = {
+            'Versions': [{'Key': 'a.txt', 'VersionId': 'v2', 'IsLatest': True}],
+            'IsTruncated': True, 'NextKeyMarker': 'a.txt', 'NextVersionIdMarker': 'v1',
+        }
+        with patch('dashboard.s3_api._s3_client', return_value=client):
+            data = list_s3_objects('bucket', versions=True, continuation_token='a.txt', version_id_marker='v3')
+
+        self.assertEqual(client.list_object_versions.call_args.kwargs['KeyMarker'], 'a.txt')
+        self.assertEqual(client.list_object_versions.call_args.kwargs['VersionIdMarker'], 'v3')
+        self.assertEqual((data['next_continuation_token'], data['next_version_id_marker']), ('a.txt', 'v1'))
+
+    def test_opensearch_update_rejects_engine_version_with_pointer_to_upgrade(self):
+        from dashboard.opensearch_api import update_domain_config
+
+        with self.assertRaisesRegex(ValueError, 'UpgradeDomain'):
+            update_domain_config(domain_name='search', engine_version='OpenSearch_2.19')
+
+
+class S3EmptyBucketTests(SimpleTestCase):
+    def _client(self, delete_response):
+        client = MagicMock()
+        client.get_paginator.return_value.paginate.return_value.build_full_result.return_value = {
+            'Versions': [{'Key': 'a.txt', 'VersionId': 'v1'}, {'Key': 'a.txt', 'VersionId': 'v2'}, {'Key': 'plain.txt', 'VersionId': 'null'}],
+            'DeleteMarkers': [{'Key': 'b.txt', 'VersionId': 'm1'}],
+        }
+        client.delete_objects.return_value = delete_response
+        return client
+
+    def test_empty_deletes_every_version_and_counts_deleted(self):
+        client = self._client({'Deleted': [{}, {}, {}, {}]})
+        with patch('dashboard.s3_api._s3_client', return_value=client):
+            response = self.client.post('/api/s3/buckets/bucket-a/empty/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content)['deleted_count'], 4)
+        delete = client.delete_objects.call_args.kwargs['Delete']
+        self.assertFalse(delete['Quiet'])
+        self.assertEqual(delete['Objects'], [
+            {'Key': 'a.txt', 'VersionId': 'v1'}, {'Key': 'a.txt', 'VersionId': 'v2'},
+            {'Key': 'plain.txt'}, {'Key': 'b.txt', 'VersionId': 'm1'},
+        ])
+
+    def test_partial_failure_is_not_reported_as_success(self):
+        client = self._client({'Deleted': [{}, {}, {}], 'Errors': [{'Key': 'a.txt', 'Code': 'AccessDenied', 'Message': 'Access Denied'}]})
+        with patch('dashboard.s3_api._s3_client', return_value=client):
+            response = self.client.post('/api/s3/buckets/bucket-a/empty/')
+
+        self.assertEqual(response.status_code, 409)
+        data = json.loads(response.content)
+        self.assertEqual(data['deleted_count'], 3)
+        self.assertIn('1 of 4 objects could not be deleted', data['error'])
