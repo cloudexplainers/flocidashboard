@@ -102,7 +102,7 @@ LAB_BATCH_ORDER = [
     {
         'service': 'kms',
         'title': 'KMS labs',
-        'summary': 'Continue into application configuration after customer managed keys, aliases, and encrypt/decrypt round trips.',
+        'summary': 'Continue into application configuration after customer managed keys, aliases, encrypt/decrypt round trips, key policies, rotation, grants, envelope encryption, and SSE-KMS.',
     },
     {
         'service': 'ssm',
