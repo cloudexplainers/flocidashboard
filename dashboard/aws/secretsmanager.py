@@ -60,7 +60,7 @@ def secretsmanager_inventory() -> dict[str, Any]:
 
     if len(secrets) > 1:
         with ThreadPoolExecutor(max_workers=min(8, len(secrets))) as executor:
-            detailed_secrets = list(executor.map(secret_detail, secrets))
+            detailed_secrets = core.map_in_context(executor, secret_detail, secrets)
     else:
         detailed_secrets = [secret_detail(secret) for secret in secrets]
 

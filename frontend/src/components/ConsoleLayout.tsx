@@ -7,6 +7,7 @@ import Flashbar, { FlashbarProps } from '@cloudscape-design/components/flashbar'
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
+import { PARTIAL_LOAD_EVENT, PartialLoadDetail, describeLoadErrors } from '../api/loadErrors';
 
 interface ConsoleLayoutProps {
   breadcrumbs: BreadcrumbGroupProps.Item[];
@@ -31,13 +32,31 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
 }) => {
   const { identity, auth } = useSession();
   const [loadError, setLoadError] = useState('');
+  const [partialLoad, setPartialLoad] = useState<PartialLoadDetail | null>(null);
   useEffect(() => {
     const handler = (event: Event) => setLoadError((event as CustomEvent<string>).detail);
-    const clear = () => setLoadError('');
+    const partial = (event: Event) => setPartialLoad((event as CustomEvent<PartialLoadDetail>).detail);
+    const clear = () => { setLoadError(''); setPartialLoad(null); };
     window.addEventListener('floci_load_error', handler);
+    window.addEventListener(PARTIAL_LOAD_EVENT, partial);
     window.addEventListener('floci_navigate', clear);
-    return () => { window.removeEventListener('floci_load_error', handler); window.removeEventListener('floci_navigate', clear); };
+    return () => { window.removeEventListener('floci_load_error', handler); window.removeEventListener(PARTIAL_LOAD_EVENT, partial); window.removeEventListener('floci_navigate', clear); };
   }, []);
+  const partialLoadText = partialLoad ? describeLoadErrors(partialLoad.errors) : null;
+  const partialLoadItems: FlashbarProps.MessageDefinition[] = partialLoad && partialLoadText ? [{
+    type: 'warning',
+    id: 'floci-partial-load',
+    header: 'Some lists were not returned by Floci',
+    content: <div data-testid="partial-load-warning">
+      These lists show as empty here, but Floci did not return them, so they are not known to be empty.
+      <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+        {partialLoadText.unsupported.length > 0 && <li>Not implemented by this Floci version: {partialLoadText.unsupported.join(', ')}</li>}
+        {partialLoadText.failed.map(line => <li key={line}>{line}</li>)}
+      </ul>
+    </div>,
+    dismissible: true,
+    onDismiss: () => setPartialLoad(null),
+  }] : [];
   const [toolsOpen, setToolsOpen] = useState(false);
 
   return (
@@ -62,7 +81,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
           items={sideNavItems}
         />
       }
-      notifications={<Flashbar items={[...notifications, ...(loadError ? [{ type: 'error' as const, content: loadError, dismissible: true, onDismiss: () => setLoadError('') }] : [])]} />}
+      notifications={<Flashbar items={[...notifications, ...partialLoadItems, ...(loadError ? [{ type: 'error' as const, content: loadError, dismissible: true, onDismiss: () => setLoadError('') }] : [])]} />}
       toolsOpen={toolsOpen}
       onToolsChange={(e) => setToolsOpen(e.detail.open)}
       tools={

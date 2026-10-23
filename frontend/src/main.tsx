@@ -4,6 +4,9 @@ import '@cloudscape-design/global-styles/index.css';
 import './index.css';
 import { SessionProvider } from './components/SessionContext';
 import { App } from './App';
+import { installLoadErrorHook } from './api/loadErrors';
+
+installLoadErrorHook();
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

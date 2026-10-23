@@ -104,7 +104,7 @@ def lambda_inventory() -> dict[str, Any]:
     # sequential round trips. Preserve list ordering while bounding concurrency.
     if len(functions) > 1:
         with ThreadPoolExecutor(max_workers=min(8, len(functions))) as executor:
-            detailed_functions = list(executor.map(function_detail, functions))
+            detailed_functions = core.map_in_context(executor, function_detail, functions)
     else:
         detailed_functions = [function_detail(function) for function in functions]
 

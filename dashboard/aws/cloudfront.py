@@ -35,7 +35,7 @@ def cloudfront_inventory() -> dict[str, Any]:
 
     if distributions:
         with ThreadPoolExecutor(max_workers=min(8, len(distributions))) as executor:
-            distributions = list(executor.map(distribution_configuration, distributions))
+            distributions = core.map_in_context(executor, distribution_configuration, distributions)
 
     streaming_distributions = nested(
         'ListStreamingDistributions',

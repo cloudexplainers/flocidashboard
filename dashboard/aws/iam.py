@@ -184,7 +184,7 @@ def iam_inventory() -> dict[str, Any]:
         if len(items) < 2:
             return [loader(item) for item in items]
         with ThreadPoolExecutor(max_workers=min(8, len(items))) as executor:
-            return list(executor.map(loader, items))
+            return core.map_in_context(executor, loader, items)
 
     return {
         'summary': {

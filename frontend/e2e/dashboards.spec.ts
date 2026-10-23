@@ -200,6 +200,23 @@ test('inventory failures show an actionable error instead of silently appearing 
   await expect(page.getByText(/Unable to load ec2 resources/)).toBeVisible();
 });
 
+test('lists Floci did not return are named instead of passing as empty', async ({ page }) => {
+  const loadErrors = [
+    { operation: 'DescribeSnapshots', code: 'UnsupportedOperation', error: 'Operation DescribeSnapshots is not supported.', unsupported: true },
+    { operation: 'DescribeEvents', code: 'InternalFailure', error: 'kaput', unsupported: false },
+  ];
+  await inventory(page, 'elasticache', { clusters: [], snapshots: [], load_errors: loadErrors });
+  await page.goto('/elasticache/');
+  const warning = page.getByTestId('partial-load-warning');
+  await expect(warning).toContainText('Not implemented by this Floci version: DescribeSnapshots');
+  await expect(warning).toContainText('DescribeEvents (InternalFailure): kaput');
+  await expect(page.getByRole('option', { name: /Load errors/ })).toHaveCount(0);
+
+  await inventory(page, 'ec2', { instances: [], load_errors: [loadErrors[0]] });
+  await page.goto('/ec2/');
+  await expect(page.getByTestId('partial-load-warning')).toContainText('DescribeSnapshots');
+});
+
 for (const key of ['home', 'topology', 'inspector', 'settings', 'environment', 'activity', 'console', 'labs']) {
   test(`${key} utility dashboard renders without runtime errors`, async ({ page }) => {
     const errors: string[] = [];

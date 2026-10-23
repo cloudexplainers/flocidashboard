@@ -255,7 +255,7 @@ def ecs_inventory() -> dict[str, Any]:
         if len(values) < 2:
             return [loader(value) for value in values]
         with ThreadPoolExecutor(max_workers=min(8, len(values))) as executor:
-            return list(executor.map(loader, values))
+            return core.map_in_context(executor, loader, values)
 
     detailed_clusters = parallel_map(cluster_arns, cluster_detail)
     task_definitions = parallel_map(task_definition_arns, describe_task_definition)

@@ -42,11 +42,18 @@ def config_inventory() -> dict[str, Any]:
         'describe_configuration_aggregators',
         'ConfigurationAggregators',
     )
-    remediation_configurations = items(
-        'DescribeRemediationConfigurations',
-        'describe_remediation_configurations',
-        'RemediationConfigurations',
-    )
+    # DescribeRemediationConfigurations requires ConfigRuleNames (at most 25 per call).
+    rule_names = [rule.get('ConfigRuleName') for rule in config_rules if rule.get('ConfigRuleName')]
+    remediation_configurations = [
+        item
+        for chunk in core._chunks(rule_names, 25)
+        for item in items(
+            'DescribeRemediationConfigurations',
+            'describe_remediation_configurations',
+            'RemediationConfigurations',
+            ConfigRuleNames=chunk,
+        )
+    ]
     retention_configurations = items(
         'DescribeRetentionConfigurations',
         'describe_retention_configurations',

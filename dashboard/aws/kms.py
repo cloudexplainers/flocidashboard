@@ -71,7 +71,7 @@ def kms_inventory() -> dict[str, Any]:
 
     if len(keys) > 1:
         with ThreadPoolExecutor(max_workers=min(8, len(keys))) as executor:
-            detailed_keys = list(executor.map(key_detail, keys))
+            detailed_keys = core.map_in_context(executor, key_detail, keys)
     else:
         detailed_keys = [key_detail(key) for key in keys]
 

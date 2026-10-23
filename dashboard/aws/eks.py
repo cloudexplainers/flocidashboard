@@ -211,7 +211,7 @@ def eks_inventory() -> dict[str, Any]:
         if len(items) < 2:
             return [loader(item) for item in items]
         with ThreadPoolExecutor(max_workers=min(8, len(items))) as executor:
-            return list(executor.map(loader, items))
+            return core.map_in_context(executor, loader, items)
 
     clusters = enrich(cluster_names, cluster_detail)
     nodegroup_refs = [(cluster.get('name'), name) for cluster in clusters for name in cluster.get('nodegroups', [])]

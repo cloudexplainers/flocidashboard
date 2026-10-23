@@ -83,7 +83,7 @@ def ecr_inventory() -> dict[str, Any]:
 
     if len(repositories) > 1:
         with ThreadPoolExecutor(max_workers=min(8, len(repositories))) as executor:
-            detailed_repositories = list(executor.map(repository_detail, repositories))
+            detailed_repositories = core.map_in_context(executor, repository_detail, repositories)
     else:
         detailed_repositories = [repository_detail(repository) for repository in repositories]
 

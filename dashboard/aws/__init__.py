@@ -17,8 +17,9 @@ from __future__ import annotations
 import copy
 import os
 import json
+import re
 import threading
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import partial
@@ -542,10 +543,58 @@ def _nested_operation_items(
     return []
 
 
+# Error codes that mean "this optional thing doesn't exist" (no bucket policy, no
+# function URL, a resource deleted between list and describe). A _safe_value
+# fallback is the true answer for these, so they are not reported as load errors.
+_ABSENT_CODE = re.compile(r'^(NoSuch|.*NotFound|.*DoesNotExist|.*NotExist(s|ent)?)', re.IGNORECASE)
+_load_errors: ContextVar[list[dict[str, Any]] | None] = ContextVar('floci_load_errors', default=None)
+
+
+def _record_load_error(exc: Exception) -> None:
+    errors = _load_errors.get()
+    if errors is None:
+        return
+    code = _error_code(exc)
+    if code and _ABSENT_CODE.match(code):
+        return
+    message = exc.response.get('Error', {}).get('Message') if isinstance(exc, ClientError) else None
+    entry = {
+        'operation': getattr(exc, 'operation_name', None) or exc.__class__.__name__,
+        'code': code,
+        'error': message or str(exc),
+    }
+    if entry not in errors:
+        errors.append(entry)
+
+
+def collect_load_errors(loader: Callable[[], Any]) -> tuple[Any, list[dict[str, Any]]]:
+    """Run an inventory loader and return (result, load_errors).
+
+    Inventory loaders fill optional lists through _safe_value, which returns a
+    fallback ([] or None) when a call fails. Without this, a failed list looked
+    the same as an empty one. The errors are reported next to the inventory so
+    the console can say which lists Floci did not return.
+    """
+    errors: list[dict[str, Any]] = []
+    token = _load_errors.set(errors)
+    try:
+        return loader(), errors
+    finally:
+        _load_errors.reset(token)
+
+
+def map_in_context(executor, fn: Callable[[Any], Any], items) -> list[Any]:
+    """executor.map that keeps the caller's context (and its load-error list) in worker threads."""
+    items = list(items)
+    contexts = [copy_context() for _ in items]
+    return list(executor.map(lambda pair: pair[0].run(fn, pair[1]), zip(contexts, items)))
+
+
 def _safe_value(loader: Callable[[], Any], fallback: Any = None) -> Any:
     try:
         return loader()
-    except (BotoCoreError, ClientError, ResponseParserError, ValueError):
+    except (BotoCoreError, ClientError, ResponseParserError, ValueError) as exc:
+        _record_load_error(exc)
         return fallback
 
 

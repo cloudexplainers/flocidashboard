@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from dashboard import aws as core
@@ -50,7 +51,15 @@ def pricing_inventory() -> dict[str, Any]:
             })
 
     price_lists = _safe_value(
-        lambda: core._paginate(pricing, 'list_price_lists', 'PriceLists', ServiceCode='AmazonS3'),
+        # EffectiveDate and CurrencyCode are required; ask for the S3 price lists in effect now.
+        lambda: core._paginate(
+            pricing,
+            'list_price_lists',
+            'PriceLists',
+            ServiceCode='AmazonS3',
+            EffectiveDate=datetime.now(timezone.utc),
+            CurrencyCode='USD',
+        ),
         [],
     ) if 'ListPriceLists' in operations else []
 
@@ -79,6 +88,7 @@ def pricing_inventory() -> dict[str, Any]:
         'notes': [
             'Floci 1.5.15 adds AWS Price List service support under the pricing service name.',
             'Attribute values are sampled from the first 10 services and first 5 attributes per service to keep page loads bounded.',
+            'Price lists are the AmazonS3 lists in effect today, in USD (ListPriceLists needs a service, date and currency).',
         ],
     }
 

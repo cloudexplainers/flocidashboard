@@ -13,7 +13,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_POST
-from .aws import FlociClientFactory, acm_inventory, amazonmq_inventory, apigateway_inventory, appconfig_inventory, appsync_inventory, athena_inventory, autoscaling_inventory, backup_inventory, batch_inventory, bcmdataexports_inventory, bedrockruntime_inventory, cloudcontrol_inventory, cloudformation_inventory, cloudfront_inventory, cloudmap_inventory, cloudtrail_inventory, cloudwatch_inventory, codebuild_inventory, codepipeline_inventory, codedeploy_inventory, config_inventory, cognito_inventory, costexplorer_inventory, cur_inventory, docdb_inventory, dynamodb_inventory, ec2_inventory, ecr_inventory, ecs_inventory, eks_inventory, elasticache_inventory, elasticbeanstalk_inventory, elasticloadbalancing_inventory, emr_inventory, eventbridge_inventory, firehose_inventory, glue_inventory, iam_inventory, iot_inventory, kafka_inventory, kinesis_inventory, kms_inventory, lambda_inventory, list_resources, memorydb_inventory, neptune_inventory, opensearch_inventory, pipes_inventory, pricing_inventory, rds_inventory, rdsdata_inventory, resourcegroupstagging_inventory, route53_inventory, s3_inventory, s3vectors_inventory, scheduler_inventory, secretsmanager_inventory, ses_inventory, sns_inventory, sqs_inventory, ssm_inventory, stepfunctions_inventory, textract_inventory, transcribe_inventory, transfer_inventory, wafv2_inventory
+from .aws import FlociClientFactory, collect_load_errors, acm_inventory, amazonmq_inventory, apigateway_inventory, appconfig_inventory, appsync_inventory, athena_inventory, autoscaling_inventory, backup_inventory, batch_inventory, bcmdataexports_inventory, bedrockruntime_inventory, cloudcontrol_inventory, cloudformation_inventory, cloudfront_inventory, cloudmap_inventory, cloudtrail_inventory, cloudwatch_inventory, codebuild_inventory, codepipeline_inventory, codedeploy_inventory, config_inventory, cognito_inventory, costexplorer_inventory, cur_inventory, docdb_inventory, dynamodb_inventory, ec2_inventory, ecr_inventory, ecs_inventory, eks_inventory, elasticache_inventory, elasticbeanstalk_inventory, elasticloadbalancing_inventory, emr_inventory, eventbridge_inventory, firehose_inventory, glue_inventory, iam_inventory, iot_inventory, kafka_inventory, kinesis_inventory, kms_inventory, lambda_inventory, list_resources, memorydb_inventory, neptune_inventory, opensearch_inventory, pipes_inventory, pricing_inventory, rds_inventory, rdsdata_inventory, resourcegroupstagging_inventory, route53_inventory, s3_inventory, s3vectors_inventory, scheduler_inventory, secretsmanager_inventory, ses_inventory, sns_inventory, sqs_inventory, ssm_inventory, stepfunctions_inventory, textract_inventory, transcribe_inventory, transfer_inventory, wafv2_inventory
 from .labs import get_lab, lab_status, next_lab_batch, reset_lab, run_lab_step
 from .labs.exams import exam_tracks, tags_for_lab
 from .labs.registry import all_labs
@@ -34,6 +34,29 @@ SERVICE_ALIASES = {
 LABS_PROGRESS_CACHE_KEY = 'dashboard:labs-progress'
 LABS_PROGRESS_CACHE_SECONDS = 15
 LABS_PROGRESS_WORKERS = 8
+
+
+# Codes Floci returns for an operation it doesn't implement.
+UNSUPPORTED_OPERATION_CODES = {'InvalidAction', 'UnknownOperationException', 'UnsupportedOperation'}
+
+
+def _inventory_response(loader) -> JsonResponse:
+    """Serve an inventory with the lists that failed to load.
+
+    Inventories fill optional lists through _safe_value, which falls back to an
+    empty list. load_errors names each list call that failed, so the console can
+    say "Floci did not return X" instead of showing it as empty.
+    """
+    payload, errors = collect_load_errors(loader)
+    if errors and isinstance(payload, dict):
+        payload = {
+            **payload,
+            'load_errors': [
+                {**error, 'unsupported': error.get('code') in UNSUPPORTED_OPERATION_CODES}
+                for error in errors
+            ],
+        }
+    return JsonResponse(payload)
 
 
 def selected_service_keys(request) -> Optional[set[str]]:
@@ -393,455 +416,455 @@ def init_lifecycle(request):
 
 def iam(request):
     try:
-        return JsonResponse(iam_inventory())
+        return _inventory_response(iam_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def s3(request):
     try:
-        return JsonResponse(s3_inventory())
+        return _inventory_response(s3_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def ec2(request):
     try:
-        return JsonResponse(ec2_inventory())
+        return _inventory_response(ec2_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def kms(request):
     try:
-        return JsonResponse(kms_inventory())
+        return _inventory_response(kms_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def lambda_(request):
     try:
-        return JsonResponse(lambda_inventory())
+        return _inventory_response(lambda_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def sqs(request):
     try:
-        return JsonResponse(sqs_inventory())
+        return _inventory_response(sqs_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def secretsmanager(request):
     try:
-        return JsonResponse(secretsmanager_inventory())
+        return _inventory_response(secretsmanager_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def dynamodb(request):
     try:
-        return JsonResponse(dynamodb_inventory())
+        return _inventory_response(dynamodb_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def docdb(request):
     try:
-        return JsonResponse(docdb_inventory())
+        return _inventory_response(docdb_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def memorydb(request):
     try:
-        return JsonResponse(memorydb_inventory())
+        return _inventory_response(memorydb_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def codepipeline(request):
     try:
-        return JsonResponse(codepipeline_inventory())
+        return _inventory_response(codepipeline_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def s3vectors(request):
     try:
-        return JsonResponse(s3vectors_inventory())
+        return _inventory_response(s3vectors_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def iot(request):
     try:
-        return JsonResponse(iot_inventory())
+        return _inventory_response(iot_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def elasticbeanstalk(request):
     try:
-        return JsonResponse(elasticbeanstalk_inventory())
+        return _inventory_response(elasticbeanstalk_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cloudwatch(request):
     try:
-        return JsonResponse(cloudwatch_inventory())
+        return _inventory_response(cloudwatch_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cloudcontrol(request):
     try:
-        return JsonResponse(cloudcontrol_inventory())
+        return _inventory_response(cloudcontrol_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cloudmap(request):
     try:
-        return JsonResponse(cloudmap_inventory())
+        return _inventory_response(cloudmap_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cloudtrail(request):
     try:
-        return JsonResponse(cloudtrail_inventory())
+        return _inventory_response(cloudtrail_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def config(request):
     try:
-        return JsonResponse(config_inventory())
+        return _inventory_response(config_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def eventbridge(request):
     try:
-        return JsonResponse(eventbridge_inventory())
+        return _inventory_response(eventbridge_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cognito(request):
     try:
-        return JsonResponse(cognito_inventory())
+        return _inventory_response(cognito_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def apigateway(request):
     try:
-        return JsonResponse(apigateway_inventory())
+        return _inventory_response(apigateway_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def appconfig(request):
     try:
-        return JsonResponse(appconfig_inventory())
+        return _inventory_response(appconfig_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def appsync(request):
     try:
-        return JsonResponse(appsync_inventory())
+        return _inventory_response(appsync_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def amazonmq(request):
     try:
-        return JsonResponse(amazonmq_inventory())
+        return _inventory_response(amazonmq_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def bedrockruntime(request):
     try:
-        return JsonResponse(bedrockruntime_inventory())
+        return _inventory_response(bedrockruntime_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def codebuild(request):
     try:
-        return JsonResponse(codebuild_inventory())
+        return _inventory_response(codebuild_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def codedeploy(request):
     try:
-        return JsonResponse(codedeploy_inventory())
+        return _inventory_response(codedeploy_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def ecs(request):
     try:
-        return JsonResponse(ecs_inventory())
+        return _inventory_response(ecs_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def emr(request):
     try:
-        return JsonResponse(emr_inventory())
+        return _inventory_response(emr_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def eks(request):
     try:
-        return JsonResponse(eks_inventory())
+        return _inventory_response(eks_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def elasticache(request):
     try:
-        return JsonResponse(elasticache_inventory())
+        return _inventory_response(elasticache_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def elasticloadbalancing(request):
     try:
-        return JsonResponse(elasticloadbalancing_inventory())
+        return _inventory_response(elasticloadbalancing_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def firehose(request):
     try:
-        return JsonResponse(firehose_inventory())
+        return _inventory_response(firehose_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def kinesis(request):
     try:
-        return JsonResponse(kinesis_inventory())
+        return _inventory_response(kinesis_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def kafka(request):
     try:
-        return JsonResponse(kafka_inventory())
+        return _inventory_response(kafka_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def opensearch(request):
     try:
-        return JsonResponse(opensearch_inventory())
+        return _inventory_response(opensearch_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def pipes(request):
     try:
-        return JsonResponse(pipes_inventory())
+        return _inventory_response(pipes_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def pricing(request):
     try:
-        return JsonResponse(pricing_inventory())
+        return _inventory_response(pricing_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def costexplorer(request):
     try:
-        return JsonResponse(costexplorer_inventory())
+        return _inventory_response(costexplorer_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cur(request):
     try:
-        return JsonResponse(cur_inventory())
+        return _inventory_response(cur_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def bcmdataexports(request):
     try:
-        return JsonResponse(bcmdataexports_inventory())
+        return _inventory_response(bcmdataexports_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def neptune(request):
     try:
-        return JsonResponse(neptune_inventory())
+        return _inventory_response(neptune_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def resourcegroupstagging(request):
     try:
-        return JsonResponse(resourcegroupstagging_inventory())
+        return _inventory_response(resourcegroupstagging_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def ssm(request):
     try:
-        return JsonResponse(ssm_inventory())
+        return _inventory_response(ssm_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def athena(request):
     try:
-        return JsonResponse(athena_inventory())
+        return _inventory_response(athena_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def autoscaling(request):
     try:
-        return JsonResponse(autoscaling_inventory())
+        return _inventory_response(autoscaling_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def backup(request):
     try:
-        return JsonResponse(backup_inventory())
+        return _inventory_response(backup_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def batch(request):
     try:
-        return JsonResponse(batch_inventory())
+        return _inventory_response(batch_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def route53(request):
     try:
-        return JsonResponse(route53_inventory())
+        return _inventory_response(route53_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def transfer(request):
     try:
-        return JsonResponse(transfer_inventory())
+        return _inventory_response(transfer_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def sns(request):
     try:
-        return JsonResponse(sns_inventory())
+        return _inventory_response(sns_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def ses(request):
     try:
-        return JsonResponse(ses_inventory())
+        return _inventory_response(ses_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cloudformation(request):
     try:
-        return JsonResponse(cloudformation_inventory())
+        return _inventory_response(cloudformation_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def cloudfront(request):
     try:
-        return JsonResponse(cloudfront_inventory())
+        return _inventory_response(cloudfront_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def ecr(request):
     try:
-        return JsonResponse(ecr_inventory())
+        return _inventory_response(ecr_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def rds(request):
     try:
-        return JsonResponse(rds_inventory())
+        return _inventory_response(rds_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def rdsdata(request):
     try:
-        return JsonResponse(rdsdata_inventory())
+        return _inventory_response(rdsdata_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def acm(request):
     try:
-        return JsonResponse(acm_inventory())
+        return _inventory_response(acm_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def stepfunctions(request):
     try:
-        return JsonResponse(stepfunctions_inventory())
+        return _inventory_response(stepfunctions_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def scheduler(request):
     try:
-        return JsonResponse(scheduler_inventory())
+        return _inventory_response(scheduler_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def textract(request):
     try:
-        return JsonResponse(textract_inventory())
+        return _inventory_response(textract_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def transcribe(request):
     try:
-        return JsonResponse(transcribe_inventory())
+        return _inventory_response(transcribe_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def glue(request):
     try:
-        return JsonResponse(glue_inventory())
+        return _inventory_response(glue_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
 
 def wafv2(request):
     try:
-        return JsonResponse(wafv2_inventory())
+        return _inventory_response(wafv2_inventory)
     except (BotoCoreError, ClientError, ValueError) as exc:
         return JsonResponse({'error': str(exc)}, status=502)
 
