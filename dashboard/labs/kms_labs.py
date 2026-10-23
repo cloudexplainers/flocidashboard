@@ -11,6 +11,7 @@ from botocore.exceptions import ClientError
 from django.core.cache import cache
 
 from dashboard.aws import _clean_response
+from . import kms_key_management_labs as key_management
 from .monolith import (
     _ignore_missing_codes,
     _json_text,
@@ -399,10 +400,14 @@ def _reset_kms_crypto() -> dict[str, Any]:
     }
 
 
-LABS = [KMS_CRYPTO_LAB]
+LABS = [KMS_CRYPTO_LAB, key_management.LAB]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'kms' and lab_key == 'key-management':
+        from .kms_key_management_labs import run_step as key_management_run_step
+        return key_management_run_step(step_key)
+
     if service_key == 'kms' and lab_key == 'key-alias-encrypt-decrypt':
         runners = {
             'create-key': _run_kms_create_key,
@@ -418,6 +423,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'kms' and lab_key == 'key-management':
+        from .kms_key_management_labs import status as key_management_status
+        return key_management_status()
+
     if service_key == 'kms' and lab_key == 'key-alias-encrypt-decrypt':
         key_verification = _verify_kms_lab_key()
         alias_verification = _verify_kms_lab_alias()
@@ -449,6 +458,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'kms' and lab_key == 'key-management':
+        from .kms_key_management_labs import reset as key_management_reset
+        return key_management_reset()
+
     if service_key == 'kms' and lab_key == 'key-alias-encrypt-decrypt':
         return _reset_kms_crypto()
 

@@ -211,6 +211,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('rds', 'aurora-resilience'): _tags(clf='3.4', saa='2.2 3.3'),
     ('elasticloadbalancing', 'ha-web-tier'): _tags(clf='3.3 3.2', saa='2.2 2.1 3.2 3.4'),
     ('s3', 'data-protection-tiers'): _tags(clf='3.6 4.1', saa='1.3 4.1 2.2'),
+    ('kms', 'key-management'): _tags(clf='2.2', saa='1.3'),
     # Level 5
     ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
@@ -302,7 +303,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'AWS Artifact provides AWS compliance reports and agreements.',
             'Encryption at rest (KMS) and in transit (TLS certificates from ACM) protect data.',
         ],
-        'related_labs': [('cloudwatch', 'metric-alarms'), ('kms', 'key-alias-encrypt-decrypt')],
+        'related_labs': [('cloudwatch', 'metric-alarms'), ('kms', 'key-alias-encrypt-decrypt'), ('kms', 'key-management')],
         'planned': 'W3-3 Governance services tour',
     },
     {
