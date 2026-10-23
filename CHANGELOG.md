@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Backend accuracy review (see "Backend API review" in `docs/console-accuracy-review.md`):
+  - **Incomplete lists are named:** when Floci doesn't return a list (often an operation it doesn't implement), or the dashboard shows only part of one, every console now shows a "Some lists are incomplete" warning instead of presenting the list as empty.
+  - **No invented results:** the EKS kubeconfig and ECR push commands are built from what Floci reports, with the configured Region and `--endpoint-url`; ECR "Inject mock image tag" reports Floci's error instead of a made-up image; CodeDeploy's no-op "Simulate lifecycle event" is removed; IAM's account-root trust policy, assume-role by name and Cognito pool ARNs use the real account.
+  - **No false success:** S3 "Empty bucket" deletes every version and delete marker, as the console does, and reports objects it couldn't delete; Settings → Reset Floci reports an unreachable Floci as an error.
+  - **Visible defaults:** generic forms show the values used when a field is left blank. Auto Scaling scaling policies no longer send a 60-second cooldown you didn't set.
+  - **Fixed lists:** Config remediation configurations and Pricing price lists load; Cognito pages pools, clients, users and groups past 60; the S3 objects view says when a bucket has more than 1,000 objects.
+  - **EKS lab:** "Generate kubeconfig" waits for the cluster to be ACTIVE instead of passing with a placeholder.
 - Added exam study tracks for AWS Certified Cloud Practitioner (CLF-C02) and Solutions Architect – Associate (SAA-C03):
   - **Track switcher:** the labs page switches between Levels and each exam (`/labs/?track=SAA-C03`).
   - **Exam view:** labs are grouped by domain and task statement, with progress weighted by each domain's share of the exam.

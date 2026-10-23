@@ -1295,7 +1295,7 @@ KINESIS_ACTIONS = (
         fields=(
             action_field('name', 'Stream name', required=True),
             action_field('mode', 'Stream mode', required=True, options=('ON_DEMAND', 'PROVISIONED'), default='ON_DEMAND', help_text='Capacity mode. The console defaults to On-demand.'),
-            action_field('shard_count', 'Shard count', field_type='number', help_text='Provisioned mode only. Defaults to 1.', default=1),
+            action_field('shard_count', 'Shard count', field_type='number', help_text='Provisioned mode only. Defaults to 1.'),
         ),
         success_message='Stream created',
     ),

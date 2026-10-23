@@ -478,3 +478,109 @@ Each Floci behavior this review relies on, checked in `/Users/chris/floci` (pull
 The live Route 53 and CloudFront specs (`--project=live`) pass after their label changes. `check_labs` on the
 disposable emulator passed 66 of 66 labs after the S3 SigV4 change. The emulator was stopped afterwards and the
 containers it started were removed.
+
+# Backend API review
+
+The two console reviews mostly checked what each page shows. Their worst bugs came from the Python layer
+underneath, so this pass swept that layer on its own: `dashboard/*_api.py`, `dashboard/*_views.py`, the
+inventory loaders in `dashboard/aws/`, `dashboard/actions.py` and the action metadata in `dashboard/services.py`.
+Severity uses the same scale as above.
+
+## Summary
+
+- **About 50 inventory lists read as empty when Floci hadn't returned them.** Every optional list in an
+  inventory goes through `_safe_value(..., [])`, which turned any failure into an empty list. On an empty
+  Floci 2.3.0, 52 list calls across 17 services fail, mostly because Floci doesn't implement the operation
+  (ElastiCache snapshots and events, SSM sessions and OpsItems, Transfer workflows, Transcribe medical jobs,
+  MemoryDB subnet groups, ...). The console showed each as "(0)". Inventory endpoints now return
+  `load_errors`, and every console shows a warning that names the lists Floci didn't return.
+- **Invented data.** The EKS kubeconfig was built for clusters that might not exist, with a placeholder CA
+  and an invented ARN. The ECR "Inject mock image" action reported a published image with a made-up digest
+  whenever `PutImage` failed, which on Floci 2.3.0 is always. ECR push commands named a registry that doesn't
+  exist. CodeDeploy "Simulate lifecycle event" called nothing and reported success.
+- **False success.** "Empty bucket" always reported 0 objects deleted and ignored per-object failures; it also
+  left old versions behind in versioned buckets, so the bucket still couldn't be deleted. Settings reported
+  "successfully wiped and reset" when Floci was unreachable.
+- **Hidden or wrong defaults.** Auto Scaling scaling policies always sent `Cooldown=60` (AWS uses the group's
+  cooldown when it's omitted) and turned an entered 0 into 60. Defaults that match AWS are now visible in the
+  generic forms instead of being applied silently.
+- **Silent truncation.** Cognito listed at most 60 pools, clients, users and groups. The S3 objects view showed
+  1,000 objects with no sign that more existed.
+
+Method: scripted first, then each finding read in context.
+
+- A botocore model check (`ast` over every backend file): each `client.<operation>(Keyword=...)` call, and
+  each key assigned into a dict later passed as `**params`, must be an input member of that operation; each
+  CamelCase `response.get('Key')` read must exist in some shape of the file's services. It found two real
+  bugs (OpenSearch `EngineVersion`, S3 `VersionIdMarker`); the rest were attribute-map keys.
+- A field check: for every action in `services.py`, resolve its path with Django's URL resolver and compare
+  the action's fields with the `body.get(...)` names its view reads, and the view's defaults with the fields'
+  `default` values.
+- A load-error probe: run every `*_inventory()` against an empty disposable Floci with the new collector on,
+  and list every failed call.
+- Greps for `except Exception`, `000000000000`, `us-east-1`, `simulated`, `[:N]` caps and `MaxResults=` without
+  paging.
+
+Probes ran against a disposable Floci 2.3.0 on port 14566 only.
+
+## Findings
+
+| Severity | Finding | Status |
+| --- | --- | --- |
+| High | Inventories turned every failed list call into an empty list (`_safe_value`), so lists Floci doesn't implement, or that failed, read as "(0)". | Fixed: `_safe_value` records failures (except narrow "doesn't exist" codes such as `NoSuch*`, `*NotFound*`) in a per-request collector, also across the loaders' worker threads. Inventory endpoints add `load_errors` (operation, code, message, `unsupported`), and every console shows a "Some lists are incomplete" warning naming them. |
+| High | EKS `get_kubeconfig` swallowed every `DescribeCluster` error and returned a kubeconfig with an invented endpoint, a placeholder CA certificate and an `arn:aws:eks:...:000000000000` ARN, even for a missing cluster. The EKS lab's "Generate kubeconfig" step passed on it while the cluster was still `CREATING`. | Fixed: a missing cluster is a 404, a cluster without endpoint and CA is reported with its status, and the lab step waits up to 3 minutes for `ACTIVE` and otherwise asks the learner to run it again. |
+| High | ECR "Inject mock image tag" returned a fabricated image (made-up digest and size, `simulated: true`) whenever `PutImage` failed. Floci 2.3.0 has no `PutImage`, so it never worked and always reported success. | Fixed: the error is returned; the action description says 2.3.0 lacks `PutImage`. |
+| High | ECR push commands used a made-up `floci:4566/ecr/<repo>` registry. Floci serves `<account>.dkr.ecr.<region>.localhost:<port>/<repo>` and returns the login address as `proxyEndpoint`. | Fixed: built from `repositoryUri` and `GetAuthorizationToken`; a missing repository is a 404. |
+| High | CodeDeploy "Simulate lifecycle event" made no API call and returned "simulated as Succeeded". | Removed. `put_lifecycle_event_hook_execution_status` is the real call. |
+| High | S3 "Empty bucket" sent `Quiet=True` (S3 then lists only failures), counted `Deleted` (always empty) and ignored `Errors`: it always said 0 objects were deleted and never reported failures. It also deleted only current objects, so a versioned bucket kept its versions and couldn't be deleted. | Fixed: deletes every version and delete marker, as the console's Empty does, counts what S3 reports, and returns 409 with the failures when objects remain. Checked live: a versioned bucket empties and can then be deleted. |
+| High | Settings → Reset Floci said "successfully wiped and reset" when Floci was unreachable: the view returned 200 with `ok: false`. | Fixed: 502 with the reason. |
+| High | Config's `DescribeRemediationConfigurations` was called without its required `ConfigRuleNames`, and Pricing's `ListPriceLists` without `EffectiveDate` and `CurrencyCode`. botocore rejected both before sending, and the error was swallowed, so the lists were always empty. | Fixed: rule names are passed in chunks of 25; price lists use today's date and USD, which the inventory notes say. |
+| Medium | Auto Scaling `put_scaling_policy` always sent `Cooldown=60` and `ScalingAdjustment=1` when left blank, and `or` turned an entered 0 into 60. | Fixed: a blank cooldown is omitted (AWS then uses the group's default cooldown), 0 is kept, and the adjustment is required. |
+| Medium | ECR push commands and the EKS kubeconfig used `us-east-1` instead of the configured Region, and gave AWS CLI commands without `--endpoint-url`, which would reach real AWS. | Fixed: configured Region; `--endpoint-url` with the public Floci endpoint. |
+| Medium | Defaults applied when a generic-form field is left blank were invisible: ACM expiry days (45), lifecycle hook heartbeat (3600 s), ElastiCache user access string (`on ~* +@all`, full access), Kafka version and broker count, OpenSearch engine, instance type and size, Kinesis shard count, Transcribe language, and others. | Fixed: shown as field defaults. CodePipeline's required transition type is now a field (Inbound/Outbound); Auto Scaling's delete has a visible "Force delete" choice (default on, as the console's Delete). |
+| Medium | Cognito listed user pools, app clients, users and groups with one call capped at 60, and built pool ARNs with account `000000000000` (also used for `ListTagsForResource`). | Fixed: every list is paged; the ARN is the one `DescribeUserPool` returns. |
+| Medium | IAM's "account root" trust template and assume-role by role name used account `000000000000` instead of the caller's account. | Fixed: account from `GetCallerIdentity`. |
+| Medium | IoT `create_topic_rule` added a republish action with an invented role ARN when no actions were given. | Fixed: no actions are added. |
+| Medium | RDS's final-snapshot check treated any lookup error as "no snapshot", so the console would say Floci skipped the snapshot when the check itself failed. | Fixed: only `DBSnapshotNotFound`-type codes mean missing; other errors say the snapshot couldn't be checked. |
+| Medium | The S3 objects view asked for 1,000 objects and ignored `is_truncated`. | Fixed: the header shows "1,000+" and says more exist. Version listing also keeps `NextVersionIdMarker`. |
+| Medium | Inventories that load details only for the first N items (CodePipeline 50 pipelines, SSM 50 documents, S3 Vectors indexes for 50 buckets, Batch 10 queues and 25 jobs per status) and `_paginate`'s 100-page guard cut lists silently. | Fixed: each cut is reported in the same warning. |
+| Low | OpenSearch "Update domain config" offered an engine version field; `UpdateDomainConfig` has no such parameter, so botocore rejected the call. | Fixed: field removed; the helper points to Upgrade domain. |
+| Low | SQS `start_message_move_task` had a dead fallback that returned an invented `COMPLETED` task. | Removed. |
+| Low | Cognito discovery and JWKS links used the internal endpoint (`floci:4566` in Docker). | Fixed: public endpoint. |
+| Low | A non-JSON reply to Floci's state reset was replaced with an invented `{"status": "OK"}`. | Fixed: the raw reply is kept. |
+| Low | IAM access-key and inline-policy action paths used placeholder names (`{user}`, `{policy}`) that differed from their fields, so a generic form would ask twice. | Fixed. |
+
+## Left as is
+
+| Finding | Why |
+| --- | --- |
+| The incomplete-list warning names operations, not the inventory keys they fill, so the list that reads "(0)" still shows in the resource-type picker. | Mapping each `_safe_value` call to its key means touching ~470 call sites; the warning already tells the user not to trust those lists. |
+| Unimplemented operations are still called on every inventory load. | Calling them is how the dashboard learns that a newer Floci implements them; the cost is small. |
+| Lambda and EventBridge test-event templates contain sample ARNs with account `000000000000` and `us-east-1`. | They are templates, like the console's own, and are labeled as samples. |
+| `views.api_lab_status` returns 200 with an `error` key when a lab's status can't be read. | The labs page polls it and shows the error; changing the status would make polling noisy. |
+| Some backend defaults remain for custom consoles (EC2 volume size, RDS instance class, ECS CPU/memory). | Those consoles send their own form values; the defaults only apply to direct API calls. |
+| `identity_views._rotate_user_access_key` treats a failed `ListAccessKeys` as no keys. | `CreateAccessKey` then fails visibly at the two-key limit; low impact. |
+
+## Floci behavior this review relies on
+
+Checked in `/Users/chris/floci` (pulled 2026-10-22, commit `433ab5aef`) at the `2.3.0` tag and at `main`, then
+probed on the disposable emulator. Paths are under `src/main/java/io/github/hectorvent/floci/services/`.
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| `ListPriceLists` requires `EffectiveDate` and `CurrencyCode`. | `pricing/PricingService` validates both, at 2.3.0 and `main`. | Confirmed. |
+| Config has no `DescribeRemediationConfigurations`, `DescribeDeliveryChannelStatus` or `DescribeConfigurationAggregators`. | Not handled in `configservice/` at 2.3.0 or `main`; live calls return `InvalidAction`. | Confirmed. |
+| ECR has no `PutImage` in 2.3.0. | Added to `ecr/EcrJsonHandler` on `main`; live 2.3.0 returns `UnsupportedOperation`. | Confirmed. |
+| ECR repository URIs are `<account>.dkr.ecr.<region>.localhost:<port>/<repo>`, and `GetAuthorizationToken` returns the login endpoint. | `ecr/registry/EcrRegistryManager.getRepositoryUri` / `getProxyEndpoint`; live: `000000000000.dkr.ecr.us-east-1.localhost:14566/<repo>`. | Confirmed. |
+| An EKS cluster gets its endpoint when its k3s container starts and its CA once k3s answers; until then it is `CREATING`. | `eks/EksClusterManager.applyEndpoints` / `finalizeCluster` at 2.3.0. Live: `ACTIVE` with CA about 8 s after create. | Confirmed. |
+| `DescribeUserPool` returns the pool `Arn`. | `cognito/CognitoJsonHandler` writes `Arn` at 2.3.0. | Confirmed. |
+| The 52 failing inventory calls are operations Floci 2.3.0 doesn't implement. | Live replies: `UnsupportedOperation`, `UnknownOperationException`, `InvalidAction`, or a 404/405/`AuthorizationHeaderMalformed` from an unrouted path. The first three are flagged "Not implemented by this Floci version"; the rest are listed with their error. | Confirmed on 2.3.0. |
+
+## Verification (backend review)
+
+`ruff check .`, `manage.py check`, `manage.py test --noinput` (1,194 passed, 37 of them new in
+`dashboard/tests_backend_review.py`), `npx tsc --noEmit`, `npm run build` and `npm run test:e2e` (346 passed)
+pass on the branch and again on the merged `main`. `check_labs` on the disposable emulator passed the IAM (11),
+SQS (9), Cognito (2) and EKS (1) labs, whose backend code changed. Kinesis shard count keeps its help text
+("Defaults to 1") rather than a form default, because a default would be sent with On-demand streams too.
+The emulator was stopped afterwards and the containers it started were removed.
