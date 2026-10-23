@@ -485,6 +485,7 @@ export const App: React.FC = () => {
           { type: 'link' as const, text: 'Databases', href: 'rds/instances', icon: <AwsServiceIcon service="rds" size={18} /> },
           { type: 'link' as const, text: 'Clusters', href: 'rds/clusters' },
           { type: 'link' as const, text: 'Parameter groups', href: 'rds/parameter-groups' },
+          { type: 'link' as const, text: 'Snapshots', href: 'rds/snapshots' },
           ...(resource ? [
             { type: 'divider' as const },
             { type: 'link' as const, text: 'Overview', href: `${base}&tab=overview` },

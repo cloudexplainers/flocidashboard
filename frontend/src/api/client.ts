@@ -1069,6 +1069,28 @@ export async function deleteRdsCluster(identifier: string, skipFinalSnapshot: bo
   });
 }
 
+/** CreateDBSnapshot. Floci dumps the database before it answers (PostgreSQL only). */
+export async function createRdsSnapshot(instanceIdentifier: string, snapshotIdentifier: string): Promise<any> {
+  return requestJson('/api/rds/snapshots/', {
+    method: 'POST',
+    json: { instance_identifier: instanceIdentifier, snapshot_identifier: snapshotIdentifier },
+    errorMessage: 'Failed to take DB snapshot',
+  });
+}
+
+export async function deleteRdsSnapshot(snapshotIdentifier: string): Promise<any> {
+  return requestJson(`/api/rds/snapshots/${encodeURIComponent(snapshotIdentifier)}/`, { method: 'DELETE', errorMessage: 'Failed to delete DB snapshot' });
+}
+
+/** RestoreDBInstanceFromDBSnapshot: a new DB instance with the snapshot's data. */
+export async function restoreRdsSnapshot(snapshotIdentifier: string, instanceIdentifier: string, dbInstanceClass: string = ''): Promise<any> {
+  return requestJson(`/api/rds/snapshots/${encodeURIComponent(snapshotIdentifier)}/restore/`, {
+    method: 'POST',
+    json: { instance_identifier: instanceIdentifier, db_instance_class: dbInstanceClass },
+    errorMessage: 'Failed to restore DB snapshot',
+  });
+}
+
 export async function createRdsParameterGroup(name: string, family: string, description: string): Promise<any> {
   return requestJson('/api/rds/parameter-groups/', {
     method: 'POST',

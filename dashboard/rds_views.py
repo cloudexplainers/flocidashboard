@@ -10,11 +10,14 @@ from .rds_api import (
     create_db_cluster,
     create_db_instance,
     create_db_parameter_group,
+    create_db_snapshot,
     delete_db_cluster,
     delete_db_instance,
     delete_db_parameter_group,
+    delete_db_snapshot,
     modify_db_instance,
     reboot_db_instance,
+    restore_db_instance_from_snapshot,
 )
 
 
@@ -121,3 +124,39 @@ def rds_parameter_group_delete(request, name: str):
         return JsonResponse(delete_db_parameter_group(name))
     except Exception as exc:
         return handle_action_error(exc, service='rds', operation='delete_db_parameter_group')
+
+
+@require_http_methods(['POST'])
+def rds_snapshots_create(request):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(create_db_snapshot(
+            body.get('instance_identifier', ''),
+            body.get('snapshot_identifier', ''),
+            tags=body.get('tags'),
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='create_db_snapshot')
+
+
+@require_http_methods(['DELETE'])
+def rds_snapshot_delete(request, identifier: str):
+    try:
+        return JsonResponse(delete_db_snapshot(identifier))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='delete_db_snapshot')
+
+
+@require_http_methods(['POST'])
+def rds_snapshot_restore(request, identifier: str):
+    try:
+        body = parse_json_body(request)
+        publicly_accessible = body.get('publicly_accessible')
+        return JsonResponse(restore_db_instance_from_snapshot(
+            identifier,
+            body.get('instance_identifier', ''),
+            db_instance_class=body.get('db_instance_class') or '',
+            publicly_accessible=publicly_accessible if isinstance(publicly_accessible, bool) else None,
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='restore_db_instance_from_db_snapshot')

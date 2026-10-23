@@ -7,7 +7,9 @@ import {
   rdsStatusLabel,
   rdsEngineLabel,
   rdsEndpoint,
+  rdsTime,
   RdsInstance,
+  RdsSnapshot,
   RdsCluster,
   RdsParameterGroup,
 } from "./rdsResources";
@@ -37,7 +39,11 @@ import {
   deleteRdsCluster,
   createRdsParameterGroup,
   deleteRdsParameterGroup,
+  createRdsSnapshot,
+  deleteRdsSnapshot,
+  restoreRdsSnapshot,
 } from "../api/client";
+import ConfirmActionModal from "../components/ConfirmActionModal";
 import { FlociNote } from '../components/FlociNote';
 
 type DBInstanceItem = RdsInstance;
@@ -139,6 +145,15 @@ const RdsWorkspace: React.FC<Props> = ({
   const [instances, setInstances] = useState<DBInstanceItem[]>([]);
   const [clusters, setClusters] = useState<DBClusterItem[]>([]);
   const [paramGroups, setParamGroups] = useState<ParameterGroupItem[]>([]);
+  const [snapshots, setSnapshots] = useState<RdsSnapshot[]>([]);
+  const [selectedSnapshots, setSelectedSnapshots] = useState<RdsSnapshot[]>([]);
+  const [takeSnapshotOpen, setTakeSnapshotOpen] = useState(false);
+  const [newSnapshotId, setNewSnapshotId] = useState("");
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreDbId, setRestoreDbId] = useState("");
+  const [restoreClass, setRestoreClass] = useState("");
+  const [deleteSnapshotOpen, setDeleteSnapshotOpen] = useState(false);
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Selected items
@@ -274,12 +289,17 @@ const RdsWorkspace: React.FC<Props> = ({
       setInstances(inventory.instances);
       setClusters(inventory.clusters);
       setParamGroups(inventory.groups);
+      setSnapshots(inventory.snapshots);
+      setSelectedSnapshots((selected) =>
+        inventory.snapshots.filter((s) => s.name === selected[0]?.name),
+      );
       setIssues(Array.isArray(payload.issues) ? payload.issues : []);
     } catch (err: any) {
       if (!alive.current || current !== generation.current) return;
       setInstances([]);
       setClusters([]);
       setParamGroups([]);
+      setSnapshots([]);
       setIssues([]);
       setLoadError(err.message || "Failed to load RDS databases.");
     } finally {
@@ -289,6 +309,52 @@ const RdsWorkspace: React.FC<Props> = ({
   useEffect(() => {
     void loadData();
   }, []);
+
+  const runSnapshotAction = async (work: () => Promise<string>, close: () => void) => {
+    if (mutationLock.current) return;
+    mutationLock.current = true;
+    setSnapshotBusy(true);
+    setActionAlert(null);
+    try {
+      const message = await work();
+      close();
+      setActionAlert({ type: "success", message });
+      await loadData();
+    } catch (err: any) {
+      setActionAlert({ type: "error", message: err.message || "RDS operation failed" });
+      close();
+    } finally {
+      mutationLock.current = false;
+      setSnapshotBusy(false);
+    }
+  };
+  const handleTakeSnapshot = () => {
+    if (!activeInstance || !newSnapshotId.trim()) return;
+    const name = newSnapshotId.trim();
+    void runSnapshotAction(async () => {
+      const result = await createRdsSnapshot(activeInstance.name, name);
+      const status = result?.snapshot?.Status;
+      return `Snapshot "${name}" of ${activeInstance.name} ${status === "available" ? "is available" : `reported status ${status || "not reported"}`}. Find it under Snapshots.`;
+    }, () => setTakeSnapshotOpen(false));
+  };
+  const selectedSnapshot = selectedSnapshots[0];
+  const handleRestoreSnapshot = () => {
+    if (!selectedSnapshot || !restoreDbId.trim()) return;
+    const name = restoreDbId.trim();
+    void runSnapshotAction(async () => {
+      const result = await restoreRdsSnapshot(selectedSnapshot.name, name, restoreClass.trim());
+      return `Restoring snapshot "${selectedSnapshot.name}" to new DB instance ${name} (status ${result?.instance?.DBInstanceStatus || "not reported"}).`;
+    }, () => setRestoreOpen(false));
+  };
+  const handleDeleteSnapshot = () => {
+    if (!selectedSnapshot) return;
+    const name = selectedSnapshot.name;
+    void runSnapshotAction(async () => {
+      await deleteRdsSnapshot(name);
+      setSelectedSnapshots([]);
+      return `Snapshot "${name}" deleted.`;
+    }, () => setDeleteSnapshotOpen(false));
+  };
 
   const handleCreateInstance = async () => {
     if (
@@ -587,6 +653,18 @@ const RdsWorkspace: React.FC<Props> = ({
               </Button>
             )}
             {activeInstance && <Button onClick={prepareModify}>Modify</Button>}
+            {activeInstance && (
+              <Button
+                disabled={activeInstance.status !== "available"}
+                onClick={() => {
+                  setActionAlert(null);
+                  setNewSnapshotId(`${activeInstance.name}-snapshot`);
+                  setTakeSnapshotOpen(true);
+                }}
+              >
+                Take snapshot
+              </Button>
+            )}
             {activeInstance && (
               <Button onClick={prepareDeleteInstance}>Delete</Button>
             )}
@@ -969,6 +1047,89 @@ const RdsWorkspace: React.FC<Props> = ({
                 </SpaceBetween>
               ),
             },
+            {
+              id: "snapshots",
+              label: `Snapshots (${snapshots.length})`,
+              content: (
+                <SpaceBetween size="l">
+                  <FlociNote>
+                    A Floci DB snapshot holds a dump of the database, and restoring it
+                    creates a new DB instance with that data. Floci snapshots PostgreSQL
+                    instances only; it refuses MySQL and MariaDB. Automated backups
+                    produce no system snapshots here.
+                  </FlociNote>
+                  <Table
+                    header={
+                      <Header
+                        variant="h2"
+                        counter={`(${snapshots.length})`}
+                        description="Manual DB snapshots. To take one, open a database and choose Take snapshot."
+                        actions={
+                          <SpaceBetween direction="horizontal" size="xs">
+                            <Button
+                              disabled={!selectedSnapshot || snapshotBusy}
+                              onClick={() => {
+                                setActionAlert(null);
+                                setDeleteSnapshotOpen(true);
+                              }}
+                            >
+                              Delete snapshot
+                            </Button>
+                            <Button
+                              variant="primary"
+                              disabled={!selectedSnapshot || selectedSnapshot.status !== "available" || snapshotBusy}
+                              onClick={() => {
+                                setActionAlert(null);
+                                setRestoreDbId(selectedSnapshot ? `${selectedSnapshot.name}-restored` : "");
+                                setRestoreClass("");
+                                setRestoreOpen(true);
+                              }}
+                            >
+                              Restore snapshot
+                            </Button>
+                          </SpaceBetween>
+                        }
+                      >
+                        Snapshots
+                      </Header>
+                    }
+                    columnDefinitions={[
+                      { id: "name", header: "Snapshot name", cell: (s) => <strong>{s.name}</strong> },
+                      { id: "instance", header: "DB instance", cell: (s) => s.instance || "Not reported" },
+                      {
+                        id: "status",
+                        header: "Status",
+                        cell: (s) => (
+                          <StatusIndicator type={rdsStatus(s.status)}>
+                            {rdsStatusLabel(s.status)}
+                          </StatusIndicator>
+                        ),
+                      },
+                      { id: "type", header: "Snapshot type", cell: (s) => s.type || "Not reported" },
+                      { id: "engine", header: "Engine", cell: (s) => (s.engine ? rdsEngineLabel(s.engine) : "Not reported") },
+                      { id: "created", header: "Snapshot creation time", cell: (s) => rdsTime(s.created) },
+                      {
+                        id: "storage",
+                        header: "Allocated storage",
+                        cell: (s) => (s.allocated_storage == null ? "Not reported" : `${s.allocated_storage} GiB`),
+                      },
+                    ]}
+                    items={snapshots}
+                    loading={loading}
+                    loadingText="Loading snapshots..."
+                    selectionType="single"
+                    selectedItems={selectedSnapshots}
+                    onSelectionChange={({ detail }) => setSelectedSnapshots(detail.selectedItems)}
+                    trackBy="name"
+                    empty={
+                      <Box textAlign="center" padding={{ vertical: "m" }}>
+                        No DB snapshots found.
+                      </Box>
+                    }
+                  />
+                </SpaceBetween>
+              ),
+            },
           ]}
         />
       )}
@@ -1158,6 +1319,79 @@ const RdsWorkspace: React.FC<Props> = ({
         </SpaceBetween>
       </Modal>
 
+      {/* Take Snapshot Modal */}
+      <Modal
+        visible={takeSnapshotOpen}
+        onDismiss={() => !snapshotBusy && setTakeSnapshotOpen(false)}
+        header="Take DB snapshot"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setTakeSnapshotOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} disabled={!newSnapshotId.trim()} onClick={handleTakeSnapshot}>
+                Take snapshot
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            Creates a point-in-time snapshot of {activeInstance?.name}.
+          </Box>
+          <FormField label="Snapshot name" constraintText="Unique in the Region. Letters, digits and hyphens; starts with a letter.">
+            <Input value={newSnapshotId} onChange={({ detail }) => setNewSnapshotId(detail.value)} />
+          </FormField>
+          <FlociNote>
+            Floci snapshots PostgreSQL instances only. For MySQL and MariaDB it
+            returns InvalidDBInstanceState, which is shown here.
+          </FlociNote>
+        </SpaceBetween>
+      </Modal>
+      {/* Restore Snapshot Modal */}
+      <Modal
+        visible={restoreOpen}
+        onDismiss={() => !snapshotBusy && setRestoreOpen(false)}
+        header="Restore snapshot"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setRestoreOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} disabled={!restoreDbId.trim()} onClick={handleRestoreSnapshot}>
+                Restore DB instance
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            Restoring creates a new DB instance from snapshot {selectedSnapshot?.name}; the
+            original instance is not changed.
+          </Box>
+          <FormField label="DB instance identifier" description="Name of the new DB instance.">
+            <Input value={restoreDbId} onChange={({ detail }) => setRestoreDbId(detail.value)} />
+          </FormField>
+          <FormField label={<>DB instance class <i>- optional</i></>} description="Leave blank to use the class of the snapshot's original instance.">
+            <Input value={restoreClass} placeholder="db.t3.micro" onChange={({ detail }) => setRestoreClass(detail.value)} />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+      <ConfirmActionModal
+        visible={deleteSnapshotOpen}
+        header="Delete snapshot"
+        confirmLabel="Delete"
+        confirmationText="delete me"
+        loading={snapshotBusy}
+        onConfirm={handleDeleteSnapshot}
+        onDismiss={() => setDeleteSnapshotOpen(false)}
+      >
+        Delete snapshot {selectedSnapshot?.name}? Its saved data is deleted too. This can&apos;t be undone.
+      </ConfirmActionModal>
       {/* Reboot Instance Modal */}
       <Modal
         visible={rebootInstanceOpen}

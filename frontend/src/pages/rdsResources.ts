@@ -15,6 +15,13 @@ export type RdsParameterGroup = Record<string, any> & {
   family?: string;
   description?: string;
 };
+export type RdsSnapshot = Record<string, any> & {
+  name: string;
+  instance?: string;
+  status: string;
+  type?: string;
+  engine?: string;
+};
 const array = (value: unknown): any[] => (Array.isArray(value) ? value : []);
 export function rdsInventory(payload: any) {
   const instances: RdsInstance[] = array(
@@ -97,7 +104,21 @@ export function rdsInventory(payload: any) {
           ? group.parameters.length
           : undefined)),
   }));
-  return { instances, clusters, groups };
+  const snapshots: RdsSnapshot[] = array(
+    payload.snapshots ?? payload.DBSnapshots,
+  ).map((snapshot) => ({
+    ...snapshot,
+    name: snapshot.name || snapshot.DBSnapshotIdentifier || "",
+    arn: snapshot.arn ?? snapshot.DBSnapshotArn,
+    instance: snapshot.instance ?? snapshot.DBInstanceIdentifier,
+    status: snapshot.status ?? snapshot.Status ?? "",
+    type: snapshot.type ?? snapshot.SnapshotType,
+    engine: snapshot.engine ?? snapshot.Engine,
+    engine_version: snapshot.engine_version ?? snapshot.EngineVersion,
+    created: snapshot.created ?? snapshot.SnapshotCreateTime,
+    allocated_storage: snapshot.allocated_storage ?? snapshot.AllocatedStorage,
+  }));
+  return { instances, clusters, groups, snapshots };
 }
 export function rdsStatus(
   status: string,

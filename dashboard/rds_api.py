@@ -182,6 +182,58 @@ def delete_db_instance(identifier: str, *, skip_final_snapshot: bool = True, fin
     return result
 
 
+def create_db_snapshot(instance_identifier: str, snapshot_identifier: str, *, tags: Any = None) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        'DBInstanceIdentifier': _required(instance_identifier, 'DB instance identifier'),
+        'DBSnapshotIdentifier': _required(snapshot_identifier, 'Snapshot identifier'),
+    }
+    clean_tags = _tags(tags)
+    if clean_tags:
+        kwargs['Tags'] = clean_tags
+    # Floci dumps the database inside its container before answering.
+    response = _client(long_running=True).create_db_snapshot(**kwargs)
+    return {
+        'identifier': kwargs['DBSnapshotIdentifier'],
+        'snapshot': _clean_response(response.get('DBSnapshot', {})),
+        'response': _clean_response(response),
+    }
+
+
+def delete_db_snapshot(snapshot_identifier: str) -> dict[str, Any]:
+    clean_identifier = _required(snapshot_identifier, 'Snapshot identifier')
+    response = _client().delete_db_snapshot(DBSnapshotIdentifier=clean_identifier)
+    return {
+        'identifier': clean_identifier,
+        'snapshot': _clean_response(response.get('DBSnapshot', {})),
+        'response': _clean_response(response),
+    }
+
+
+def restore_db_instance_from_snapshot(
+    snapshot_identifier: str,
+    instance_identifier: str,
+    *,
+    db_instance_class: str = '',
+    publicly_accessible: bool | None = None,
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        'DBSnapshotIdentifier': _required(snapshot_identifier, 'Snapshot identifier'),
+        'DBInstanceIdentifier': _required(instance_identifier, 'New DB instance identifier'),
+    }
+    if (db_instance_class or '').strip():
+        kwargs['DBInstanceClass'] = db_instance_class.strip()
+    if publicly_accessible is not None:
+        kwargs['PubliclyAccessible'] = bool(publicly_accessible)
+    # Restoring starts a new database container and loads the snapshot into it.
+    response = _client(long_running=True).restore_db_instance_from_db_snapshot(**kwargs)
+    return {
+        'identifier': kwargs['DBInstanceIdentifier'],
+        'snapshot_identifier': kwargs['DBSnapshotIdentifier'],
+        'instance': _clean_response(response.get('DBInstance', {})),
+        'response': _clean_response(response),
+    }
+
+
 def create_db_cluster(
     identifier: str,
     engine: str,

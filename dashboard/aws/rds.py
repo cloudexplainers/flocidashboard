@@ -28,7 +28,26 @@ def rds_inventory() -> dict[str, Any]:
     raw_instances = _rds_optional(lambda: core._paginate(rds, 'describe_db_instances', 'DBInstances'), set())
     raw_clusters = _rds_optional(lambda: core._paginate(rds, 'describe_db_clusters', 'DBClusters'), set())
     raw_groups = _rds_optional(lambda: core._paginate(rds, 'describe_db_parameter_groups', 'DBParameterGroups'), set())
-    issues = [f'{label}: {value["error"]}' for label, value in [('Databases', raw_instances), ('Clusters', raw_clusters), ('Parameter groups', raw_groups)] if isinstance(value, dict) and value.get('error')]
+    raw_snapshots = _rds_optional(lambda: core._paginate(rds, 'describe_db_snapshots', 'DBSnapshots'), set())
+    issues = [f'{label}: {value["error"]}' for label, value in [('Databases', raw_instances), ('Clusters', raw_clusters), ('Parameter groups', raw_groups), ('Snapshots', raw_snapshots)] if isinstance(value, dict) and value.get('error')]
+    snapshots = [
+        {
+            'name': snapshot.get('DBSnapshotIdentifier'),
+            'arn': snapshot.get('DBSnapshotArn'),
+            'instance': snapshot.get('DBInstanceIdentifier'),
+            'status': snapshot.get('Status'),
+            'type': snapshot.get('SnapshotType'),
+            'engine': snapshot.get('Engine'),
+            'engine_version': snapshot.get('EngineVersion'),
+            'created': snapshot.get('SnapshotCreateTime'),
+            'allocated_storage': snapshot.get('AllocatedStorage'),
+            'encrypted': snapshot.get('Encrypted'),
+            'port': snapshot.get('Port'),
+            'tags': snapshot.get('TagList', []),
+        }
+        for snapshot in (raw_snapshots if isinstance(raw_snapshots, list) else [])
+        if isinstance(snapshot, dict)
+    ]
     instances = raw_instances if isinstance(raw_instances, list) else []
     clusters = raw_clusters if isinstance(raw_clusters, list) else []
     parameter_groups = raw_groups if isinstance(raw_groups, list) else []
@@ -124,12 +143,14 @@ def rds_inventory() -> dict[str, Any]:
             'instances': len(detailed_instances),
             'clusters': len(detailed_clusters),
             'parameter_groups': len(detailed_parameter_groups),
+            'snapshots': len(snapshots),
             'available_instances': sum(1 for instance in detailed_instances if instance.get('status') == 'available'),
             'proxy_endpoints': sum(1 for instance in detailed_instances if instance.get('connect_port')),
         },
         'instances': detailed_instances,
         'clusters': detailed_clusters,
         'parameter_groups': detailed_parameter_groups,
+        'snapshots': snapshots,
         'supported': [
             'CreateDBInstance',
             'DescribeDBInstances',
@@ -145,6 +166,10 @@ def rds_inventory() -> dict[str, Any]:
             'DeleteDBParameterGroup',
             'ModifyDBParameterGroup',
             'DescribeDBParameters',
+            'CreateDBSnapshot',
+            'DescribeDBSnapshots',
+            'DeleteDBSnapshot',
+            'RestoreDBInstanceFromDBSnapshot',
         ],
         'supported_engines': [
             {'name': 'postgres', 'default_image': 'postgres:16-alpine'},
@@ -173,6 +198,8 @@ def rds_inventory() -> dict[str, Any]:
             'Floci manages real PostgreSQL, MySQL, and MariaDB Docker containers.',
             'Instances expose local TCP proxy endpoints on localhost:<proxy-port>.',
             'IAM database authentication is supported when enabled at instance creation time.',
+            'Manual DB snapshots hold a pg_dumpall of the database, and restoring one creates a new instance with that data. Floci snapshots PostgreSQL instances only; MySQL and MariaDB are refused.',
+            'Modifications apply immediately whatever ApplyImmediately says; Floci runs no maintenance window.',
         ],
     }
 
