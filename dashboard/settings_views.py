@@ -130,6 +130,12 @@ def settings_floci_reset(request):
     try:
         factory = FlociClientFactory()
         result = factory.reset_state()
+        if not result.get('ok'):
+            # Floci did not take the reset (unreachable or an HTTP error): not a success.
+            return JsonResponse({
+                'error': f"Floci did not reset its state: {result.get('error') or 'no response'}",
+                'reset_result': result,
+            }, status=502)
         return JsonResponse({
             **_settings_payload(request),
             'reset_result': result,

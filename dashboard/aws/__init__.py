@@ -378,7 +378,8 @@ class FlociClientFactory:
         try:
             data = json.loads(body)
         except json.JSONDecodeError:
-            data = {'status': 'OK'}
+            # Report what Floci sent rather than an invented status.
+            data = {'raw': body}
 
         return {
             'ok': True,

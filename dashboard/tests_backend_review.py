@@ -480,3 +480,26 @@ class RdsFinalSnapshotCheckTests(SimpleTestCase):
             status = _final_snapshot_status('describe_db_snapshots', 'DBSnapshots', DBSnapshotIdentifier='final')
 
         self.assertFalse(status['found'])
+
+
+class FlociResetTests(TestCase):
+    @patch('dashboard.settings_views.FlociClientFactory')
+    def test_unreachable_floci_reset_is_an_error(self, factory_class):
+        factory_class.return_value.reset_state.return_value = {'ok': False, 'url': 'http://floci:4566/_floci/state/reset', 'error': 'Connection refused'}
+
+        response = self.client.post('/api/settings/floci-reset/')
+
+        self.assertEqual(response.status_code, 502)
+        self.assertIn('Connection refused', response.json()['error'])
+
+    def test_non_json_reset_reply_is_reported_as_sent(self):
+        from io import BytesIO
+
+        from dashboard.aws import FlociClientFactory
+
+        reply = MagicMock()
+        reply.__enter__.return_value = BytesIO(b'reset done')
+        with patch('dashboard.aws.urlopen', return_value=reply):
+            result = FlociClientFactory(endpoint_url='http://localhost:4566').reset_state()
+
+        self.assertEqual(result['data'], {'raw': 'reset done'})
