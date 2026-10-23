@@ -231,7 +231,6 @@ def codedeploy_inventory() -> dict[str, Any]:
             'DeregisterOnPremisesInstance',
         ],
         'notes': [
-            'Deployment lists are collected from applications and deployment groups, then de-duplicated before detail lookup.',
             'ContinueDeployment is accepted but does nothing. PutLifecycleEventHookExecutionStatus does not check that the deployment exists.',
         ],
     }

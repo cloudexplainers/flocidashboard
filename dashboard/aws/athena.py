@@ -134,9 +134,8 @@ def athena_inventory() -> dict[str, Any]:
             'FLOCI_SERVICES_ATHENA_DUCK_URL',
         ],
         'notes': [
-            'Mock mode makes queries transition to SUCCEEDED immediately with empty results.',
-            'The DuckDB sidecar is started lazily on the first StartQueryExecution call.',
-            'The dashboard only previews a few result rows for completed queries.',
+            "Floci runs queries in DuckDB (its floci-duck container) against the data in Floci's S3 and writes the results as CSV to the query's output location. With FLOCI_SERVICES_ATHENA_MOCK=true, queries succeed at once with no rows.",
+            'This page previews only the first few result rows of a completed query.',
         ],
     }
 

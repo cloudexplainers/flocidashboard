@@ -461,9 +461,58 @@ test('generic workbench fills only the selected resource and its parents, and de
   await dialog.getByLabel('Confirmation text').fill('delete');
   await dialog.getByRole('button', { name: 'Delete user', exact: true }).click();
   await expect.poll(() => deleted).toBe('DELETE');
-  await expect(page.getByText('How Floci emulates this service', { exact: true })).toBeVisible();
+  // The workbench shows the notes once, in the layout's collapsed section, not again in the inventory.
+  await expect(page.getByText('How Floci emulates this service', { exact: true })).toHaveCount(1);
+  await expect(page.getByText('Floci Transfer Family covers the management-plane API only.')).toBeHidden();
+  await page.getByText('How Floci emulates this service', { exact: true }).click();
   await expect(page.getByText('Floci Transfer Family covers the management-plane API only.')).toBeVisible();
   await expect(page.getByText(/example changelog line/)).toHaveCount(0);
+});
+
+test('custom consoles show the inventory notes once, collapsed', async ({ page }) => {
+  await inventory(page, 'dynamodb', {
+    tables: [],
+    notes: ['Global-table replicas are reported as ACTIVE, but Floci replicates nothing.'],
+    not_supported: ['Example operation Floci answers UnknownOperation'],
+  });
+  await page.goto('/dynamodb/');
+  const section = page.getByTestId('inventory-notes');
+  await expect(section).toHaveCount(1);
+  await expect(section).toContainText('How Floci emulates this service');
+  await expect(section).toContainText('2 notes');
+  await expect(page.getByText(/Floci replicates nothing/)).toBeHidden();
+  await section.getByText('How Floci emulates this service', { exact: true }).click();
+  await expect(page.getByText(/Floci replicates nothing/)).toBeVisible();
+  await expect(section).toContainText('Not emulated');
+  await expect(section).toContainText('Example operation Floci answers UnknownOperation');
+  await page.screenshot({ path: 'test-results/screenshots/inventory-notes.png' });
+
+  // Another console shows its own notes, not the previous service's.
+  await inventory(page, 'route53', { hosted_zones: [], notes: [] });
+  await page.goto('/route53/');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+  await expect(page.getByTestId('inventory-notes')).toHaveCount(0);
+});
+
+test('a console whose inventory load failed still gets its notes, without a load warning', async ({ page }) => {
+  let inventoryRequests = 0;
+  await page.route('**/api/secretsmanager/', route => {
+    inventoryRequests += 1;
+    if (inventoryRequests === 1) return route.fulfill({ status: 502, json: { error: 'Endpoint offline' } });
+    return route.fulfill({ json: {
+      secrets: [],
+      notes: ['Rotation invokes the rotation Lambda function for real.'],
+      load_errors: [{ operation: 'ListSecrets', code: 'InternalFailure', error: 'kaput', unsupported: false }],
+    } });
+  });
+  await page.goto('/secretsmanager/');
+  const section = page.getByTestId('inventory-notes');
+  await expect(section).toContainText('How Floci emulates this service');
+  await section.getByText('How Floci emulates this service', { exact: true }).click();
+  await expect(page.getByText('Rotation invokes the rotation Lambda function for real.')).toBeVisible();
+  // The second request is the notes section's own: its load errors are about lists this page didn't show.
+  await expect(page.getByTestId('partial-load-warning')).toHaveCount(0);
+  expect(inventoryRequests).toBe(2);
 });
 
 test('generic workbench selects show AWS values and send the visible default', async ({ page }) => {

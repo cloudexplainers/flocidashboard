@@ -28,7 +28,6 @@ export function ResourceInventory({ service, revision = 0, onSelectResource }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const [notes, setNotes] = useState<string[]>([]);
   const onSelect = useRef(onSelectResource);
   onSelect.current = onSelectResource;
   const kindRef = useRef('');
@@ -44,14 +43,8 @@ export function ResourceInventory({ service, revision = 0, onSelectResource }: {
       if (!alive) return;
       const groups = Object.fromEntries(Object.entries(data).filter(([key, value]) => isResourceCollection(key, value)).map(([key, value]) => [key, value as any[]]));
       setCollections(groups);
-      const strings = (value: unknown) => Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-      setNotes([
-        // Release-changelog lines ("Floci 1.5.20 adds ...") describe old versions, not this emulator.
-        ...strings(data.notes).filter(note => !/^Floci \d+\.\d+\.\d+ /.test(note)),
-        ...[...strings(data.out_of_scope), ...strings(data.not_supported)].map(item => `Not emulated: ${item}`),
-      ]);
       setKind(previous => previous in groups ? previous : Object.keys(groups)[0] || '');
-    }).catch(err => { if (alive) { setError(err.message); setCollections({}); setNotes([]); } }).finally(() => { if (alive) setLoading(false); });
+    }).catch(err => { if (alive) { setError(err.message); setCollections({}); } }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [service.key, service.api_path, refresh, revision]);
   kindRef.current = kind;
@@ -63,7 +56,6 @@ export function ResourceInventory({ service, revision = 0, onSelectResource }: {
   return <Container header={<Header variant="h2" description="Inspect resources before choosing an operation." actions={<Button onClick={() => setRefresh(refresh + 1)} iconName="refresh" loading={loading}>Refresh resources</Button>}>Resource inventory</Header>}>
     <SpaceBetween size="m">
       {error && <Alert type="error">{error}</Alert>}
-      {notes.length > 0 && <Alert type="info" header="How Floci emulates this service"><ul style={{ margin: 0, paddingLeft: 20 }}>{notes.map(note => <li key={note}>{note}</li>)}</ul></Alert>}
       <Select ariaLabel="Resource type" selectedOption={kind ? { label: label(kind), value: kind } : null} placeholder="Resource type" options={Object.keys(collections).map(key => ({ value: key, label: `${label(key)} (${collections[key].length})` }))} onChange={({ detail }) => { setKind(detail.selectedOption.value!); kindRef.current = detail.selectedOption.value!; selectResources([]); setFilter(''); }} />
       <TextFilter filteringText={filter} filteringPlaceholder="Find resources" onChange={({ detail }) => { setFilter(detail.filteringText); selectResources([]); }} />
       <Table loading={loading} loadingText="Loading resources" selectionType="single" selectedItems={selected} onSelectionChange={({ detail }) => selectResources([...detail.selectedItems])} columnDefinitions={keys.length ? keys.map(key => ({ id: key, header: label(key), sortingField: key, minWidth: key === keys[0] ? 160 : 140, cell: (item: any) => key === keys[0] ? <Button variant="inline-link" onClick={() => selectResources([item])}>{String(item[key] ?? 'Not reported')}</Button> : <div style={{ maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item[key] == null ? 'Not reported' : String(item[key])}>{/status|state/i.test(key) || typeof item[key] === 'boolean' ? <ResourceValue name={key} value={item[key]} /> : String(item[key] ?? 'Not reported')}</div> })) : [{ id: 'resource', header: 'Resource', cell: (item: any) => JSON.stringify(item) }]} items={filtered} empty={<Box textAlign="center">{filter ? 'No resources match your filter.' : 'No resources reported by this endpoint.'}</Box>} />

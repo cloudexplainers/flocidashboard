@@ -55,7 +55,7 @@ def rdsdata_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'RDS Data API is request-oriented rather than catalog-oriented, so this page surfaces supported calls and required request fields.',
+            'The RDS Data API has no resources to list, so this page shows the calls it supports and their required fields.',
         ],
     }
 

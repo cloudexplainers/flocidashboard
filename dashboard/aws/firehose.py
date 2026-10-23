@@ -103,9 +103,8 @@ def firehose_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Records are buffered and delivered when the stream\'s buffering hints are reached (size or interval, 5 MiB / 300 seconds by default), as in AWS. FLOCI_SERVICES_FIREHOSE_FLUSH_RECORD_COUNT makes Floci flush after a fixed number of records instead.',
+            "Records are buffered and delivered when the stream's buffering hints are reached (size or interval, 5 MiB / 300 seconds by default), as in AWS. FLOCI_SERVICES_FIREHOSE_FLUSH_RECORD_COUNT makes Floci flush after a fixed number of records instead.",
             'A stream with an S3 destination delivers to its bucket. Floci also accepts a stream with no destination, which AWS rejects, and delivers its records to the floci-firehose-results bucket.',
-            'Destinations are flattened from each delivery stream so delivery configuration can be scanned together.',
             'Floci adds a newline after each record that does not end with one; AWS writes record bytes exactly as sent, with no separator.',
         ],
     }

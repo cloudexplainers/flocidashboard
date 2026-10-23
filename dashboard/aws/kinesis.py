@@ -137,9 +137,7 @@ def kinesis_inventory() -> dict[str, Any]:
             'UpdateShardCount',
             'UpdateStreamMode',
         ],
-        'notes': [
-            'Shard and consumer details are flattened from each stream for scanning.',
-        ],
+        'notes': [],
     }
 
 

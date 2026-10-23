@@ -141,8 +141,6 @@ def dynamodb_inventory() -> dict[str, Any]:
             'ListTagsOfResource',
         ],
         'notes': [
-            'UpdateItem now honors the legacy Expected condition shape for compatibility with older clients.',
-            'Point-in-time recovery can be turned on and is reported, but Floci 2.3.0 cannot restore a table (no RestoreTableToPointInTime or CreateBackup).',
             'Global-table replicas added with UpdateTable are reported as ACTIVE, but Floci creates no table in the replica Region and replicates nothing.',
         ],
         'streams_supported': [

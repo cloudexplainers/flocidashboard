@@ -697,6 +697,28 @@ The lab writes its order row with the RDS Data API through the cluster (as AWS a
 secret `--manage-master-user-password` creates; Floci doesn't report `HttpEndpointEnabled`, so the lab passes
 `--enable-http-endpoint` for fidelity only. `check_labs --service rds` passed on 2.3.0.
 
+## Inventory notes on every console (2026-10-23)
+
+Every inventory (`GET /api/<service>/`) can return `notes`, `not_supported` and `out_of_scope`, but only the
+generic workbench showed them, so notes on custom consoles (DynamoDB replicas, Secrets Manager rotation) were
+visible only through the API. The fetch hook in `frontend/src/api/loadErrors.ts`, which already raises the
+"Some lists are incomplete" warning, now also keeps each service's notes, and `ConsoleLayout` shows them once,
+above the console, in a collapsed "How Floci emulates this service" section (`components/InventoryNotes.tsx`).
+The workbench no longer renders its own copy. If a console's inventory request failed, the section requests
+the inventory once itself; that request doesn't raise the incomplete-lists warning.
+
+Every service's notes were then reviewed against Floci's source at `2.3.0`:
+
+| Change | Services |
+| --- | --- |
+| Wrong, corrected | EC2 (`CreateKeyPair` returns a real key and the public key is copied into the instance; security groups are enforced only with `FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true`), Pipes (targets are Lambda, SQS, SNS, EventBridge and Step Functions; no Kinesis), EKS ("Phase 1" was out of date: node groups and Fargate profiles exist), Athena (DuckDB, mock mode off by default), ACM (export also allowed for certificates requested with export enabled), Secrets Manager (also rotates on schedule) |
+| Repeated a console's inline note, removed | DynamoDB PITR, CloudFront caching, Secrets Manager resource policies, RDS snapshots, `ApplyImmediately`, point-in-time restore, replicas, Aurora failover and cluster snapshots, Route 53 |
+| Implementation chatter, removed or reworded | Protocol lines (KMS, CloudFormation, ElastiCache, ECR, Step Functions, RDS, Pipes), "This page focuses…"/"This read-only inspector…", "round out"/"complements", AppSync's "should now work", DynamoDB's `Expected` changelog line. Notes that say the page shows only part of a list are kept, reworded as "This page…". |
+
+`dashboard/tests_inventory_notes.py` checks the notes statically (no chatter, no inline duplicates, the
+corrected claims). Not changed here: CloudTrail, Elastic Load Balancing and Auto Scaling notes, whose consoles
+other work was changing at the same time; CloudTrail's notes still repeat the console's inline note.
+
 ## Recommended next work
 
 | Item | Why not here |
@@ -705,6 +727,5 @@ secret `--manage-master-user-password` creates; Floci doesn't report `HttpEndpoi
 | ELBv2 target-group attributes (stickiness, deregistration delay), listener and rule edits; Auto Scaling instance refresh and `SetInstanceHealth` | HA web tier (Wave 1). Check that the reconciler replaces Unhealthy instances before building the Auto Scaling part. |
 | S3 lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication config (configuration only) | S3 data protection (Wave 1). Each needs its own label. |
 | EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
-| Show inventory `notes` on dedicated consoles | Only the generic workbench renders them, so notes added to dedicated consoles' loaders (DynamoDB replicas, Secrets Manager rotation) are visible only through the API. |
 | Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration, ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
 | Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |

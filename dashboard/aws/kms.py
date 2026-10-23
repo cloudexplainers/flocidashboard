@@ -131,10 +131,8 @@ def kms_inventory() -> dict[str, Any]:
             'RetireGrant',
         ],
         'notes': [
-            'KMS uses JSON 1.1 with X-Amz-Target: TrentService.* against the local Floci endpoint.',
-            'CreateKey accepts creation-time tag floci:override-id for deterministic local test key IDs.',
-            'Floci strips reserved floci:* tags from stored resource tags and rejects adding them later.',
-            'Grant lifecycle APIs are stored and queryable but are not evaluated during cryptographic operations.',
+            'CreateKey accepts the creation-time tag floci:override-id to pick the key ID. Floci strips reserved floci:* tags from the stored tags and rejects adding them later.',
+            'Grants are stored and can be listed, retired and revoked, but are not evaluated during cryptographic operations.',
         ],
     }
 

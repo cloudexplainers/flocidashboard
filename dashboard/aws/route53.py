@@ -82,10 +82,7 @@ def route53_inventory() -> dict[str, Any]:
             'ListTrafficPolicyInstances',
             'ListReusableDelegationSets',
         ],
-        'notes': [
-            'Route 53 inventory expands hosted zones with record sets and query logging configuration when available.',
-            'Route 53 is a global service; this dashboard still uses the configured local endpoint.',
-        ],
+        'notes': [],
     }
 
 

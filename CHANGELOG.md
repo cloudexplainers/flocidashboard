@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Emulation notes on every console (see "Inventory notes on every console" in `docs/console-accuracy-review.md`):
+  - **Shown everywhere:** each service console, custom or generic, now has a collapsed "How Floci emulates this service" section with the service's notes on what Floci simulates and what it accepts without simulating. Before, only the generic workbench showed them.
+  - **Corrected notes:** EC2 key pairs hold real keys and security groups are enforced only with `FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true`; Pipes targets include EventBridge but not Kinesis; Athena runs queries in DuckDB; EKS has node groups and Fargate profiles; ACM exports certificates requested with export enabled; Secrets Manager rotates on schedule.
+  - **Removed:** notes that repeated what a console says inline (DynamoDB PITR, CloudFront caching, Secrets Manager policies, RDS snapshots, restore, replicas and failover, Route 53) and notes about the dashboard's own code or protocols.
+
 - RDS and Aurora resilience:
   - **Console:** a database's Actions menu adds Create read replica, Promote and Restore to point in time (latest restorable time or a custom UTC time); a cluster's Actions menu adds Add reader, Failover (to a chosen reader or the one RDS picks) and Take snapshot. The Snapshots tab lists cluster snapshots, which restore to a new cluster or delete after typed confirmation. A database's Configuration tab shows its replication role, source, replicas, replication status and latest restorable time.
   - **Says what Floci doesn't do:** point-in-time restore copies the source as it is now whatever time you choose; a replica gets one copy of its PostgreSQL source and isn't updated afterwards (and accepts writes); Multi-AZ runs no standby; a failover moves only the writer role, because a cluster's instances share one database; cluster snapshots are Aurora PostgreSQL only.

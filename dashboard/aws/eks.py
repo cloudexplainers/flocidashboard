@@ -246,8 +246,7 @@ def eks_inventory() -> dict[str, Any]:
             'ListTagsForResource',
         ],
         'notes': [
-            'Floci EKS Phase 1 supports cluster create, describe, list, delete, tag, untag, and list-tags operations through the REST JSON API.',
-            'Mock mode stores cluster metadata in-process and marks clusters ACTIVE immediately; real mode starts a k3s container per cluster.',
+            'Floci starts a k3s container for each cluster. In mock mode clusters are marked ACTIVE immediately with no Kubernetes behind them.',
         ],
     }
 

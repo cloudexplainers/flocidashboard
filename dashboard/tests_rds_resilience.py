@@ -206,7 +206,8 @@ class ResilienceInventoryTests(SimpleTestCase):
         self.assertEqual(result['summary']['cluster_snapshots'], 1)
         self.assertEqual(result['cluster_snapshots'][0]['cluster'], 'aurora')
         self.assertIn('FailoverDBCluster', result['supported'])
-        self.assertTrue(any('keeps no transaction log' in note for note in result['notes']))
+        # The console says this next to the restore form, so the inventory notes don't repeat it.
+        self.assertFalse(any('keeps no transaction log' in note for note in result['notes']))
 
 
 class FakeRds:

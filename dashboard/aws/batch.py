@@ -95,7 +95,7 @@ def batch_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'The dashboard samples jobs from the first ten queues across common Batch job statuses to keep refreshes bounded.',
+            'This page lists jobs from the first ten queues only, across the common job statuses.',
         ],
     }
 
