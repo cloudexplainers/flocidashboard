@@ -108,8 +108,7 @@ def secretsmanager_inventory() -> dict[str, Any]:
             'value_display': 'Secret values are retrieved only on explicit request.',
         },
         'notes': [
-            'Rotation invokes the rotation Lambda function for real.',
-            'Resource policies are stored and returned, but Floci does not evaluate them: a Deny does not block GetSecretValue.',
+            "Rotation invokes the rotation Lambda function for real, both on RotateSecret and when a secret's rotation schedule comes due.",
         ],
     }
 

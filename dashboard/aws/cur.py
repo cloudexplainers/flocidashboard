@@ -35,9 +35,7 @@ def cur_inventory() -> dict[str, Any]:
             if operation in operations
         ],
         'available_sdk_operations': sorted(operations),
-        'notes': [
-            'Report definitions connect billing export metadata to local S3-style delivery settings.',
-        ],
+        'notes': [],
     }
 
 

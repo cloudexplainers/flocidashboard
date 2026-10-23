@@ -174,7 +174,6 @@ def elasticache_inventory() -> dict[str, Any]:
             'DescribeEvents',
         ],
         'notes': [
-            'Floci ElastiCache uses the AWS-compatible Query management API and Redis RESP for the data plane.',
             'CreateReplicationGroup starts a real Valkey or Redis Docker container and exposes it through a local TCP proxy port.',
             'Supported interactive workflows include replication-group lifecycle, ElastiCache users, user access strings, and IAM auth token validation.',
         ],

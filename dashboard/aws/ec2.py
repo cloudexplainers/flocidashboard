@@ -268,12 +268,11 @@ def ec2_inventory() -> dict[str, Any]:
             {'type': 'Main Route Table', 'id': 'rtb-default', 'details': 'Associated with default VPC'},
         ],
         'notes': [
-            'RunInstances launches a Docker-backed local instance unless EC2 mock mode is enabled.',
-            'DescribeImages returns a static list of common AMIs and Floci-native AMI IDs.',
-            'CreateKeyPair returns dummy RSA PEM material that is not usable for real SSH.',
-            'Use ImportKeyPair with a real public key for working SSH access.',
+            'RunInstances starts a Docker container for each instance unless EC2 mock mode is on.',
+            'DescribeImages returns a fixed list of common AMIs and Floci-native AMI IDs.',
+            "Key pairs hold real keys: CreateKeyPair returns a usable private key, and Floci copies the key pair's public key into the instance container for SSH.",
             'Floci serves IMDS-compatible metadata on the configured host IMDS port, default 9169.',
-            'Security group rules are stored and returned but local Docker networking handles enforcement.',
+            'Security group rules are stored and returned, but Floci applies them to instance traffic only when it runs with FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true.',
         ],
     }
 

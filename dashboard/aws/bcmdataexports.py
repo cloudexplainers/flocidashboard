@@ -61,9 +61,7 @@ def bcmdataexports_inventory() -> dict[str, Any]:
             if operation in operations
         ],
         'available_sdk_operations': sorted(operations),
-        'notes': [
-            'BCM exports round out the local cost-services flow alongside Pricing, Cost Explorer, and CUR.',
-        ],
+        'notes': [],
     }
 
 

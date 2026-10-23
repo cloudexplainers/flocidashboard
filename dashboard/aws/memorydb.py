@@ -57,9 +57,7 @@ def memorydb_inventory() -> dict[str, Any]:
             if operation in operations
         ],
         'available_sdk_operations': sorted(operations),
-        'notes': [
-            'This read-only inspector focuses on cluster, user, ACL, subnet group, parameter group, and snapshot inventory.',
-        ],
+        'notes': [],
     }
 
 

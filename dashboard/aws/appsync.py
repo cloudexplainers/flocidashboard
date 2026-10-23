@@ -115,9 +115,7 @@ def appsync_inventory() -> dict[str, Any]:
             'Type CRUD',
             'TagResource, UntagResource, and ListTagsForResource',
         ],
-        'notes': [
-            'GraphQL workloads that depend on schema introspection and the full data-source surface should now work end to end against Floci.',
-        ],
+        'notes': [],
     }
 
 

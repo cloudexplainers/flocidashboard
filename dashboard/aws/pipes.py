@@ -91,10 +91,8 @@ def pipes_inventory() -> dict[str, Any]:
             'DELETED',
         ],
         'notes': [
-            'EventBridge Pipes uses a REST-JSON API against the local Floci endpoint.',
-            'Pipe summaries are expanded with DescribePipe so source, enrichment, target, logging, role, KMS, and tag data are visible.',
-            'Supported sources include SQS, Kinesis, DynamoDB streams, and Kafka topics.',
-            'Supported targets include Lambda, SQS, SNS, Kinesis, and Step Functions.',
+            'Supported sources are SQS queues, Kinesis streams, DynamoDB streams and Kafka topics (Amazon MSK or self-managed).',
+            'Supported targets are Lambda, SQS, SNS, EventBridge event buses and Step Functions; Floci delivers nothing to any other target. Only Lambda enrichments run.',
         ],
     }
 

@@ -723,16 +723,59 @@ targets behind an ALB, and an ASG of two instances):
 | Cancel and rollback | `CancelInstanceRefresh` and `RollbackInstanceRefresh` return `UnsupportedOperation` (also on `main`). Suspending the `InstanceRefresh` process pauses a refresh (`AutoScalingReconciler.refreshPaused`). | Not offered; listed under "Not emulated"; inventory note |
 | Set instance health | `Unhealthy` is stored and reported; the reconciler never replaces the instance (watched 40 s) and the grace period is ignored. A stopped or terminated instance is replaced to keep the desired capacity (both checked). | Action description and success message; inventory note |
 
-No lab in this change. The HA web tier lab (W1-1) is the next step; see the recommended next work.
+The Elastic Load Balancing inventory notes no longer repeat what these tabs say inline, and two notes about how the
+dashboard loads the lists were dropped (see "Inventory notes on every console" below). No lab in this change. The HA
+web tier lab (W1-1) is the next step; see the recommended next work.
+
+## Inventory notes on every console (2026-10-23)
+
+Every inventory (`GET /api/<service>/`) can return `notes`, `not_supported` and `out_of_scope`, but only the
+generic workbench showed them, so notes on custom consoles (DynamoDB replicas, Secrets Manager rotation) were
+visible only through the API. The fetch hook in `frontend/src/api/loadErrors.ts`, which already raises the
+"Some lists are incomplete" warning, now also keeps each service's notes, and `ConsoleLayout` shows them once,
+above the console, in a collapsed "How Floci emulates this service" section (`components/InventoryNotes.tsx`).
+The workbench no longer renders its own copy. If a console's inventory request failed, the section requests
+the inventory once itself; that request doesn't raise the incomplete-lists warning.
+
+Every service's notes were then reviewed against Floci's source at `2.3.0`:
+
+| Change | Services |
+| --- | --- |
+| Wrong, corrected | EC2 (`CreateKeyPair` returns a real key and the public key is copied into the instance; security groups are enforced only with `FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true`), Pipes (targets are Lambda, SQS, SNS, EventBridge and Step Functions; no Kinesis), EKS ("Phase 1" was out of date: node groups and Fargate profiles exist), Athena (DuckDB, mock mode off by default), ACM (export also allowed for certificates requested with export enabled), Secrets Manager (also rotates on schedule) |
+| Repeated a console's inline note, removed | DynamoDB PITR, CloudFront caching, CloudTrail events, Secrets Manager resource policies, RDS snapshots, `ApplyImmediately`, point-in-time restore, replicas, Aurora failover and cluster snapshots, Route 53 |
+| Implementation chatter, removed or reworded | Protocol lines (KMS, CloudFormation, ElastiCache, ECR, Step Functions, RDS, Pipes), "This page focuses…"/"This read-only inspector…", "round out"/"complements", AppSync's "should now work", DynamoDB's `Expected` changelog line. Notes that say the page shows only part of a list are kept, reworded as "This page…". |
+
+`dashboard/tests_inventory_notes.py` checks the notes statically (no chatter, no inline duplicates, the
+corrected claims). CloudTrail keeps only its event-selector note; the console says the rest inline. Elastic Load
+Balancing and Auto Scaling notes were left as they are, since the HA web tier work was changing those consoles.
+
+## CloudTrail log-file viewer (2026-10-23)
+
+Done from the recommended next work. Floci records no management events, so `LookupEvents` is always empty, but
+a logging trail delivers matching S3 data events to its bucket. A trail's **Log files** tab now reads them:
+
+- `GET /api/cloudtrail/trails/<trail>/log-files/` finds the trail's bucket and `S3KeyPrefix` with `DescribeTrails`,
+  walks the `AWSLogs/<account>/CloudTrail/<region>/yyyy/MM/dd/` folders (`ListObjectsV2` with a delimiter), and
+  returns whole days of `.json.gz` files newest first, about 100 files per request; `?before=yyyy/MM/dd` continues.
+  Days with more than 2,000 files per account and Region are cut off and reported through `record_truncation`.
+- `GET .../log-files/read/?key=` reads one file under that prefix only, up to 5 MB compressed and 25 MB expanded,
+  gunzips it and returns `Records`. A missing trail or bucket, AccessDenied, a file that isn't gzip or JSON, or
+  one without `Records` is an error, never an empty list.
+- A Floci note on the tab, and a link from the Event history note.
+
+Checked in `CloudTrailLogWriter.java` (key layout; a prefix gets a `/` appended, as in AWS; files go under the
+event's Region, so a multi-Region trail can have several Region folders) and live on 2.3.0: a trail with prefix
+`audit` and an `arn:aws:s3:::bucket/` selector delivered one file after about 60 seconds holding PutObject,
+GetObject, a GetObject that failed with `NoSuchKey`, and DeleteObject; the tab listed and opened it. A trail
+whose bucket was deleted shows `NoSuchBucket`. CloudTrail digest files and other objects in the bucket are not
+listed.
 
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
-| CloudTrail log-file viewer | Trails already have an event-selector editor; a view that lists and unzips the `AWSLogs/` files in the trail bucket would make the audit topic (CLF 2.x, SAA 1.x) usable without the S3 console. |
 | HA web tier lab (W1-1): launch configuration with a web server in user data, ALB across two subnets, target group health check, ASG (min 2) attached to it; verify the ALB forwards to ASG instances, an instance refresh, and self-healing by terminating an instance | The console controls exist (above). Verify traffic from inside an instance (SSM `curl http://floci:<port>/`), since listener ports aren't published to the host. Teach that Set instance health Unhealthy doesn't trigger replacement in Floci. |
 | S3 lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication config (configuration only) | S3 data protection (Wave 1). Each needs its own label. |
 | EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
-| Show inventory `notes` on dedicated consoles | Only the generic workbench renders them, so notes added to dedicated consoles' loaders (DynamoDB replicas, Secrets Manager rotation) are visible only through the API. |
 | Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration, ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
 | Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |

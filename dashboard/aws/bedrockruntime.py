@@ -120,8 +120,7 @@ def bedrockruntime_inventory() -> dict[str, Any]:
             'Tool-use round-tripping in Converse.',
         ],
         'notes': [
-            'This page describes the Bedrock Runtime data plane; Floci does not persist Bedrock Runtime resources.',
-            'The response shape is designed to satisfy AWS SDK and CLI clients without calling a real model.',
+            'Floci keeps no Bedrock Runtime resources, so this page describes the data-plane calls instead.',
         ],
     }
 

@@ -71,7 +71,7 @@ def codepipeline_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'This read-only inspector expands the first 50 pipelines with pipeline definition, state, and execution summaries when supported.',
+            'This page shows the definition, state and executions of the first 50 pipelines only.',
         ],
     }
 

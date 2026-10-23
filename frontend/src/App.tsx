@@ -1036,6 +1036,10 @@ export const App: React.FC = () => {
     }
   };
 
+  // The inventory (GET /api/<service>/) whose emulation notes the layout shows.
+  const inventoryView = currentView === 'elbv2' || currentView === 'elb' ? 'elasticloadbalancing' : currentView;
+  const inventoryService = services.some((s) => s.key === inventoryView) ? inventoryView : undefined;
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <TopNav
@@ -1056,6 +1060,7 @@ export const App: React.FC = () => {
         sideNavItems={getSideNavItems()}
         activeSideNavHref={activeSubView}
         onSideNavFollow={(href) => navigateTo(href)}
+        inventoryService={inventoryService}
       >
         <Suspense
           fallback={

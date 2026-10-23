@@ -207,7 +207,7 @@ class ElasticLoadBalancingEditEndpointTests(SimpleTestCase):
 class ElasticLoadBalancingInventoryAttributeTests(SimpleTestCase):
     @patch('dashboard.aws._paginate')
     @patch('dashboard.aws.FlociClientFactory')
-    def test_target_groups_carry_their_attributes_and_the_note_says_they_are_not_applied(self, factory, paginate):
+    def test_target_groups_carry_their_attributes(self, factory, paginate):
         elbv2 = MagicMock()
         elbv2.describe_target_group_attributes.return_value = {'Attributes': [
             {'Key': 'stickiness.enabled', 'Value': 'true'}, {'Key': 'deregistration_delay.timeout_seconds', 'Value': '30'},
@@ -230,7 +230,8 @@ class ElasticLoadBalancingInventoryAttributeTests(SimpleTestCase):
             {'stickiness.enabled': 'true', 'deregistration_delay.timeout_seconds': '30'},
         )
         self.assertIn('ModifyTargetGroupAttributes', inventory['supported_from_sdk'])
-        self.assertTrue(any('no draining' in note for note in inventory['notes']))
+        # The Attributes and Health checks tabs say this inline, so the inventory notes don't repeat it.
+        self.assertFalse(any('draining' in note for note in inventory['notes']))
 
 
 class AutoScalingRefreshAndHealthTests(SimpleTestCase):

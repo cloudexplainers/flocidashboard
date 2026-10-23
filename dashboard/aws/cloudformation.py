@@ -185,10 +185,7 @@ def cloudformation_inventory() -> dict[str, Any]:
             'ListStackSetOperations',
         ],
         'protocol': 'Query XML',
-        'notes': [
-            'CloudFormation actions use the Query XML protocol at the Floci root endpoint.',
-            'Stacks can expose templates, events, resources, outputs, stack policies, and change sets.',
-        ],
+        'notes': [],
     }
 
 

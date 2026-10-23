@@ -84,7 +84,7 @@ def costexplorer_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'The dashboard samples the current month to keep Cost Explorer reads bounded.',
+            'This page reads costs for the current month only.',
             'Costs are synthesized from the resources in Floci and its bundled price list; they are not real charges. Reservation and Savings Plans reports return zeroed totals.',
             'Anomaly monitors and subscriptions are stored, but never evaluate costs or send notifications.',
         ],

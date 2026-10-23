@@ -2,6 +2,10 @@
 // call fails, and name each failed call in `load_errors`. This hook watches every inventory
 // response, so all consoles can say which lists Floci did not return instead of showing
 // them as empty.
+//
+// The same responses carry `notes`, `not_supported` and `out_of_scope`: what Floci accepts
+// without simulating it. The hook keeps the latest of those per service, so the layout can
+// show them once on every console, custom or generic.
 
 export interface LoadError {
   operation: string;
@@ -16,6 +20,57 @@ export interface PartialLoadDetail {
 }
 
 export const PARTIAL_LOAD_EVENT = 'floci_partial_load';
+export const INVENTORY_NOTES_EVENT = 'floci_inventory_notes';
+
+export interface InventoryNotes {
+  notes: string[];
+  notEmulated: string[];
+}
+
+const notesByService = new Map<string, InventoryNotes>();
+const seenServices = new Set<string>();
+const requestedServices = new Set<string>();
+// Marks the notes section's own inventory request, whose load errors describe lists the
+// console doesn't show, so they don't raise the "Some lists are incomplete" warning.
+const NOTES_ONLY_HEADER = 'X-Floci-Notes-Only';
+
+export function inventoryNotes(service: string): InventoryNotes | undefined {
+  return notesByService.get(service);
+}
+
+const strings = (value: unknown) => Array.isArray(value)
+  ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+  : [];
+
+/** Reads the emulation notes from an inventory response; undefined if it has none. */
+export function readInventoryNotes(data: any): InventoryNotes | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const notes = strings(data.notes)
+    // Release-changelog lines ("Floci 1.5.20 adds ...") describe old versions, not this emulator.
+    .filter(note => !/^Floci \d+\.\d+\.\d+ /.test(note));
+  const notEmulated = [...new Set([...strings(data.not_supported), ...strings(data.out_of_scope)])];
+  return notes.length || notEmulated.length ? { notes, notEmulated } : undefined;
+}
+
+/**
+ * Some custom consoles never request GET /api/<service>/. Once a console has had time to load,
+ * this fetches the inventory once per page load so its notes can be shown.
+ */
+export function requestInventoryNotes(service: string) {
+  if (seenServices.has(service) || requestedServices.has(service)) return;
+  requestedServices.add(service);
+  fetch(`/api/${service}/`, { headers: { [NOTES_ONLY_HEADER]: '1' } }).catch(() => undefined);
+}
+
+function recordInventoryNotes(service: string, data: any) {
+  seenServices.add(service);
+  // Notes are fixed per service, so a failed or note-less response keeps the last ones.
+  const found = readInventoryNotes(data);
+  if (!found || JSON.stringify(found) === JSON.stringify(notesByService.get(service))) return;
+  notesByService.set(service, found);
+  window.dispatchEvent(new CustomEvent<string>(INVENTORY_NOTES_EVENT, { detail: service }));
+}
+
 const INVENTORY_PATH = /^\/api\/([a-z0-9-]+)\/$/;
 
 export function installLoadErrorHook() {
@@ -29,6 +84,8 @@ export function installLoadErrorHook() {
       const match = method === 'GET' && url.origin === window.location.origin ? INVENTORY_PATH.exec(url.pathname) : null;
       if (match && response.ok) {
         response.clone().json().then(data => {
+          recordInventoryNotes(match[1], data);
+          if (new Headers(init?.headers).has(NOTES_ONLY_HEADER)) return;
           const errors = Array.isArray(data?.load_errors) ? data.load_errors as LoadError[] : [];
           if (errors.length) window.dispatchEvent(new CustomEvent<PartialLoadDetail>(PARTIAL_LOAD_EVENT, { detail: { service: match[1], errors } }));
         }).catch(() => undefined);

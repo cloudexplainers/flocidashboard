@@ -157,9 +157,9 @@ def ecr_inventory() -> dict[str, Any]:
             'TLS via emulated ACM',
         ],
         'notes': [
-            'The control plane uses JSON 1.1 and the data plane is a real OCI Distribution v2 registry.',
+            'The data plane is a real OCI Distribution v2 registry.',
             'Repository URIs use loopback hostnames like <account>.dkr.ecr.<region>.localhost:<port>/<repo> by default.',
-            'GetAuthorizationToken returns a docker login token, but the dashboard only displays proxy endpoints.',
+            'This page shows registry endpoints, not docker login tokens.',
             'Deleted image blobs are reclaimed by POST /_floci/ecr/gc.',
         ],
     }

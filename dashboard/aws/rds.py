@@ -238,16 +238,10 @@ def rds_inventory() -> dict[str, Any]:
             'FLOCI_STORAGE_SERVICES_RDS_MODE',
         ],
         'notes': [
-            'RDS management uses Query XML and the data plane uses PostgreSQL or MySQL wire protocol.',
             'Floci manages real PostgreSQL, MySQL, and MariaDB Docker containers.',
             'Instances expose local TCP proxy endpoints on localhost:<proxy-port>.',
             'IAM database authentication is supported when enabled at instance creation time.',
-            'Manual DB snapshots hold a pg_dumpall of the database, and restoring one creates a new instance with that data. Floci snapshots PostgreSQL instances only; MySQL and MariaDB are refused.',
-            'Modifications apply immediately whatever ApplyImmediately says; Floci runs no maintenance window.',
-            'Point-in-time restore copies the source as it is when the request arrives, whatever restore time is asked for: Floci keeps no transaction log.',
-            'A read replica gets a copy of its PostgreSQL source when it is created; later writes are not replicated, and the replica accepts writes. MySQL and MariaDB sources are refused.',
-            'Multi-AZ is recorded but runs no standby, and the Availability Zone a cluster instance asks for is not applied.',
-            'An Aurora cluster runs its instances against one database, so a failover moves the writer role only. Cluster snapshots are Aurora PostgreSQL only.',
+            'Multi-AZ is recorded but runs no standby.',
         ],
     }
 

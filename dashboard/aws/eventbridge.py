@@ -118,10 +118,7 @@ def eventbridge_inventory() -> dict[str, Any]:
             'ListTargetsByRule',
             'PutEvents',
         ],
-        'notes': [
-            'The default event bus is named default and accepts AWS service events.',
-            'Custom event buses are for application events.',
-        ],
+        'notes': [],
     }
 
 

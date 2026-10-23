@@ -108,7 +108,6 @@ def cloudcontrol_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'This read-only inspector queries common AWS type-name presets and keeps per-type errors visible so unsupported gaps are easy to spot.',
-            'Cloud Control is useful for generic resource discovery tools and complements the service-specific dashboard inventories.',
+            "This page queries a preset list of resource types. A type Floci doesn't support shows the error Floci returned.",
         ],
     }

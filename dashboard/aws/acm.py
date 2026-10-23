@@ -110,8 +110,8 @@ def acm_inventory() -> dict[str, Any]:
         'notes': [
             'Floci issues requested certificates immediately, with no Pending validation state, unless FLOCI_SERVICES_ACM_VALIDATION_WAIT_SECONDS is set above 0. In AWS, DNS or email validation must complete first.',
             'Certificates use real RSA or EC keys and valid X.509 structure.',
-            'Only PRIVATE certificates can be exported with an encrypted private key.',
-            'The dashboard intentionally shows PEM availability instead of dumping certificate material.',
+            'ExportCertificate works only for private certificates and for certificates requested with export enabled. It returns the private key encrypted with your passphrase.',
+            'This page shows whether PEM material is available, not the certificate material itself.',
         ],
     }
 

@@ -50,7 +50,7 @@ def s3vectors_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'The inspector lists vector buckets and samples indexes for the first 50 buckets when the SDK model exposes those operations.',
+            'This page lists indexes for the first 50 vector buckets only.',
         ],
     }
 

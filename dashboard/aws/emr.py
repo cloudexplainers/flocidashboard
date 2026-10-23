@@ -82,7 +82,6 @@ def emr_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'The dashboard inspects clusters, nested instance groups, and steps when those management APIs are available.',
             'Floci tracks clusters and steps as a state machine; it runs no Hadoop or Spark.',
         ],
     }

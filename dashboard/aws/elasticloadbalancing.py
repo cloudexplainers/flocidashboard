@@ -227,10 +227,7 @@ def elasticloadbalancing_inventory() -> dict[str, Any]:
             'DescribeLoadBalancerPolicies',
         ],
         'notes': [
-            'This page combines the AWS elbv2 and classic elb SDK APIs under the Elastic Load Balancing service name.',
-            'Target health is fetched per target group; listener rules are fetched per listener.',
-            'Application Load Balancers serve real traffic: listeners, rules and health checks apply, and edits to them take effect at once.',
-            'Target group stickiness and deregistration delay are stored and reported but not applied in Floci 2.3.0: requests go round robin with no stickiness cookie, and a deregistered target is removed at once, with no draining. Newer Floci builds apply duration-based (lb_cookie) stickiness.',
+            'Application Load Balancers serve real traffic: listener ports, rules and health checks apply.',
             'Classic Load Balancers are control plane only: listeners are recorded but Floci serves no traffic for them, and load balancer policies are not supported.',
         ],
     }

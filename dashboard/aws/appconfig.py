@@ -314,9 +314,7 @@ def appconfig_inventory() -> dict[str, Any]:
             'GetLatestConfiguration',
         ],
         'notes': [
-            'Management resources are read through the AppConfig API.',
-            'Runtime retrieval uses the AppConfigData API with configuration sessions and latest-configuration tokens.',
-            'Hosted configuration content is shown as size and a short UTF-8 preview to keep the dashboard readable.',
+            'This page shows hosted configuration content as its size and a short UTF-8 preview.',
         ],
     }
 

@@ -136,8 +136,7 @@ def stepfunctions_inventory() -> dict[str, Any]:
         ],
         'protocol': 'JSON 1.1',
         'notes': [
-            'Floci exposes Step Functions through the AmazonStatesService JSON 1.1 target.',
-            'Execution histories are previewed with a small event limit on the dashboard.',
+            "This page previews only the first events of an execution's history.",
             'Task token callbacks are available for waitForTaskToken workflows.',
         ],
     }

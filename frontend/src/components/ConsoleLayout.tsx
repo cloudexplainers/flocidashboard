@@ -7,6 +7,7 @@ import Flashbar, { FlashbarProps } from '@cloudscape-design/components/flashbar'
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import SpaceBetween from '@cloudscape-design/components/space-between';
+import { InventoryNotesSection } from './InventoryNotes';
 import { PARTIAL_LOAD_EVENT, PartialLoadDetail, describeLoadErrors } from '../api/loadErrors';
 
 interface ConsoleLayoutProps {
@@ -17,6 +18,8 @@ interface ConsoleLayoutProps {
   onSideNavFollow: (href: string) => void;
   notifications?: FlashbarProps.MessageDefinition[];
   toolsContent?: React.ReactNode;
+  /** Service whose inventory notes to show above the console (its /api/<service>/ key). */
+  inventoryService?: string;
   children: React.ReactNode;
 }
 
@@ -28,6 +31,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
   onSideNavFollow,
   notifications = [],
   toolsContent,
+  inventoryService,
   children,
 }) => {
   const { identity, auth } = useSession();
@@ -105,7 +109,10 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
           </Container>
         )
       }
-      content={children}
+      content={<>
+        <InventoryNotesSection service={inventoryService} />
+        {children}
+      </>}
     />
   );
 };
