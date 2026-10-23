@@ -55,8 +55,9 @@ def create_delivery_stream(
 ) -> dict[str, Any]:
     """Create a Direct PUT stream with an Amazon S3 destination, as the console does.
 
-    AWS requires a destination. Floci accepts a stream without one, and then
-    PutRecord succeeds while the records go nowhere, so a destination is required here.
+    AWS requires a destination. Floci accepts a stream without one and delivers its
+    records to its own floci-firehose-results bucket, which has no AWS equivalent, so a
+    destination is required here.
     """
     clean_name = _required(name, 'Delivery stream name')
     bucket_arn = _required(s3_bucket_arn, 'S3 bucket ARN')

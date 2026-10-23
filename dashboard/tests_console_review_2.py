@@ -240,3 +240,27 @@ class ActionErrorStatusTests(SimpleTestCase):
         server = ClientError({'Error': {'Code': 'InternalFailure'}, 'ResponseMetadata': {'HTTPStatusCode': 500}}, 'DeleteHostedZone')
         self.assertEqual(error_status(not_empty), 400)
         self.assertEqual(error_status(server), 502)
+
+
+class GlueCrawlersAndJobsTests(SimpleTestCase):
+    def test_inventory_lists_crawlers_and_jobs(self):
+        from unittest.mock import patch
+
+        from dashboard.aws.glue import glue_inventory
+
+        client = MagicMock()
+        client.meta.service_model.operation_names = []
+        pages = {
+            'get_databases': {'DatabaseList': []},
+            'list_registries': {'Registries': []},
+            'get_crawlers': {'Crawlers': [{'Name': 'logs-crawler', 'State': 'READY', 'DatabaseName': 'logs', 'LastCrawl': {'Status': 'SUCCEEDED'}}]},
+            'get_jobs': {'Jobs': [{'Name': 'etl', 'Command': {'Name': 'glueetl'}, 'GlueVersion': '5.0'}]},
+        }
+        client.get_paginator.side_effect = lambda name: MagicMock(paginate=MagicMock(return_value=MagicMock(build_full_result=MagicMock(return_value=pages.get(name, {})))))
+        with patch('dashboard.aws.FlociClientFactory') as factory:
+            factory.return_value.client.return_value = client
+            result = glue_inventory()
+
+        self.assertEqual(result['summary']['crawlers'], 1)
+        self.assertEqual(result['crawlers'][0]['last_crawl_status'], 'SUCCEEDED')
+        self.assertEqual(result['jobs'][0]['command'], 'glueetl')

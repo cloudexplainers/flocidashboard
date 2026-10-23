@@ -71,7 +71,7 @@ Severity: **High** = an action silently does nothing, reports false success, or 
 | Low | Create bucket had no name validation and a hard-coded "us-east-1". | Fixed: S3 naming rules client-side; Region from the session. |
 
 Left as is:
-- Floci accepts a public bucket policy while `BlockPublicPolicy` is on; AWS rejects it with AccessDenied. That is emulator behavior, not a console bug.
+- ~~Floci accepts a public bucket policy while `BlockPublicPolicy` is on.~~ Corrected in the second review: Floci 2.3.0 rejects it with AccessDenied, as AWS does (`S3Service.putBucketPolicy`; confirmed live).
 - Presigned URLs are SigV2 (boto3's default for this client). The console uses SigV4 and caps the expiry at 12 hours. Changing the signer needs a separate client config, because cached clients are keyed without it.
 - The Metrics, Management (lifecycle, replication, inventory) and Access Points tabs are not built. Lifecycle has a backend route but no UI; replication and inventory are not implemented in Floci.
 - Object versions ("Show versions") are not listed in the UI, although the API supports `ListObjectVersions`.
@@ -336,8 +336,8 @@ Severity uses the same scale as above.
 - **Wrong resources in a list.** The Neptune page listed DocumentDB clusters and the other way round, because
   `DescribeDBClusters` returns every RDS-family engine.
 - **Actions that did the wrong thing or quietly nothing.** Transfer Family's workbench included IAM "Update
-  user" and "Create login profile" actions. Firehose created streams with no destination, which Floci accepts
-  while `PutRecord` then succeeds and the records go nowhere. RDS "Create final snapshot" is accepted by Floci
+  user" and "Create login profile" actions. Firehose created streams with no destination, which AWS rejects;
+  Floci accepts them and delivers their records to its own `floci-firehose-results` bucket. RDS "Create final snapshot" is accepted by Floci
   but no snapshot is made; the console now checks and says so.
 - **The generic workbench is now safer and closer to the console.** Only real resource lists are offered as
   resource types; selecting a resource fills the fields that identify it or its parent, but never points a
@@ -355,8 +355,8 @@ ElastiCache, OpenSearch, MSK, Neptune, DocumentDB, MemoryDB, Transfer servers an
 CodeBuild/CodeDeploy/CodePipeline, Config, Backup, AppConfig, Pipes, Scheduler, IoT, ACM, Auto Scaling, Batch,
 EMR, WAF, Amazon MQ, Cloud Map, Elastic Beanstalk, S3 Vectors), then each inventory and action was checked
 against the AWS API reference and the console. A script checked which form fields a selected resource fills for
-every action and resource type. Floci's source was not at `/Users/chris/floci/floci`, so emulator behavior was
-established by live probes only.
+every action and resource type. Emulator behavior was first established by live probes, then each claim was
+checked against Floci's source at the 2.3.0 tag and at `main` (see "Checked against the Floci source" below).
 
 ## Cross-cutting (second review)
 
@@ -379,15 +379,16 @@ Transfer Family and WAF v2.
 | High | Firehose delivery streams never appeared (see Cross-cutting). | Fixed. |
 | High | Neptune listed DocumentDB (and other RDS-family) clusters and DocumentDB listed Neptune ones. | Fixed: each lists only its own engine, in the inventory and the resource graph. |
 | High | Transfer Family's actions included IAM `Update user` (`PATCH /api/iam/users/{user}/`) and `Create login profile`; "Update user" on an SFTP user would have renamed an IAM user. | Removed. Every workbench action now stays within its own service's API (checked by a test). |
-| High | Firehose "Create delivery stream" took only a name. Floci creates a stream with an empty destination, and `PutRecord` then reports success while records go nowhere. AWS requires a destination. | Fixed: Direct PUT with an Amazon S3 destination (bucket and role required), the console's 5 MiB / 300 s buffer defaults, validated ranges. |
+| Medium | Firehose "Create delivery stream" took only a name. AWS requires a destination; Floci accepts a stream without one and delivers its records to its own `floci-firehose-results` bucket, which has no AWS equivalent. The inventory note also said Floci flushes "after every 5 records"; 2.3.0 flushes on the buffering hints, as AWS does. | Fixed: Direct PUT with an Amazon S3 destination (bucket and role required), the console's 5 MiB / 300 s buffer defaults, validated ranges. The notes describe the real flush and default-bucket behavior. |
 | High | Selecting a resource could fill the wrong resource's form. Rows and actions use different names (`name` vs `{stream}`), and a naive fill put an Auto Scaling group's name into "Delete launch configuration" or a user's server into "Delete server". Before, almost nothing was filled at all. | Fixed: a field is filled from the selected row when the row's type matches the field (`streams` → `{stream}`, `config_rules` → `{rule}` via `ConfigRuleName`), or from a parent reference the row carries (`application_name` on a deployment group). Delete and update forms are filled only when the selected row is their target. ACM actions take `{certificate_arn}`. |
 | Medium | Resource types included lists that aren't resources: SDK operation lists that escaped the filter, enum reference lists (ACM key algorithms, Auto Scaling adjustment types), state tallies, Textract stub blocks, and "Notes". | Fixed: only lists of objects that aren't reference data are resource types. Emulator notes and "not emulated" lists show in an info box, "How Floci emulates this service". Release-changelog notes ("Floci 1.5.20 adds ...") describe old versions and are not shown; three internal "inferred from the SDK" notes were removed. |
 | Medium | Deletes used a plain confirmation that didn't name the target. | Fixed: deletes need "delete" typed and show the target identifiers. Stopping a backup job and detaching Auto Scaling instances are no longer treated as deletes. |
 | Medium | Enum fields were free text (Kinesis stream mode, ACM validation method and key algorithm, AppConfig profile type, Cloud Map namespace type, CodeDeploy compute platform, CodePipeline retry mode and approval status, lifecycle hook transition and default result, Glue schema format and compatibility, Pipes desired state, Scheduler state, Transcribe media format, Transfer endpoint type and domain, OpenSearch volume type, ElastiCache user auth type). | Fixed: fields can declare `options` and a `default`, shown as a select with AWS values. A declared default is visible in the form and sent unless changed, instead of being applied silently by the backend. |
-| Medium | Hidden backend defaults differed from AWS: CodeDeploy compute platform `Lambda` (AWS: `Server`), lifecycle hook default result `CONTINUE` (AWS: `ABANDON`), OpenSearch `gp2` (console: `gp3`), Transcribe `MediaFormat` forced to `mp4` (AWS detects it), ElastiCache auth type `no-password` (AWS: `no-password-required`). | Fixed in the API helpers and views, and shown in the forms. |
+| Medium | Hidden backend defaults differed from AWS: CodeDeploy compute platform `Lambda` (AWS: `Server`), lifecycle hook default result `CONTINUE` (AWS: `ABANDON`), OpenSearch `gp2` (console: `gp3`), Transcribe `MediaFormat` forced to `mp4` (AWS detects it), ElastiCache auth type `no-password` (AWS: `no-password-required`; Floci rejects `no-password` too, so creating such a user failed). | Fixed in the API helpers and views, and shown in the forms. |
 | Medium | Neptune "Delete DB cluster" showed "Skip final snapshot" unchecked but the backend defaulted to skipping. Floci never creates Neptune snapshots. | The checkbox now starts checked and says Floci doesn't create Neptune snapshots. |
 | Medium | Amazon MQ showed 0 users for RabbitMQ brokers. RabbitMQ brokers have no Amazon MQ user API (AWS rejects `ListUsers`); their users live in the RabbitMQ console. | Shows "-" (unknown), and `ListUsers` is no longer called for them. |
 | Low | Batch job times were epoch milliseconds; Auto Scaling groups didn't show their launch template; Kinesis capacity mode was buried in an object; Transfer users and Glue tables were only nested inside their parents. | Fixed: ISO timestamps, `launch_template_name`, `capacity_mode`, and `users` / `tables` lists. |
+| Low | Glue crawlers and jobs were not listed, although Floci supports `GetCrawlers` and `GetJobs`. | Fixed: `crawlers` (state, database, schedule, last crawl status) and `jobs` (command, script, Glue version) lists. |
 | Low | OpenSearch reports its endpoint as the container address (`http://172.x.x.x:9200`). | Note added: use the host port Floci publishes (9400-9499). |
 
 Left as is:
@@ -395,9 +396,9 @@ Left as is:
   humanizer would be wrong for some services (CloudFormation keeps the enum).
 - Raw JSON fields remain for nested inputs (Backup plans, CodeBuild project options, Config rules, AppSync
   resolvers). Turning each into a structured form is per-service console work.
-- ACM issues requested certificates immediately, with no "Pending validation" state; the emulator notes say so.
-- Glue crawlers and jobs are not listed (Floci 2.3 has no list operations for them); Config rule compliance and
-  WAF CloudFront-scope resources depend on Floci support and were not added.
+- ACM issues requested certificates immediately, with no "Pending validation" state, unless Floci is started with
+  `FLOCI_SERVICES_ACM_VALIDATION_WAIT_SECONDS` above 0; the emulator notes say so.
+- Config rule compliance and WAF CloudFront-scope resources were not added.
 
 ## "Left as is" from the first review
 
@@ -412,10 +413,10 @@ Left as is:
 | Lambda | No code editor or deploy. | Fixed: "Code source" lists the package files from `GetFunction`'s `Code.Location` (fetched through the configured Floci endpoint only), edits text files and deploys. Deploy rebuilds the current package with the edited files replaced, so other files are kept. Verified live: edit, deploy, invoke returns the new code. |
 | SNS | Topic access policy not editable. | Fixed: Edit/Save changes with JSON validation via `SetTopicAttributes`. |
 | S3 | Metrics, Management (lifecycle, replication, inventory) and Access Points tabs. | Left: larger console work; replication and inventory are not in Floci. |
-| S3 | Floci accepts a public bucket policy while Block Public Access is on. | Left: emulator behavior. |
+| S3 | "Floci accepts a public bucket policy while Block Public Access is on." | Wrong: Floci 2.3.0 rejects it with AccessDenied, as AWS does. The first-review line is corrected. |
 | EC2/VPC | Key pairs, volumes, snapshots, Elastic IPs, NAT gateways, network ACLs, launch templates and flow logs have no tables; no status checks. | Left: a larger redesign; Floci reports no status checks. |
 | IAM | AWS managed policies can't be browsed; no editors for policy versions, permissions boundaries, login profiles or tags. | Left: larger console work. |
-| Lambda | No `LogResult` from Floci; layers, destinations, concurrency, resource policy, VPC and tags have no editors. | Left: emulator behavior / larger console work. |
+| Lambda | No `LogResult` from Floci (confirmed in source: `InvokeResult.setLogResult` is never called); layers, destinations, concurrency, resource policy, VPC and tags have no editors. | Left: emulator behavior / larger console work. |
 | DynamoDB | GSIs/LSIs, streams, on-demand backups, exports and global tables. | Left: larger console work. |
 | SNS | Delivery policy and data protection policy editors; email/SMS/HTTP delivery. | Left: the backend now accepts `DeliveryPolicy`, but no editor was built; delivery is emulator behavior. |
 | CloudWatch | Dashboards, composite alarms, anomaly detection, Logs Insights. | Left: larger console work (Floci supports Logs Insights). |
@@ -438,19 +439,42 @@ Left as is:
 | Athena | Low | Title Case labels in the create workgroup form. | Fixed. |
 
 Left as is:
-- KMS rotation period (90-2560 days) isn't shown or set: Floci 2.3 accepts `RotationPeriodInDays` but doesn't
-  report it back.
+- KMS rotation period (90-2560 days) isn't shown or set: Floci 2.3.0 range-checks `RotationPeriodInDays`, then
+  discards it, and `GetKeyRotationStatus` returns only `KeyRotationEnabled`.
 - SSM parameter labels can be viewed but not attached; SSM descriptions are dropped by Floci when a parameter is
   overwritten without one (AWS keeps them).
-- ECR image details were reviewed in code only: Floci rejects `PutImage`, and pushing needs Docker login to the
-  registry container.
+- ECR image details were reviewed in code only: Floci 2.3.0 has no `PutImage` (Floci's `main` added it on
+  2026-10-20, not yet released), and pushing needs Docker login to the registry container.
 - Route 53 health checks are in the inventory but have no page in this console.
 - Athena has no delete workgroup action.
+
+## Checked against the Floci source
+
+Each Floci behavior this review relies on, checked in `/Users/chris/floci` (pulled 2026-10-22, commit
+`433ab5aef`) at the `2.3.0` tag the emulator runs and at `main`, which is 410 commits ahead. Paths are under
+`src/main/java/io/github/hectorvent/floci/services/`.
+
+| Claim | Source | Verdict |
+| --- | --- | --- |
+| RDS accepts "create final snapshot" on delete but makes no snapshot. | `rds/RdsQueryHandler.handleDeleteDbInstance` / `handleDeleteDbCluster` never read `SkipFinalSnapshot` or `FinalDBSnapshotIdentifier`. Same on `main`. | Confirmed. |
+| Neptune never creates snapshots. | `neptune/NeptuneQueryHandler` has no snapshot operations. Same on `main`. | Confirmed. |
+| Firehose: a stream with no destination loses its records. | `firehose/FirehoseService.resolveBucket` falls back to `floci-firehose-results`. | Wrong; corrected above. The records go to that bucket after the buffering interval. |
+| Firehose flushes after every 5 records. | `application.yml`: `flush-record-count: 0`; flushes follow the buffering hints. | Wrong (stale inventory note); corrected. |
+| KMS doesn't report the rotation period. | `kms/KmsJsonHandler.handleEnableKeyRotation` validates and drops the value. | Confirmed. |
+| ECR rejects `PutImage`. | Missing in 2.3.0; added on `main` in #5784. | Confirmed for 2.3.0. |
+| ACM issues certificates immediately. | `acm/AcmService`: `PENDING_VALIDATION` only when `validation-wait-seconds` > 0 (default 0). | Confirmed, with the setting now noted. |
+| SSM drops a description on overwrite. | `ssm/SsmService.storeParameter` sets the new (possibly null) description. | Confirmed. |
+| Glue has no crawler or job list operations. | `glue/GlueJsonHandler` handles `GetCrawlers`, `ListCrawlers`, `GetJobs`, `ListJobs`. | Wrong; crawlers and jobs are now listed. |
+| Amazon MQ rejects user APIs on RabbitMQ brokers. | `amazonmq/AmazonMqService`, matching AWS. | Confirmed. |
+| ElastiCache auth type values. | `elasticache/UserAuthentication` accepts `password`, `no-password-required`, `iam`. | Confirmed; the old `no-password` value was rejected. |
+| OpenSearch host ports 9400-9499. | `EmulatorConfig` `proxyBasePort`/`proxyMaxPort` defaults. | Confirmed. |
+| Lambda returns no `LogResult` (first review). | `lambda/model/InvokeResult.setLogResult` is never called. | Confirmed. |
+| S3 accepts a public policy under Block Public Access (first review). | `s3/S3Service.putBucketPolicy` rejects it; reproduced live. | Wrong; corrected. |
 
 ## Verification (second review)
 
 `npx tsc --noEmit`, `npm run build`, `npm run test:e2e` (344 passed, against the disposable emulator) and
-`docker compose exec -T dashboard python manage.py test --noinput` run on this branch (1,157 passed) all pass.
+`docker compose exec -T dashboard python manage.py test --noinput` run on this branch (1,158 passed) all pass.
 The live Route 53 and CloudFront specs (`--project=live`) pass after their label changes. `check_labs` on the
 disposable emulator passed 66 of 66 labs after the S3 SigV4 change. The emulator was stopped afterwards and the
 containers it started were removed.

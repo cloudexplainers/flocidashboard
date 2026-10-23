@@ -103,8 +103,8 @@ def firehose_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Incoming records are buffered in memory and flushed to S3 after every 5 records for immediate local feedback.',
-            'Floci writes flushed records as raw NDJSON to the floci-firehose-results bucket.',
+            'Records are buffered and delivered when the stream\'s buffering hints are reached (size or interval, 5 MiB / 300 seconds by default), as in AWS. FLOCI_SERVICES_FIREHOSE_FLUSH_RECORD_COUNT makes Floci flush after a fixed number of records instead.',
+            'A stream with an S3 destination delivers to its bucket. Floci also accepts a stream with no destination, which AWS rejects, and delivers its records to the floci-firehose-results bucket.',
             'Destinations are flattened from each delivery stream so delivery configuration can be scanned together.',
             'Floci 1.5.31 lets EventBridge rules deliver events to Firehose delivery stream targets.',
             'Floci 1.5.30 returns ExtendedS3DestinationDescription and supports UpdateDestination.',

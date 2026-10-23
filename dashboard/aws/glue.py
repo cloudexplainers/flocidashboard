@@ -57,6 +57,8 @@ def glue_inventory() -> dict[str, Any]:
     operations = set(glue.meta.service_model.operation_names)
     databases = _safe_value(lambda: core._paginate(glue, 'get_databases', 'DatabaseList'), [])
     registries = _glue_optional(lambda: core._paginate(glue, 'list_registries', 'Registries'), {'EntityNotFoundException'})
+    crawlers = _glue_optional(lambda: core._paginate(glue, 'get_crawlers', 'Crawlers'), {'EntityNotFoundException'})
+    jobs = _glue_optional(lambda: core._paginate(glue, 'get_jobs', 'Jobs'), {'EntityNotFoundException'})
 
     def table_detail(database_name: str, table: dict[str, Any]) -> dict[str, Any]:
         table_name = table.get('Name')
@@ -238,6 +240,8 @@ def glue_inventory() -> dict[str, Any]:
                 for table in database.get('tables', [])
             ),
             'table_versions': sum(database.get('table_version_count') or 0 for database in detailed_databases),
+            'crawlers': len(crawlers) if isinstance(crawlers, list) else 0,
+            'jobs': len(jobs) if isinstance(jobs, list) else 0,
             'functions': len(functions),
             'registries': len(detailed_registries),
             'schemas': sum(registry.get('schema_count') or 0 for registry in detailed_registries),
@@ -247,6 +251,33 @@ def glue_inventory() -> dict[str, Any]:
         # Tables as their own list, as in the Glue console's Tables page.
         'tables': [table for database in detailed_databases for table in database.get('tables', [])],
         'functions': functions,
+        'crawlers': [
+            {
+                'name': crawler.get('Name'),
+                'state': crawler.get('State'),
+                'database_name': crawler.get('DatabaseName'),
+                'role': crawler.get('Role'),
+                'schedule': (crawler.get('Schedule') or {}).get('ScheduleExpression'),
+                'last_crawl_status': (crawler.get('LastCrawl') or {}).get('Status'),
+                'created': crawler.get('CreationTime'),
+                'targets': crawler.get('Targets'),
+            }
+            for crawler in crawlers
+        ] if isinstance(crawlers, list) else [],
+        'jobs': [
+            {
+                'name': job.get('Name'),
+                'role': job.get('Role'),
+                'command': (job.get('Command') or {}).get('Name'),
+                'script_location': (job.get('Command') or {}).get('ScriptLocation'),
+                'glue_version': job.get('GlueVersion'),
+                'worker_type': job.get('WorkerType'),
+                'number_of_workers': job.get('NumberOfWorkers'),
+                'created': job.get('CreatedOn'),
+                'last_modified': job.get('LastModifiedOn'),
+            }
+            for job in jobs
+        ] if isinstance(jobs, list) else [],
         'registries': detailed_registries,
         'supported': {
             'Databases': ['CreateDatabase', 'GetDatabase', 'GetDatabases', 'DeleteDatabase', 'UpdateDatabase'],

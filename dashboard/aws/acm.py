@@ -108,7 +108,7 @@ def acm_inventory() -> dict[str, Any]:
             'PRIVATE',
         ],
         'notes': [
-            'Floci immediately issues requested certificates for local emulation.',
+            'Floci issues requested certificates immediately, with no Pending validation state, unless FLOCI_SERVICES_ACM_VALIDATION_WAIT_SECONDS is set above 0. In AWS, DNS or email validation must complete first.',
             'Certificates use real RSA or EC keys and valid X.509 structure.',
             'Only PRIVATE certificates can be exported with an encrypted private key.',
             'Floci 1.5.27 restores ACM certificates after restart by ignoring computed getters in persisted state.',
