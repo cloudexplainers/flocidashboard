@@ -3521,6 +3521,26 @@ test('CloudFront function creation sends actual code and publication is explicit
   await expect(page.getByRole('dialog')).toContainText('Publishing does not associate');
 });
 
+test('CloudTrail create trail uses the console defaults and starts logging', async ({ page }) => {
+  await inventory(page, 'cloudtrail', { trails: [] });
+  const calls: { path: string; body: any }[] = [];
+  await page.route('**/api/cloudtrail/trails/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() !== 'POST') return route.fulfill({ json: {} });
+    calls.push({ path, body: route.request().postDataJSON() });
+    return route.fulfill({ json: path.endsWith('/logging/') ? { is_logging: true } : { name: 'org-audit' } });
+  });
+  await page.goto('/cloudtrail/trails');
+  await page.getByRole('button', { name: 'Create trail', exact: true }).first().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Trail name', { exact: true }).fill('org-audit');
+  await dialog.getByLabel('S3 bucket name', { exact: true }).fill('audit-logs');
+  await dialog.getByRole('button', { name: 'Create trail', exact: true }).click();
+  await expect.poll(() => calls.length).toBe(2);
+  expect(calls[0].body).toMatchObject({ name: 'org-audit', is_multi_region_trail: true, include_global_service_events: true, is_organization_trail: false });
+  expect(calls[1]).toEqual({ path: '/api/cloudtrail/trails/org-audit/logging/', body: { enabled: true } });
+});
+
 const cloudTrailFixture = { name: 'learning-audit', arn: 'arn:aws:cloudtrail:eu-west-1:123456789012:trail/learning-audit', s3_bucket_name: 'audit-logs', home_region: 'eu-west-1', is_multi_region_trail: false, include_global_service_events: false, status: { IsLogging: false, LatestDeliveryError: 'AccessDenied: bucket policy denied delivery' } };
 const auditEvent = { EventId: 'event-1', EventName: 'DeleteBucket', EventTime: '2026-10-21T12:00:00Z', Username: 'learner', Resources: [{ ResourceName: 'demo-bucket', ResourceType: 'AWS::S3::Bucket' }], CloudTrailEvent: JSON.stringify({ eventSource: 's3.amazonaws.com', awsRegion: 'eu-west-1', sourceIPAddress: '192.0.2.1', userIdentity: { type: 'AssumedRole', arn: 'arn:aws:sts::123456789012:assumed-role/Student/session' }, errorCode: 'AccessDenied', errorMessage: 'Explicit deny', readOnly: false, requestParameters: { bucketName: 'demo-bucket' } }) };
 
