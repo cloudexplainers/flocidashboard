@@ -85,6 +85,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'elasticloadbalancing':
         from .elasticloadbalancing_labs import LABS
         return LABS
+    if service_key == 'route53':
+        from .route53_labs import LABS
+        return LABS
     return []
 
 
@@ -178,6 +181,11 @@ LAB_BATCH_ORDER = [
         'service': 'elasticloadbalancing',
         'title': 'Load balancing & Auto Scaling lab',
         'summary': 'Build a highly available web tier: an Application Load Balancer, health-checked targets, and an Auto Scaling group that scales out, replaces lost instances, and rolls out new releases.',
+    },
+    {
+        'service': 'route53',
+        'title': 'Route 53 DNS lab',
+        'summary': 'Route users with DNS: a public hosted zone, health checks, failover between Regions, an apex alias, weighted and latency records, a failover drill, and a split-horizon private hosted zone.',
     },
     {
         'service': 'ecs',
@@ -468,6 +476,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'elasticloadbalancing':
         from .elasticloadbalancing_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'route53':
+        from .route53_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -551,6 +562,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'elasticloadbalancing':
         from .elasticloadbalancing_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'route53':
+        from .route53_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -640,6 +654,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'elasticloadbalancing':
         from .elasticloadbalancing_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'route53':
+        from .route53_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:

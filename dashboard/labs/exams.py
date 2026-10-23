@@ -212,6 +212,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('elasticloadbalancing', 'ha-web-tier'): _tags(clf='3.3 3.2', saa='2.2 2.1 3.2 3.4'),
     ('s3', 'data-protection-tiers'): _tags(clf='3.6 4.1', saa='1.3 4.1 2.2'),
     ('kms', 'key-management'): _tags(clf='2.2', saa='1.3'),
+    ('route53', 'routing-failover'): _tags(clf='3.5 3.2', saa='2.2 3.4'),
     # Level 5
     ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
@@ -329,8 +330,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Use multiple Regions for disaster recovery, business continuity, low latency for distant users, or data residency.',
             'Edge locations serve CloudFront, Route 53, and Global Accelerator close to users.',
         ],
-        'related_labs': [('ec2', 'vpc-public-private'), ('elasticloadbalancing', 'ha-web-tier')],
-        'planned': 'W1-6 Route 53 routing and failover',
+        'related_labs': [('ec2', 'vpc-public-private'), ('elasticloadbalancing', 'ha-web-tier'), ('route53', 'routing-failover')],
+        'planned': None,
     },
     {
         'key': 'hybrid-connectivity',
