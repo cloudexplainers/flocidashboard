@@ -193,6 +193,11 @@ def error_status(exc: Exception) -> int:
             return 403
         if code in THROTTLE_CODES:
             return 429
+        # Any other client error (HostedZoneNotEmpty, ResourceInUse, ...) keeps the
+        # 4xx status AWS sent; 502 is for failures of the service itself.
+        aws_status = exc.response.get('ResponseMetadata', {}).get('HTTPStatusCode')
+        if isinstance(aws_status, int) and 400 <= aws_status < 500:
+            return aws_status
         return 502
     if isinstance(exc, BotoCoreError):
         return 502

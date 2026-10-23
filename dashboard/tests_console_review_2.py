@@ -224,3 +224,15 @@ class SnsTopicAttributeTests(SimpleTestCase):
         client.return_value.set_topic_attributes.assert_called_once_with(
             TopicArn=arn, AttributeName='Policy', AttributeValue='{"Version": "2012-10-17", "Statement": []}',
         )
+
+
+class ActionErrorStatusTests(SimpleTestCase):
+    def test_aws_client_errors_keep_their_4xx_status(self):
+        from botocore.exceptions import ClientError
+
+        from dashboard.actions import error_status
+
+        not_empty = ClientError({'Error': {'Code': 'HostedZoneNotEmpty'}, 'ResponseMetadata': {'HTTPStatusCode': 400}}, 'DeleteHostedZone')
+        server = ClientError({'Error': {'Code': 'InternalFailure'}, 'ResponseMetadata': {'HTTPStatusCode': 500}}, 'DeleteHostedZone')
+        self.assertEqual(error_status(not_empty), 400)
+        self.assertEqual(error_status(server), 502)
