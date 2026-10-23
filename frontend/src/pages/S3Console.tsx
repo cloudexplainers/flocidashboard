@@ -25,6 +25,8 @@ import Checkbox from '@cloudscape-design/components/checkbox';
 import BreadcrumbGroup from '@cloudscape-design/components/breadcrumb-group';
 import FileUpload from '@cloudscape-design/components/file-upload';
 import ConfirmActionModal from '../components/ConfirmActionModal';
+import { S3BucketObjectLock, S3ObjectLockSettings } from '../components/S3ObjectLock';
+import { S3IntelligentTieringConfigs, S3LifecycleRules, S3ReplicationRules } from '../components/S3Management';
 import { formatAwsDate, formatBytes } from '../format';
 import {
   fetchServiceInventory,
@@ -58,6 +60,7 @@ import {
   fetchS3ObjectTags,
   putS3ObjectTags,
   fetchS3ObjectHead,
+  S3ObjectHead,
   S3ObjectListing,
   S3PublicAccessBlock,
 } from '../api/client';
@@ -214,7 +217,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
   // Object details
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
   const [inspectObject, setInspectObject] = useState<any | null>(null);
-  const [objectHeadData, setObjectHeadData] = useState<any | null>(null);
+  const [objectHeadData, setObjectHeadData] = useState<S3ObjectHead | null>(null);
   const [objectTags, setObjectTags] = useState<Array<{ Key: string; Value: string }>>([]);
   const [newTagKey, setNewTagKey] = useState('');
   const [newTagValue, setNewTagValue] = useState('');
@@ -243,6 +246,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
   // Properties
   const [versioningStatus, setVersioningStatus] = useState<VersioningStatus>('Disabled');
   const [updatingVersioning, setUpdatingVersioning] = useState(false);
+  const [objectLockEnabled, setObjectLockEnabled] = useState(false);
   const [encryption, setEncryption] = useState<any | null | undefined>(undefined);
   const [bucketTags, setBucketTags] = useState<Array<{ Key: string; Value: string }>>([]);
 
@@ -343,6 +347,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
   const loadBucketDetails = async (bucket: BucketItem) => {
     const generation = ++detailGeneration.current;
     setInspectModalOpen(false);
+    setObjectLockEnabled(Boolean(bucket.ObjectLock));
     setListing(null);
     setAnonymousAccess(null);
     setPrefix('');
@@ -389,6 +394,8 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
       return false;
     }
   };
+
+  const notify = (type: 'success' | 'error', text: string) => setActionMessage({ type, text });
 
   const bucketNameError = newBucketName ? validateBucketName(newBucketName) : '';
 
@@ -494,6 +501,16 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
     }
   };
 
+  const refreshObjectHead = async (obj: any) => {
+    if (!activeBucket) return;
+    const versionId = showVersions ? obj.version_id : undefined;
+    try {
+      setObjectHeadData(await fetchS3ObjectHead(activeBucket.Name, obj.key, versionId));
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to read object' });
+    }
+  };
+
   const handleInspectObject = async (obj: any) => {
     setInspectObject(obj);
     setObjectHeadData(null);
@@ -502,7 +519,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
     if (!activeBucket) return;
     try {
       const [head, tags] = await Promise.all([
-        fetchS3ObjectHead(activeBucket.Name, obj.key),
+        fetchS3ObjectHead(activeBucket.Name, obj.key, showVersions ? obj.version_id : undefined),
         fetchS3ObjectTags(activeBucket.Name, obj.key),
       ]);
       setObjectHeadData(head);
@@ -925,10 +942,12 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                       header={
                         <Header
                           variant="h3"
-                          description="Versioning keeps multiple variants of an object in the same bucket. Once enabled, it can be suspended but not disabled."
+                          description={objectLockEnabled
+                            ? 'Versioning keeps multiple variants of an object in the same bucket. Object Lock is on, so versioning can’t be suspended.'
+                            : 'Versioning keeps multiple variants of an object in the same bucket. Once enabled, it can be suspended but not disabled.'}
                           actions={
                             versioningStatus === 'Enabled'
-                              ? <Button loading={updatingVersioning} onClick={() => handleSetVersioning('Suspended')}>Suspend</Button>
+                              ? <Button loading={updatingVersioning} disabled={objectLockEnabled} onClick={() => handleSetVersioning('Suspended')}>Suspend</Button>
                               : <Button loading={updatingVersioning} disabled={versioningStatus === 'Unavailable'} onClick={() => handleSetVersioning('Enabled')}>Enable</Button>
                           }
                         >
@@ -955,9 +974,9 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                       />
                     </Container>
 
-                    <Container header={<Header variant="h3" description="Object Lock prevents object versions from being deleted or overwritten. It can be enabled when the bucket is created or later on a versioned bucket, and cannot be turned off.">Object Lock</Header>}>
-                      <KeyValuePairs columns={2} items={[{ label: 'Object Lock', value: activeBucket.ObjectLock ? 'Enabled' : 'Disabled' }]} />
-                    </Container>
+                    <S3IntelligentTieringConfigs bucket={activeBucket.Name} notify={notify} />
+
+                    <S3BucketObjectLock bucket={activeBucket.Name} versioningStatus={versioningStatus} onLockChange={setObjectLockEnabled} notify={notify} />
 
                     <Table
                       header={
@@ -1019,6 +1038,16 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                         {websiteConfig && <Box variant="small">For your customers to access content at the website endpoint, you must make all your content publicly readable through Block Public Access and a bucket policy.</Box>}
                       </SpaceBetween>
                     </Container>
+                  </SpaceBetween>
+                ),
+              },
+              {
+                label: 'Management',
+                id: 'management',
+                content: (
+                  <SpaceBetween size="l">
+                    <S3LifecycleRules bucket={activeBucket.Name} notify={notify} />
+                    <S3ReplicationRules bucket={activeBucket.Name} buckets={buckets.map(bucket => bucket.Name)} versioningStatus={versioningStatus} notify={notify} />
                   </SpaceBetween>
                 ),
               },
@@ -1262,6 +1291,16 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
               ]}
             />
           </Container>
+
+          {objectLockEnabled && activeBucket && inspectObject && (
+            <S3ObjectLockSettings
+              bucket={activeBucket.Name}
+              objectKey={inspectObject.key}
+              versionId={showVersions ? inspectObject.version_id : undefined}
+              head={objectHeadData}
+              onChanged={() => refreshObjectHead(inspectObject)}
+            />
+          )}
 
           {objectHeadData?.metadata && Object.keys(objectHeadData.metadata).length > 0 && (
             <Container header={<Header variant="h3" description="User-defined metadata (x-amz-meta-*).">Metadata</Header>}>

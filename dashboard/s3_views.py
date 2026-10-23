@@ -48,6 +48,16 @@ from .s3_api import (
     put_s3_versioning,
     put_s3_website,
     upload_s3_object,
+    delete_s3_intelligent_tiering,
+    delete_s3_replication,
+    get_s3_object_lock,
+    get_s3_replication,
+    list_s3_intelligent_tiering,
+    put_s3_intelligent_tiering,
+    put_s3_object_legal_hold,
+    put_s3_object_lock,
+    put_s3_object_retention,
+    put_s3_replication,
 )
 
 S3_BUCKET_NAME_RE = re.compile(r'^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$')
@@ -555,5 +565,97 @@ def s3_bucket_website(request, bucket_name: str):
         if not isinstance(config, dict):
             return _json_error('configuration object is required')
         return JsonResponse({'configuration': put_s3_website(bucket_name, config)})
+    except Exception as exc:
+        return _handle_s3(exc)
+
+
+@require_http_methods(['GET', 'PUT'])
+def s3_bucket_object_lock(request, bucket_name: str):
+    err = _validate_bucket(bucket_name)
+    if err:
+        return _json_error(err)
+    try:
+        if request.method == 'GET':
+            return JsonResponse({'configuration': get_s3_object_lock(bucket_name)})
+        body = _parse_json_body(request)
+        default_retention = body.get('default_retention')
+        if default_retention is not None and not isinstance(default_retention, dict):
+            return _json_error('default_retention must be an object or null')
+        return JsonResponse({'configuration': put_s3_object_lock(bucket_name, default_retention)})
+    except Exception as exc:
+        return _handle_s3(exc)
+
+
+def _object_target(body: dict) -> tuple[str, str | None]:
+    key = str(body.get('key', '')).strip()
+    if _validate_key(key):
+        raise ValueError('Invalid key')
+    return key, (str(body.get('version_id')).strip() or None) if body.get('version_id') else None
+
+
+@require_http_methods(['PUT'])
+def s3_object_retention(request, bucket_name: str):
+    err = _validate_bucket(bucket_name)
+    if err:
+        return _json_error(err)
+    try:
+        body = _parse_json_body(request)
+        key, version_id = _object_target(body)
+        return JsonResponse(put_s3_object_retention(
+            bucket_name, key, version_id, body.get('mode') or None, body.get('retain_until_date') or None,
+            bool(body.get('bypass_governance_retention')),
+        ))
+    except Exception as exc:
+        return _handle_s3(exc)
+
+
+@require_http_methods(['PUT'])
+def s3_object_legal_hold(request, bucket_name: str):
+    err = _validate_bucket(bucket_name)
+    if err:
+        return _json_error(err)
+    try:
+        body = _parse_json_body(request)
+        key, version_id = _object_target(body)
+        return JsonResponse(put_s3_object_legal_hold(bucket_name, key, version_id, str(body.get('status', ''))))
+    except Exception as exc:
+        return _handle_s3(exc)
+
+
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def s3_bucket_replication(request, bucket_name: str):
+    err = _validate_bucket(bucket_name)
+    if err:
+        return _json_error(err)
+    try:
+        if request.method == 'GET':
+            return JsonResponse({'configuration': get_s3_replication(bucket_name)})
+        if request.method == 'DELETE':
+            return JsonResponse(delete_s3_replication(bucket_name))
+        config = _parse_json_body(request).get('configuration')
+        if not isinstance(config, dict):
+            return _json_error('configuration object is required')
+        return JsonResponse({'configuration': put_s3_replication(bucket_name, config)})
+    except Exception as exc:
+        return _handle_s3(exc)
+
+
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def s3_bucket_intelligent_tiering(request, bucket_name: str):
+    err = _validate_bucket(bucket_name)
+    if err:
+        return _json_error(err)
+    try:
+        if request.method == 'GET':
+            return JsonResponse({'configurations': list_s3_intelligent_tiering(bucket_name)})
+        if request.method == 'DELETE':
+            config_id = request.GET.get('id', '').strip()
+            if not config_id:
+                return _json_error('id is required')
+            return JsonResponse(delete_s3_intelligent_tiering(bucket_name, config_id))
+        config = _parse_json_body(request).get('configuration')
+        if not isinstance(config, dict):
+            return _json_error('configuration object is required')
+        return JsonResponse({'configuration': put_s3_intelligent_tiering(bucket_name, config)})
     except Exception as exc:
         return _handle_s3(exc)

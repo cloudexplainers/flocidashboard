@@ -816,7 +816,8 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the lefto
 | Cross-Region Replication | A bucket created with `LocationConstraint=us-west-2` reports that Region. The rule is stored (Floci accepted it even before versioning was on, which AWS refuses), but no object reached the destination, and the role is not checked. | Note in the step; the result counts the destination's objects |
 | Requester Pays | Stored; GETs need no `x-amz-request-payer` and return no `x-amz-request-charged`. | Note in the step |
 
-The console still has no forms for Object Lock retention, legal holds, replication or Intelligent-Tiering (see below).
+The console had no forms for Object Lock retention, legal holds, replication or Intelligent-Tiering; they were added
+afterwards (see "S3 management and data protection forms").
 `check_labs --service s3 --lab data-protection-tiers` passed on 2.3.0; it takes about a minute because Reset waits out
 the COMPLIANCE retention.
 
@@ -923,11 +924,39 @@ Tests: `dashboard/tests_ec2_addressing.py`, two mocked browser tests in `fronten
 one in `frontend/e2e/dashboards.live.spec.ts` (allocate, create a NAT gateway on it, see the association, delete,
 release), which passed against 2.3.0.
 
+## S3 management and data protection forms (2026-10-23)
+
+The S3 item of the recommended next work (below) is done. A bucket now has a **Management** tab with Lifecycle rules
+(create, edit, delete) and Replication rules (create, delete), and its Properties tab adds Intelligent-Tiering Archive
+configurations (create, edit, delete) and an editable Object Lock panel (turn it on, default retention mode and period).
+An object's details dialog shows Object Lock retention and legal hold for the version shown, with Edit retention and
+Turn on/off legal hold, when the bucket has Object Lock. Backed by `/api/s3/buckets/<bucket>/object-lock/`,
+`.../objects/retention/`, `.../objects/legal-hold/`, `.../replication/` and `.../intelligent-tiering/`; `HeadObject`
+now returns the lock fields, and the existing lifecycle route checks rules before sending them.
+
+Checked in `S3Service.java` and `docs/services/s3.md` at `2.3.0`, then live on the disposable emulator:
+
+| Behavior | Floci 2.3.0 | Console |
+| --- | --- | --- |
+| Object Lock retention and legal hold | Enforced: a version under governance retention can be deleted only with the bypass, compliance retention can't be shortened or changed, and a legal hold blocks a delete even with the bypass. Removing governance retention needs the bypass. | Nothing to label beyond the note; the retention form asks for the bypass and refuses changes compliance forbids |
+| Turning Object Lock on | Accepted on a bucket without versioning (AWS: `InvalidBucketState`), and versioning can then be suspended on a locked bucket (AWS refuses). | The dashboard refuses both: Object Lock needs versioning first, and Suspend is disabled on a locked bucket |
+| Retention or legal hold without Object Lock | Accepted on any bucket (AWS: `InvalidRequest`, "Bucket is missing Object Lock Configuration"). | The dashboard refuses it; the form is shown only on locked buckets |
+| Lifecycle rules | Stored and returned as sent, never run (no transition, expiration or multipart abort). No validation: a rule without actions, a Standard-IA transition before 30 days and an expiration before the last transition are all accepted. | Note on the tab; the form and the backend check the AWS rules (actions, 30-day IA minimum, expiration after transitions, unique storage classes and IDs, no delete-marker cleanup with expiration days, no multipart abort with tag filters). Rules with dates or size filters are listed but edited only with the CLI |
+| Replication | Stored, nothing replicated, role not checked. Accepted with versioning off on either bucket and with a destination that doesn't exist. | Note on the tab; the dashboard requires versioning on the source and on a destination in this account, unique priorities and a role ARN |
+| Intelligent-Tiering archive configurations | Stored; day limits checked (90-730 Archive, 180-730 Deep Archive); objects never change tier. | Note in the form; the form checks the same limits |
+
+The S3 inventory listed replication and Intelligent-Tiering as not implemented and Request payment as supported; it now
+lists the first two as supported (configuration only) and Request payment under not implemented, as Floci's own docs do.
+
+Verification: `manage.py test` (1,365 passed), `npx tsc --noEmit`, `npm run build`, the mocked browser suite with six
+new S3 tests, and a new live test (`dashboards.live.spec.ts`) that turns on Object Lock, sets a legal hold that Floci
+then enforces against a delete, and creates a lifecycle rule, a replication rule and a tiering configuration through
+the console, checking each against Floci 2.3.0 with the SDK.
+
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
-| S3 console: lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication and Intelligent-Tiering config (configuration only) | The S3 data protection lab (above) uses the API; the console forms each need their own label. |
 | EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
-| Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration, ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
+| Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration (`main` applies it; the Management tab note says it never runs), ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
 | Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |

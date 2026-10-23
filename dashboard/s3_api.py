@@ -510,6 +510,9 @@ def head_s3_object(bucket: str, key: str, version_id: str | None = None) -> dict
         'storage_class': response.get('StorageClass'),
         'metadata': response.get('Metadata', {}),
         'versioning': response.get('VersionId'),
+        'object_lock_mode': response.get('ObjectLockMode'),
+        'object_lock_retain_until_date': response.get('ObjectLockRetainUntilDate'),
+        'object_lock_legal_hold_status': response.get('ObjectLockLegalHoldStatus'),
     })
 
 
@@ -616,6 +619,7 @@ def get_s3_lifecycle(bucket: str) -> list[dict[str, Any]]:
 
 
 def put_s3_lifecycle(bucket: str, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    validate_lifecycle_rules(rules)
     _s3_client().put_bucket_lifecycle_configuration(
         Bucket=bucket,
         LifecycleConfiguration={'Rules': rules},
@@ -746,7 +750,7 @@ def s3_inventory_summary() -> dict[str, Any]:
             'bucket_configuration': [
                 'Location', 'Versioning', 'Tagging', 'Policy', 'CORS', 'Lifecycle',
                 'ACL', 'Encryption', 'Notifications', 'Object Lock', 'Public Access Block',
-                'Request payment', 'Website hosting',
+                'Replication', 'Intelligent-Tiering configurations', 'Website hosting',
             ],
             'objects': [
                 'ListObjectsV2',
@@ -766,14 +770,275 @@ def s3_inventory_summary() -> dict[str, Any]:
                 'Records, Stats, and End event stream frames',
             ],
             'not_implemented': [
-                'Replication',
                 'Access logging',
-                'Intelligent-Tiering configurations',
-                'Inventory configurations',
-                'Metrics and Analytics configurations',
+                'Request payment',
             ],
         },
         'notes': [
             'Floci supports S3 bucket website hosting configuration and local website-style object serving.',
+            'Object Lock is enforced: retention and legal holds block deletes and retention changes as in AWS.',
+            'Lifecycle rules, replication and Intelligent-Tiering archive configurations are stored and returned, '
+            'but nothing runs them: objects never transition, expire, replicate or move between access tiers.',
         ],
     }
+
+
+# Management and data protection settings. Floci 2.3.0 enforces Object Lock (retention and legal
+# holds block deletes), but only stores lifecycle, replication and Intelligent-Tiering settings, and
+# skips several checks AWS makes when they are saved. The checks below are the ones AWS makes, so
+# the console refuses what AWS would refuse.
+
+DASHBOARD_CHECK = ' (AWS refuses this; Floci 2.3.0 accepts it, so the dashboard checks.)'
+LIFECYCLE_IA_CLASSES = {'STANDARD_IA', 'ONEZONE_IA'}
+LIFECYCLE_STORAGE_CLASSES = {'STANDARD_IA', 'ONEZONE_IA', 'INTELLIGENT_TIERING', 'GLACIER_IR', 'GLACIER', 'DEEP_ARCHIVE'}
+OBJECT_LOCK_MODES = {'GOVERNANCE', 'COMPLIANCE'}
+
+
+def _aws_rule_error(code: str, message: str, status: int, operation: str) -> ClientError:
+    return ClientError(
+        {'Error': {'Code': code, 'Message': message + DASHBOARD_CHECK}, 'ResponseMetadata': {'HTTPStatusCode': status}},
+        operation,
+    )
+
+
+def _versioning_status(s3, bucket: str) -> str:
+    return s3.get_bucket_versioning(Bucket=bucket).get('Status') or 'Disabled'
+
+
+def _object_lock_enabled(s3, bucket: str) -> bool:
+    try:
+        configuration = s3.get_object_lock_configuration(Bucket=bucket).get('ObjectLockConfiguration') or {}
+    except ClientError as exc:
+        if _error_code(exc) == 'ObjectLockConfigurationNotFoundError':
+            return False
+        raise
+    return configuration.get('ObjectLockEnabled') == 'Enabled'
+
+
+def validate_lifecycle_rules(rules: list[dict[str, Any]]) -> None:
+    """Raise ValueError with the AWS wording for a lifecycle configuration AWS would reject."""
+    if len(rules) > 1000:
+        raise ValueError('A lifecycle configuration can have up to 1,000 rules.')
+    seen_ids: set[str] = set()
+    for rule in rules:
+        if not isinstance(rule, dict):
+            raise ValueError('Each lifecycle rule must be an object.')
+        rule_id = str(rule.get('ID') or '')
+        if len(rule_id) > 255:
+            raise ValueError('The ID of a lifecycle rule can be up to 255 characters long.')
+        if rule_id:
+            if rule_id in seen_ids:
+                raise ValueError(f'Rule ID must be unique. Found same ID for more than one rule: {rule_id}')
+            seen_ids.add(rule_id)
+        if rule.get('Status') not in {'Enabled', 'Disabled'}:
+            raise ValueError('Lifecycle rule status must be Enabled or Disabled.')
+        label = f'rule "{rule_id}"' if rule_id else 'a rule'
+        actions = ('Expiration', 'Transitions', 'NoncurrentVersionExpiration',
+                   'NoncurrentVersionTransitions', 'AbortIncompleteMultipartUpload')
+        if not any(rule.get(action) for action in actions):
+            raise ValueError(f'At least one action needs to be specified in {label}.')
+
+        def days_of(items: list[dict[str, Any]], field: str) -> list[tuple[str, int]]:
+            result = []
+            classes = set()
+            for item in items or []:
+                storage_class = item.get('StorageClass')
+                if storage_class not in LIFECYCLE_STORAGE_CLASSES:
+                    raise ValueError(f'Unsupported storage class in {label}: {storage_class}')
+                if storage_class in classes:
+                    raise ValueError(f"'StorageClass' must be different for transition rules in {label}.")
+                classes.add(storage_class)
+                if field in item:
+                    days = int(item[field])
+                    if days < 0:
+                        raise ValueError(f"'{field}' in the transition action of {label} must be 0 or more.")
+                    if storage_class in LIFECYCLE_IA_CLASSES and days < 30:
+                        raise ValueError(
+                            f"'{field}' in Transition action must be greater than or equal to 30 for storageClass '{storage_class}' ({label})."
+                        )
+                    result.append((storage_class, days))
+            return result
+
+        transitions = days_of(rule.get('Transitions') or [], 'Days')
+        noncurrent = days_of(rule.get('NoncurrentVersionTransitions') or [], 'NoncurrentDays')
+        expiration = rule.get('Expiration') or {}
+        if 'Days' in expiration:
+            if expiration.get('ExpiredObjectDeleteMarker'):
+                raise ValueError(f'ExpiredObjectDeleteMarker cannot be specified with Days or Date in the Expiration action of {label}.')
+            days = int(expiration['Days'])
+            if days < 1:
+                raise ValueError(f"'Days' in the Expiration action of {label} must be a positive integer.")
+            if transitions and days <= max(day for _, day in transitions):
+                raise ValueError(f"'Days' in the Expiration action for {label} must be greater than 'Days' in the Transition action.")
+        noncurrent_expiration = rule.get('NoncurrentVersionExpiration') or {}
+        if 'NoncurrentDays' in noncurrent_expiration:
+            days = int(noncurrent_expiration['NoncurrentDays'])
+            if days < 1:
+                raise ValueError(f"'NoncurrentDays' in the NoncurrentVersionExpiration action of {label} must be a positive integer.")
+            if noncurrent and days <= max(day for _, day in noncurrent):
+                raise ValueError(
+                    f"'NoncurrentDays' in the NoncurrentVersionExpiration action for {label} must be greater than 'NoncurrentDays' in the NoncurrentVersionTransition action."
+                )
+        abort = rule.get('AbortIncompleteMultipartUpload') or {}
+        if abort:
+            if int(abort.get('DaysAfterInitiation', 0)) < 1:
+                raise ValueError(f"'DaysAfterInitiation' in the AbortIncompleteMultipartUpload action of {label} must be a positive integer.")
+            filter_ = rule.get('Filter') or {}
+            if filter_.get('Tag') or (filter_.get('And') or {}).get('Tags'):
+                raise ValueError(f'AbortIncompleteMultipartUpload cannot be specified with Tags ({label}).')
+
+
+def get_s3_object_lock(bucket: str) -> dict[str, Any] | None:
+    return _s3_optional(
+        lambda: _s3_client().get_object_lock_configuration(Bucket=bucket).get('ObjectLockConfiguration'),
+        {'ObjectLockConfigurationNotFoundError', 'NoSuchBucket'},
+    )
+
+
+def put_s3_object_lock(bucket: str, default_retention: dict[str, Any] | None) -> dict[str, Any]:
+    """Turn Object Lock on (it can't be turned off) and set or clear the default retention."""
+    s3 = _s3_client()
+    if not _object_lock_enabled(s3, bucket) and _versioning_status(s3, bucket) != 'Enabled':
+        raise _aws_rule_error(
+            'InvalidBucketState',
+            "Versioning must be 'Enabled' on the bucket to apply a Object Lock configuration.",
+            409,
+            'PutObjectLockConfiguration',
+        )
+    configuration: dict[str, Any] = {'ObjectLockEnabled': 'Enabled'}
+    if default_retention:
+        mode = default_retention.get('Mode')
+        if mode not in OBJECT_LOCK_MODES:
+            raise ValueError('Default retention mode must be GOVERNANCE or COMPLIANCE.')
+        has_days, has_years = 'Days' in default_retention, 'Years' in default_retention
+        if has_days == has_years:
+            raise ValueError('Default retention needs either Days or Years, not both.')
+        unit = 'Days' if has_days else 'Years'
+        value = int(default_retention[unit])
+        limit = 36500 if unit == 'Days' else 100
+        if not 1 <= value <= limit:
+            raise ValueError(f'Default retention {unit.lower()} must be between 1 and {limit}.')
+        configuration['Rule'] = {'DefaultRetention': {'Mode': mode, unit: value}}
+    s3.put_object_lock_configuration(Bucket=bucket, ObjectLockConfiguration=configuration)
+    return configuration
+
+
+def _require_object_lock(s3, bucket: str, operation: str) -> None:
+    if not _object_lock_enabled(s3, bucket):
+        raise _aws_rule_error('InvalidRequest', 'Bucket is missing Object Lock Configuration.', 400, operation)
+
+
+def _version_params(bucket: str, key: str, version_id: str | None) -> dict[str, Any]:
+    params: dict[str, Any] = {'Bucket': bucket, 'Key': key}
+    if version_id:
+        params['VersionId'] = version_id
+    return params
+
+
+def put_s3_object_retention(
+    bucket: str,
+    key: str,
+    version_id: str | None,
+    mode: str | None,
+    retain_until: str | None,
+    bypass_governance: bool = False,
+) -> dict[str, Any]:
+    s3 = _s3_client()
+    _require_object_lock(s3, bucket, 'PutObjectRetention')
+    retention: dict[str, Any] = {}
+    if mode:
+        if mode not in OBJECT_LOCK_MODES:
+            raise ValueError('Retention mode must be GOVERNANCE or COMPLIANCE.')
+        if not retain_until:
+            raise ValueError('A retain until date is required.')
+        retention = {'Mode': mode, 'RetainUntilDate': retain_until}
+    params = _version_params(bucket, key, version_id)
+    s3.put_object_retention(**params, Retention=retention, BypassGovernanceRetention=bool(bypass_governance))
+    return {'mode': mode or None, 'retain_until_date': retain_until if mode else None}
+
+
+def put_s3_object_legal_hold(bucket: str, key: str, version_id: str | None, status: str) -> dict[str, Any]:
+    if status not in {'ON', 'OFF'}:
+        raise ValueError('Legal hold status must be ON or OFF.')
+    s3 = _s3_client()
+    _require_object_lock(s3, bucket, 'PutObjectLegalHold')
+    s3.put_object_legal_hold(**_version_params(bucket, key, version_id), LegalHold={'Status': status})
+    return {'status': status}
+
+
+def get_s3_replication(bucket: str) -> dict[str, Any] | None:
+    return _s3_optional(
+        lambda: _s3_client().get_bucket_replication(Bucket=bucket).get('ReplicationConfiguration'),
+        {'ReplicationConfigurationNotFoundError', 'NoSuchBucket'},
+    )
+
+
+def put_s3_replication(bucket: str, configuration: dict[str, Any]) -> dict[str, Any]:
+    s3 = _s3_client()
+    if _versioning_status(s3, bucket) != 'Enabled':
+        raise _aws_rule_error(
+            'InvalidRequest',
+            "Versioning must be 'Enabled' on the bucket to apply a replication configuration.",
+            400,
+            'PutBucketReplication',
+        )
+    rules = configuration.get('Rules') or []
+    if not configuration.get('Role') or not rules:
+        raise ValueError('A replication configuration needs an IAM role and at least one rule.')
+    own_buckets = {item.get('Name') for item in s3.list_buckets().get('Buckets', [])}
+    priorities = [rule.get('Priority') for rule in rules if 'Priority' in rule]
+    if len(priorities) != len(set(priorities)):
+        raise ValueError('Found duplicate priority. Each replication rule needs a different priority.')
+    for rule in rules:
+        destination = str((rule.get('Destination') or {}).get('Bucket') or '')
+        if not destination.startswith('arn:aws:s3:::'):
+            raise ValueError('The destination must be a bucket ARN such as arn:aws:s3:::my-bucket.')
+        name = destination.removeprefix('arn:aws:s3:::')
+        if name == bucket:
+            raise ValueError('The destination bucket must be different from the source bucket.')
+        if name in own_buckets and _versioning_status(s3, name) != 'Enabled':
+            raise _aws_rule_error(
+                'InvalidRequest',
+                f'Destination bucket must have versioning enabled ({name}).',
+                400,
+                'PutBucketReplication',
+            )
+    s3.put_bucket_replication(Bucket=bucket, ReplicationConfiguration=configuration)
+    return configuration
+
+
+def delete_s3_replication(bucket: str) -> dict[str, bool]:
+    _s3_client().delete_bucket_replication(Bucket=bucket)
+    return {'deleted': True}
+
+
+def list_s3_intelligent_tiering(bucket: str) -> list[dict[str, Any]]:
+    s3 = _s3_client()
+    configurations: list[dict[str, Any]] = []
+    token = None
+    while True:
+        params: dict[str, Any] = {'Bucket': bucket}
+        if token:
+            params['ContinuationToken'] = token
+        response = s3.list_bucket_intelligent_tiering_configurations(**params)
+        configurations.extend(response.get('IntelligentTieringConfigurationList') or [])
+        token = response.get('NextContinuationToken')
+        if not response.get('IsTruncated') or not token:
+            return _clean_response(configurations)
+
+
+def put_s3_intelligent_tiering(bucket: str, configuration: dict[str, Any]) -> dict[str, Any]:
+    config_id = str(configuration.get('Id') or '').strip()
+    if not config_id:
+        raise ValueError('Configuration name is required.')
+    _s3_client().put_bucket_intelligent_tiering_configuration(
+        Bucket=bucket,
+        Id=config_id,
+        IntelligentTieringConfiguration={**configuration, 'Id': config_id},
+    )
+    return configuration
+
+
+def delete_s3_intelligent_tiering(bucket: str, config_id: str) -> dict[str, bool]:
+    _s3_client().delete_bucket_intelligent_tiering_configuration(Bucket=bucket, Id=config_id)
+    return {'deleted': True}

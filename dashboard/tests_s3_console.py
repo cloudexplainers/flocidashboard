@@ -317,3 +317,136 @@ class S3ConsoleAccuracyTests(SimpleTestCase):
         presign_s3_object('b', 'k')
 
         factory_mock.assert_called_with(endpoint_url='http://localhost:4566')
+
+
+class S3ManagementSettingsTests(SimpleTestCase):
+    """Lifecycle, replication, Intelligent-Tiering and Object Lock: the checks AWS makes and Floci skips."""
+
+    def _put(self, path, body):
+        return self.client.put(path, data=json.dumps(body), content_type='application/json')
+
+    def test_lifecycle_rules_are_checked_before_floci_sees_them(self):
+        from .s3_api import validate_lifecycle_rules
+
+        cases = [
+            ({'ID': 'r', 'Status': 'Enabled', 'Filter': {}}, 'At least one action'),
+            ({'ID': 'r', 'Status': 'Enabled', 'Filter': {}, 'Transitions': [{'Days': 10, 'StorageClass': 'STANDARD_IA'}]}, 'greater than or equal to 30'),
+            ({'ID': 'r', 'Status': 'Enabled', 'Filter': {}, 'Transitions': [{'Days': 60, 'StorageClass': 'GLACIER'}], 'Expiration': {'Days': 30}}, 'must be greater than'),
+            ({'ID': 'r', 'Status': 'Enabled', 'Filter': {}, 'Expiration': {'Days': 3, 'ExpiredObjectDeleteMarker': True}}, 'ExpiredObjectDeleteMarker'),
+            ({'ID': 'r', 'Status': 'Enabled', 'Filter': {'Tag': {'Key': 'a', 'Value': 'b'}}, 'AbortIncompleteMultipartUpload': {'DaysAfterInitiation': 7}}, 'cannot be specified with Tags'),
+        ]
+        for rule, message in cases:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                validate_lifecycle_rules([rule])
+        with self.assertRaisesRegex(ValueError, 'unique'):
+            validate_lifecycle_rules([{'ID': 'a', 'Status': 'Enabled', 'Expiration': {'Days': 1}}] * 2)
+        validate_lifecycle_rules([{
+            'ID': 'ok', 'Status': 'Enabled', 'Filter': {'Prefix': 'logs/'},
+            'Transitions': [{'Days': 30, 'StorageClass': 'STANDARD_IA'}, {'Days': 90, 'StorageClass': 'GLACIER'}],
+            'Expiration': {'Days': 365}, 'NoncurrentVersionExpiration': {'NoncurrentDays': 30},
+        }])
+
+    @patch('dashboard.s3_api._s3_client')
+    def test_invalid_lifecycle_rule_returns_400_without_calling_floci(self, client_mock):
+        response = self._put('/api/s3/buckets/logs/lifecycle/', {'rules': [{'ID': 'r', 'Status': 'Enabled', 'Filter': {}}]})
+
+        self.assertEqual(response.status_code, 400)
+        client_mock.return_value.put_bucket_lifecycle_configuration.assert_not_called()
+
+    @patch('dashboard.s3_api._s3_client')
+    def test_object_lock_needs_versioning_as_in_aws(self, client_mock):
+        from botocore.exceptions import ClientError
+
+        s3 = client_mock.return_value
+        s3.get_object_lock_configuration.side_effect = ClientError({'Error': {'Code': 'ObjectLockConfigurationNotFoundError'}}, 'GetObjectLockConfiguration')
+        s3.get_bucket_versioning.return_value = {}
+
+        response = self._put('/api/s3/buckets/plain/object-lock/', {'default_retention': None})
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['code'], 'InvalidBucketState')
+        self.assertIn('Floci 2.3.0 accepts it', response.json()['error'])
+        s3.put_object_lock_configuration.assert_not_called()
+
+        s3.get_bucket_versioning.return_value = {'Status': 'Enabled'}
+        response = self._put('/api/s3/buckets/plain/object-lock/', {'default_retention': {'Mode': 'COMPLIANCE', 'Years': 1}})
+
+        self.assertEqual(response.status_code, 200)
+        s3.put_object_lock_configuration.assert_called_once_with(
+            Bucket='plain',
+            ObjectLockConfiguration={'ObjectLockEnabled': 'Enabled', 'Rule': {'DefaultRetention': {'Mode': 'COMPLIANCE', 'Years': 1}}},
+        )
+
+    @patch('dashboard.s3_api._s3_client')
+    def test_retention_and_legal_hold_need_object_lock_and_pass_the_version(self, client_mock):
+        from botocore.exceptions import ClientError
+
+        s3 = client_mock.return_value
+        s3.get_object_lock_configuration.side_effect = ClientError({'Error': {'Code': 'ObjectLockConfigurationNotFoundError'}}, 'GetObjectLockConfiguration')
+        response = self._put('/api/s3/buckets/plain/objects/legal-hold/', {'key': 'a.txt', 'status': 'ON'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('missing Object Lock Configuration', response.json()['error'])
+        s3.put_object_legal_hold.assert_not_called()
+
+        s3.get_object_lock_configuration.side_effect = None
+        s3.get_object_lock_configuration.return_value = {'ObjectLockConfiguration': {'ObjectLockEnabled': 'Enabled'}}
+        response = self._put('/api/s3/buckets/vault/objects/retention/', {
+            'key': 'a.txt', 'version_id': 'v1', 'mode': None, 'bypass_governance_retention': True,
+        })
+        self.assertEqual(response.status_code, 200)
+        s3.put_object_retention.assert_called_once_with(
+            Bucket='vault', Key='a.txt', VersionId='v1', Retention={}, BypassGovernanceRetention=True,
+        )
+        response = self._put('/api/s3/buckets/vault/objects/legal-hold/', {'key': 'a.txt', 'status': 'ON'})
+        self.assertEqual(response.status_code, 200)
+        s3.put_object_legal_hold.assert_called_once_with(Bucket='vault', Key='a.txt', LegalHold={'Status': 'ON'})
+
+    @patch('dashboard.s3_api._s3_client')
+    def test_replication_needs_versioning_on_both_buckets(self, client_mock):
+        s3 = client_mock.return_value
+        s3.list_buckets.return_value = {'Buckets': [{'Name': 'source'}, {'Name': 'replica'}]}
+        versioning = {'source': {}, 'replica': {}}
+        s3.get_bucket_versioning.side_effect = lambda Bucket: versioning[Bucket]
+        configuration = {'Role': 'arn:aws:iam::000000000000:role/r', 'Rules': [
+            {'ID': 'r', 'Priority': 0, 'Status': 'Enabled', 'Filter': {}, 'DeleteMarkerReplication': {'Status': 'Disabled'},
+             'Destination': {'Bucket': 'arn:aws:s3:::replica'}},
+        ]}
+
+        response = self._put('/api/s3/buckets/source/replication/', {'configuration': configuration})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Versioning must be 'Enabled' on the bucket", response.json()['error'])
+
+        versioning['source'] = {'Status': 'Enabled'}
+        response = self._put('/api/s3/buckets/source/replication/', {'configuration': configuration})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Destination bucket must have versioning enabled', response.json()['error'])
+        s3.put_bucket_replication.assert_not_called()
+
+        versioning['replica'] = {'Status': 'Enabled'}
+        response = self._put('/api/s3/buckets/source/replication/', {'configuration': configuration})
+        self.assertEqual(response.status_code, 200)
+        s3.put_bucket_replication.assert_called_once_with(Bucket='source', ReplicationConfiguration=configuration)
+
+    @patch('dashboard.s3_api._s3_client')
+    def test_intelligent_tiering_lists_puts_and_deletes(self, client_mock):
+        s3 = client_mock.return_value
+        s3.list_bucket_intelligent_tiering_configurations.return_value = {
+            'IsTruncated': False,
+            'IntelligentTieringConfigurationList': [{'Id': 'cold', 'Status': 'Enabled', 'Tierings': [{'Days': 90, 'AccessTier': 'ARCHIVE_ACCESS'}]}],
+        }
+        self.assertEqual(self.client.get('/api/s3/buckets/tiered/intelligent-tiering/').json()['configurations'][0]['Id'], 'cold')
+
+        configuration = {'Id': 'cold', 'Status': 'Enabled', 'Tierings': [{'Days': 180, 'AccessTier': 'DEEP_ARCHIVE_ACCESS'}]}
+        self.assertEqual(self._put('/api/s3/buckets/tiered/intelligent-tiering/', {'configuration': configuration}).status_code, 200)
+        s3.put_bucket_intelligent_tiering_configuration.assert_called_once_with(Bucket='tiered', Id='cold', IntelligentTieringConfiguration=configuration)
+
+        self.assertEqual(self.client.delete('/api/s3/buckets/tiered/intelligent-tiering/?id=cold').status_code, 200)
+        s3.delete_bucket_intelligent_tiering_configuration.assert_called_once_with(Bucket='tiered', Id='cold')
+
+    @patch('dashboard.s3_api.list_s3_buckets', return_value=[])
+    def test_inventory_lists_replication_and_intelligent_tiering_as_supported(self, _list_mock):
+        supported = s3_inventory_summary()['supported']
+
+        self.assertIn('Replication', supported['bucket_configuration'])
+        self.assertIn('Intelligent-Tiering configurations', supported['bucket_configuration'])
+        self.assertNotIn('Replication', supported['not_implemented'])

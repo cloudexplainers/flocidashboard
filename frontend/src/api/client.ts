@@ -1332,9 +1332,85 @@ export async function putS3ObjectTags(bucketName: string, key: string, tags: Arr
   });
 }
 
+export interface S3ObjectHead {
+  content_type?: string;
+  content_length?: number;
+  etag?: string;
+  last_modified?: string;
+  storage_class?: string;
+  metadata?: Record<string, string>;
+  versioning?: string;
+  object_lock_mode?: 'GOVERNANCE' | 'COMPLIANCE';
+  object_lock_retain_until_date?: string;
+  object_lock_legal_hold_status?: 'ON' | 'OFF';
+}
+
 /** HeadObject, returned with the backend's snake_case field names. */
-export async function fetchS3ObjectHead(bucketName: string, key: string): Promise<{ content_type?: string; content_length?: number; etag?: string; last_modified?: string; storage_class?: string; metadata?: Record<string, string>; versioning?: string } | null> {
-  return requestJson(`${s3Bucket(bucketName)}/objects/head/?${new URLSearchParams({ key })}`, { errorMessage: 'Failed to read object metadata' });
+export async function fetchS3ObjectHead(bucketName: string, key: string, versionId?: string): Promise<S3ObjectHead | null> {
+  return requestJson(`${s3Bucket(bucketName)}/objects/head/?${new URLSearchParams({ key, ...(versionId ? { versionId } : {}) })}`, { errorMessage: 'Failed to read object metadata' });
+}
+
+export interface S3ObjectLockConfiguration {
+  ObjectLockEnabled?: 'Enabled';
+  Rule?: { DefaultRetention?: { Mode: 'GOVERNANCE' | 'COMPLIANCE'; Days?: number; Years?: number } };
+}
+
+export async function fetchS3ObjectLock(bucketName: string): Promise<S3ObjectLockConfiguration | null> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/object-lock/`, { errorMessage: 'Failed to read Object Lock' });
+  return data.configuration || null;
+}
+
+/** Turns Object Lock on (it can't be turned off) and sets or clears the default retention. */
+export async function putS3ObjectLock(bucketName: string, defaultRetention: { Mode: string; Days?: number; Years?: number } | null): Promise<any> {
+  return requestJson(`${s3Bucket(bucketName)}/object-lock/`, { method: 'PUT', json: { default_retention: defaultRetention }, errorMessage: 'Failed to edit Object Lock' });
+}
+
+/** PutObjectRetention. A null mode removes the retention (governance needs the bypass). */
+export async function putS3ObjectRetention(bucketName: string, key: string, versionId: string | undefined, mode: string | null, retainUntilDate: string | null, bypassGovernanceRetention = false): Promise<any> {
+  return requestJson(`${s3Bucket(bucketName)}/objects/retention/`, {
+    method: 'PUT',
+    json: { key, version_id: versionId, mode, retain_until_date: retainUntilDate, bypass_governance_retention: bypassGovernanceRetention },
+    errorMessage: 'Failed to edit Object Lock retention',
+  });
+}
+
+export async function putS3ObjectLegalHold(bucketName: string, key: string, versionId: string | undefined, status: 'ON' | 'OFF'): Promise<any> {
+  return requestJson(`${s3Bucket(bucketName)}/objects/legal-hold/`, { method: 'PUT', json: { key, version_id: versionId, status }, errorMessage: 'Failed to edit Object Lock legal hold' });
+}
+
+export async function fetchS3Lifecycle(bucketName: string): Promise<any[]> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/lifecycle/`, { errorMessage: 'Failed to read lifecycle rules' });
+  return data.rules || [];
+}
+
+/** PutBucketLifecycleConfiguration replaces every rule; an empty list deletes the configuration. */
+export async function putS3Lifecycle(bucketName: string, rules: any[]): Promise<any> {
+  if (!rules.length) return requestJson(`${s3Bucket(bucketName)}/lifecycle/`, { method: 'DELETE', errorMessage: 'Failed to delete lifecycle configuration' });
+  return requestJson(`${s3Bucket(bucketName)}/lifecycle/`, { method: 'PUT', json: { rules }, errorMessage: 'Failed to save lifecycle rules' });
+}
+
+export async function fetchS3Replication(bucketName: string): Promise<{ Role?: string; Rules?: any[] } | null> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/replication/`, { errorMessage: 'Failed to read replication rules' });
+  return data.configuration || null;
+}
+
+/** PutBucketReplication replaces every rule; no rules deletes the configuration. */
+export async function putS3Replication(bucketName: string, configuration: { Role: string; Rules: any[] }): Promise<any> {
+  if (!configuration.Rules.length) return requestJson(`${s3Bucket(bucketName)}/replication/`, { method: 'DELETE', errorMessage: 'Failed to delete replication configuration' });
+  return requestJson(`${s3Bucket(bucketName)}/replication/`, { method: 'PUT', json: { configuration }, errorMessage: 'Failed to save replication rules' });
+}
+
+export async function fetchS3IntelligentTiering(bucketName: string): Promise<any[]> {
+  const data = await requestJson(`${s3Bucket(bucketName)}/intelligent-tiering/`, { errorMessage: 'Failed to read Intelligent-Tiering archive configurations' });
+  return data.configurations || [];
+}
+
+export async function putS3IntelligentTiering(bucketName: string, configuration: any): Promise<any> {
+  return requestJson(`${s3Bucket(bucketName)}/intelligent-tiering/`, { method: 'PUT', json: { configuration }, errorMessage: 'Failed to save Intelligent-Tiering archive configuration' });
+}
+
+export async function deleteS3IntelligentTiering(bucketName: string, id: string): Promise<any> {
+  return requestJson(`${s3Bucket(bucketName)}/intelligent-tiering/?${new URLSearchParams({ id })}`, { method: 'DELETE', errorMessage: 'Failed to delete Intelligent-Tiering archive configuration' });
 }
 
 // CloudFormation Operational APIs
