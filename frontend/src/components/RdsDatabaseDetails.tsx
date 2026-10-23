@@ -9,6 +9,7 @@ import Button from "@cloudscape-design/components/button";
 import FormField from "@cloudscape-design/components/form-field";
 import Textarea from "@cloudscape-design/components/textarea";
 import { CodeSnippet } from "./CodeSnippet";
+import { FlociNote } from "./FlociNote";
 import {
   RdsInstance,
   RdsCluster,
@@ -17,6 +18,7 @@ import {
   rdsTime,
   rdsConnection,
   memberRole,
+  replicationStatus,
 } from "../pages/rdsResources";
 const present = (value: any) => value ?? "Not reported";
 export function RdsDatabaseDetails({
@@ -25,13 +27,31 @@ export function RdsDatabaseDetails({
   tab,
   onTabChange,
   onCluster,
+  onInstance,
 }: {
   db: RdsInstance;
   cluster?: RdsCluster;
   tab: string;
   onTabChange: (tab: string) => void;
   onCluster: (name: string) => void;
+  onInstance?: (name: string) => void;
 }) {
+  const instanceLink = (name: string) =>
+    onInstance ? (
+      <Button key={name} variant="inline-link" onClick={() => onInstance(name)}>
+        {name}
+      </Button>
+    ) : (
+      name
+    );
+  const replicas: string[] = Array.isArray(db.read_replicas)
+    ? db.read_replicas
+    : [];
+  const replicationRole = db.read_replica_source
+    ? "Replica"
+    : replicas.length
+      ? "Primary"
+      : "None";
   const connection = rdsConnection(db);
   const membership = cluster?.members.find(
     (member) => member.DBInstanceIdentifier === db.name,
@@ -248,6 +268,68 @@ export function RdsDatabaseDetails({
                     },
                   ]}
                 />
+              </Container>
+              <Container
+                header={
+                  <Header
+                    variant="h2"
+                    description="Read replicas and point-in-time recovery, as Floci reports them."
+                  >
+                    Replication and recovery
+                  </Header>
+                }
+              >
+                <SpaceBetween size="m">
+                  <KeyValuePairs
+                    columns={2}
+                    minColumnWidth={260}
+                    items={[
+                      { label: "Replication role", value: replicationRole },
+                      {
+                        label: "Replication source",
+                        value: db.read_replica_source
+                          ? instanceLink(db.read_replica_source)
+                          : "None",
+                      },
+                      {
+                        label: "Read replicas",
+                        value: replicas.length ? (
+                          <SpaceBetween direction="horizontal" size="xs">
+                            {replicas.map(instanceLink)}
+                          </SpaceBetween>
+                        ) : (
+                          "None"
+                        ),
+                      },
+                      {
+                        label: "Replication status",
+                        value: replicationStatus(db) ?? (db.read_replica_source ? "Not reported" : "None"),
+                      },
+                      {
+                        label: "Latest restorable time (UTC)",
+                        value: db.latest_restorable_time
+                          ? rdsTime(db.latest_restorable_time)
+                          : db.backup_retention_period === 0
+                            ? "None (automated backups are off)"
+                            : "Not reported",
+                      },
+                    ]}
+                  />
+                  {(db.read_replica_source || replicas.length > 0) && (
+                    <FlociNote>
+                      Floci copied the source into the replica once, when the
+                      replica was created. Later writes to the source are not
+                      replicated, and the replica accepts writes, which an RDS
+                      read replica refuses.
+                    </FlociNote>
+                  )}
+                  {db.multi_az === true && (
+                    <FlociNote>
+                      Floci records Multi-AZ but runs no standby instance, so
+                      there is no secondary Availability Zone to fail over to.
+                    </FlociNote>
+                  )}
+                </SpaceBetween>
               </Container>
               {db.pending_modifications && (
                 <Container

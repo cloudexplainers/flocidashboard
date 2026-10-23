@@ -114,13 +114,14 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'Identity enforcement, remote operations, workflow orchestration, and containers',
     badge: 'Senior',
     color: 'red',
-    description: 'Switch identities and prove IAM enforcement end to end, run commands on instances with SSM, orchestrate workflows with Step Functions Choice and Parallel states, and deploy containerized microservices on ECS with Fargate.',
+    description: 'Switch identities and prove IAM enforcement end to end, run commands on instances with SSM, orchestrate workflows with Step Functions Choice and Parallel states, deploy containerized microservices on ECS with Fargate, and make databases resilient with RDS read replicas, point-in-time restore, and Aurora failover.',
     labs: [
       { service: 'iam', key: 'identity-enforcement-capstone', title: 'Switch identities and verify IAM enforcement', stepCount: 7 },
       { service: 'ec2', key: 'guided-ssm-command', title: 'Execute commands with SSM Run Command', stepCount: 3 },
       { service: 'stepfunctions', key: 'order-processing-workflow', title: 'Build a Step Functions state machine with Choice branching', stepCount: 5 },
       { service: 'stepfunctions', key: 'parallel-retry-workflow', title: 'Execute parallel branches and aggregate state outputs', stepCount: 3 },
       { service: 'ecs', key: 'fargate-microservice', title: 'Deploy containerized microservices with Amazon ECS and AWS Fargate', stepCount: 6 },
+      { service: 'rds', key: 'aurora-resilience', title: 'Design resilient databases with read replicas, point-in-time restore, and Aurora failover', stepCount: 10 },
     ],
   },
   {

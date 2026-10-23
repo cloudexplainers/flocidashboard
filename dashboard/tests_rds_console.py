@@ -12,7 +12,7 @@ class RDSWorkspaceTests(SimpleTestCase):
         client.list_tags_for_resource.return_value = {'TagList': []}
         db = {'DBInstanceIdentifier': 'orders', 'DBInstanceStatus': 'creating', 'AllocatedStorage': 0, 'PubliclyAccessible': False, 'MultiAZ': False, 'IAMDatabaseAuthenticationEnabled': False, 'StorageEncrypted': False, 'DeletionProtection': False, 'BackupRetentionPeriod': 0, 'AvailabilityZone': 'eu-west-1a', 'Endpoint': {'Address': 'reported.local', 'Port': 17001}, 'DBSubnetGroup': {'DBSubnetGroupName': 'private', 'VpcId': 'vpc-real'}, 'VpcSecurityGroups': [{'VpcSecurityGroupId': 'sg-real', 'Status': 'active'}], 'PendingModifiedValues': {'DBInstanceClass': 'db.t3.small'}}
         cluster = {'DBClusterIdentifier': 'cluster', 'DBClusterMembers': [{'DBInstanceIdentifier': 'orders', 'IsClusterWriter': False, 'PromotionTier': 0}], 'ReaderEndpoint': 'read.local', 'StorageEncrypted': False, 'BackupRetentionPeriod': 0, 'AvailabilityZones': ['eu-west-1a']}
-        paginate_mock.side_effect = lambda _client, operation, _key, **kwargs: {'describe_db_instances': [db], 'describe_db_clusters': [cluster], 'describe_db_parameter_groups': [], 'describe_db_snapshots': []}[operation]
+        paginate_mock.side_effect = lambda _client, operation, _key, **kwargs: {'describe_db_instances': [db], 'describe_db_clusters': [cluster], 'describe_db_parameter_groups': [], 'describe_db_snapshots': [], 'describe_db_cluster_snapshots': []}[operation]
         result = rds_inventory()
         instance = result['instances'][0]
         self.assertEqual(instance['allocated_storage'], 0)
@@ -32,7 +32,7 @@ class RDSWorkspaceTests(SimpleTestCase):
         from botocore.exceptions import ClientError
         paginate_mock.side_effect = ClientError({'Error': {'Code': 'AccessDenied', 'Message': 'Describe denied'}}, 'DescribeDBInstances')
         result = rds_inventory()
-        self.assertEqual(len(result['issues']), 4)
+        self.assertEqual(len(result['issues']), 5)
         self.assertIn('Describe denied', result['issues'][0])
         self.assertEqual(result['instances'], [])
 

@@ -10,6 +10,8 @@ import {
   rdsTime,
   RdsInstance,
   RdsSnapshot,
+  RdsClusterSnapshot,
+  clusterWriter,
   RdsCluster,
   RdsParameterGroup,
 } from "./rdsResources";
@@ -17,6 +19,8 @@ import React, { useState, useEffect, useRef } from "react";
 import Header from "@cloudscape-design/components/header";
 import Table from "../components/ResourceTable";
 import Button from "@cloudscape-design/components/button";
+import ButtonDropdown from "@cloudscape-design/components/button-dropdown";
+import RadioGroup from "@cloudscape-design/components/radio-group";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import Tabs from "@cloudscape-design/components/tabs";
@@ -42,6 +46,14 @@ import {
   createRdsSnapshot,
   deleteRdsSnapshot,
   restoreRdsSnapshot,
+  restoreRdsToPointInTime,
+  createRdsReadReplica,
+  promoteRdsReadReplica,
+  addRdsClusterInstance,
+  failoverRdsCluster,
+  createRdsClusterSnapshot,
+  deleteRdsClusterSnapshot,
+  restoreRdsClusterSnapshot,
 } from "../api/client";
 import ConfirmActionModal from "../components/ConfirmActionModal";
 import { FlociNote } from '../components/FlociNote';
@@ -154,6 +166,29 @@ const RdsWorkspace: React.FC<Props> = ({
   const [restoreClass, setRestoreClass] = useState("");
   const [deleteSnapshotOpen, setDeleteSnapshotOpen] = useState(false);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
+  // Resilience: read replicas, point-in-time restore, cluster failover and cluster snapshots
+  const [replicaOpen, setReplicaOpen] = useState(false);
+  const [replicaId, setReplicaId] = useState("");
+  const [replicaClass, setReplicaClass] = useState("");
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteRetention, setPromoteRetention] = useState("1");
+  const [pitrOpen, setPitrOpen] = useState(false);
+  const [pitrTarget, setPitrTarget] = useState("");
+  const [pitrMode, setPitrMode] = useState<"latest" | "custom">("latest");
+  const [pitrTime, setPitrTime] = useState("");
+  const [pitrClass, setPitrClass] = useState("");
+  const [addInstanceOpen, setAddInstanceOpen] = useState(false);
+  const [addInstanceId, setAddInstanceId] = useState("");
+  const [addInstanceClass, setAddInstanceClass] = useState("db.r6g.large");
+  const [failoverOpen, setFailoverOpen] = useState(false);
+  const [failoverTarget, setFailoverTarget] = useState("");
+  const [clusterSnapshotOpen, setClusterSnapshotOpen] = useState(false);
+  const [newClusterSnapshotId, setNewClusterSnapshotId] = useState("");
+  const [clusterSnapshots, setClusterSnapshots] = useState<RdsClusterSnapshot[]>([]);
+  const [selectedClusterSnapshots, setSelectedClusterSnapshots] = useState<RdsClusterSnapshot[]>([]);
+  const [restoreClusterOpen, setRestoreClusterOpen] = useState(false);
+  const [restoreClusterId, setRestoreClusterId] = useState("");
+  const [deleteClusterSnapshotOpen, setDeleteClusterSnapshotOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Selected items
@@ -293,6 +328,10 @@ const RdsWorkspace: React.FC<Props> = ({
       setSelectedSnapshots((selected) =>
         inventory.snapshots.filter((s) => s.name === selected[0]?.name),
       );
+      setClusterSnapshots(inventory.clusterSnapshots);
+      setSelectedClusterSnapshots((selected) =>
+        inventory.clusterSnapshots.filter((s) => s.name === selected[0]?.name),
+      );
       setIssues(Array.isArray(payload.issues) ? payload.issues : []);
     } catch (err: any) {
       if (!alive.current || current !== generation.current) return;
@@ -300,6 +339,7 @@ const RdsWorkspace: React.FC<Props> = ({
       setClusters([]);
       setParamGroups([]);
       setSnapshots([]);
+      setClusterSnapshots([]);
       setIssues([]);
       setLoadError(err.message || "Failed to load RDS databases.");
     } finally {
@@ -355,6 +395,94 @@ const RdsWorkspace: React.FC<Props> = ({
       return `Snapshot "${name}" deleted.`;
     }, () => setDeleteSnapshotOpen(false));
   };
+
+  const isPitrTimeValid = (value: string) =>
+    !Number.isNaN(new Date(value.trim()).valueOf()) && value.trim() !== "";
+  const handleRestorePointInTime = () => {
+    if (!activeInstance || !pitrTarget.trim()) return;
+    const source = activeInstance.name;
+    const target = pitrTarget.trim();
+    const time = pitrMode === "custom" ? new Date(pitrTime.trim()).toISOString() : "";
+    void runSnapshotAction(async () => {
+      const result = await restoreRdsToPointInTime(source, target, time, pitrClass.trim());
+      return `Restoring ${source} ${time ? `to ${time}` : "to its latest restorable time"} as new DB instance ${target} (status ${result?.instance?.DBInstanceStatus || "not reported"}).`;
+    }, () => setPitrOpen(false));
+  };
+  const handleCreateReplica = () => {
+    if (!activeInstance || !replicaId.trim()) return;
+    const source = activeInstance.name;
+    const name = replicaId.trim();
+    void runSnapshotAction(async () => {
+      const result = await createRdsReadReplica(source, name, replicaClass.trim());
+      return `Creating read replica ${name} of ${source} (status ${result?.instance?.DBInstanceStatus || "not reported"}).`;
+    }, () => setReplicaOpen(false));
+  };
+  const handlePromote = () => {
+    if (!activeInstance) return;
+    const name = activeInstance.name;
+    const retention = promoteRetention.trim();
+    void runSnapshotAction(async () => {
+      if (retention && (!/^\d+$/.test(retention) || Number(retention) > 35))
+        throw new Error("Backup retention period must be a whole number of days from 0 to 35.");
+      const result = await promoteRdsReadReplica(name, retention ? Number(retention) : undefined);
+      const instance = result?.instance || {};
+      return `Promoted ${name} to a standalone DB instance (backup retention ${instance.BackupRetentionPeriod ?? "not reported"} days).`;
+    }, () => setPromoteOpen(false));
+  };
+  const handleAddClusterInstance = () => {
+    if (!activeCluster || !addInstanceId.trim()) return;
+    const cluster = activeCluster.name;
+    const name = addInstanceId.trim();
+    void runSnapshotAction(async () => {
+      const result = await addRdsClusterInstance(cluster, name, addInstanceClass.trim() || "db.r6g.large");
+      return `Adding DB instance ${name} to cluster ${cluster} (status ${result?.instance?.DBInstanceStatus || "not reported"}).`;
+    }, () => setAddInstanceOpen(false));
+  };
+  const handleFailover = () => {
+    if (!activeCluster) return;
+    const cluster = activeCluster.name;
+    void runSnapshotAction(async () => {
+      const result = await failoverRdsCluster(cluster, failoverTarget);
+      return result?.writer
+        ? `Failover of ${cluster} complete: ${result.writer} is now the writer.`
+        : `Failover of ${cluster} requested; Floci reported no writer in its answer.`;
+    }, () => setFailoverOpen(false));
+  };
+  const handleTakeClusterSnapshot = () => {
+    if (!activeCluster || !newClusterSnapshotId.trim()) return;
+    const cluster = activeCluster.name;
+    const name = newClusterSnapshotId.trim();
+    void runSnapshotAction(async () => {
+      const result = await createRdsClusterSnapshot(cluster, name);
+      const status = result?.snapshot?.Status;
+      return `Cluster snapshot "${name}" of ${cluster} ${status === "available" ? "is available" : `reported status ${status || "not reported"}`}. Find it under Snapshots.`;
+    }, () => setClusterSnapshotOpen(false));
+  };
+  const selectedClusterSnapshot = selectedClusterSnapshots[0];
+  const handleRestoreClusterSnapshot = () => {
+    if (!selectedClusterSnapshot || !restoreClusterId.trim()) return;
+    const snapshot = selectedClusterSnapshot;
+    const name = restoreClusterId.trim();
+    void runSnapshotAction(async () => {
+      const result = await restoreRdsClusterSnapshot(snapshot.name, name, snapshot.engine || "");
+      return `Restoring cluster snapshot "${snapshot.name}" to new DB cluster ${name} (status ${result?.cluster?.Status || "not reported"}). Add instances to it to connect through them.`;
+    }, () => setRestoreClusterOpen(false));
+  };
+  const handleDeleteClusterSnapshot = () => {
+    if (!selectedClusterSnapshot) return;
+    const name = selectedClusterSnapshot.name;
+    void runSnapshotAction(async () => {
+      await deleteRdsClusterSnapshot(name);
+      setSelectedClusterSnapshots([]);
+      return `Cluster snapshot "${name}" deleted.`;
+    }, () => setDeleteClusterSnapshotOpen(false));
+  };
+  const activeWriter = activeCluster ? clusterWriter(activeCluster) : undefined;
+  const failoverReaders = activeCluster
+    ? activeCluster.members
+        .filter((member) => member.IsClusterWriter === false)
+        .map((member) => String(member.DBInstanceIdentifier))
+    : [];
 
   const handleCreateInstance = async () => {
     if (
@@ -666,7 +794,79 @@ const RdsWorkspace: React.FC<Props> = ({
               </Button>
             )}
             {activeInstance && (
+              <ButtonDropdown
+                disabled={snapshotBusy}
+                items={[
+                  {
+                    id: "create-read-replica",
+                    text: "Create read replica",
+                    disabled: activeInstance.status !== "available" || Boolean(activeInstance.cluster_identifier),
+                  },
+                  {
+                    id: "promote",
+                    text: "Promote",
+                    disabled: !activeInstance.read_replica_source,
+                  },
+                  {
+                    id: "restore-point-in-time",
+                    text: "Restore to point in time",
+                    disabled: Boolean(activeInstance.cluster_identifier),
+                  },
+                ]}
+                onItemClick={({ detail }) => {
+                  setActionAlert(null);
+                  if (detail.id === "create-read-replica") {
+                    setReplicaId(`${activeInstance.name}-replica`);
+                    setReplicaClass("");
+                    setReplicaOpen(true);
+                  } else if (detail.id === "promote") {
+                    setPromoteRetention("1");
+                    setPromoteOpen(true);
+                  } else {
+                    setPitrTarget(`${activeInstance.name}-restored`);
+                    setPitrMode("latest");
+                    setPitrTime("");
+                    setPitrClass("");
+                    setPitrOpen(true);
+                  }
+                }}
+              >
+                Actions
+              </ButtonDropdown>
+            )}
+            {activeInstance && (
               <Button onClick={prepareDeleteInstance}>Delete</Button>
+            )}
+            {activeCluster && (
+              <ButtonDropdown
+                disabled={snapshotBusy}
+                items={[
+                  { id: "add-instance", text: "Add reader" },
+                  {
+                    id: "failover",
+                    text: "Failover",
+                    disabled: failoverReaders.length === 0,
+                  },
+                  { id: "take-snapshot", text: "Take snapshot" },
+                ]}
+                onItemClick={({ detail }) => {
+                  setActionAlert(null);
+                  if (detail.id === "add-instance") {
+                    const base = activeCluster.members.length === 0 ? "writer" : `reader-${activeCluster.members.length}`;
+                    setAddInstanceId(`${activeCluster.name}-${base}`);
+                    setAddInstanceClass("db.r6g.large");
+                    setAddInstanceOpen(true);
+                  } else if (detail.id === "failover") {
+                    setFailoverTarget("");
+                    setFailoverOpen(true);
+                  } else {
+                    setNewClusterSnapshotId(`${activeCluster.name}-snapshot`);
+                    setClusterSnapshotOpen(true);
+                  }
+                }}
+              >
+                Actions
+              </ButtonDropdown>
             )}
             {activeCluster && (
               <Button
@@ -731,6 +931,7 @@ const RdsWorkspace: React.FC<Props> = ({
           tab={detailTab}
           onTabChange={(tab) => onNavigate?.(dbPath(activeInstance.name, tab))}
           onCluster={(name) => onNavigate?.(clusterPath(name))}
+          onInstance={(name) => onNavigate?.(dbPath(name))}
         />
       )}
       {activeCluster && (
@@ -1049,7 +1250,7 @@ const RdsWorkspace: React.FC<Props> = ({
             },
             {
               id: "snapshots",
-              label: `Snapshots (${snapshots.length})`,
+              label: `Snapshots (${snapshots.length + clusterSnapshots.length})`,
               content: (
                 <SpaceBetween size="l">
                   <FlociNote>
@@ -1124,6 +1325,75 @@ const RdsWorkspace: React.FC<Props> = ({
                     empty={
                       <Box textAlign="center" padding={{ vertical: "m" }}>
                         No DB snapshots found.
+                      </Box>
+                    }
+                  />
+                  <FlociNote>
+                    A cluster snapshot holds a dump of the cluster&apos;s database.
+                    Floci snapshots Aurora PostgreSQL clusters only; it refuses
+                    Aurora MySQL.
+                  </FlociNote>
+                  <Table
+                    header={
+                      <Header
+                        variant="h2"
+                        counter={`(${clusterSnapshots.length})`}
+                        description="Manual DB cluster snapshots. To take one, open a DB cluster and choose Actions, Take snapshot."
+                        actions={
+                          <SpaceBetween direction="horizontal" size="xs">
+                            <Button
+                              disabled={!selectedClusterSnapshot || snapshotBusy}
+                              onClick={() => {
+                                setActionAlert(null);
+                                setDeleteClusterSnapshotOpen(true);
+                              }}
+                            >
+                              Delete cluster snapshot
+                            </Button>
+                            <Button
+                              variant="primary"
+                              disabled={!selectedClusterSnapshot || selectedClusterSnapshot.status !== "available" || snapshotBusy}
+                              onClick={() => {
+                                setActionAlert(null);
+                                setRestoreClusterId(selectedClusterSnapshot ? `${selectedClusterSnapshot.name}-restored` : "");
+                                setRestoreClusterOpen(true);
+                              }}
+                            >
+                              Restore cluster snapshot
+                            </Button>
+                          </SpaceBetween>
+                        }
+                      >
+                        Cluster snapshots
+                      </Header>
+                    }
+                    columnDefinitions={[
+                      { id: "name", header: "Snapshot name", cell: (s) => <strong>{s.name}</strong> },
+                      { id: "cluster", header: "DB cluster", cell: (s) => s.cluster || "Not reported" },
+                      {
+                        id: "status",
+                        header: "Status",
+                        cell: (s) => (
+                          <StatusIndicator type={rdsStatus(s.status)}>
+                            {rdsStatusLabel(s.status)}
+                          </StatusIndicator>
+                        ),
+                      },
+                      { id: "type", header: "Snapshot type", cell: (s) => s.type || "Not reported" },
+                      { id: "engine", header: "Engine", cell: (s) => (s.engine ? rdsEngineLabel(s.engine) : "Not reported") },
+                      { id: "created", header: "Snapshot creation time", cell: (s) => rdsTime(s.created) },
+                    ]}
+                    items={clusterSnapshots}
+                    loading={loading}
+                    loadingText="Loading cluster snapshots..."
+                    selectionType="single"
+                    selectedItems={selectedClusterSnapshots}
+                    onSelectionChange={({ detail }) => setSelectedClusterSnapshots(detail.selectedItems)}
+                    trackBy="name"
+                    ariaLabels={{ tableLabel: "Cluster snapshots" }}
+                    empty={
+                      <Box textAlign="center" padding={{ vertical: "m" }}>
+                        No DB cluster snapshots found.
                       </Box>
                     }
                   />
@@ -1391,6 +1661,286 @@ const RdsWorkspace: React.FC<Props> = ({
         onDismiss={() => setDeleteSnapshotOpen(false)}
       >
         Delete snapshot {selectedSnapshot?.name}? Its saved data is deleted too. This can&apos;t be undone.
+      </ConfirmActionModal>
+      {/* Create read replica */}
+      <Modal
+        visible={replicaOpen}
+        onDismiss={() => !snapshotBusy && setReplicaOpen(false)}
+        header="Create read replica"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setReplicaOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} disabled={!replicaId.trim()} onClick={handleCreateReplica}>
+                Create read replica
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            Creates a read-only copy of {activeInstance?.name} that RDS keeps up to date
+            asynchronously. Use it to scale reads; promote it to make it a standalone
+            instance. The source needs automated backups.
+          </Box>
+          <FormField label="Replica source">
+            <Input value={activeInstance?.name || ""} readOnly />
+          </FormField>
+          <FormField label="DB instance identifier" description="Name of the read replica.">
+            <Input value={replicaId} onChange={({ detail }) => setReplicaId(detail.value)} />
+          </FormField>
+          <FormField label={<>DB instance class <i>- optional</i></>} description="Leave blank to use the source's class.">
+            <Input value={replicaClass} placeholder={activeInstance?.class || "db.t3.micro"} onChange={({ detail }) => setReplicaClass(detail.value)} />
+          </FormField>
+          <FlociNote>
+            Floci copies the source into the replica once, when it is created: later
+            writes to the source are not replicated, and the replica accepts writes.
+            Floci makes replicas of PostgreSQL instances only and refuses MySQL and
+            MariaDB sources.
+          </FlociNote>
+        </SpaceBetween>
+      </Modal>
+      {/* Promote read replica */}
+      <Modal
+        visible={promoteOpen}
+        onDismiss={() => !snapshotBusy && setPromoteOpen(false)}
+        header="Promote read replica"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setPromoteOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} onClick={handlePromote}>
+                Promote read replica
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Alert type="warning">
+            Promoting {activeInstance?.name} stops replication from{" "}
+            {activeInstance?.read_replica_source || "its source"} and makes it a standalone
+            DB instance that accepts writes. The instance reboots. This can&apos;t be undone.
+          </Alert>
+          <FormField label="Backup retention period" description="Days of automated backups for the promoted instance (0-35). Leave blank for 1 day.">
+            <Input value={promoteRetention} type="number" onChange={({ detail }) => setPromoteRetention(detail.value)} />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+      {/* Restore to point in time */}
+      <Modal
+        visible={pitrOpen}
+        onDismiss={() => !snapshotBusy && setPitrOpen(false)}
+        header="Restore to point in time"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setPitrOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                loading={snapshotBusy}
+                disabled={!pitrTarget.trim() || (pitrMode === "custom" && !isPitrTimeValid(pitrTime))}
+                onClick={handleRestorePointInTime}
+              >
+                Restore to point in time
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            Creates a new DB instance from {activeInstance?.name} as it was at the time you
+            choose; the source is not changed. The source needs automated backups.
+          </Box>
+          <FormField label="Restore time">
+            <RadioGroup
+              value={pitrMode}
+              onChange={({ detail }) => setPitrMode(detail.value as "latest" | "custom")}
+              items={[
+                {
+                  value: "latest",
+                  label: "Latest restorable time",
+                  description: activeInstance?.latest_restorable_time
+                    ? rdsTime(activeInstance.latest_restorable_time)
+                    : "Not reported: the source may have automated backups off.",
+                },
+                { value: "custom", label: "Custom date and time" },
+              ]}
+            />
+          </FormField>
+          {pitrMode === "custom" && (
+            <FormField
+              label="Date and time (UTC)"
+              constraintText="ISO 8601, for example 2026-10-23T10:30:00Z. It must be inside the restorable window."
+              errorText={pitrTime.trim() && !isPitrTimeValid(pitrTime) ? "Enter a valid date and time." : undefined}
+            >
+              <Input ariaLabel="Custom restore time" value={pitrTime} placeholder="2026-10-23T10:30:00Z" onChange={({ detail }) => setPitrTime(detail.value)} />
+            </FormField>
+          )}
+          <FormField label="DB instance identifier" description="Name of the new DB instance.">
+            <Input value={pitrTarget} onChange={({ detail }) => setPitrTarget(detail.value)} />
+          </FormField>
+          <FormField label={<>DB instance class <i>- optional</i></>} description="Leave blank to use the source's class.">
+            <Input value={pitrClass} placeholder={activeInstance?.class || "db.t3.micro"} onChange={({ detail }) => setPitrClass(detail.value)} />
+          </FormField>
+          <FlociNote>
+            Floci checks that the time is inside the restorable window, but it keeps no
+            transaction log: the new instance gets a copy of the source as it is now,
+            whatever time you choose. Floci restores PostgreSQL instances only.
+          </FlociNote>
+        </SpaceBetween>
+      </Modal>
+      {/* Add instance to cluster */}
+      <Modal
+        visible={addInstanceOpen}
+        onDismiss={() => !snapshotBusy && setAddInstanceOpen(false)}
+        header="Add reader"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setAddInstanceOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} disabled={!addInstanceId.trim() || !addInstanceClass.trim()} onClick={handleAddClusterInstance}>
+                Add reader
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            Adds a DB instance to cluster {activeCluster?.name}. The cluster&apos;s first
+            instance becomes the writer; the others are readers that serve reads and are
+            failover targets.
+          </Box>
+          <FormField label="DB instance identifier">
+            <Input value={addInstanceId} onChange={({ detail }) => setAddInstanceId(detail.value)} />
+          </FormField>
+          <FormField label="DB instance class">
+            <Input value={addInstanceClass} onChange={({ detail }) => setAddInstanceClass(detail.value)} />
+          </FormField>
+          <FlociNote>
+            Floci runs every instance of a cluster against one database and places them
+            all in the same Availability Zone.
+          </FlociNote>
+        </SpaceBetween>
+      </Modal>
+      {/* Failover cluster */}
+      <Modal
+        visible={failoverOpen}
+        onDismiss={() => !snapshotBusy && setFailoverOpen(false)}
+        header={`Failover DB cluster: ${activeCluster?.name || ""}`}
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setFailoverOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} onClick={handleFailover}>
+                Failover
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            Promotes a reader to writer; the current writer{activeWriter ? ` (${activeWriter})` : ""} becomes a
+            reader. In AWS the cluster endpoint then points at the new writer and open
+            connections drop.
+          </Box>
+          <FormField label="Target reader" description="Leave on the default to let RDS choose a reader.">
+            <Select
+              selectedOption={{ label: failoverTarget || "Let RDS choose", value: failoverTarget }}
+              onChange={({ detail }) => setFailoverTarget(detail.selectedOption.value || "")}
+              options={[
+                { label: "Let RDS choose", value: "" },
+                ...failoverReaders.map((name) => ({ label: name, value: name })),
+              ]}
+            />
+          </FormField>
+          <FlociNote>
+            Floci moves only the writer role. The cluster&apos;s instances share one
+            database, so no data moves and connections are not dropped.
+          </FlociNote>
+        </SpaceBetween>
+      </Modal>
+      {/* Take cluster snapshot */}
+      <Modal
+        visible={clusterSnapshotOpen}
+        onDismiss={() => !snapshotBusy && setClusterSnapshotOpen(false)}
+        header="Take DB cluster snapshot"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setClusterSnapshotOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} disabled={!newClusterSnapshotId.trim()} onClick={handleTakeClusterSnapshot}>
+                Take snapshot
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>Creates a manual snapshot of DB cluster {activeCluster?.name}.</Box>
+          <FormField label="Snapshot name" constraintText="Unique in the Region. Letters, digits and hyphens; starts with a letter.">
+            <Input value={newClusterSnapshotId} onChange={({ detail }) => setNewClusterSnapshotId(detail.value)} />
+          </FormField>
+          <FlociNote>
+            Floci snapshots Aurora PostgreSQL clusters only. For Aurora MySQL it returns
+            InvalidDBClusterStateFault, which is shown here.
+          </FlociNote>
+        </SpaceBetween>
+      </Modal>
+      {/* Restore cluster snapshot */}
+      <Modal
+        visible={restoreClusterOpen}
+        onDismiss={() => !snapshotBusy && setRestoreClusterOpen(false)}
+        header="Restore cluster snapshot"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={snapshotBusy} onClick={() => setRestoreClusterOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" loading={snapshotBusy} disabled={!restoreClusterId.trim()} onClick={handleRestoreClusterSnapshot}>
+                Restore DB cluster
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <Box>
+            Restoring creates a new DB cluster from snapshot {selectedClusterSnapshot?.name}.
+            As in AWS, the new cluster has no instances: add a writer to connect to it.
+          </Box>
+          <FormField label="DB cluster identifier" description="Name of the new DB cluster.">
+            <Input value={restoreClusterId} onChange={({ detail }) => setRestoreClusterId(detail.value)} />
+          </FormField>
+        </SpaceBetween>
+      </Modal>
+      <ConfirmActionModal
+        visible={deleteClusterSnapshotOpen}
+        header="Delete cluster snapshot"
+        confirmLabel="Delete"
+        confirmationText="delete me"
+        loading={snapshotBusy}
+        onConfirm={handleDeleteClusterSnapshot}
+        onDismiss={() => setDeleteClusterSnapshotOpen(false)}
+      >
+        Delete cluster snapshot {selectedClusterSnapshot?.name}? Its saved data is deleted too. This can&apos;t be undone.
       </ConfirmActionModal>
       {/* Reboot Instance Modal */}
       <Modal

@@ -15,6 +15,13 @@ export type RdsParameterGroup = Record<string, any> & {
   family?: string;
   description?: string;
 };
+export type RdsClusterSnapshot = Record<string, any> & {
+  name: string;
+  cluster?: string;
+  status: string;
+  type?: string;
+  engine?: string;
+};
 export type RdsSnapshot = Record<string, any> & {
   name: string;
   instance?: string;
@@ -57,6 +64,14 @@ export function rdsInventory(payload: any) {
     deletion_protection: db.deletion_protection ?? db.DeletionProtection,
     backup_retention_period:
       db.backup_retention_period ?? db.BackupRetentionPeriod,
+    latest_restorable_time:
+      db.latest_restorable_time ?? db.LatestRestorableTime,
+    read_replica_source:
+      db.read_replica_source ?? db.ReadReplicaSourceDBInstanceIdentifier,
+    read_replicas: array(
+      db.read_replicas ?? db.ReadReplicaDBInstanceIdentifiers,
+    ),
+    status_infos: array(db.status_infos ?? db.StatusInfos),
     pending_modifications: db.pending_modifications ?? db.PendingModifiedValues,
     parameter_groups: db.parameter_groups ?? db.DBParameterGroups,
   }));
@@ -88,6 +103,8 @@ export function rdsInventory(payload: any) {
     parameter_group: cluster.parameter_group ?? cluster.DBClusterParameterGroup,
     backup_retention_period:
       cluster.backup_retention_period ?? cluster.BackupRetentionPeriod,
+    latest_restorable_time:
+      cluster.latest_restorable_time ?? cluster.LatestRestorableTime,
   }));
   const groups: RdsParameterGroup[] = array(
     payload.parameter_groups ?? payload.DBParameterGroups,
@@ -118,7 +135,19 @@ export function rdsInventory(payload: any) {
     created: snapshot.created ?? snapshot.SnapshotCreateTime,
     allocated_storage: snapshot.allocated_storage ?? snapshot.AllocatedStorage,
   }));
-  return { instances, clusters, groups, snapshots };
+  const clusterSnapshots: RdsClusterSnapshot[] = array(
+    payload.cluster_snapshots ?? payload.DBClusterSnapshots,
+  ).map((snapshot) => ({
+    ...snapshot,
+    name: snapshot.name || snapshot.DBClusterSnapshotIdentifier || "",
+    arn: snapshot.arn ?? snapshot.DBClusterSnapshotArn,
+    cluster: snapshot.cluster ?? snapshot.DBClusterIdentifier,
+    status: snapshot.status ?? snapshot.Status ?? "",
+    type: snapshot.type ?? snapshot.SnapshotType,
+    engine: snapshot.engine ?? snapshot.Engine,
+    created: snapshot.created ?? snapshot.SnapshotCreateTime,
+  }));
+  return { instances, clusters, groups, snapshots, clusterSnapshots };
 }
 export function rdsStatus(
   status: string,
@@ -248,4 +277,18 @@ const RDS_ENGINE_LABELS: Record<string, string> = {
 export function rdsEngineLabel(engine?: string): string {
   if (!engine) return "Not reported";
   return RDS_ENGINE_LABELS[engine] || engine;
+}
+
+/** The writer a cluster reports, or undefined when no member says it is the writer. */
+export function clusterWriter(cluster: RdsCluster): string | undefined {
+  return cluster.members.find((member) => member.IsClusterWriter === true)
+    ?.DBInstanceIdentifier;
+}
+
+/** Read replication status of a replica ("replicating", "terminated", ...), from StatusInfos. */
+export function replicationStatus(db: RdsInstance): string | undefined {
+  const info = (db.status_infos || []).find(
+    (item: any) => item?.StatusType === "read replication",
+  );
+  return info?.Status;
 }

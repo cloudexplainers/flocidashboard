@@ -3730,6 +3730,167 @@ test('RDS Take snapshot posts the instance and shows the error Floci returns', a
   expect(bodies).toEqual([{ instance_identifier: 'other-db', snapshot_identifier: 'other-db-snapshot' }]);
 });
 
+// RDS and Aurora resilience: replicas, point-in-time restore, failover and cluster snapshots.
+const rdsResilienceFixture = { ...rdsFixture, instances: [
+  ...rdsFixture.instances,
+  { name: 'shop-pg', engine: 'postgres', status: 'available', class: 'db.t3.micro', multi_az: true, backup_retention_period: 7, latest_restorable_time: '2026-10-23T11:00:00Z', read_replicas: ['shop-pg-replica'] },
+  { name: 'shop-pg-replica', engine: 'postgres', status: 'available', backup_retention_period: 0, read_replica_source: 'shop-pg', status_infos: [{ StatusType: 'read replication', Status: 'replicating', Normal: true }] },
+], cluster_snapshots: [
+  { name: 'orders-cluster-snap', cluster: 'orders-cluster', status: 'available', type: 'manual', engine: 'aurora-postgresql', created: '2026-10-23T09:00:00Z' },
+] };
+
+test('RDS shows replication links and restore window, and labels what Floci does not replicate', async ({ page }) => {
+  await inventory(page, 'rds', rdsResilienceFixture);
+  await page.goto('/rds/instances?db=shop-pg-replica&tab=configuration');
+  await expect(page.getByRole('heading', { name: 'Replication and recovery', exact: true })).toBeVisible();
+  await expect(page.getByText('Replica', { exact: true })).toBeVisible();
+  await expect(page.getByText('replicating', { exact: true })).toBeVisible();
+  await expect(page.getByText('None (automated backups are off)', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tabpanel', { name: 'Configuration' }).getByTestId('floci-note').filter({ hasText: 'Later writes to the source are not replicated' })).toBeVisible();
+  await page.getByRole('button', { name: 'shop-pg', exact: true }).click();
+  await expect(page).toHaveURL(/rds\/instances\?db=shop-pg&tab=overview$/);
+  await page.goto('/rds/instances?db=shop-pg&tab=configuration');
+  await expect(page.getByText('Primary', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'shop-pg-replica', exact: true })).toBeVisible();
+  await expect(page.getByRole('tabpanel', { name: 'Configuration' }).getByText('2026-10-23T11:00:00.000Z', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tabpanel', { name: 'Configuration' }).getByTestId('floci-note').filter({ hasText: 'runs no standby instance' })).toBeVisible();
+});
+
+test('RDS creates a read replica, restores to a point in time and promotes only a replica', async ({ page }) => {
+  await inventory(page, 'rds', rdsResilienceFixture);
+  const calls: { path: string; body: any }[] = [];
+  await page.route('**/api/rds/instances/*/*/', route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    calls.push({ path, body: request.postDataJSON() });
+    if (path.endsWith('/promote/')) return route.fulfill({ json: { instance: { BackupRetentionPeriod: 7 } } });
+    if (path.endsWith('/restore-point-in-time/') && calls.filter(c => c.path === path).length > 1)
+      return route.fulfill({ status: 400, json: { error: 'The restore time 2020-01-01T00:00:00.000Z is outside the restorable window.' } });
+    return route.fulfill({ json: { instance: { DBInstanceStatus: 'available' } } });
+  });
+  await page.goto('/rds/instances?db=shop-pg');
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Promote', exact: true })).toHaveAttribute('aria-disabled', 'true');
+  await page.getByRole('menuitem', { name: 'Create read replica', exact: true }).click();
+  const replica = page.getByRole('dialog', { name: 'Create read replica' });
+  await expect(replica.getByTestId('floci-note')).toContainText('PostgreSQL instances only');
+  await expect(replica.getByLabel('DB instance identifier', { exact: true })).toHaveValue('shop-pg-replica');
+  await replica.getByLabel('DB instance identifier', { exact: true }).fill('shop-pg-reports');
+  await replica.getByRole('button', { name: 'Create read replica', exact: true }).click();
+  await expect(page.getByText(/Creating read replica shop-pg-reports of shop-pg/)).toBeVisible();
+  expect(calls[0]).toEqual({ path: '/api/rds/instances/shop-pg/read-replicas/', body: { replica_identifier: 'shop-pg-reports', db_instance_class: '' } });
+
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Restore to point in time', exact: true }).click();
+  const pitr = page.getByRole('dialog', { name: 'Restore to point in time' });
+  await expect(pitr.getByTestId('floci-note')).toContainText('keeps no transaction log');
+  await expect(pitr.getByText('2026-10-23T11:00:00.000Z', { exact: true })).toBeVisible();
+  await pitr.getByRole('button', { name: 'Restore to point in time', exact: true }).click();
+  await expect(page.getByText(/Restoring shop-pg to its latest restorable time as new DB instance shop-pg-restored/)).toBeVisible();
+  expect(calls[1]).toEqual({ path: '/api/rds/instances/shop-pg/restore-point-in-time/', body: { target_identifier: 'shop-pg-restored', use_latest_restorable_time: true, db_instance_class: '' } });
+
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Restore to point in time', exact: true }).click();
+  await pitr.getByRole('radio', { name: 'Custom date and time' }).check();
+  await pitr.getByLabel('Custom restore time', { exact: true }).fill('not a time');
+  await expect(pitr.getByRole('button', { name: 'Restore to point in time', exact: true })).toBeDisabled();
+  await pitr.getByLabel('Custom restore time', { exact: true }).fill('2020-01-01T00:00:00Z');
+  await pitr.getByRole('button', { name: 'Restore to point in time', exact: true }).click();
+  await expect(page.getByText('The restore time 2020-01-01T00:00:00.000Z is outside the restorable window.')).toBeVisible();
+  expect(calls[2].body).toEqual({ target_identifier: 'shop-pg-restored', restore_time: '2020-01-01T00:00:00.000Z', db_instance_class: '' });
+
+  await page.goto('/rds/instances?db=shop-pg-replica');
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Promote', exact: true }).click();
+  const promote = page.getByRole('dialog', { name: 'Promote read replica' });
+  await expect(promote).toContainText('stops replication from shop-pg');
+  await promote.getByLabel('Backup retention period', { exact: true }).fill('7');
+  await promote.getByRole('button', { name: 'Promote read replica', exact: true }).click();
+  await expect(page.getByText(/Promoted shop-pg-replica to a standalone DB instance \(backup retention 7 days\)/)).toBeVisible();
+  expect(calls[3]).toEqual({ path: '/api/rds/instances/shop-pg-replica/promote/', body: { backup_retention_period: 7 } });
+});
+
+test('Aurora cluster adds a reader, fails over to a chosen reader and takes a snapshot', async ({ page }) => {
+  await inventory(page, 'rds', rdsResilienceFixture);
+  const calls: { path: string; body: any }[] = [];
+  await page.route('**/api/rds/clusters/orders-cluster/*/', route => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    calls.push({ path, body: request.postDataJSON() });
+    if (path.endsWith('/failover/')) return route.fulfill({ json: { writer: 'orders-reader' } });
+    return route.fulfill({ json: { instance: { DBInstanceStatus: 'available' } } });
+  });
+  await page.route('**/api/rds/cluster-snapshots/', route => {
+    calls.push({ path: new URL(route.request().url()).pathname, body: route.request().postDataJSON() });
+    return route.fulfill({ status: 400, json: { error: 'Operation CreateDBClusterSnapshot is not supported for engine MYSQL.' } });
+  });
+  await page.goto('/rds/clusters?cluster=orders-cluster');
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Add reader', exact: true }).click();
+  const add = page.getByRole('dialog', { name: 'Add reader' });
+  await expect(add.getByTestId('floci-note')).toContainText('one database');
+  await add.getByRole('button', { name: 'Add reader', exact: true }).click();
+  await expect(page.getByText(/Adding DB instance orders-cluster-reader-2 to cluster orders-cluster/)).toBeVisible();
+  expect(calls[0]).toEqual({ path: '/api/rds/clusters/orders-cluster/instances/', body: { instance_identifier: 'orders-cluster-reader-2', db_instance_class: 'db.r6g.large' } });
+
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Failover', exact: true }).click();
+  const failover = page.getByRole('dialog', { name: 'Failover DB cluster: orders-cluster' });
+  await expect(failover).toContainText('the current writer (orders-writer) becomes a reader');
+  await expect(failover.getByTestId('floci-note')).toContainText('moves only the writer role');
+  await failover.getByRole('button', { name: /Let RDS choose/ }).click();
+  await page.getByRole('option', { name: 'orders-reader', exact: true }).click();
+  await failover.getByRole('button', { name: 'Failover', exact: true }).click();
+  await expect(page.getByText('Failover of orders-cluster complete: orders-reader is now the writer.')).toBeVisible();
+  expect(calls[1]).toEqual({ path: '/api/rds/clusters/orders-cluster/failover/', body: { target_instance_identifier: 'orders-reader' } });
+
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Take snapshot', exact: true }).click();
+  const snap = page.getByRole('dialog', { name: 'Take DB cluster snapshot' });
+  await expect(snap.getByTestId('floci-note')).toContainText('Aurora PostgreSQL clusters only');
+  await snap.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  await expect(page.getByText('Operation CreateDBClusterSnapshot is not supported for engine MYSQL.')).toBeVisible();
+  expect(calls[2]).toEqual({ path: '/api/rds/cluster-snapshots/', body: { cluster_identifier: 'orders-cluster', snapshot_identifier: 'orders-cluster-snapshot' } });
+});
+
+test('Aurora failover is unavailable without a reader', async ({ page }) => {
+  await inventory(page, 'rds', { ...rdsFixture, clusters: [{ name: 'solo', engine: 'aurora-postgresql', status: 'available', members: [{ DBInstanceIdentifier: 'solo-1', IsClusterWriter: true }] }] });
+  await page.goto('/rds/clusters?cluster=solo');
+  await page.getByRole('button', { name: 'Actions', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: 'Failover', exact: true })).toHaveAttribute('aria-disabled', 'true');
+});
+
+test('RDS cluster snapshots restore to a new cluster and delete after typed confirmation', async ({ page }) => {
+  await inventory(page, 'rds', rdsResilienceFixture);
+  const calls: { path: string; method: string; body: any }[] = [];
+  await page.route('**/api/rds/cluster-snapshots/**', route => {
+    const request = route.request();
+    calls.push({ path: new URL(request.url()).pathname, method: request.method(), body: request.postDataJSON() });
+    return route.fulfill({ json: request.method() === 'POST' ? { cluster: { Status: 'available' } } : {} });
+  });
+  await page.goto('/rds/snapshots');
+  await expect(page.getByRole('tab', { name: 'Snapshots (1)', exact: true })).toBeVisible();
+  const table = page.getByRole('table', { name: 'Cluster snapshots' });
+  await expect(table.getByRole('cell', { name: 'orders-cluster-snap', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Restore cluster snapshot', exact: true })).toBeDisabled();
+  await table.getByRole('radio').first().check();
+  await page.getByRole('button', { name: 'Restore cluster snapshot', exact: true }).click();
+  const restore = page.getByRole('dialog', { name: 'Restore cluster snapshot' });
+  await expect(restore).toContainText('the new cluster has no instances');
+  await expect(restore.getByRole('textbox')).toHaveValue('orders-cluster-snap-restored');
+  await restore.getByRole('button', { name: 'Restore DB cluster', exact: true }).click();
+  await expect(page.getByText(/Restoring cluster snapshot "orders-cluster-snap" to new DB cluster orders-cluster-snap-restored/)).toBeVisible();
+  expect(calls[0]).toEqual({ path: '/api/rds/cluster-snapshots/orders-cluster-snap/restore/', method: 'POST', body: { cluster_identifier: 'orders-cluster-snap-restored', engine: 'aurora-postgresql' } });
+  await table.getByRole('radio').first().check();
+  await page.getByRole('button', { name: 'Delete cluster snapshot', exact: true }).click();
+  const remove = page.getByRole('dialog', { name: 'Delete cluster snapshot' });
+  await expect(remove.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await remove.getByRole('textbox').fill('delete me');
+  await remove.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(() => calls.length).toBe(2);
+  expect(calls[1]).toMatchObject({ path: '/api/rds/cluster-snapshots/orders-cluster-snap/', method: 'DELETE' });
+});
+
 test('S3 warns when an unsigned request can list the bucket despite Block Public Access', async ({ page }) => {
   await inventory(page, 's3', { buckets: [{ Name: 'private-data', public_access_block: { BlockPublicAcls: true, IgnorePublicAcls: true, BlockPublicPolicy: true, RestrictPublicBuckets: true } }, { Name: 'locked-down' }] });
   await page.route('**/api/s3/buckets/*/anonymous-access/', route => {

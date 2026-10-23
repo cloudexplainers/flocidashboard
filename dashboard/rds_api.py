@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from botocore.config import Config
@@ -234,6 +235,87 @@ def restore_db_instance_from_snapshot(
     }
 
 
+def _restore_time(value: Any):
+    """Parse an ISO 8601 restore time; a time without a zone is taken as UTC."""
+    text = str(value).strip()
+    try:
+        parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError as exc:
+        raise ValueError('Restore time must be an ISO 8601 date and time, for example 2026-10-23T10:30:00Z') from exc
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def restore_db_instance_to_point_in_time(
+    source_identifier: str,
+    target_identifier: str,
+    *,
+    restore_time: Any = '',
+    use_latest_restorable_time: bool = False,
+    db_instance_class: str = '',
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        'SourceDBInstanceIdentifier': _required(source_identifier, 'Source DB instance identifier'),
+        'TargetDBInstanceIdentifier': _required(target_identifier, 'New DB instance identifier'),
+    }
+    has_time = restore_time not in (None, '')
+    if has_time == bool(use_latest_restorable_time):
+        raise ValueError('Choose either the latest restorable time or a custom restore time')
+    if has_time:
+        kwargs['RestoreTime'] = _restore_time(restore_time)
+    else:
+        kwargs['UseLatestRestorableTime'] = True
+    if (db_instance_class or '').strip():
+        kwargs['DBInstanceClass'] = db_instance_class.strip()
+    # Floci starts a new database container and copies the source into it before answering.
+    response = _client(long_running=True).restore_db_instance_to_point_in_time(**kwargs)
+    return {
+        'identifier': kwargs['TargetDBInstanceIdentifier'],
+        'source_identifier': kwargs['SourceDBInstanceIdentifier'],
+        'instance': _clean_response(response.get('DBInstance', {})),
+        'response': _clean_response(response),
+    }
+
+
+def create_db_instance_read_replica(
+    source_identifier: str,
+    replica_identifier: str,
+    *,
+    db_instance_class: str = '',
+) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        'SourceDBInstanceIdentifier': _required(source_identifier, 'Source DB instance identifier'),
+        'DBInstanceIdentifier': _required(replica_identifier, 'Read replica identifier'),
+    }
+    if (db_instance_class or '').strip():
+        kwargs['DBInstanceClass'] = db_instance_class.strip()
+    response = _client(long_running=True).create_db_instance_read_replica(**kwargs)
+    return {
+        'identifier': kwargs['DBInstanceIdentifier'],
+        'source_identifier': kwargs['SourceDBInstanceIdentifier'],
+        'instance': _clean_response(response.get('DBInstance', {})),
+        'response': _clean_response(response),
+    }
+
+
+def promote_read_replica(identifier: str, *, backup_retention_period: Any = None) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {'DBInstanceIdentifier': _required(identifier, 'DB instance identifier')}
+    if backup_retention_period not in (None, ''):
+        try:
+            retention = int(backup_retention_period)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('Backup retention period must be a number of days') from exc
+        if not 0 <= retention <= 35:
+            raise ValueError('Backup retention period must be between 0 and 35 days')
+        kwargs['BackupRetentionPeriod'] = retention
+    # Promotion reboots the instance, as in AWS.
+    response = _client(long_running=True).promote_read_replica(**kwargs)
+    return {
+        'identifier': kwargs['DBInstanceIdentifier'],
+        'instance': _clean_response(response.get('DBInstance', {})),
+        'response': _clean_response(response),
+    }
+
+
 def create_db_cluster(
     identifier: str,
     engine: str,
@@ -283,6 +365,97 @@ def delete_db_cluster(identifier: str, *, skip_final_snapshot: bool = True, fina
             'describe_db_cluster_snapshots', 'DBClusterSnapshots', DBClusterSnapshotIdentifier=kwargs['FinalDBSnapshotIdentifier'],
         )
     return result
+
+
+def add_db_cluster_instance(cluster_identifier: str, instance_identifier: str, *, db_instance_class: str = 'db.r6g.large') -> dict[str, Any]:
+    """Add an instance to a cluster. The first one becomes the writer, later ones readers."""
+    clean_cluster = _required(cluster_identifier, 'DB cluster identifier')
+    client = _client(long_running=True)
+    clusters = client.describe_db_clusters(DBClusterIdentifier=clean_cluster).get('DBClusters', [])
+    engine = clusters[0].get('Engine') if clusters else None
+    if not engine:
+        raise ValueError(f'DB cluster {clean_cluster} reports no engine')
+    kwargs = {
+        'DBInstanceIdentifier': _required(instance_identifier, 'DB instance identifier'),
+        'DBClusterIdentifier': clean_cluster,
+        'Engine': engine,
+        'DBInstanceClass': _required(db_instance_class, 'DB instance class'),
+    }
+    response = client.create_db_instance(**kwargs)
+    return {
+        'identifier': kwargs['DBInstanceIdentifier'],
+        'cluster_identifier': clean_cluster,
+        'instance': _clean_response(response.get('DBInstance', {})),
+        'response': _clean_response(response),
+    }
+
+
+def failover_db_cluster(cluster_identifier: str, *, target_instance_identifier: str = '') -> dict[str, Any]:
+    kwargs: dict[str, Any] = {'DBClusterIdentifier': _required(cluster_identifier, 'DB cluster identifier')}
+    if (target_instance_identifier or '').strip():
+        kwargs['TargetDBInstanceIdentifier'] = target_instance_identifier.strip()
+    response = _client().failover_db_cluster(**kwargs)
+    cluster = response.get('DBCluster', {})
+    writer = next(
+        (member.get('DBInstanceIdentifier') for member in cluster.get('DBClusterMembers') or [] if member.get('IsClusterWriter')),
+        None,
+    )
+    return {
+        'identifier': kwargs['DBClusterIdentifier'],
+        'writer': writer,
+        'cluster': _clean_response(cluster),
+        'response': _clean_response(response),
+    }
+
+
+def create_db_cluster_snapshot(cluster_identifier: str, snapshot_identifier: str, *, tags: Any = None) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        'DBClusterIdentifier': _required(cluster_identifier, 'DB cluster identifier'),
+        'DBClusterSnapshotIdentifier': _required(snapshot_identifier, 'Snapshot identifier'),
+    }
+    clean_tags = _tags(tags)
+    if clean_tags:
+        kwargs['Tags'] = clean_tags
+    response = _client(long_running=True).create_db_cluster_snapshot(**kwargs)
+    return {
+        'identifier': kwargs['DBClusterSnapshotIdentifier'],
+        'snapshot': _clean_response(response.get('DBClusterSnapshot', {})),
+        'response': _clean_response(response),
+    }
+
+
+def delete_db_cluster_snapshot(snapshot_identifier: str) -> dict[str, Any]:
+    clean_identifier = _required(snapshot_identifier, 'Snapshot identifier')
+    response = _client().delete_db_cluster_snapshot(DBClusterSnapshotIdentifier=clean_identifier)
+    return {
+        'identifier': clean_identifier,
+        'snapshot': _clean_response(response.get('DBClusterSnapshot', {})),
+        'response': _clean_response(response),
+    }
+
+
+def restore_db_cluster_from_snapshot(snapshot_identifier: str, cluster_identifier: str, *, engine: str = '') -> dict[str, Any]:
+    clean_snapshot = _required(snapshot_identifier, 'Snapshot identifier')
+    client = _client(long_running=True)
+    clean_engine = (engine or '').strip()
+    if not clean_engine:
+        # The API requires the engine; it must match the snapshot's.
+        snapshots = client.describe_db_cluster_snapshots(DBClusterSnapshotIdentifier=clean_snapshot).get('DBClusterSnapshots', [])
+        clean_engine = (snapshots[0].get('Engine') if snapshots else '') or ''
+        if not clean_engine:
+            raise ValueError(f'DB cluster snapshot {clean_snapshot} reports no engine')
+    kwargs = {
+        'SnapshotIdentifier': clean_snapshot,
+        'DBClusterIdentifier': _required(cluster_identifier, 'New DB cluster identifier'),
+        'Engine': clean_engine,
+    }
+    response = client.restore_db_cluster_from_snapshot(**kwargs)
+    return {
+        'identifier': kwargs['DBClusterIdentifier'],
+        'snapshot_identifier': clean_snapshot,
+        'cluster': _clean_response(response.get('DBCluster', {})),
+        'response': _clean_response(response),
+    }
 
 
 def create_db_parameter_group(name: str, family: str, description: str) -> dict[str, Any]:

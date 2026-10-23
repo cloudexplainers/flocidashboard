@@ -3269,6 +3269,51 @@ RDS_ACTIONS = (
         success_message='DB snapshot deleted',
     ),
     action(
+        'restore_db_instance_to_point_in_time',
+        'Restore to point in time',
+        'POST',
+        '/api/rds/instances/{instance}/restore-point-in-time/',
+        'create',
+        description=(
+            'Creates a new DB instance from the source as of a time in its restorable window. Floci keeps no '
+            'transaction log: whatever time is asked for, the new instance gets a copy of the source as it is now '
+            '(PostgreSQL only; the source needs automated backups).'
+        ),
+        fields=(
+            action_field('target_identifier', 'New DB instance identifier', required=True),
+            action_field('use_latest_restorable_time', 'Latest restorable time', field_type='boolean'),
+            action_field('restore_time', 'Custom restore time (UTC, ISO 8601)'),
+            action_field('db_instance_class', 'DB instance class'),
+        ),
+        success_message='Point-in-time restore started',
+    ),
+    action(
+        'create_db_instance_read_replica',
+        'Create read replica',
+        'POST',
+        '/api/rds/instances/{instance}/read-replicas/',
+        'create',
+        description=(
+            'Floci copies the source into the new replica once, when it is created; later writes to the source are '
+            'not replicated, and the replica accepts writes. PostgreSQL sources with automated backups only.'
+        ),
+        fields=(
+            action_field('replica_identifier', 'Read replica identifier', required=True),
+            action_field('db_instance_class', 'DB instance class'),
+        ),
+        success_message='Read replica create started',
+    ),
+    action(
+        'promote_read_replica',
+        'Promote read replica',
+        'POST',
+        '/api/rds/instances/{instance}/promote/',
+        'update',
+        confirm='Promote this read replica to a standalone DB instance? It stops being a replica, and this can\'t be undone.',
+        fields=(action_field('backup_retention_period', 'Backup retention period (days)', field_type='number'),),
+        success_message='Read replica promoted',
+    ),
+    action(
         'create_db_cluster',
         'Create DB cluster',
         'POST',
@@ -3294,6 +3339,67 @@ RDS_ACTIONS = (
         safety='destructive',
         confirm='Delete this DB cluster?',
         success_message='DB cluster delete started',
+    ),
+    action(
+        'add_db_cluster_instance',
+        'Add instance to cluster',
+        'POST',
+        '/api/rds/clusters/{cluster}/instances/',
+        'create',
+        description='The first instance becomes the writer; later ones are readers. Floci runs all of a cluster\'s instances against one database.',
+        fields=(
+            action_field('instance_identifier', 'DB instance identifier', required=True),
+            action_field('db_instance_class', 'DB instance class'),
+        ),
+        success_message='DB instance added to the cluster',
+    ),
+    action(
+        'failover_db_cluster',
+        'Failover',
+        'POST',
+        '/api/rds/clusters/{cluster}/failover/',
+        'execute',
+        description=(
+            'Makes a reader the writer. Floci moves only the writer role: the cluster\'s instances share one '
+            'database, so no data moves and connections are not dropped.'
+        ),
+        confirm='Fail over this DB cluster to a reader instance?',
+        fields=(action_field('target_instance_identifier', 'Target reader instance'),),
+        success_message='DB cluster failover complete',
+    ),
+    action(
+        'create_db_cluster_snapshot',
+        'Take DB cluster snapshot',
+        'POST',
+        '/api/rds/cluster-snapshots/',
+        'create',
+        description='Floci saves a dump of the cluster database (Aurora PostgreSQL only; Aurora MySQL is refused).',
+        fields=(
+            action_field('cluster_identifier', 'DB cluster identifier', required=True),
+            action_field('snapshot_identifier', 'Snapshot identifier', required=True),
+            action_field('tags', 'Tags', field_type='object'),
+        ),
+        success_message='DB cluster snapshot created',
+    ),
+    action(
+        'restore_db_cluster_from_snapshot',
+        'Restore cluster snapshot',
+        'POST',
+        '/api/rds/cluster-snapshots/{cluster_snapshot}/restore/',
+        'create',
+        description='Creates a new DB cluster with the snapshot\'s data. As in AWS, it has no instances until you add them.',
+        fields=(action_field('cluster_identifier', 'New DB cluster identifier', required=True),),
+        success_message='DB cluster restore started',
+    ),
+    action(
+        'delete_db_cluster_snapshot',
+        'Delete DB cluster snapshot',
+        'DELETE',
+        '/api/rds/cluster-snapshots/{cluster_snapshot}/',
+        'delete',
+        safety='destructive',
+        confirm='Delete this DB cluster snapshot and its saved data?',
+        success_message='DB cluster snapshot deleted',
     ),
     action(
         'create_db_parameter_group',

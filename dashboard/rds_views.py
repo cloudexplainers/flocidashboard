@@ -7,17 +7,25 @@ from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
 from .rds_api import (
+    add_db_cluster_instance,
     create_db_cluster,
+    create_db_cluster_snapshot,
     create_db_instance,
+    create_db_instance_read_replica,
     create_db_parameter_group,
     create_db_snapshot,
     delete_db_cluster,
+    delete_db_cluster_snapshot,
     delete_db_instance,
     delete_db_parameter_group,
     delete_db_snapshot,
+    failover_db_cluster,
     modify_db_instance,
+    promote_read_replica,
     reboot_db_instance,
+    restore_db_cluster_from_snapshot,
     restore_db_instance_from_snapshot,
+    restore_db_instance_to_point_in_time,
 )
 
 
@@ -160,3 +168,96 @@ def rds_snapshot_restore(request, identifier: str):
         ))
     except Exception as exc:
         return handle_action_error(exc, service='rds', operation='restore_db_instance_from_db_snapshot')
+
+
+@require_http_methods(['POST'])
+def rds_instance_restore_point_in_time(request, identifier: str):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(restore_db_instance_to_point_in_time(
+            identifier,
+            body.get('target_identifier', ''),
+            restore_time=body.get('restore_time') or '',
+            use_latest_restorable_time=body.get('use_latest_restorable_time') is True,
+            db_instance_class=body.get('db_instance_class') or '',
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='restore_db_instance_to_point_in_time')
+
+
+@require_http_methods(['POST'])
+def rds_instance_read_replicas(request, identifier: str):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(create_db_instance_read_replica(
+            identifier,
+            body.get('replica_identifier', ''),
+            db_instance_class=body.get('db_instance_class') or '',
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='create_db_instance_read_replica')
+
+
+@require_http_methods(['POST'])
+def rds_instance_promote(request, identifier: str):
+    try:
+        body = parse_json_body(request) if request.body else {}
+        return JsonResponse(promote_read_replica(identifier, backup_retention_period=body.get('backup_retention_period')))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='promote_read_replica')
+
+
+@require_http_methods(['POST'])
+def rds_cluster_instances(request, identifier: str):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(add_db_cluster_instance(
+            identifier,
+            body.get('instance_identifier', ''),
+            db_instance_class=body.get('db_instance_class') or 'db.r6g.large',
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='create_db_instance')
+
+
+@require_http_methods(['POST'])
+def rds_cluster_failover(request, identifier: str):
+    try:
+        body = parse_json_body(request) if request.body else {}
+        return JsonResponse(failover_db_cluster(identifier, target_instance_identifier=body.get('target_instance_identifier') or ''))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='failover_db_cluster')
+
+
+@require_http_methods(['POST'])
+def rds_cluster_snapshots_create(request):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(create_db_cluster_snapshot(
+            body.get('cluster_identifier', ''),
+            body.get('snapshot_identifier', ''),
+            tags=body.get('tags'),
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='create_db_cluster_snapshot')
+
+
+@require_http_methods(['DELETE'])
+def rds_cluster_snapshot_delete(request, identifier: str):
+    try:
+        return JsonResponse(delete_db_cluster_snapshot(identifier))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='delete_db_cluster_snapshot')
+
+
+@require_http_methods(['POST'])
+def rds_cluster_snapshot_restore(request, identifier: str):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(restore_db_cluster_from_snapshot(
+            identifier,
+            body.get('cluster_identifier', ''),
+            engine=body.get('engine') or '',
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='rds', operation='restore_db_cluster_from_snapshot')

@@ -1091,6 +1091,80 @@ export async function restoreRdsSnapshot(snapshotIdentifier: string, instanceIde
   });
 }
 
+/** RestoreDBInstanceToPointInTime. Either the latest restorable time or a custom ISO 8601 time. */
+export async function restoreRdsToPointInTime(
+  sourceIdentifier: string,
+  targetIdentifier: string,
+  restoreTime: string = '',
+  dbInstanceClass: string = '',
+): Promise<any> {
+  return requestJson(`/api/rds/instances/${encodeURIComponent(sourceIdentifier)}/restore-point-in-time/`, {
+    method: 'POST',
+    json: restoreTime
+      ? { target_identifier: targetIdentifier, restore_time: restoreTime, db_instance_class: dbInstanceClass }
+      : { target_identifier: targetIdentifier, use_latest_restorable_time: true, db_instance_class: dbInstanceClass },
+    errorMessage: 'Failed to restore DB instance to a point in time',
+  });
+}
+
+/** CreateDBInstanceReadReplica. */
+export async function createRdsReadReplica(sourceIdentifier: string, replicaIdentifier: string, dbInstanceClass: string = ''): Promise<any> {
+  return requestJson(`/api/rds/instances/${encodeURIComponent(sourceIdentifier)}/read-replicas/`, {
+    method: 'POST',
+    json: { replica_identifier: replicaIdentifier, db_instance_class: dbInstanceClass },
+    errorMessage: 'Failed to create read replica',
+  });
+}
+
+/** PromoteReadReplica. */
+export async function promoteRdsReadReplica(identifier: string, backupRetentionPeriod?: number): Promise<any> {
+  return requestJson(`/api/rds/instances/${encodeURIComponent(identifier)}/promote/`, {
+    method: 'POST',
+    json: backupRetentionPeriod === undefined ? {} : { backup_retention_period: backupRetentionPeriod },
+    errorMessage: 'Failed to promote read replica',
+  });
+}
+
+/** CreateDBInstance in a cluster: the first instance is the writer, later ones readers. */
+export async function addRdsClusterInstance(clusterIdentifier: string, instanceIdentifier: string, dbInstanceClass: string): Promise<any> {
+  return requestJson(`/api/rds/clusters/${encodeURIComponent(clusterIdentifier)}/instances/`, {
+    method: 'POST',
+    json: { instance_identifier: instanceIdentifier, db_instance_class: dbInstanceClass },
+    errorMessage: 'Failed to add DB instance to the cluster',
+  });
+}
+
+/** FailoverDBCluster, to the named reader or, when blank, the one RDS picks. */
+export async function failoverRdsCluster(clusterIdentifier: string, targetInstanceIdentifier: string = ''): Promise<any> {
+  return requestJson(`/api/rds/clusters/${encodeURIComponent(clusterIdentifier)}/failover/`, {
+    method: 'POST',
+    json: { target_instance_identifier: targetInstanceIdentifier },
+    errorMessage: 'Failed to fail over DB cluster',
+  });
+}
+
+/** CreateDBClusterSnapshot. */
+export async function createRdsClusterSnapshot(clusterIdentifier: string, snapshotIdentifier: string): Promise<any> {
+  return requestJson('/api/rds/cluster-snapshots/', {
+    method: 'POST',
+    json: { cluster_identifier: clusterIdentifier, snapshot_identifier: snapshotIdentifier },
+    errorMessage: 'Failed to take DB cluster snapshot',
+  });
+}
+
+export async function deleteRdsClusterSnapshot(snapshotIdentifier: string): Promise<any> {
+  return requestJson(`/api/rds/cluster-snapshots/${encodeURIComponent(snapshotIdentifier)}/`, { method: 'DELETE', errorMessage: 'Failed to delete DB cluster snapshot' });
+}
+
+/** RestoreDBClusterFromSnapshot: a new cluster, without instances, holding the snapshot's data. */
+export async function restoreRdsClusterSnapshot(snapshotIdentifier: string, clusterIdentifier: string, engine: string = ''): Promise<any> {
+  return requestJson(`/api/rds/cluster-snapshots/${encodeURIComponent(snapshotIdentifier)}/restore/`, {
+    method: 'POST',
+    json: { cluster_identifier: clusterIdentifier, engine },
+    errorMessage: 'Failed to restore DB cluster snapshot',
+  });
+}
+
 export async function createRdsParameterGroup(name: string, family: string, description: string): Promise<any> {
   return requestJson('/api/rds/parameter-groups/', {
     method: 'POST',
