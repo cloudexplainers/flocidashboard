@@ -446,3 +446,11 @@ Left as is:
   registry container.
 - Route 53 health checks are in the inventory but have no page in this console.
 - Athena has no delete workgroup action.
+
+## Verification (second review)
+
+`npx tsc --noEmit`, `npm run build`, `npm run test:e2e` (344 passed, against the disposable emulator) and
+`docker compose exec -T dashboard python manage.py test --noinput` run on this branch (1,157 passed) all pass.
+The live Route 53 and CloudFront specs (`--project=live`) pass after their label changes. `check_labs` on the
+disposable emulator passed 66 of 66 labs after the S3 SigV4 change. The emulator was stopped afterwards and the
+containers it started were removed.
