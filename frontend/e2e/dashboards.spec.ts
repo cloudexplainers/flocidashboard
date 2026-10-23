@@ -1543,6 +1543,24 @@ test('KMS schedules key deletion with a 7-30 day waiting period and can cancel i
   await expect.poll(() => requests[1]).toEqual({ path: '/api/kms/deletion/cancel/', body: { key_id: 'key-pending' } });
 });
 
+test('KMS key aliases can be created and deleted from the Aliases tab', async ({ page }) => {
+  await inventory(page, 'kms', kmsFixture());
+  const requests: { method: string; body: any }[] = [];
+  await page.route('**/api/kms/aliases/', route => { requests.push({ method: route.request().method(), body: route.request().postDataJSON() }); return route.fulfill({ json: {} }); });
+  await page.goto('/kms/aliases?key=key-app');
+  await expect(page.getByRole('cell', { name: 'alias/backup', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create alias', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create alias' });
+  await dialog.getByPlaceholder('alias/my-app-key').fill('alias/aws/reserved');
+  await expect(dialog.getByRole('button', { name: 'Create alias', exact: true })).toBeDisabled();
+  await dialog.getByPlaceholder('alias/my-app-key').fill('reports');
+  await dialog.getByRole('button', { name: 'Create alias', exact: true }).click();
+  await expect.poll(() => requests[0]).toEqual({ method: 'POST', body: { alias_name: 'alias/reports', target_key_id: 'key-app' } });
+  await page.getByRole('row').filter({ hasText: 'alias/backup' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Delete alias' }).getByRole('button', { name: 'Delete alias', exact: true }).click();
+  await expect.poll(() => requests[1]).toEqual({ method: 'DELETE', body: { key_id: 'key-app', alias_name: 'alias/backup' } });
+});
+
 function kmsRequestAction(path: string, method: string) {
   const actions: Record<string, string> = {
     '/api/kms/keys/': 'create_key', '/api/kms/aliases/': 'create_alias',

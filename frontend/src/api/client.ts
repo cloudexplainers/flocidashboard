@@ -2174,7 +2174,7 @@ export async function deleteConsoleResource(path: string, errorMessage = 'Delete
 /** Dedicated KMS endpoints; /api/kms/ is a read-only inventory, not an action dispatcher. */
 export async function executeKmsAction(action: string, payload: Record<string, any>): Promise<any> {
   const paths: Record<string, [string, string]> = {
-    create_key: ['POST', 'keys'], create_alias: ['POST', 'aliases'],
+    create_key: ['POST', 'keys'], create_alias: ['POST', 'aliases'], delete_alias: ['DELETE', 'aliases'],
     encrypt: ['POST', 'crypto/encrypt'], decrypt: ['POST', 'crypto/decrypt'],
     generate_data_key: ['POST', 'data-keys'], set_key_rotation: ['POST', 'rotation'],
     set_key_enabled: ['POST', 'key-state'], put_key_policy: ['PUT', 'key-policy'],

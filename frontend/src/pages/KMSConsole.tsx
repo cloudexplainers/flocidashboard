@@ -106,9 +106,12 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
   const [waitingDays, setWaitingDays] = useState("30");
   const [deletionAcknowledged, setDeletionAcknowledged] = useState(false);
   const [confirmation, setConfirmation] = useState<{
-    kind: "disable" | "revoke";
+    kind: "disable" | "revoke" | "alias";
     grantId?: string;
+    alias?: string;
   } | null>(null);
+  const [aliasOpen, setAliasOpen] = useState(false);
+  const [newAlias, setNewAlias] = useState("");
   const requestId = useRef(0);
   const keyId =
     new URLSearchParams(
@@ -212,6 +215,8 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
   const fullAlias = alias.trim().startsWith("alias/")
     ? alias.trim()
     : `alias/${alias.trim()}`;
+  const newAliasFull = newAlias.trim().startsWith("alias/") ? newAlias.trim() : `alias/${newAlias.trim()}`;
+  const newAliasValid = Boolean(newAlias.trim()) && /^alias\/[a-zA-Z0-9/_-]+$/.test(newAliasFull) && !newAliasFull.startsWith("alias/aws/") && newAliasFull.length <= 256;
   const aliasValid =
     !alias.trim() ||
     (/^alias\/[a-zA-Z0-9/_-]+$/.test(fullAlias) &&
@@ -357,7 +362,7 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
           {key.issues.join(" ")} Refresh to retry.
         </Alert>
       ) : null}
-      {message && !createOpen && !grantOpen && !confirmation && !deletionOpen && (
+      {message && !createOpen && !grantOpen && !confirmation && !deletionOpen && !aliasOpen && (
         <Alert
           type={message.type}
           dismissible
@@ -604,6 +609,39 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
                       ]}
                     />
                   </Container>
+                ),
+              },
+              {
+                id: "aliases",
+                label: `Aliases (${key.aliases.length})`,
+                content: (
+                  <Table
+                    trackBy={(item: { name: string }) => item.name}
+                    header={
+                      <Header
+                        variant="h2"
+                        counter={`(${key.aliases.length})`}
+                        description="An alias is a friendly name for the key. A key can have several aliases; each alias points to one key."
+                        actions={managed ? (
+                          <Button disabled={busy || loading} onClick={() => { setNewAlias(""); setMessage(null); setAliasOpen(true); }}>Create alias</Button>
+                        ) : undefined}
+                      >
+                        Aliases
+                      </Header>
+                    }
+                    items={key.aliases.map((name) => ({ name }))}
+                    columnDefinitions={[
+                      { id: "name", header: "Alias name", cell: (item: { name: string }) => item.name },
+                      {
+                        id: "actions",
+                        header: "Actions",
+                        cell: (item: { name: string }) => managed && !item.name.startsWith("alias/aws/") ? (
+                          <Button disabled={busy} onClick={() => setConfirmation({ kind: "alias", alias: item.name })}>Delete</Button>
+                        ) : "-",
+                      },
+                    ]}
+                    empty={<Box textAlign="center">This key has no aliases.</Box>}
+                  />
                 ),
               },
               {
@@ -1020,6 +1058,44 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
         </SpaceBetween>
       </Modal>
       <Modal
+        visible={aliasOpen}
+        onDismiss={() => !busy && setAliasOpen(false)}
+        header="Create alias"
+        footer={
+          <Box float="right">
+            <SpaceBetween direction="horizontal" size="xs">
+              <Button variant="link" disabled={busy} onClick={() => setAliasOpen(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={busy}
+                disabled={!newAliasValid}
+                onClick={() =>
+                  run(async () => {
+                    await executeKmsAction("create_alias", { alias_name: newAliasFull, target_key_id: keyId });
+                    setAliasOpen(false);
+                    await loadData();
+                    if (context.current === keyId) setMessage({ type: "success", text: `Alias ${newAliasFull} created.` });
+                  })
+                }
+              >
+                Create alias
+              </Button>
+            </SpaceBetween>
+          </Box>
+        }
+      >
+        <SpaceBetween size="m">
+          <FormField
+            label="Alias name"
+            description="The alias/ prefix is added if you leave it out. Names starting with alias/aws/ are reserved for AWS managed keys."
+            errorText={newAlias && !newAliasValid ? "Use letters, numbers, slashes, underscores and hyphens, without the alias/aws/ prefix." : undefined}
+          >
+            <Input value={newAlias} placeholder="alias/my-app-key" onChange={({ detail }) => setNewAlias(detail.value)} />
+          </FormField>
+          {aliasOpen && message?.type === "error" && <Alert type="error">{message.text}</Alert>}
+        </SpaceBetween>
+      </Modal>
+      <Modal
         visible={deletionOpen}
         onDismiss={() => !busy && setDeletionOpen(false)}
         header="Schedule key deletion"
@@ -1087,7 +1163,7 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
         visible={!!confirmation}
         onDismiss={() => !busy && setConfirmation(null)}
         header={
-          confirmation?.kind === "disable" ? "Disable key" : "Revoke grant"
+          confirmation?.kind === "disable" ? "Disable key" : confirmation?.kind === "alias" ? "Delete alias" : "Revoke grant"
         }
         footer={
           <Box float="right">
@@ -1109,6 +1185,12 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
                         { enabled: false },
                         "Key disabled.",
                       )
+                    : confirmation?.kind === "alias"
+                    ? mutate(
+                        "delete_alias",
+                        { alias_name: confirmation.alias },
+                        `Alias ${confirmation.alias} deleted.`,
+                      )
                     : run(async () => {
                         await executeKmsAction("revoke_grant", {
                           key_id: keyId,
@@ -1126,7 +1208,9 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
               >
                 {confirmation?.kind === "disable"
                   ? "Disable key"
-                  : "Revoke grant"}
+                  : confirmation?.kind === "alias"
+                    ? "Delete alias"
+                    : "Revoke grant"}
               </Button>
             </SpaceBetween>
           </Box>
@@ -1136,6 +1220,8 @@ export const KMSConsole: React.FC<KMSConsoleProps> = ({
           <Alert type="warning">
             {confirmation?.kind === "disable"
               ? `Disable ${key?.aliases[0] || keyId}? Applications using this key for cryptographic operations will fail until it is enabled again.`
+              : confirmation?.kind === "alias"
+              ? `Delete alias ${confirmation.alias}? Applications that refer to the key by this alias will fail. The key itself is not affected.`
               : `Revoke grant ${confirmation?.grantId} on ${keyId}? The grantee will lose the permissions provided by this grant.`}
           </Alert>
           {confirmation && message?.type === "error" && (
