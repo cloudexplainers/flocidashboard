@@ -43,6 +43,7 @@ for (const protocol of ['HTTP', 'REST']) {
       await page.screenshot({ path: `test-results/screenshots/apigateway-${protocol.toLowerCase()}-live.png`, fullPage: true });
       await page.getByRole('button', { name: 'Delete API', exact: true }).click();
       const deleted = page.waitForResponse(response => response.url().endsWith('/api/apigateway/apis/delete/') && response.request().method() === 'POST');
+      await page.getByRole('dialog').getByLabel('Confirmation text').fill('confirm');
       await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
       const deletedResponse = await deleted;
       expect(deletedResponse.ok(), await deletedResponse.text()).toBe(true);
@@ -546,7 +547,7 @@ test('DynamoDB live composite schema, indexes, TTL and item links survive reload
     await page.getByRole('tab', { name: /Indexes/ }).click();
     await page.reload();
     await expect(page.getByRole('cell', { name: 'ByStatus', exact: true })).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'KEYS_ONLY', exact: true })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Keys only', exact: true })).toBeVisible();
     await page.screenshot({ path: 'test-results/screenshots/dynamodb-live.png', fullPage: true });
   } finally {
     if (created) await dataWorkflowFixture(`ddb.delete_table(TableName='${name}')`);
@@ -754,9 +755,9 @@ test('CloudFormation live workspace creates a stack and reviews and executes an 
   try {
     await page.goto('/cloudformation/');
     csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content') || '';
-    await page.getByRole('button', { name: 'Create Stack', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Create stack', exact: true }).first().click();
     const modal = page.getByRole('dialog');
-    await modal.getByLabel('Stack Name', { exact: true }).fill(name);
+    await modal.getByLabel('Stack name', { exact: true }).fill(name);
     await modal.getByLabel('Template Body (YAML or JSON)', { exact: true }).fill(JSON.stringify(template));
     const creating = page.waitForResponse(response => response.url().endsWith('/api/cloudformation/stacks/') && response.request().method() === 'POST');
     await modal.getByRole('button', { name: 'Deploy Stack', exact: true }).click();
@@ -771,11 +772,11 @@ test('CloudFormation live workspace creates a stack and reviews and executes an 
     await expect(page.getByRole('heading', { name: `Stack: ${name}`, exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Resources (1)', exact: true }).click();
     await expect(page.getByText('AWS::SQS::Queue', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Create Change Set', exact: true }).click();
-    await modal.getByLabel('Change Set Name', { exact: true }).fill('queue-timeout');
+    await page.getByRole('button', { name: 'Create change set', exact: true }).first().click();
+    await modal.getByLabel('Change set name', { exact: true }).fill('queue-timeout');
     const proposed = { ...template, Resources: { Queue: { ...template.Resources.Queue, Properties: { ...template.Resources.Queue.Properties, VisibilityTimeout: 60 } } } };
     await modal.getByLabel('Proposed template (YAML or JSON)', { exact: true }).fill(JSON.stringify(proposed));
-    await modal.getByRole('button', { name: 'Create Change Set', exact: true }).click();
+    await modal.getByRole('button', { name: 'Create change set', exact: true }).click();
     await expect(modal).not.toBeVisible();
     await expect(page.getByRole('heading', { name: 'Change set: queue-timeout', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Execute change set', exact: true })).toBeEnabled();
@@ -789,8 +790,8 @@ test('CloudFormation live workspace creates a stack and reviews and executes an 
     expect(attributes.attributes.VisibilityTimeout).toBe('60');
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
     await page.screenshot({ path: 'test-results/screenshots/cloudformation-update-live.png', fullPage: true });
-    await page.getByRole('button', { name: 'Delete Stack', exact: true }).click();
-    await modal.getByRole('button', { name: 'Confirm Delete', exact: true }).click();
+    await page.getByRole('button', { name: 'Delete', exact: true }).first().click();
+    await modal.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(modal).not.toBeVisible();
     await expect.poll(stackStatus, { timeout: 30_000 }).toBe('DELETE_COMPLETE');
     deleted = true;
@@ -846,6 +847,8 @@ test('RDS live database workspace creates modifies reboots and deletes a reporte
     await expect(modal).not.toBeVisible();
     await page.screenshot({ path: 'test-results/screenshots/rds-database-live.png', fullPage: true });
     await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await modal.getByRole('checkbox', { name: 'Create final snapshot', exact: true }).uncheck();
+    await modal.getByLabel('Confirmation text').fill('delete me');
     await modal.getByRole('button', { name: 'Delete database', exact: true }).click();
     await expect(modal).not.toBeVisible();
     await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0); deleted = true;
@@ -888,6 +891,8 @@ test('RDS live cluster workspace shows SDK reported membership and cleans up clu
     rdsSdk("rds.delete_db_instance(DBInstanceIdentifier=p['member'],SkipFinalSnapshot=True)\nprint(json.dumps({'deleted':True}))", { member });
     memberCreated = false;
     await page.getByRole('button', { name: 'Delete cluster', exact: true }).click();
+    await modal.getByRole('checkbox', { name: 'Create final snapshot', exact: true }).uncheck();
+    await modal.getByLabel('Confirmation text').fill('delete me');
     await modal.getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(modal).not.toBeVisible();
     await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0); deleted = true;
@@ -912,13 +917,14 @@ test('CloudTrail live trail configuration selectors and logging persist', async 
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Trail name', { exact: true }).fill(name);
     await dialog.getByLabel('S3 bucket name', { exact: true }).fill(name);
+    // Start single-Region so the edit below has a change to save.
+    await dialog.getByText('Multi-Region trail', { exact: true }).click();
     const creation = page.waitForResponse(response => response.url().endsWith('/api/cloudtrail/trails/') && response.request().method() === 'POST');
     await dialog.getByRole('button', { name: 'Create trail', exact: true }).click();
     const response = await creation;
     expect(response.ok(), await response.text()).toBe(true); created = true;
     await expect(page.getByRole('heading', { name: `Trail: ${name}`, exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Start logging', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+    // The create form starts logging by default, as the AWS console does.
     await expect(page.getByRole('button', { name: 'Stop logging', exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Event selectors', exact: true }).click();
     await page.getByRole('button', { name: 'Edit event selectors', exact: true }).click();
