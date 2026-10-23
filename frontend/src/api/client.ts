@@ -833,6 +833,46 @@ export async function changeEc2SecurityGroupRule(groupId: string, direction: 'in
   });
 }
 
+/** AllocateAddress (Domain vpc), with an optional Name tag. */
+export async function allocateEc2ElasticIp(name?: string): Promise<{ allocation_id: string; public_ip: string; domain: string }> {
+  return requestJson('/api/ec2/elastic-ips/', { method: 'POST', json: { name: name || undefined }, errorMessage: 'Failed to allocate Elastic IP address' });
+}
+
+export async function releaseEc2ElasticIp(allocationId: string): Promise<any> {
+  return requestJson(`/api/ec2/elastic-ips/${encodeURIComponent(allocationId)}/`, { method: 'DELETE', errorMessage: 'Failed to release Elastic IP address' });
+}
+
+export async function associateEc2ElasticIp(allocationId: string, instanceId: string, allowReassociation: boolean): Promise<{ association_id: string }> {
+  return requestJson(`/api/ec2/elastic-ips/${encodeURIComponent(allocationId)}/association/`, {
+    method: 'PUT',
+    json: { instance_id: instanceId, allow_reassociation: allowReassociation },
+    errorMessage: 'Failed to associate Elastic IP address',
+  });
+}
+
+export async function disassociateEc2ElasticIp(allocationId: string, associationId: string): Promise<any> {
+  return requestJson(`/api/ec2/elastic-ips/${encodeURIComponent(allocationId)}/association/`, {
+    method: 'DELETE',
+    json: { association_id: associationId },
+    errorMessage: 'Failed to disassociate Elastic IP address',
+  });
+}
+
+export interface Ec2NatGatewayRequest {
+  name?: string;
+  subnet_id: string;
+  connectivity_type: 'public' | 'private';
+  allocation_id?: string;
+}
+
+export async function createEc2NatGateway(params: Ec2NatGatewayRequest): Promise<{ nat_gateway_id: string; nat_gateway: any }> {
+  return requestJson('/api/ec2/nat-gateways/', { method: 'POST', json: params, errorMessage: 'Failed to create NAT gateway' });
+}
+
+export async function deleteEc2NatGateway(natGatewayId: string): Promise<any> {
+  return requestJson(`/api/ec2/nat-gateways/${encodeURIComponent(natGatewayId)}/`, { method: 'DELETE', errorMessage: 'Failed to delete NAT gateway' });
+}
+
 /** SSM SendCommand with the AWS-RunShellScript document. */
 export async function runEc2InstanceCommand(instanceId: string, command: string): Promise<{ command_id: string; status: string }> {
   return requestJson(`/api/ec2/instances/${encodeURIComponent(instanceId)}/commands/`, {

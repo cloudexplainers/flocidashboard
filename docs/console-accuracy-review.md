@@ -93,7 +93,7 @@ Left as is:
 
 Left as is:
 - Status checks, monitoring and the instance Storage tab are not shown; Floci does not report instance status checks.
-- Key pairs, volumes, snapshots, Elastic IPs, NAT gateways, network ACLs, launch templates and flow logs have backend routes but no dedicated tables in this console. They are listed in the inventory and the generic workbench. Building them out is a larger redesign.
+- Key pairs, volumes, snapshots, network ACLs, launch templates and flow logs have backend routes but no dedicated tables in this console. They are listed in the inventory and the generic workbench. Building them out is a larger redesign. (Elastic IPs and NAT gateways now have tables; see "Elastic IP and NAT gateway tables" below.)
 - Floci stores security group rules but local Docker networking does not enforce them; the rule dialog says so.
 
 ## IAM
@@ -414,7 +414,7 @@ Left as is:
 | SNS | Topic access policy not editable. | Fixed: Edit/Save changes with JSON validation via `SetTopicAttributes`. |
 | S3 | Metrics, Management (lifecycle, replication, inventory) and Access Points tabs. | Left: larger console work; replication and inventory are not in Floci. |
 | S3 | "Floci accepts a public bucket policy while Block Public Access is on." | Wrong: Floci 2.3.0 rejects it with AccessDenied, as AWS does. The first-review line is corrected. |
-| EC2/VPC | Key pairs, volumes, snapshots, Elastic IPs, NAT gateways, network ACLs, launch templates and flow logs have no tables; no status checks. | Left: a larger redesign; Floci reports no status checks. |
+| EC2/VPC | Key pairs, volumes, snapshots, Elastic IPs, NAT gateways, network ACLs, launch templates and flow logs have no tables; no status checks. | Elastic IPs and NAT gateways: done (see "Elastic IP and NAT gateway tables"). The rest left: a larger redesign; Floci reports no status checks. |
 | IAM | AWS managed policies can't be browsed; no editors for policy versions, permissions boundaries, login profiles or tags. | Left: larger console work. |
 | Lambda | No `LogResult` from Floci (confirmed in source: `InvokeResult.setLogResult` is never called); layers, destinations, concurrency, resource policy, VPC and tags have no editors. | Left: emulator behavior / larger console work. |
 | DynamoDB | GSIs/LSIs, streams, on-demand backups, exports and global tables. | Left: larger console work. |
@@ -888,6 +888,40 @@ steps out of order, then reset):
 
 The Route 53 console already labels routing policies and shows private zone VPCs; its Floci note no longer says geolocation is stored.
 `check_labs --service route53` passed on 2.3.0.
+
+## Elastic IP and NAT gateway tables (2026-10-23)
+
+The EC2 console's network views (`/ec2/elastic_ips`, `/ec2/nat_gateways`, also in the side navigation) replace the
+inventory-only listing. Both are in `frontend/src/pages/EC2AddressingPanels.tsx`.
+
+- **Elastic IPs**: the console's columns (Name, allocated address, type, allocation ID, associated instance, associated
+  resource, private IP, association ID, network border group), a filter, a Summary and Tags detail, and Allocate (with a
+  Name tag), Associate (running or stopped instances, "Allow reassociation"), Disassociate and Release, each confirmed.
+- **NAT gateways**: Name, ID, connectivity type, state, state message, primary public and private IPv4, primary network
+  interface, VPC, subnet and creation time; Details, Route tables (every route that targets the gateway) and Tags; Create
+  (Name tag, subnet, Public or Private, and for Public an unused Elastic IP, with "Allocate Elastic IP" in the form)
+  and Delete (typed "delete", listing the routes that point at it).
+- Backend: `AllocateAddress` and `CreateNatGateway` take a Name tag (`TagSpecifications`), `AssociateAddress` takes
+  `AllowReassociation`, and `CreateNatGateway` no longer requires an Elastic IP for a private gateway. The generic
+  workbench forms match.
+
+Checked live on a throwaway Floci 2.3.0:
+
+| Behavior | Floci 2.3.0 | Console |
+| --- | --- | --- |
+| NAT data plane | Created gateways are `available` at once and route tables can target them, but no traffic passes through them; instances reach the network through Docker networking. | Warning on the NAT gateways view |
+| Public NAT gateway without an Elastic IP | Accepted (AWS rejects it). A private gateway with one is refused, as on AWS. | The backend and form require an Elastic IP for Public and refuse one for Private |
+| One Elastic IP on several NAT gateways | Accepted (AWS rejects it). | The form lists only addresses that aren't associated with an instance or a gateway |
+| NAT association in `DescribeAddresses` | Missing: the address shows no association while a gateway uses it. | "Associated with" and the association ID come from `DescribeNatGateways` |
+| Deleting a NAT gateway | It disappears at once (AWS lists it as Deleted for about an hour); routes to it stay `active` (AWS: `blackhole`); its Elastic IP stays allocated, as on AWS. | Noted in the warning and the delete dialog |
+| Releasing an associated Elastic IP | Allowed, whether the address is on an instance or a NAT gateway (AWS refuses). | Release is disabled until the address is disassociated; a NAT gateway's address can't be disassociated, as in AWS |
+| Re-association | `AssociateAddress` moves an associated address without `AllowReassociation`, and an instance keeps its earlier Elastic IP when it gets a second one (AWS replaces it). Instance and network interface IDs aren't validated. | The Associate dialog requires "Allow reassociation" for an associated address and offers only listed instances |
+| Public IP while associated | A running instance reports its container IP as its public IP, and an associated Elastic IP reports that address too; the allocated address comes back after disassociation. | Info note on the Elastic IPs view |
+| Name tags | `TagSpecifications` on `AllocateAddress` and `CreateNatGateway` are stored and returned. | Name columns |
+
+Tests: `dashboard/tests_ec2_addressing.py`, two mocked browser tests in `frontend/e2e/dashboards.spec.ts`, and a live
+one in `frontend/e2e/dashboards.live.spec.ts` (allocate, create a NAT gateway on it, see the association, delete,
+release), which passed against 2.3.0.
 
 ## Recommended next work
 

@@ -951,3 +951,64 @@ test('CloudTrail live trail configuration selectors and logging persist', async 
     sdk("s3.delete_bucket(Bucket=p['name'])");
   }
 });
+
+test('EC2 live Elastic IP and NAT gateway tables allocate, create, link, delete and release', async ({ page }) => {
+  test.setTimeout(90_000);
+  const suffix = Date.now();
+  let allocationId = '';
+  let natGatewayId = '';
+  let csrf = '';
+  try {
+    await page.goto('/ec2/elastic_ips');
+    csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content') || '';
+    await page.getByRole('button', { name: 'Allocate Elastic IP address', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Allocate Elastic IP address' }).getByPlaceholder('web-eip').fill(`ui-eip-${suffix}`);
+    const allocated = page.waitForResponse(r => r.url().endsWith('/api/ec2/elastic-ips/') && r.request().method() === 'POST');
+    await page.getByRole('button', { name: 'Allocate', exact: true }).click();
+    const allocation = await (await allocated).json();
+    allocationId = allocation.allocation_id;
+    expect(allocationId, JSON.stringify(allocation)).toMatch(/^eipalloc-/);
+    await expect(page.getByRole('heading', { name: `${allocation.public_ip} (ui-eip-${suffix})`, exact: true })).toBeVisible();
+
+    await page.getByRole('link', { name: 'NAT gateways', exact: true }).click();
+    await page.getByRole('button', { name: 'Create NAT gateway', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Create NAT gateway' });
+    await dialog.getByPlaceholder('my-nat-gateway').fill(`ui-nat-${suffix}`);
+    await dialog.getByRole('button', { name: /Elastic IP allocation ID/ }).click();
+    await page.getByRole('option', { name: new RegExp(allocationId) }).click();
+    const created = page.waitForResponse(r => r.url().endsWith('/api/ec2/nat-gateways/') && r.request().method() === 'POST');
+    await dialog.getByRole('button', { name: 'Create NAT gateway', exact: true }).click();
+    const gateway = await (await created).json();
+    natGatewayId = gateway.nat_gateway_id;
+    expect(natGatewayId, JSON.stringify(gateway)).toMatch(/^nat-/);
+    const row = page.getByRole('table', { name: 'NAT gateways' }).getByRole('row', { name: new RegExp(natGatewayId) });
+    await expect(row).toContainText(`ui-nat-${suffix}`);
+    await expect(row).toContainText('Available');
+    await expect(row).toContainText(allocation.public_ip);
+
+    // Floci leaves the NAT association out of DescribeAddresses; the table takes it from the gateway.
+    await page.getByRole('link', { name: 'Elastic IPs', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Elastic IP addresses' }).getByRole('row', { name: new RegExp(allocationId) })).toContainText(`NAT gateway ${natGatewayId}`);
+    await page.screenshot({ path: 'test-results/screenshots/ec2-elastic-ips-live.png', fullPage: true });
+
+    await page.getByRole('link', { name: 'NAT gateways', exact: true }).click();
+    await page.getByRole('button', { name: natGatewayId, exact: true }).click();
+    await page.getByRole('button', { name: 'Delete NAT gateway', exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: 'Delete NAT gateway' });
+    await confirm.getByRole('textbox').fill('delete');
+    await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page.getByRole('button', { name: natGatewayId, exact: true })).toHaveCount(0);
+    natGatewayId = '';
+
+    await page.getByRole('link', { name: 'Elastic IPs', exact: true }).click();
+    await page.getByRole('button', { name: allocation.public_ip, exact: true }).click();
+    await page.getByRole('button', { name: 'Actions', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Release Elastic IP address', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Release Elastic IP addresses' }).getByRole('button', { name: 'Release', exact: true }).click();
+    await expect(page.getByRole('button', { name: allocation.public_ip, exact: true })).toHaveCount(0);
+    allocationId = '';
+  } finally {
+    if (natGatewayId) await page.request.delete(`/api/ec2/nat-gateways/${natGatewayId}/`, { headers: { 'X-CSRFToken': csrf } });
+    if (allocationId) await page.request.delete(`/api/ec2/elastic-ips/${allocationId}/`, { headers: { 'X-CSRFToken': csrf } });
+  }
+});
