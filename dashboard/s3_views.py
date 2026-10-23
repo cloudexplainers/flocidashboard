@@ -11,6 +11,7 @@ from django.views.decorators.http import require_http_methods
 from .actions import handle_action_error, json_error, parse_json_body
 from .aws import create_s3_bucket
 from .s3_api import (
+    probe_anonymous_list,
     copy_s3_object,
     create_s3_folder,
     delete_s3_bucket,
@@ -125,6 +126,17 @@ def s3_bucket_detail(request, bucket_name: str):
 
     try:
         return JsonResponse(get_s3_bucket(bucket_name))
+    except Exception as exc:
+        return _handle_s3(exc)
+
+
+@require_http_methods(['GET'])
+def s3_bucket_anonymous_access(request, bucket_name: str):
+    err = _validate_bucket(bucket_name)
+    if err:
+        return _json_error(err)
+    try:
+        return JsonResponse(probe_anonymous_list(bucket_name))
     except Exception as exc:
         return _handle_s3(exc)
 

@@ -38,6 +38,13 @@ def _validate_endpoint_url(value: str) -> str:
     return endpoint_url
 
 
+def _env_flag(name: str) -> bool | None:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return None
+    return value.strip().lower() == 'true'
+
+
 def _settings_payload(request) -> dict:
     factory = FlociClientFactory()
     override = request.session.get(RUNTIME_ENDPOINT_SESSION_KEY) or ''
@@ -47,10 +54,12 @@ def _settings_payload(request) -> dict:
         'runtime_endpoint_url': override,
         'default_endpoint_url': default_endpoint_url(),
         'region': factory.region,
+        # Floci doesn't report its configuration. These read the dashboard's own environment,
+        # which matches Floci's only when the same variables are passed to both; None = not set.
         'service_auth': {
-            's3_enforce_auth': os.getenv('FLOCI_SERVICES_S3_ENFORCE_AUTH', 'false').lower() == 'true',
-            'iam_enforcement': os.getenv('FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED', 'false').lower() == 'true',
-            'validate_signatures': os.getenv('FLOCI_AUTH_VALIDATE_SIGNATURES', 'false').lower() == 'true',
+            's3_enforce_auth': _env_flag('FLOCI_SERVICES_S3_ENFORCE_AUTH'),
+            'iam_enforcement': _env_flag('FLOCI_SERVICES_IAM_ENFORCEMENT_ENABLED'),
+            'validate_signatures': _env_flag('FLOCI_AUTH_VALIDATE_SIGNATURES'),
         },
         **factory.credential_context(),
     }

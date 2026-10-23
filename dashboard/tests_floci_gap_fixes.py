@@ -74,3 +74,59 @@ class VersionClaimTests(SimpleTestCase):
             for number, line in enumerate(path.read_text().splitlines(), 1) if pattern.match(line)
         ]
         self.assertEqual(offenders, [])
+
+
+class S3AnonymousAccessTests(SimpleTestCase):
+
+    @patch('dashboard.s3_api.boto3.client')
+    def test_probe_sends_an_unsigned_list_and_reports_success(self, client_factory):
+        from botocore import UNSIGNED
+
+        from .s3_api import probe_anonymous_list
+
+        result = probe_anonymous_list('private-bucket')
+
+        config = client_factory.call_args.kwargs['config']
+        self.assertIs(config.signature_version, UNSIGNED)
+        client_factory.return_value.list_objects_v2.assert_called_once_with(Bucket='private-bucket', MaxKeys=0)
+        self.assertEqual(result, {'bucket': 'private-bucket', 'anonymous_list_allowed': True, 'status_code': 200, 'error_code': None})
+
+    @patch('dashboard.s3_api.boto3.client')
+    def test_probe_reports_a_refused_request(self, client_factory):
+        from botocore.exceptions import ClientError
+
+        from .s3_api import probe_anonymous_list
+
+        client_factory.return_value.list_objects_v2.side_effect = ClientError(
+            {'Error': {'Code': 'AccessDenied', 'Message': 'Access Denied'}, 'ResponseMetadata': {'HTTPStatusCode': 403}},
+            'ListObjectsV2',
+        )
+        result = probe_anonymous_list('private-bucket')
+        self.assertFalse(result['anonymous_list_allowed'])
+        self.assertEqual((result['status_code'], result['error_code']), (403, 'AccessDenied'))
+
+    @patch('dashboard.s3_views.probe_anonymous_list')
+    def test_endpoint_returns_the_probe_result(self, probe):
+        probe.return_value = {'bucket': 'b-1', 'anonymous_list_allowed': True, 'status_code': 200, 'error_code': None}
+        response = self.client.get(reverse('dashboard:s3-bucket-anonymous-access', kwargs={'bucket_name': 'b-1'}))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['anonymous_list_allowed'])
+        probe.assert_called_once_with('b-1')
+
+    def test_endpoint_rejects_invalid_bucket_names(self):
+        response = self.client.get(reverse('dashboard:s3-bucket-anonymous-access', kwargs={'bucket_name': 'Bad_Name'}))
+        self.assertEqual(response.status_code, 400)
+
+
+class SettingsAuthFlagTests(SimpleTestCase):
+
+    def test_unset_flags_are_reported_as_unknown(self):
+        from .settings_views import _env_flag
+
+        with patch.dict('os.environ', {}, clear=False) as env:
+            env.pop('FLOCI_SERVICES_S3_ENFORCE_AUTH', None)
+            self.assertIsNone(_env_flag('FLOCI_SERVICES_S3_ENFORCE_AUTH'))
+        with patch.dict('os.environ', {'FLOCI_SERVICES_S3_ENFORCE_AUTH': 'false'}):
+            self.assertFalse(_env_flag('FLOCI_SERVICES_S3_ENFORCE_AUTH'))
+        with patch.dict('os.environ', {'FLOCI_SERVICES_S3_ENFORCE_AUTH': 'TRUE'}):
+            self.assertTrue(_env_flag('FLOCI_SERVICES_S3_ENFORCE_AUTH'))

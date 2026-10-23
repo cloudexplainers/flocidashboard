@@ -99,7 +99,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
               </div>
               <div>
                 <strong>Authentication:</strong>
-                <p>IAM policy enforcement: {auth ? (auth.iam_enforcement ? 'Enabled' : 'Disabled') : 'Unknown'}</p>
+                <p>IAM policy enforcement: {auth?.iam_enforcement === true ? 'Enabled' : auth?.iam_enforcement === false ? 'Disabled' : 'Not known (set in Floci&apos;s environment)'}</p>
               </div>
             </SpaceBetween>
           </Container>

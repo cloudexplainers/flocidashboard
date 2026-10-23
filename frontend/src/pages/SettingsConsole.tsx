@@ -14,6 +14,14 @@ import Alert from '@cloudscape-design/components/alert';
 import KeyValuePairs from '@cloudscape-design/components/key-value-pairs';
 import { fetchSettings, saveEndpoint, resetEndpoint, testConnection, resetFlociState } from '../api/client';
 
+
+/** A Floci auth flag as set in the dashboard's environment: true, false or not set. */
+function authFlag(value: boolean | null | undefined, onLabel: string) {
+  if (value === true) return <StatusIndicator type="success">{onLabel}</StatusIndicator>;
+  if (value === false) return <StatusIndicator type="info">Off</StatusIndicator>;
+  return <StatusIndicator type="info">Not known (not set for the dashboard)</StatusIndicator>;
+}
+
 export const SettingsConsole: React.FC = () => {
   const [settings, setSettings] = useState<any>({});
   const [loading, setLoading] = useState(true);
@@ -218,7 +226,7 @@ export const SettingsConsole: React.FC = () => {
         header={
           <Header
             variant="h2"
-            description="Environment variable enforcement toggles active inside the Floci engine."
+            description="Floci doesn't report its configuration. These are the values set in the dashboard's own environment; they match Floci only when the same variables are passed to both. This project's Compose file sets them for Floci only, so they show as not known there."
           >
             Service Authentication & Security Flags
           </Header>
@@ -229,27 +237,15 @@ export const SettingsConsole: React.FC = () => {
           items={[
             {
               label: 'S3 Authentication Enforcement',
-              value: settings.service_auth?.s3_enforce_auth ? (
-                <StatusIndicator type="success">Enforced</StatusIndicator>
-              ) : (
-                <StatusIndicator type="info">Permissive (Default)</StatusIndicator>
-              ),
+              value: authFlag(settings.service_auth?.s3_enforce_auth, 'Enforced'),
             },
             {
               label: 'IAM Policy Enforcement',
-              value: settings.service_auth?.iam_enforcement ? (
-                <StatusIndicator type="success">Enforced</StatusIndicator>
-              ) : (
-                <StatusIndicator type="info">Permissive (Default)</StatusIndicator>
-              ),
+              value: authFlag(settings.service_auth?.iam_enforcement, 'Enforced'),
             },
             {
               label: 'SigV4 Signature Validation',
-              value: settings.service_auth?.validate_signatures ? (
-                <StatusIndicator type="success">Strict</StatusIndicator>
-              ) : (
-                <StatusIndicator type="info">Permissive (Default)</StatusIndicator>
-              ),
+              value: authFlag(settings.service_auth?.validate_signatures, 'Strict'),
             },
           ]}
         />

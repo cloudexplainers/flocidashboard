@@ -6,6 +6,9 @@ import json
 from typing import Any
 from urllib.parse import urlparse
 
+import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from .aws import FlociClientFactory, _clean_response, _error_code, public_endpoint_url
@@ -26,6 +29,37 @@ def _bucket_encryption(s3, bucket: str) -> dict[str, Any]:
 
 def _s3_client():
     return FlociClientFactory().client('s3')
+
+
+def probe_anonymous_list(name: str) -> dict[str, Any]:
+    """Send an unsigned ListObjectsV2 (MaxKeys=0) for the bucket, as an anonymous caller would.
+
+    Reads nothing back but the answer. Floci started with FLOCI_SERVICES_S3_ENFORCE_AUTH=false
+    allows every unsigned request, whatever Block Public Access and bucket policies say.
+    """
+    factory = FlociClientFactory()
+    anonymous = boto3.client(
+        's3',
+        endpoint_url=factory.endpoint_url,
+        region_name=factory.region,
+        config=Config(
+            signature_version=UNSIGNED,
+            s3={'addressing_style': 'path'},
+            retries={'max_attempts': 1},
+            connect_timeout=2,
+            read_timeout=5,
+        ),
+    )
+    try:
+        anonymous.list_objects_v2(Bucket=name, MaxKeys=0)
+    except ClientError as exc:
+        return {
+            'bucket': name,
+            'anonymous_list_allowed': False,
+            'status_code': exc.response.get('ResponseMetadata', {}).get('HTTPStatusCode'),
+            'error_code': _error_code(exc),
+        }
+    return {'bucket': name, 'anonymous_list_allowed': True, 'status_code': 200, 'error_code': None}
 
 
 def s3_website_endpoint(bucket: str, region: str | None) -> str:

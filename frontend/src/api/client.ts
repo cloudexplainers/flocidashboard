@@ -1152,6 +1152,18 @@ export async function fetchS3BucketPublicAccessBlock(bucketName: string): Promis
   return data.configuration || null;
 }
 
+export interface S3AnonymousAccess {
+  bucket: string;
+  anonymous_list_allowed: boolean;
+  status_code?: number;
+  error_code?: string | null;
+}
+
+/** Sends an unsigned ListObjectsV2 for the bucket and reports whether Floci allowed it. */
+export async function probeS3AnonymousAccess(bucketName: string): Promise<S3AnonymousAccess> {
+  return requestJson(`${s3Bucket(bucketName)}/anonymous-access/`, { errorMessage: 'Failed to test anonymous access' });
+}
+
 export async function putS3BucketPublicAccessBlock(bucketName: string, config: S3PublicAccessBlock): Promise<any> {
   return requestJson(`${s3Bucket(bucketName)}/public-access-block/`, {
     method: 'PUT',

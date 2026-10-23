@@ -541,6 +541,7 @@ urlpatterns = [
     path('api/s3/buckets/', s3_views.s3_buckets_list, name='s3-buckets'),
     path('api/s3/buckets/<str:bucket_name>/', s3_views.s3_bucket_detail, name='s3-bucket-detail'),
     path('api/s3/buckets/<str:bucket_name>/empty/', s3_views.s3_bucket_empty, name='s3-bucket-empty'),
+    path('api/s3/buckets/<str:bucket_name>/anonymous-access/', s3_views.s3_bucket_anonymous_access, name='s3-bucket-anonymous-access'),
     path('api/s3/buckets/<str:bucket_name>/objects/', s3_views.s3_bucket_objects, name='s3-bucket-objects'),
     path('api/s3/buckets/<str:bucket_name>/objects/download/', s3_views.s3_object_download, name='s3-object-download'),
     path('api/s3/buckets/<str:bucket_name>/objects/copy/', s3_views.s3_object_copy, name='s3-object-copy'),

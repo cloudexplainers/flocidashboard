@@ -51,6 +51,7 @@ import {
   fetchS3BucketVersioning,
   putS3BucketVersioning,
   fetchS3BucketPublicAccessBlock,
+  probeS3AnonymousAccess,
   putS3BucketPublicAccessBlock,
   fetchS3BucketEncryption,
   fetchS3BucketTags,
@@ -254,6 +255,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
   const [savedCors, setSavedCors] = useState(false);
   const [savingCors, setSavingCors] = useState(false);
   const [pab, setPab] = useState<S3PublicAccessBlock | null>(null);
+  const [anonymousAccess, setAnonymousAccess] = useState<{ allowed: boolean; code?: string | null } | null>(null);
   const [pabDraft, setPabDraft] = useState<Required<S3PublicAccessBlock>>({ BlockPublicAcls: false, IgnorePublicAcls: false, BlockPublicPolicy: false, RestrictPublicBuckets: false });
   const [savingPab, setSavingPab] = useState(false);
   const [confirmPabOpen, setConfirmPabOpen] = useState(false);
@@ -342,6 +344,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
     const generation = ++detailGeneration.current;
     setInspectModalOpen(false);
     setListing(null);
+    setAnonymousAccess(null);
     setPrefix('');
     const name = bucket.Name;
     await Promise.all([
@@ -365,6 +368,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
           RestrictPublicBuckets: Boolean(config?.RestrictPublicBuckets),
         });
       }, () => setPab(null)),
+      settle(generation, () => probeS3AnonymousAccess(name), result => setAnonymousAccess({ allowed: result.anonymous_list_allowed, code: result.error_code }), () => setAnonymousAccess(null)),
       settle(generation, () => fetchS3BucketEncryption(name), setEncryption, () => setEncryption(undefined)),
       settle(generation, () => fetchS3BucketTags(name), setBucketTags, () => setBucketTags([])),
     ]);
@@ -739,7 +743,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
           <Header
             variant="h2"
             counter={`(${buckets.length})`}
-            description="Buckets are containers for data stored in S3."
+            description="Buckets are containers for data stored in S3. Access follows Block Public Access and bucket policies, as in AWS; Floci applies them to unsigned requests only when started with FLOCI_SERVICES_S3_ENFORCE_AUTH=true (this project's Compose file sets false). A bucket's Permissions tab tests it."
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button disabled={!activeBucket} onClick={() => setEmptyBucketOpen(true)}>Empty</Button>
@@ -1039,6 +1043,16 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                       }
                     >
                       <SpaceBetween size="s">
+                        {anonymousAccess?.allowed && (
+                          <Alert type="warning" header="Anonymous requests can reach this bucket" data-testid="s3-anonymous-access">
+                            An unsigned request just listed this bucket, so anyone who can reach Floci can too, whatever the settings below say.
+                            Floci started with FLOCI_SERVICES_S3_ENFORCE_AUTH=false, as this project&apos;s Compose file does by default, allows every unsigned request:
+                            Block Public Access, bucket policies and ACLs don&apos;t stop anonymous reads or writes. They apply to unsigned requests only when Floci runs with that setting true.
+                          </Alert>
+                        )}
+                        {anonymousAccess && !anonymousAccess.allowed && (
+                          <Box variant="small" color="text-body-secondary">Floci refused an unsigned list request for this bucket ({anonymousAccess.code || 'denied'}).</Box>
+                        )}
                         {!pab && <Alert type="info">This bucket has no Block Public Access configuration, so every setting is Off.</Alert>}
                         <Checkbox
                           checked={pabDraft.BlockPublicAcls && pabDraft.IgnorePublicAcls && pabDraft.BlockPublicPolicy && pabDraft.RestrictPublicBuckets}
