@@ -128,19 +128,6 @@ class CloudMapActionsTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         deregister_mock.assert_called_once_with('srv-1', 'instance-1')
 
-    @patch('dashboard.cloudmap_views.update_instance_health')
-    def test_update_instance_health(self, health_mock):
-        health_mock.return_value = {'operation_id': 'op-health'}
-
-        response = self.client.post(
-            reverse('dashboard:cloudmap-instance-health', kwargs={'service_id': 'srv-1', 'instance_id': 'instance-1'}),
-            data=json.dumps({'status': 'UNHEALTHY'}),
-            content_type='application/json',
-        )
-
-        self.assertEqual(response.status_code, 200)
-        health_mock.assert_called_once_with('srv-1', 'instance-1', 'UNHEALTHY')
-
     @patch('dashboard.cloudmap_views.tag_resource')
     def test_tag_resource(self, tag_mock):
         tag_mock.return_value = {'tags': {'env': 'local'}}

@@ -188,18 +188,6 @@ def discover_instances(namespace_name: str, service_name: str, *, query_paramete
     return {'instances': _clean_response(response.get('Instances', [])), 'response': _clean_response(response)}
 
 
-def update_instance_health(service_id: str, instance_id: str, status: str = 'HEALTHY') -> dict[str, Any]:
-    clean_status = _required(status or 'HEALTHY', 'Health status').upper()
-    if clean_status not in {'HEALTHY', 'UNHEALTHY'}:
-        raise ValueError('Health status must be HEALTHY or UNHEALTHY')
-    response = _client().update_instance_custom_health_status(
-        ServiceId=_required(service_id, 'Service ID'),
-        InstanceId=_required(instance_id, 'Instance ID'),
-        Status=clean_status,
-    )
-    return {'service_id': service_id, 'instance_id': instance_id, 'status': clean_status, 'response': _clean_response(response)}
-
-
 def tag_resource(resource_arn: str, tags: Any) -> dict[str, Any]:
     clean_arn = _required(resource_arn, 'Resource ARN')
     clean_tags = _tags(tags)

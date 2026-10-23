@@ -177,6 +177,11 @@ class FlociClientFactory:
             retries={'max_attempts': 2, 'mode': 'standard'},
             connect_timeout=2,
             read_timeout=5,
+            # botocore prefixes the host for some operations (Cloud Map DiscoverInstances ->
+            # data-localhost, Logs StartLiveTail -> stream-, Step Functions StartSyncExecution
+            # -> sync-). Floci serves every operation on its one endpoint, and the prefixed
+            # hosts don't resolve.
+            inject_host_prefix=False,
         )
         self._validate_local_endpoint()
 
@@ -262,6 +267,7 @@ class FlociClientFactory:
                 connect_timeout=2,
                 read_timeout=5,
                 s3={'addressing_style': 'auto'},
+                inject_host_prefix=False,
                 # Presigned URLs use SigV4, as the S3 console's do. botocore otherwise
                 # presigns with SigV2 for this client.
                 signature_version='s3v4',

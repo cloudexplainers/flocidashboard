@@ -16,7 +16,6 @@ from .cloudmap_api import (
     register_instance,
     tag_resource,
     untag_resource,
-    update_instance_health,
 )
 
 
@@ -90,15 +89,6 @@ def cloudmap_instances_discover(request):
         body.get('namespace_name') or '',
         body.get('service_name') or '',
         query_parameters=body.get('query_parameters') or {},
-    ))
-
-
-@require_http_methods(['POST'])
-def cloudmap_instance_health(request, service_id: str, instance_id: str):
-    return _action(request, 'update_instance_custom_health_status', lambda body: update_instance_health(
-        service_id,
-        instance_id,
-        body.get('status') or 'HEALTHY',
     ))
 
 

@@ -172,7 +172,6 @@ def cloudmap_inventory() -> dict[str, Any]:
                 'DiscoverInstancesRevision',
                 'GetOperation',
                 'ListOperations',
-                'UpdateInstanceCustomHealthStatus',
                 'TagResource',
                 'UntagResource',
                 'ListTagsForResource',
@@ -181,8 +180,11 @@ def cloudmap_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci main after 1.5.23 adds AWS Cloud Map through the boto3 servicediscovery client.',
-            'Namespaces, services, registered instances, async operations, discovery calls, health status, and tags are represented through the management API.',
+            'Namespaces, services, registered instances, discovery calls and tags work through the management API. Operations reach SUCCESS immediately.',
+            'Every instance registers as HEALTHY and stays that way: Floci runs no Route 53 health checks for HealthCheckConfig and has no UpdateInstanceCustomHealthStatus.',
+        ],
+        'not_supported': [
+            'UpdateInstanceCustomHealthStatus (Floci answers UnknownOperationException)',
         ],
     }
 

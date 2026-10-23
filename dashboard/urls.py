@@ -176,7 +176,6 @@ urlpatterns = [
     path('api/cloudmap/services/<str:service_id>/', cloudmap_views.cloudmap_service_delete, name='cloudmap-service-detail'),
     path('api/cloudmap/services/<str:service_id>/instances/', cloudmap_views.cloudmap_instances_register, name='cloudmap-instances'),
     path('api/cloudmap/services/<str:service_id>/instances/<str:instance_id>/', cloudmap_views.cloudmap_instance_deregister, name='cloudmap-instance-detail'),
-    path('api/cloudmap/services/<str:service_id>/instances/<str:instance_id>/health/', cloudmap_views.cloudmap_instance_health, name='cloudmap-instance-health'),
     path('api/cloudmap/discover/', cloudmap_views.cloudmap_instances_discover, name='cloudmap-discover'),
     path('api/cloudmap/tags/', cloudmap_views.cloudmap_tags, name='cloudmap-tags'),
     path('api/cloudcontrol/', views.cloudcontrol, name='cloudcontrol'),
