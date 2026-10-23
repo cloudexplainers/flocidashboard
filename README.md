@@ -21,7 +21,7 @@ The dashboard catalogs **65 AWS services** and includes **72 workflow labs acros
 Install Docker with Compose and Git. These instructions are written for macOS; Windows has not been tested.
 
 ```bash
-git clone https://github.com/returnvalue/flocidashboard.git
+git clone https://github.com/cloudexplainers/flocidashboard.git
 cd flocidashboard
 docker compose up -d
 ```
