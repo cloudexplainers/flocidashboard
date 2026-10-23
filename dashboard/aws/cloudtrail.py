@@ -87,8 +87,6 @@ def cloudtrail_inventory() -> dict[str, Any]:
         ],
         'available_sdk_operations': sorted(operations),
         'notes': [
-            'Floci records no management events: LookupEvents always returns an empty list.',
-            'A logging trail delivers S3 data events (PutObject, GetObject, HeadObject, DeleteObject, ListObjects, GetObjectAcl) that match its event selectors to its S3 bucket as gzipped JSON log files under AWSLogs/, flushed about every 60 seconds.',
             'Event selectors are stored and applied: ReadWriteType and AWS::S3::Object data resources decide which S3 calls are logged.',
         ],
     }

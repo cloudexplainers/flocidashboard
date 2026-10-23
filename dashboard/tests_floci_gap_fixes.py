@@ -257,8 +257,10 @@ class StoredOnlyLabelTests(SimpleTestCase):
         factory_cls.return_value.client.return_value.meta.service_model.operation_names = []
         with patch('dashboard.aws.cloudtrail.core._operation_items', return_value=[]):
             notes = ' '.join(cloudtrail_inventory()['notes'])
-        self.assertIn('LookupEvents always returns an empty list', notes)
-        self.assertIn('S3 data events', notes)
+        # The console says which events Floci records next to Event history and Log files;
+        # the inventory notes add only how event selectors apply.
+        self.assertIn('Event selectors are stored and applied', notes)
+        self.assertNotIn('LookupEvents always returns an empty list', notes)
         self.assertNotIn('does not record live API activity', notes)
 
     @patch('dashboard.aws.secretsmanager.core._paginate')

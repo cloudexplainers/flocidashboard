@@ -3726,6 +3726,72 @@ test('CloudTrail missing trails and failed reads never select a different trail'
   await expect(page.getByText('Lookup denied by policy', { exact: true })).toBeVisible();
 });
 
+const logPrefix = 'AWSLogs/000000000000/CloudTrail/eu-west-1/2026/10/22/';
+const newestLog = { key: `${logPrefix}000000000000_CloudTrail_eu-west-1_20261022T1101Z_new.json.gz`, name: '000000000000_CloudTrail_eu-west-1_20261022T1101Z_new.json.gz', region: 'eu-west-1', account: '000000000000', size: 990, last_modified: '2026-10-22T11:01:00+00:00' };
+const olderLog = { ...newestLog, key: `${logPrefix.replace('/22/', '/21/')}000000000000_CloudTrail_eu-west-1_20261021T0900Z_old.json.gz`, name: '000000000000_CloudTrail_eu-west-1_20261021T0900Z_old.json.gz', last_modified: '2026-10-21T09:00:00+00:00' };
+const logRecords = [
+  { eventID: 'r-1', eventTime: '2026-10-22T11:00:10Z', eventName: 'PutObject', eventSource: 's3.amazonaws.com', sourceIPAddress: '172.18.0.1', userIdentity: { type: 'IAMUser', arn: 'arn:aws:iam::000000000000:user/learner' }, resources: [{ type: 'AWS::S3::Object', ARN: 'arn:aws:s3:::source/hello.txt' }], requestParameters: { bucketName: 'source', key: 'hello.txt' } },
+  { eventID: 'r-2', eventTime: '2026-10-22T11:00:20Z', eventName: 'GetObject', eventSource: 's3.amazonaws.com', sourceIPAddress: '172.18.0.1', userIdentity: { type: 'IAMUser', arn: 'arn:aws:iam::000000000000:user/learner' }, resources: [{ type: 'AWS::S3::Object', ARN: 'arn:aws:s3:::source/missing.txt' }], errorCode: 'NoSuchKey', errorMessage: 'The specified key does not exist.' },
+];
+
+test('CloudTrail log files list newest first, page older days and show records with raw JSON', async ({ page }) => {
+  await inventory(page, 'cloudtrail', { trails: [cloudTrailFixture] });
+  await page.route('**/api/cloudtrail/trails/learning-audit/selectors/', route => route.fulfill({ json: { EventSelectors: [] } }));
+  const listCalls: URL[] = []; const readKeys: string[] = [];
+  await page.route('**/api/cloudtrail/trails/learning-audit/log-files/**', route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/read/')) {
+      readKeys.push(url.searchParams.get('key')!);
+      return url.searchParams.get('key') === olderLog.key ? route.fulfill({ status: 400, json: { error: 'Log file is not gzip-compressed' } }) : route.fulfill({ json: { key: newestLog.key, records: logRecords } });
+    }
+    listCalls.push(url);
+    const older = url.searchParams.get('before') === '2026/10/22';
+    return route.fulfill({ json: { bucket: 'audit-logs', prefix: '', log_prefix: 'AWSLogs/', files: older ? [olderLog] : [newestLog], next_cursor: older ? null : '2026/10/22' } });
+  });
+  await page.goto('/cloudtrail/trails?trail=learning-audit&tab=log-files');
+  await expect(page.getByRole('tab', { name: 'Log files', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'Floci delivers only S3 data events' })).toContainText('about every 60 seconds');
+  await expect(page.getByText('Newest first, from s3://audit-logs/AWSLogs/')).toBeVisible();
+  await page.getByRole('button', { name: 'Load older log files', exact: true }).click();
+  await expect(page.getByRole('button', { name: olderLog.name, exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Load older log files', exact: true })).toHaveCount(0);
+  expect(listCalls.map(url => url.searchParams.get('before'))).toEqual([null, '2026/10/22']);
+  await page.getByRole('button', { name: newestLog.name, exact: true }).click();
+  await expect(page.getByRole('heading', { name: `Records in ${newestLog.name}` })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'NoSuchKey', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'arn:aws:s3:::source/hello.txt', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'arn:aws:iam::000000000000:user/learner', exact: true }).first()).toBeVisible();
+  await page.getByRole('radio', { name: 'Select GetObject at 2026-10-22T11:00:20Z' }).check();
+  await expect(page.getByRole('heading', { name: 'Record: GetObject', exact: true })).toBeVisible();
+  await expect(page.getByText('"errorMessage": "The specified key does not exist."')).toBeVisible();
+  await page.screenshot({ path: 'test-results/screenshots/cloudtrail-log-files-desktop.png', fullPage: true });
+  await page.getByRole('button', { name: olderLog.name, exact: true }).click();
+  await expect(page.getByText('Log file is not gzip-compressed', { exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'NoSuchKey', exact: true })).toHaveCount(0);
+  expect(readKeys).toEqual([newestLog.key, olderLog.key]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('CloudTrail log files report a missing bucket instead of an empty list', async ({ page }) => {
+  await inventory(page, 'cloudtrail', { trails: [cloudTrailFixture] });
+  await page.route('**/api/cloudtrail/trails/learning-audit/selectors/', route => route.fulfill({ json: { EventSelectors: [] } }));
+  await page.route('**/api/cloudtrail/trails/learning-audit/log-files/', route => route.fulfill({ status: 404, json: { error: 'The specified bucket does not exist.', code: 'NoSuchBucket' } }));
+  await page.goto('/cloudtrail/trails?trail=learning-audit&tab=log-files');
+  await expect(page.getByText('The specified bucket does not exist.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Log files unavailable.', { exact: true })).toBeVisible();
+  await expect(page.getByText(/No log files delivered yet/)).toHaveCount(0);
+});
+
+test('CloudTrail empty event history points to the trail log files', async ({ page }) => {
+  await inventory(page, 'cloudtrail', { trails: [cloudTrailFixture] });
+  await page.route('**/api/cloudtrail/events/?*', route => route.fulfill({ json: { events: [] } }));
+  await page.goto('/cloudtrail/events');
+  await page.getByTestId('floci-note').getByRole('button', { name: 'Open a trail', exact: true }).click();
+  await expect(page).toHaveURL(/\/cloudtrail\/trails$/);
+  await expect(page.getByRole('button', { name: 'learning-audit', exact: true })).toBeVisible();
+});
+
 // Floci gap fixes: where Floci stores configuration without applying it, the console says so.
 const rdsSnapshotFixture = { ...rdsFixture, instances: [...rdsFixture.instances, { name: 'shop-pg', engine: 'postgres', status: 'available' }], snapshots: [
   { name: 'orders-before-upgrade', instance: 'orders-writer', status: 'available', type: 'manual', engine: 'postgres', created: '2026-10-22T10:00:00Z', allocated_storage: 20 },

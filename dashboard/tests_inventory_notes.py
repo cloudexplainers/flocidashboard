@@ -57,6 +57,7 @@ class InventoryNoteTextTests(SimpleTestCase):
             'secretsmanager': ['Resource policies'],
             'rds': ['pg_dumpall', 'ApplyImmediately', 'transaction log', 'read replica', 'failover'],
             'route53': ['global service'],
+            'cloudtrail': ['management events', 'AWSLogs/'],
         }
         notes = inventory_notes()
         repeated = [f'{module}: {text}' for module, texts in inline.items()
