@@ -1983,6 +1983,49 @@ export async function deleteElbv2Listener(listenerArn: string): Promise<any> {
   });
 }
 
+export async function modifyElbv2TargetGroupAttributes(targetGroupArn: string, params: {
+  stickiness_enabled?: boolean;
+  stickiness_type?: 'lb_cookie' | 'app_cookie';
+  stickiness_duration_seconds?: number;
+  app_cookie_name?: string;
+  deregistration_delay_seconds?: number;
+}): Promise<any> {
+  return requestJson(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/attributes/`, { method: 'PUT', json: params, ignoreErrorField: true });
+}
+
+export async function modifyElbv2HealthCheck(targetGroupArn: string, params: {
+  path?: string;
+  interval_seconds?: number;
+  timeout_seconds?: number;
+  healthy_threshold?: number;
+  unhealthy_threshold?: number;
+  matcher?: string;
+}): Promise<any> {
+  return requestJson(`/api/elasticloadbalancing/target-groups/${encodeURIComponent(targetGroupArn)}/health-check/`, { method: 'PUT', json: params, ignoreErrorField: true });
+}
+
+export async function modifyElbv2Listener(listenerArn: string, params: {
+  port?: number;
+  action_type?: 'forward' | 'fixed-response';
+  target_group_arn?: string;
+  status_code?: number;
+  message_body?: string;
+}): Promise<any> {
+  return requestJson(`/api/elasticloadbalancing/listeners/${encodeURIComponent(listenerArn)}/`, { method: 'PUT', json: params, ignoreErrorField: true });
+}
+
+export async function createElbv2Rule(params: { listener_arn: string; priority: number; path_pattern: string; target_group_arn: string }): Promise<any> {
+  return requestJson('/api/elasticloadbalancing/rules/', { method: 'POST', json: params, ignoreErrorField: true });
+}
+
+export async function modifyElbv2Rule(ruleArn: string, params: { path_pattern?: string; target_group_arn?: string; priority?: number }): Promise<any> {
+  return requestJson(`/api/elasticloadbalancing/rules/${encodeURIComponent(ruleArn)}/`, { method: 'PUT', json: params, ignoreErrorField: true });
+}
+
+export async function deleteElbv2Rule(ruleArn: string): Promise<any> {
+  return requestJson(`/api/elasticloadbalancing/rules/${encodeURIComponent(ruleArn)}/`, { method: 'DELETE', ignoreErrorField: true });
+}
+
 // ==========================================
 // Phase 3: Athena APIs
 // ==========================================

@@ -1,5 +1,6 @@
 import { normalizeLoadBalancing } from './deliveryResources';
 import { TargetGroupHealth } from '../components/TargetGroupHealth';
+import { ListenerEditModal, ListenerRules, TargetGroupAttributes, TargetGroupHealthChecks, describeAction } from '../components/ELBv2Editors';
 import { ResourceValue } from '../components/ResourceDetails';
 import React, { useState, useEffect, useMemo } from 'react';
 import Table from '../components/ResourceTable';
@@ -88,6 +89,9 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
   const [listenerPort, setListenerPort] = useState('80');
   const [listenerTgArn, setListenerTgArn] = useState('');
   const [creatingListener, setCreatingListener] = useState(false);
+  const [editingListener, setEditingListener] = useState<any | null>(null);
+  const [selectedListenerArn, setSelectedListenerArn] = useState('');
+  const notify = (type: 'success' | 'error', text: string) => setActionMessage({ type, text });
 
   const loadData = async () => {
     setLoading(true); setLoadError('');
@@ -143,6 +147,8 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
     if (!activeLbArn) return pinned ? [] : all;
     return all.filter((l: any) => l.LoadBalancerArn === activeLbArn);
   }, [data.listeners, activeLbArn, pinned]);
+
+  const activeListener = lbListeners.find((item: any) => item.ListenerArn === selectedListenerArn) || lbListeners[0] || null;
 
   const groupTargets = (data.targets || []).filter((item: any) => item.TargetGroupArn === activeTgArn);
 
@@ -544,6 +550,16 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
             ),
           },
           {
+            label: 'Health checks',
+            id: 'healthchecks',
+            content: activeTg ? <TargetGroupHealthChecks group={activeTg} onSaved={loadData} notify={notify} /> : <Container><Box textAlign="center">Select a target group to see its health check settings.</Box></Container>,
+          },
+          {
+            label: 'Attributes',
+            id: 'attributes',
+            content: activeTg ? <TargetGroupAttributes group={activeTg} onSaved={loadData} notify={notify} /> : <Container><Box textAlign="center">Select a target group to see its attributes.</Box></Container>,
+          },
+          {
             label: `Listeners (${lbListeners.length})`,
             id: 'listeners',
             content: (
@@ -577,23 +593,30 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
                     },
                     {
                       id: 'defaultAction',
-                      header: 'Default Action (Forward To)',
-                      cell: (item: any) => <code>{item.DefaultActions?.[0]?.TargetGroupArn || item.DefaultActions?.[0]?.Type || 'Not reported'}</code>,
+                      header: 'Default action',
+                      cell: (item: any) => describeAction(item.DefaultActions?.[0], data.target_groups || []),
                     },
                     {
                       id: 'actions',
                       header: 'Actions',
                       cell: (item: any) => (
-                        <Button iconName="remove" onClick={() => handleDeleteListener(item.ListenerArn || item.listener_arn)}>
-                          Delete
-                        </Button>
+                        <SpaceBetween direction="horizontal" size="xs">
+                          <Button ariaLabel={`Edit listener ${item.Protocol}:${item.Port}`} onClick={() => setEditingListener(item)}>Edit</Button>
+                          <Button iconName="remove" onClick={() => handleDeleteListener(item.ListenerArn || item.listener_arn)}>
+                            Delete
+                          </Button>
+                        </SpaceBetween>
                       ),
-                      width: 110,
+                      width: 190,
                     },
                   ]}
                   items={lbListeners}
+                  selectionType="single"
+                  selectedItems={activeListener ? [activeListener] : []}
+                  onSelectionChange={({ detail }) => setSelectedListenerArn(detail.selectedItems[0]?.ListenerArn || '')}
                   empty={<Box textAlign="center">No listeners configured on this load balancer.</Box>}
                 />
+                {activeListener && <Box margin={{ top: 'l' }}><ListenerRules listener={activeListener} rules={data.rules || []} targetGroups={data.target_groups || []} onSaved={loadData} notify={notify} /></Box>}
               </Container>
             ),
           },
@@ -730,6 +753,8 @@ export const ELBv2Console: React.FC<ELBv2ConsoleProps> = ({ activeTab, onTabChan
           </FormField>
         </SpaceBetween>
       </Modal>
+
+      <ListenerEditModal listener={editingListener} targetGroups={data.target_groups || []} onClose={() => setEditingListener(null)} onSaved={loadData} notify={notify} />
 
       {/* Create Listener Modal */}
       <Modal

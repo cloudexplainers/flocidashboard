@@ -697,12 +697,40 @@ The lab writes its order row with the RDS Data API through the cluster (as AWS a
 secret `--manage-master-user-password` creates; Floci doesn't report `HttpEndpointEnabled`, so the lab passes
 `--enable-http-endpoint` for fidelity only. `check_labs --service rds` passed on 2.3.0.
 
+## HA web tier controls (2026-10-23)
+
+The ELBv2 and Auto Scaling item of the recommended next work (below) is done. The Elastic Load Balancing console adds Health checks
+and Attributes tabs for a target group, Edit on each listener (port and default action), and a rules table for the
+selected listener with Add rule, Edit (path, forward target group, priority) and Delete. Backed by
+`GET`/`PUT /api/elasticloadbalancing/target-groups/<arn>/attributes/`, `PUT .../health-check/`, and `PUT` on
+`/api/elasticloadbalancing/listeners/<arn>/` and `/rules/<arn>/` (`ModifyRule`, then `SetRulePriorities` for a new
+priority). The inventory now loads each target group's attributes. The Auto Scaling workbench adds Start instance refresh,
+Describe instance refreshes and Set instance health (`/api/autoscaling/groups/<name>/instance-refreshes/`,
+`/api/autoscaling/instances/<id>/health/`).
+
+Checked in `services/elbv2/` and `services/autoscaling/` at `2.3.0`, then live on a throwaway Floci 2.3.0 (two nginx
+targets behind an ALB, and an ASG of two instances):
+
+| Behavior | Floci 2.3.0 | Console says |
+| --- | --- | --- |
+| Stickiness (`lb_cookie`, `app_cookie`) | Stored and reported; four requests alternated between the targets with no `Set-Cookie`. `main` applies `lb_cookie` duration stickiness. | Note on the Attributes tab and in the dialog |
+| Deregistration delay | Stored; a deregistered target vanished from `DescribeTargetHealth` at once (no `draining`) and got no more requests. | Same note |
+| Attribute values | Any key or value is stored (`bogus.key`, duration `0`). | The dashboard checks AWS limits itself (delay 0–3600, duration 1–604800, reserved `AWSALB*` cookie names) |
+| Health check edits | Path, timeout, thresholds and success codes apply at once (path `/missing` made both targets `unhealthy`, `Target.ResponseCodeMismatch`). A new interval is reported but the probe timer keeps the old one (`ElbV2HealthChecker.startMonitoring`). With every target unhealthy, traffic still reached both (fail open, as in AWS). | Note on the Health checks tab |
+| `ModifyListener` | A new port moved the listener at once (old port refused connections); a fixed-response default action applied. Floci also accepted a change to HTTPS with no certificate, so the edit dialog keeps the protocol. | Protocol shown read-only |
+| `ModifyRule`, `SetRulePriorities` | Action and path changes re-route at once (checked through the console: `/api/` moved to the other target group). | Nothing to label |
+| Instance refresh | Real: both instances were marked `Terminating` together and replaced from the new launch configuration within 20 s, `Successful`, 100 %. `MinHealthyPercentage` and `InstanceWarmup` are echoed in `Preferences`, not applied. A second start returns `InstanceRefreshInProgress`. | Action description |
+| Cancel and rollback | `CancelInstanceRefresh` and `RollbackInstanceRefresh` return `UnsupportedOperation` (also on `main`). Suspending the `InstanceRefresh` process pauses a refresh (`AutoScalingReconciler.refreshPaused`). | Not offered; listed under "Not emulated"; inventory note |
+| Set instance health | `Unhealthy` is stored and reported; the reconciler never replaces the instance (watched 40 s) and the grace period is ignored. A stopped or terminated instance is replaced to keep the desired capacity (both checked). | Action description and success message; inventory note |
+
+No lab in this change. The HA web tier lab (W1-1) is the next step; see the recommended next work.
+
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
 | CloudTrail log-file viewer | Trails already have an event-selector editor; a view that lists and unzips the `AWSLogs/` files in the trail bucket would make the audit topic (CLF 2.x, SAA 1.x) usable without the S3 console. |
-| ELBv2 target-group attributes (stickiness, deregistration delay), listener and rule edits; Auto Scaling instance refresh and `SetInstanceHealth` | HA web tier (Wave 1). Check that the reconciler replaces Unhealthy instances before building the Auto Scaling part. |
+| HA web tier lab (W1-1): launch configuration with a web server in user data, ALB across two subnets, target group health check, ASG (min 2) attached to it; verify the ALB forwards to ASG instances, an instance refresh, and self-healing by terminating an instance | The console controls exist (above). Verify traffic from inside an instance (SSM `curl http://floci:<port>/`), since listener ports aren't published to the host. Teach that Set instance health Unhealthy doesn't trigger replacement in Floci. |
 | S3 lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication config (configuration only) | S3 data protection (Wave 1). Each needs its own label. |
 | EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
 | Show inventory `notes` on dedicated consoles | Only the generic workbench renders them, so notes added to dedicated consoles' loaders (DynamoDB replicas, Secrets Manager rotation) are visible only through the API. |

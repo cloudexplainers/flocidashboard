@@ -55,6 +55,12 @@ def elasticloadbalancing_inventory() -> dict[str, Any]:
                 rule['ListenerArn'] = listener_arn
                 rules.append(rule)
 
+    target_group_attributes: dict[str, dict[str, str]] = {}
+    for target_group in v2_target_groups:
+        arn = target_group.get('TargetGroupArn')
+        response = _safe_value(lambda arn=arn: elbv2.describe_target_group_attributes(TargetGroupArn=arn).get('Attributes', []), [])
+        target_group_attributes[arn] = {item.get('Key'): item.get('Value') for item in response if item.get('Key')}
+
     target_health = []
     for target_group in v2_target_groups:
         arn = target_group.get('TargetGroupArn')
@@ -157,6 +163,7 @@ def elasticloadbalancing_inventory() -> dict[str, Any]:
                 'target_type': group.get('TargetType'),
                 'protocol_version': group.get('ProtocolVersion'),
                 'ip_address_type': group.get('IpAddressType'),
+                'attributes': target_group_attributes.get(group.get('TargetGroupArn'), {}),
                 'tags': target_group_tags.get(group.get('TargetGroupArn'), []),
             }
             for group in v2_target_groups
@@ -198,10 +205,16 @@ def elasticloadbalancing_inventory() -> dict[str, Any]:
             'ModifyListenerAttributes',
             'ModifyCapacityReservation',
             'DescribeCapacityReservation',
+            'ModifyListener',
             'CreateRule',
             'DescribeRules',
+            'ModifyRule',
+            'SetRulePriorities',
             'CreateTargetGroup',
             'DescribeTargetGroups',
+            'ModifyTargetGroup',
+            'DescribeTargetGroupAttributes',
+            'ModifyTargetGroupAttributes',
             'RegisterTargets',
             'DescribeTargetHealth',
             'DeregisterTargets',
@@ -216,6 +229,8 @@ def elasticloadbalancing_inventory() -> dict[str, Any]:
         'notes': [
             'This page combines the AWS elbv2 and classic elb SDK APIs under the Elastic Load Balancing service name.',
             'Target health is fetched per target group; listener rules are fetched per listener.',
+            'Application Load Balancers serve real traffic: listeners, rules and health checks apply, and edits to them take effect at once.',
+            'Target group stickiness and deregistration delay are stored and reported but not applied in Floci 2.3.0: requests go round robin with no stickiness cookie, and a deregistered target is removed at once, with no draining. Newer Floci builds apply duration-based (lb_cookie) stickiness.',
             'Classic Load Balancers are control plane only: listeners are recorded but Floci serves no traffic for them, and load balancer policies are not supported.',
         ],
     }

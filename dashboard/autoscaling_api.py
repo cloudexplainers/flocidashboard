@@ -285,3 +285,54 @@ def delete_policy(name: str, policy_name: str) -> dict[str, Any]:
     clean_policy = _required(policy_name, 'Policy name')
     response = _client().delete_policy(AutoScalingGroupName=clean_name, PolicyName=clean_policy)
     return {'name': clean_name, 'policy_name': clean_policy, 'response': _clean_response(response)}
+
+
+def start_instance_refresh(
+    name: str,
+    *,
+    min_healthy_percentage: Any = None,
+    instance_warmup: Any = None,
+    skip_matching: bool = False,
+) -> dict[str, Any]:
+    clean_name = _required(name, 'Auto Scaling group name')
+    preferences: dict[str, Any] = {}
+    if min_healthy_percentage not in (None, ''):
+        percentage = _int_value(min_healthy_percentage, 'Minimum healthy percentage')
+        if not 0 <= percentage <= 100:
+            raise ValueError('Minimum healthy percentage must be from 0 to 100')
+        preferences['MinHealthyPercentage'] = percentage
+    if instance_warmup not in (None, ''):
+        warmup = _int_value(instance_warmup, 'Instance warmup')
+        if warmup < 0:
+            raise ValueError('Instance warmup must be 0 or more')
+        preferences['InstanceWarmup'] = warmup
+    if skip_matching:
+        preferences['SkipMatching'] = True
+    kwargs: dict[str, Any] = {'AutoScalingGroupName': clean_name, 'Strategy': 'Rolling'}
+    if preferences:
+        kwargs['Preferences'] = preferences
+    response = _client().start_instance_refresh(**kwargs)
+    return {
+        'name': clean_name,
+        'instance_refresh_id': response.get('InstanceRefreshId'),
+        'response': _clean_response(response),
+    }
+
+
+def describe_instance_refreshes(name: str) -> dict[str, Any]:
+    clean_name = _required(name, 'Auto Scaling group name')
+    response = _client().describe_instance_refreshes(AutoScalingGroupName=clean_name)
+    return {'name': clean_name, 'instance_refreshes': _clean_response(response.get('InstanceRefreshes', []))}
+
+
+def set_instance_health(instance_id: str, health_status: str, *, should_respect_grace_period: bool = False) -> dict[str, Any]:
+    clean_id = _required(instance_id, 'Instance ID')
+    status = (health_status or '').strip()
+    if status not in ('Healthy', 'Unhealthy'):
+        raise ValueError('Health status must be Healthy or Unhealthy')
+    response = _client().set_instance_health(
+        InstanceId=clean_id,
+        HealthStatus=status,
+        ShouldRespectGracePeriod=bool(should_respect_grace_period),
+    )
+    return {'instance_id': clean_id, 'health_status': status, 'response': _clean_response(response)}

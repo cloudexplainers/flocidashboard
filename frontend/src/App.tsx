@@ -649,6 +649,8 @@ export const App: React.FC = () => {
           { type: 'link' as const, text: 'Load Balancers', href: 'elasticloadbalancing/loadbalancers', icon: <AwsServiceIcon service="elasticloadbalancing" size={18} /> },
           { type: 'link' as const, text: 'Target Groups', href: 'elasticloadbalancing/targetgroups' },
           { type: 'link' as const, text: 'Registered Targets', href: 'elasticloadbalancing/targets' },
+          { type: 'link' as const, text: 'Health checks', href: 'elasticloadbalancing/healthchecks' },
+          { type: 'link' as const, text: 'Attributes', href: 'elasticloadbalancing/attributes' },
           { type: 'link' as const, text: 'Listeners', href: 'elasticloadbalancing/listeners' },
           { type: 'divider' as const },
           { type: 'link' as const, text: '← Console Home', href: 'home' },

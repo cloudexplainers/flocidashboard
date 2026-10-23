@@ -15,11 +15,14 @@ from .autoscaling_api import (
     delete_launch_configuration,
     delete_lifecycle_hook,
     delete_policy,
+    describe_instance_refreshes,
     detach_instances,
     detach_target_groups,
     put_lifecycle_hook,
     put_scaling_policy,
     set_desired_capacity,
+    set_instance_health,
+    start_instance_refresh,
     terminate_instance,
     update_auto_scaling_group,
 )
@@ -191,3 +194,35 @@ def autoscaling_policy_delete(request, name: str, policy_name: str):
         return JsonResponse(delete_policy(name, policy_name))
     except Exception as exc:
         return handle_action_error(exc, service='autoscaling', operation='delete_policy')
+
+
+@require_http_methods(['GET', 'POST'])
+def autoscaling_group_instance_refreshes(request, name: str):
+    if request.method == 'GET':
+        try:
+            return JsonResponse(describe_instance_refreshes(name))
+        except Exception as exc:
+            return handle_action_error(exc, service='autoscaling', operation='describe_instance_refreshes')
+    try:
+        body = parse_json_body(request) if request.body else {}
+        return JsonResponse(start_instance_refresh(
+            name,
+            min_healthy_percentage=body.get('min_healthy_percentage'),
+            instance_warmup=body.get('instance_warmup'),
+            skip_matching=body.get('skip_matching') is True,
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='autoscaling', operation='start_instance_refresh')
+
+
+@require_http_methods(['POST'])
+def autoscaling_instance_health(request, instance_id: str):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(set_instance_health(
+            instance_id,
+            body.get('health_status', ''),
+            should_respect_grace_period=body.get('should_respect_grace_period') is True,
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='autoscaling', operation='set_instance_health')

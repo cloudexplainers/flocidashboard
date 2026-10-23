@@ -17,6 +17,11 @@ from .elasticloadbalancing_api import (
     delete_rule,
     delete_target_group,
     deregister_targets,
+    describe_target_group_attributes,
+    modify_listener,
+    modify_rule,
+    modify_target_group_attributes,
+    modify_target_group_health_check,
     register_targets,
     remove_tags,
 )
@@ -96,8 +101,21 @@ def elbv2_listeners_create(request):
         return handle_action_error(exc, service='elasticloadbalancing', operation='create_listener')
 
 
-@require_http_methods(['DELETE'])
+@require_http_methods(['PUT', 'DELETE'])
 def elbv2_listener_delete(request, listener_arn: str):
+    if request.method == 'PUT':
+        try:
+            body = parse_json_body(request)
+            return JsonResponse(modify_listener(
+                listener_arn,
+                port=body.get('port'),
+                action_type=body.get('action_type') or '',
+                target_group_arn=body.get('target_group_arn') or '',
+                status_code=body.get('status_code'),
+                message_body=body.get('message_body') or '',
+            ))
+        except Exception as exc:
+            return handle_action_error(exc, service='elasticloadbalancing', operation='modify_listener')
     try:
         return JsonResponse(delete_listener(listener_arn))
     except Exception as exc:
@@ -118,8 +136,19 @@ def elbv2_rules_create(request):
         return handle_action_error(exc, service='elasticloadbalancing', operation='create_rule')
 
 
-@require_http_methods(['DELETE'])
+@require_http_methods(['PUT', 'DELETE'])
 def elbv2_rule_delete(request, rule_arn: str):
+    if request.method == 'PUT':
+        try:
+            body = parse_json_body(request)
+            return JsonResponse(modify_rule(
+                rule_arn,
+                path_pattern=body.get('path_pattern') or '',
+                target_group_arn=body.get('target_group_arn') or '',
+                priority=body.get('priority'),
+            ))
+        except Exception as exc:
+            return handle_action_error(exc, service='elasticloadbalancing', operation='modify_rule')
     try:
         return JsonResponse(delete_rule(rule_arn))
     except Exception as exc:
@@ -136,3 +165,41 @@ def elbv2_tags(request):
     except Exception as exc:
         operation = 'remove_tags' if request.method == 'DELETE' else 'add_tags'
         return handle_action_error(exc, service='elasticloadbalancing', operation=operation)
+
+
+@require_http_methods(['GET', 'PUT'])
+def elbv2_target_group_attributes(request, target_group_arn: str):
+    if request.method == 'GET':
+        try:
+            return JsonResponse(describe_target_group_attributes(target_group_arn))
+        except Exception as exc:
+            return handle_action_error(exc, service='elasticloadbalancing', operation='describe_target_group_attributes')
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(modify_target_group_attributes(
+            target_group_arn,
+            stickiness_enabled=body.get('stickiness_enabled'),
+            stickiness_type=body.get('stickiness_type') or '',
+            stickiness_duration_seconds=body.get('stickiness_duration_seconds'),
+            app_cookie_name=body.get('app_cookie_name') or '',
+            deregistration_delay_seconds=body.get('deregistration_delay_seconds'),
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='elasticloadbalancing', operation='modify_target_group_attributes')
+
+
+@require_http_methods(['PUT'])
+def elbv2_target_group_health_check(request, target_group_arn: str):
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(modify_target_group_health_check(
+            target_group_arn,
+            path=body.get('path') or '',
+            interval_seconds=body.get('interval_seconds'),
+            timeout_seconds=body.get('timeout_seconds'),
+            healthy_threshold=body.get('healthy_threshold'),
+            unhealthy_threshold=body.get('unhealthy_threshold'),
+            matcher=body.get('matcher') or '',
+        ))
+    except Exception as exc:
+        return handle_action_error(exc, service='elasticloadbalancing', operation='modify_target_group')

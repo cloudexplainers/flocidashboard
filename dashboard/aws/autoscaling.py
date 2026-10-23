@@ -229,6 +229,9 @@ def autoscaling_inventory() -> dict[str, Any]:
             'DescribeScalingActivities',
             'SetDesiredCapacity',
             'TerminateInstanceInAutoScalingGroup',
+            'StartInstanceRefresh',
+            'DescribeInstanceRefreshes',
+            'SetInstanceHealth',
             'SuspendProcesses',
             'ResumeProcesses',
             'PutLifecycleHook',
@@ -242,11 +245,14 @@ def autoscaling_inventory() -> dict[str, Any]:
             'Floci scales a group only through its desired capacity: it launches and terminates EC2 instances to match it and registers them with its target groups. Suspending Launch or Terminate stops that.',
             'Scaling policies are stored but never run. No CloudWatch alarm action triggers them and target tracking creates no alarms. Change the desired capacity to scale.',
             'Scheduled actions are stored but never run at their scheduled time.',
+            'Instance refresh really replaces instances, but all at once: minimum healthy percentage and instance warmup are stored and reported, not applied. Suspending the InstanceRefresh process pauses a refresh.',
+            'Set instance health records the status, but Floci never replaces an Unhealthy instance and ignores the grace period. A terminated or stopped instance is replaced to keep the desired capacity.',
             'Lifecycle hooks are stored, but instances never wait in Pending:Wait or Terminating:Wait, and CompleteLifecycleAction changes nothing.',
         ],
         'not_supported': [
             'Notification configurations (PutNotificationConfiguration, DescribeNotificationConfigurations, DeleteNotificationConfiguration)',
             'DescribeTags and DescribeScalingProcessTypes',
+            'CancelInstanceRefresh and RollbackInstanceRefresh',
         ],
     }
 

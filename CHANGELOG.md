@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- HA web tier controls (see "HA web tier controls" in `docs/console-accuracy-review.md`):
+  - **Load balancer console:** new Health checks and Attributes tabs for a target group: edit the health check path, success codes, thresholds, timeout and interval, the deregistration delay, and stickiness (load balancer or application cookie, with duration). Listeners have Edit (port and default action: forward to a target group or a fixed response), and the selected listener's rules are listed in priority order with Add rule, Edit (path, target group, priority) and Delete.
+  - **Auto Scaling workbench:** Start instance refresh, Describe instance refreshes and Set instance health.
+  - **Says what Floci doesn't apply:** stickiness and the deregistration delay are stored but not applied (requests go round robin with no cookie; deregistered targets are removed at once); a changed health check interval is reported but probing keeps the old interval; an instance refresh replaces every instance at once whatever the minimum healthy percentage; an Unhealthy instance is never replaced. Floci can't cancel or roll back a refresh, so the dashboard doesn't offer it. Settings Floci would store without checking (out-of-range delays or durations, reserved cookie names) are refused with the AWS limits.
+
 - RDS and Aurora resilience:
   - **Console:** a database's Actions menu adds Create read replica, Promote and Restore to point in time (latest restorable time or a custom UTC time); a cluster's Actions menu adds Add reader, Failover (to a chosen reader or the one RDS picks) and Take snapshot. The Snapshots tab lists cluster snapshots, which restore to a new cluster or delete after typed confirmation. A database's Configuration tab shows its replication role, source, replicas, replication status and latest restorable time.
   - **Says what Floci doesn't do:** point-in-time restore copies the source as it is now whatever time you choose; a replica gets one copy of its PostgreSQL source and isn't updated afterwards (and accepts writes); Multi-AZ runs no standby; a failover moves only the writer role, because a cluster's instances share one database; cluster snapshots are Aurora PostgreSQL only.

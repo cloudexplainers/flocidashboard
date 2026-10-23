@@ -3948,3 +3948,111 @@ test('Settings reports auth flags the dashboard cannot see as not known', async 
   await expect(page.getByText('Off', { exact: true }).filter({ visible: true })).toHaveCount(1);
   await expect(page.getByText('Permissive (Default)', { exact: true })).toHaveCount(0);
 });
+
+const haInventory = {
+  v2_load_balancers: [{ name: 'web-alb', arn: 'arn:lb:web', dns_name: 'web.local', state: { Code: 'active' } }],
+  listeners: [{ arn: 'arn:listener:web', load_balancer_name: 'web-alb', protocol: 'HTTP', port: 80, default_actions: [{ Type: 'forward', TargetGroupArn: 'arn:tg:web' }] }],
+  rules: [
+    { arn: 'arn:rule:api', listener_arn: 'arn:listener:web', priority: '10', conditions: [{ Field: 'path-pattern', Values: ['/api/*'], PathPatternConfig: { Values: ['/api/*'] } }], actions: [{ Type: 'forward', TargetGroupArn: 'arn:tg:api' }], is_default: false },
+    { arn: 'arn:rule:default', listener_arn: 'arn:listener:web', priority: 'default', conditions: [], actions: [{ Type: 'forward', TargetGroupArn: 'arn:tg:web' }], is_default: true },
+  ],
+  target_groups: [
+    { name: 'web', arn: 'arn:tg:web', protocol: 'HTTP', port: 80, target_type: 'instance', health_check_protocol: 'HTTP', health_check_path: '/health', health_check_interval_seconds: 30, health_check_timeout_seconds: 5, healthy_threshold_count: 5, unhealthy_threshold_count: 2, matcher: { HttpCode: '200' },
+      attributes: { 'deregistration_delay.timeout_seconds': '300', 'stickiness.enabled': 'false', 'stickiness.type': 'lb_cookie', 'stickiness.lb_cookie.duration_seconds': '86400', 'load_balancing.algorithm.type': 'round_robin', 'slow_start.duration_seconds': '0' } },
+    { name: 'api', arn: 'arn:tg:api', protocol: 'HTTP', port: 80, target_type: 'instance', attributes: {} },
+  ],
+  target_health: [],
+};
+
+test('target group attributes say Floci stores stickiness without applying it and save what was entered', async ({ page }) => {
+  await inventory(page, 'elasticloadbalancing', haInventory);
+  let payload: any = null;
+  await page.route('**/api/elasticloadbalancing/target-groups/**/attributes/', route => { payload = { url: decodeURIComponent(route.request().url()), method: route.request().method(), body: route.request().postDataJSON() }; return route.fulfill({ json: { attributes: {} } }); });
+  await page.goto('/elasticloadbalancing/attributes?tg=arn%3Atg%3Aweb');
+  await expect(page.getByRole('heading', { name: 'Attributes', exact: true })).toBeVisible();
+  await expect(page.getByText('300 seconds', { exact: true })).toBeVisible();
+  await expect(page.getByText('Off', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('floci-note').first()).toContainText('no draining period');
+  await page.getByRole('button', { name: 'Edit attributes', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Deregistration delay').fill('30');
+  await dialog.getByText('Turn on stickiness', { exact: true }).click();
+  await dialog.getByLabel('Stickiness duration').fill('120');
+  await expect(dialog.getByTestId('floci-note')).toContainText('doesn’t apply them');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => payload?.method).toBe('PUT');
+  expect(payload.url).toContain('/target-groups/arn:tg:web/attributes/');
+  expect(payload.body).toEqual({ deregistration_delay_seconds: 30, stickiness_enabled: true, stickiness_type: 'lb_cookie', stickiness_duration_seconds: 120 });
+  await expect(page.getByText(/Attributes for "web" saved\. Floci stores stickiness/)).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+});
+
+test('health check settings edit sends only the health check fields and shows the error Floci returns', async ({ page }) => {
+  await inventory(page, 'elasticloadbalancing', haInventory);
+  let body: any = null;
+  await page.route('**/api/elasticloadbalancing/target-groups/**/health-check/', route => { body = route.request().postDataJSON(); return route.fulfill({ status: 400, json: { error: 'Timeout must be shorter than the interval' } }); });
+  await page.goto('/elasticloadbalancing/healthchecks?tg=arn%3Atg%3Aweb');
+  const panel = page.getByRole('tabpanel', { name: 'Health checks' });
+  await expect(panel.getByText('/health', { exact: true })).toBeVisible();
+  await expect(panel.getByText('30 seconds', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('floci-note').first()).toContainText('keeps probing at the interval');
+  await page.getByRole('button', { name: 'Edit health check settings', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Health check path').fill('/ready');
+  await dialog.getByLabel('Timeout').fill('30');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => body).toEqual({ path: '/ready', interval_seconds: 30, timeout_seconds: 30, healthy_threshold: 5, unhealthy_threshold: 2, matcher: '200' });
+  await expect(page.getByText('Timeout must be shorter than the interval', { exact: true })).toBeVisible();
+});
+
+test('listeners can change port and default action, and rules can be edited in priority order', async ({ page }) => {
+  await inventory(page, 'elasticloadbalancing', haInventory);
+  let listenerBody: any = null;
+  let ruleBody: any = null;
+  await page.route('**/api/elasticloadbalancing/listeners/**', route => { listenerBody = route.request().postDataJSON(); return route.fulfill({ json: { listeners: [] } }); });
+  await page.route('**/api/elasticloadbalancing/rules/**', route => { ruleBody = { method: route.request().method(), url: decodeURIComponent(route.request().url()), body: route.request().postDataJSON() }; return route.fulfill({ json: {} }); });
+  await page.goto('/elasticloadbalancing/listeners?lb=arn%3Alb%3Aweb');
+  await expect(page.getByText('Forward to web', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Rules for HTTP:80/ })).toBeVisible();
+  const rows = page.getByRole('row');
+  await expect(rows.filter({ hasText: 'path-pattern is /api/*' })).toContainText('Forward to api');
+  await expect(rows.filter({ hasText: 'If no other rule applies' })).toContainText('Edit the listener to change the default action');
+  await page.getByRole('button', { name: 'Edit listener HTTP:80', exact: true }).click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Listener port').fill('8080');
+  await dialog.getByText('Return fixed response', { exact: true }).click();
+  await dialog.getByLabel('Response code').fill('503');
+  await dialog.getByLabel('Response body').fill('maintenance');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => listenerBody).toEqual({ port: 8080, action_type: 'fixed-response', status_code: 503, message_body: 'maintenance' });
+  await page.getByRole('button', { name: 'Edit rule 10', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel('Path pattern')).toHaveValue('/api/*');
+  await dialog.getByLabel('Path pattern').fill('/v2/*');
+  await dialog.getByLabel('Rule priority').fill('5');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => ruleBody?.method).toBe('PUT');
+  expect(ruleBody.url).toContain('/rules/arn:rule:api/');
+  expect(ruleBody.body).toEqual({ path_pattern: '/v2/*', priority: 5 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+});
+
+test('Auto Scaling workbench labels instance refresh and Set instance health with what Floci does', async ({ page }) => {
+  await inventory(page, 'autoscaling', { groups: [{ name: 'web-asg', instances: [{ InstanceId: 'i-web1', LifecycleState: 'InService', HealthStatus: 'Healthy' }] }] });
+  let health: any = null;
+  await page.route('**/api/autoscaling/instances/i-web1/health/', route => { health = route.request().postDataJSON(); return route.fulfill({ json: { instance_id: 'i-web1', health_status: 'Unhealthy' } }); });
+  await page.goto('/autoscaling/');
+  await page.getByRole('button', { name: /^Operation / }).click();
+  await expect(page.getByRole('option', { name: /Cancel instance refresh/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /^Start instance refresh/ }).click();
+  await expect(page.getByText(/replaces them for real but all at once/).first()).toBeVisible();
+  await expect(page.getByText(/can't cancel or roll back a refresh/).first()).toBeVisible();
+  await page.getByRole('button', { name: /^Operation / }).click();
+  await page.getByRole('option', { name: /^Set instance health/ }).click();
+  await expect(page.getByText(/doesn't replace an Unhealthy instance/).first()).toBeVisible();
+  await page.getByLabel('Instance', { exact: true }).fill('i-web1');
+  await page.getByRole('button', { name: 'Execute Set instance health', exact: true }).click();
+  await expect.poll(() => health).toEqual({ health_status: 'Unhealthy' });
+});
