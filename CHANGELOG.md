@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.0.2 — 2026-10-23
 
 - More Floci features the console didn't show (Route 53, CloudFront):
   - **Route 53 private hosted zones:** Create hosted zone offers a private zone on a VPC, and private zones get a VPCs tab to associate and disassociate VPCs (at least one stays, as on AWS). A Floci note says its DNS server answers private zones to any client.
