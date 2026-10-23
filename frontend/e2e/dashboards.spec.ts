@@ -398,21 +398,71 @@ test('API Gateway route tests and create/delete send the backend contract', asyn
 });
 
 test('generic workbench opens one task, prefills resource fields, and clears stale resource context', async ({ page }) => {
-  await inventory(page, 'acm', { certificates: [{ name: 'example.test', certificate: 'certificate-review', status: 'ISSUED' }] });
+  await inventory(page, 'acm', { certificates: [{ name: 'example.test', arn: 'certificate-review', status: 'ISSUED' }] });
   await page.route('**/api/acm/certificates/certificate-review/', route => route.fulfill({ json: { Certificate: 'returned-certificate' } }));
   await page.goto('/acm/');
   await expect(page.getByRole('button', { name: /^Execute / })).toHaveCount(0);
   await page.getByRole('radio').first().check();
   await page.getByRole('button', { name: /^Operation / }).click();
   await page.getByRole('option', { name: 'Get certificate PEM', exact: true }).click();
-  await expect(page.getByLabel('certificate', { exact: true })).toHaveValue('certificate-review');
+  await expect(page.getByLabel('Certificate ARN', { exact: true })).toHaveValue('certificate-review');
   await expect(page.getByRole('button', { name: /^Execute / })).toHaveCount(1);
   await page.getByRole('button', { name: 'Execute Get certificate PEM', exact: true }).click();
   await expect(page.getByText('Operation Succeeded', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Response details', exact: true }).click();
   await expect(page.getByText(/returned-certificate/)).toBeVisible();
-  await expect(page.getByLabel('certificate', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Certificate ARN', { exact: true })).toHaveValue('');
   await page.screenshot({ path: 'test-results/screenshots/generic-operation.png', fullPage: true });
+});
+
+test('generic workbench fills only the selected resource and its parents, and deletes need typed confirmation', async ({ page }) => {
+  await inventory(page, 'transfer', {
+    servers: [{ name: 's-1234', id: 's-1234', state: 'ONLINE' }],
+    users: [{ name: 'alice', user_name: 'alice', server_id: 's-1234' }],
+    notes: ['Floci Transfer Family covers the management-plane API only.', 'Floci 1.5.20 adds an example changelog line.'],
+    supported: ['CreateServer'],
+  });
+  let deleted = '';
+  await page.route('**/api/transfer/servers/s-1234/users/alice/', route => { deleted = route.request().method(); return route.fulfill({ json: { ok: true } }); });
+  await page.goto('/transfer/');
+  await page.getByRole('button', { name: /^Resource type/ }).click();
+  await expect(page.getByRole('option', { name: /^Notes/ })).toHaveCount(0);
+  await page.getByRole('option', { name: 'Users (1)', exact: true }).click();
+  await page.getByRole('button', { name: 'alice', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete resource', exact: true }).click();
+  await page.getByRole('button', { name: /^Operation / }).click();
+  await page.getByRole('option', { name: 'Delete server', exact: true }).click();
+  await expect(page.getByLabel('Server', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: /^Operation / }).click();
+  await page.getByRole('option', { name: 'Delete user', exact: true }).click();
+  await expect(page.getByLabel('Server', { exact: true })).toHaveValue('s-1234');
+  await expect(page.getByLabel('User', { exact: true })).toHaveValue('alice');
+  await page.getByRole('button', { name: 'Execute Delete user', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Target: server s-1234, user alice')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Delete user', exact: true })).toBeDisabled();
+  await dialog.getByLabel('Confirmation text').fill('delete');
+  await dialog.getByRole('button', { name: 'Delete user', exact: true }).click();
+  await expect.poll(() => deleted).toBe('DELETE');
+  await expect(page.getByText('How Floci emulates this service', { exact: true })).toBeVisible();
+  await expect(page.getByText('Floci Transfer Family covers the management-plane API only.')).toBeVisible();
+  await expect(page.getByText(/example changelog line/)).toHaveCount(0);
+});
+
+test('generic workbench selects show AWS values and send the visible default', async ({ page }) => {
+  await inventory(page, 'kinesis', { streams: [] });
+  let payload: any = null;
+  await page.route('**/api/kinesis/streams/', route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    payload = route.request().postDataJSON();
+    return route.fulfill({ json: { name: 'orders' } });
+  });
+  await page.goto('/kinesis/');
+  await page.getByRole('button', { name: 'Create resource', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Stream mode/ })).toContainText('ON_DEMAND');
+  await page.getByLabel('Stream name', { exact: true }).fill('orders');
+  await page.getByRole('button', { name: 'Execute Create stream', exact: true }).click();
+  await expect.poll(() => payload).toEqual({ name: 'orders', mode: 'ON_DEMAND' });
 });
 
 test('resource details preserve returned SQS and DynamoDB ARNs across Regions', async ({ page }) => {
@@ -465,7 +515,7 @@ test('API Gateway and generic task forms remain usable on narrow screens', async
 });
 
 test('generic inventory exposes readable details and contextual actions', async ({ page }) => {
-  await inventory(page, 'acm', { certificates: [{ name: 'example.test', certificate: 'review-cert', status: 'FAILED' }] });
+  await inventory(page, 'acm', { certificates: [{ name: 'example.test', arn: 'review-cert', status: 'FAILED' }] });
   await page.goto('/acm/');
   await expect(page.getByRole('button', { name: 'Delete resource', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'example.test', exact: true }).click();
@@ -473,7 +523,7 @@ test('generic inventory exposes readable details and contextual actions', async 
   await expect(page.getByText('FAILED', { exact: true })).toHaveCount(2);
   await expect(page.getByRole('button', { name: 'Raw resource JSON', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await page.getByRole('button', { name: 'Delete resource', exact: true }).click();
-  await expect(page.getByLabel('certificate', { exact: true })).toHaveValue('review-cert');
+  await expect(page.getByLabel('Certificate ARN', { exact: true })).toHaveValue('review-cert');
   await page.screenshot({ path: 'test-results/screenshots/resource-details.png', fullPage: true });
 });
 
@@ -832,11 +882,62 @@ test('S3 bucket links preserve selection across tabs and reload without claiming
   await page.screenshot({ path: 'test-results/screenshots/s3-resource.png', fullPage: true });
 });
 
+test('S3 Show versions lists versions and delete markers and permanently deletes one version', async ({ page }) => {
+  await inventory(page, 's3', { buckets: [{ Name: 'versioned' }] });
+  let deleteBody: any = null;
+  await page.route('**/api/s3/buckets/versioned/objects/?*', route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('versions') !== '1') return route.fulfill({ json: { bucket: 'versioned', prefix: '', folders: [], objects: [], is_truncated: false, key_count: 0 } });
+    return route.fulfill({ json: { bucket: 'versioned', prefix: '', folders: [], is_truncated: false, key_count: 2, objects: [
+      { key: 'a.txt', name: 'a.txt', type: 'delete_marker', size: null, version_id: 'marker-1', is_latest: true, last_modified: '2026-10-22T10:00:00Z' },
+      { key: 'a.txt', name: 'a.txt', type: 'file', size: 2, version_id: 'version-1', is_latest: false, last_modified: '2026-10-21T10:00:00Z' },
+    ] } });
+  });
+  await page.route('**/api/s3/buckets/versioned/objects/', route => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    deleteBody = route.request().postDataJSON();
+    return route.fulfill({ json: { deleted: [{ Key: 'a.txt', VersionId: 'version-1' }], errors: [] } });
+  });
+  await page.goto('/s3/objects?bucket=versioned');
+  await expect(page.getByText("You don't have any objects in this bucket.")).toBeVisible();
+  await page.getByText('Show versions', { exact: true }).click();
+  await expect(page.getByText('Delete marker', { exact: true })).toBeVisible();
+  await expect(page.getByText('version-1', { exact: true })).toBeVisible();
+  await page.getByRole('row').filter({ hasText: 'version-1' }).getByRole('radio').check();
+  await page.getByRole('button', { name: 'Delete', exact: true }).last().click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('Deleting version version-1 of a.txt permanently removes that version');
+  await dialog.getByLabel('Confirmation text').fill('permanently delete');
+  await dialog.getByRole('button', { name: 'Delete objects', exact: true }).click();
+  await expect.poll(() => deleteBody).toEqual({ keys: [{ key: 'a.txt', version_id: 'version-1' }] });
+});
+
 test('S3 missing bucket link does not expose another bucket details', async ({ page }) => {
   await inventory(page, 's3', { buckets: [{ Name: 'available-bucket' }] });
   await page.goto('/s3/objects?bucket=missing-bucket');
   await expect(page.getByText('Bucket “missing-bucket” was not found. Select an available bucket.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Bucket: available-bucket', exact: true })).toHaveCount(0);
+});
+
+test('Lambda code source edits a package file and deploys only changed files', async ({ page }) => {
+  await inventory(page, 'lambda', { functions: [{ FunctionName: 'worker', Runtime: 'python3.12', Handler: 'app.handler', State: 'Active' }] });
+  let deployed: any = null;
+  await page.route('**/api/lambda/functions/worker/source/', route => {
+    if (route.request().method() === 'PUT') { deployed = route.request().postDataJSON(); return route.fulfill({ json: { last_update_status: 'Successful' } }); }
+    return route.fulfill({ json: { handler_file: 'app.py', files: [
+      { name: 'app.py', size: 40, editable: true, content: 'def handler(event, context):\n    return 1\n' },
+      { name: 'lib/native.so', size: 9000, editable: false },
+    ] } });
+  });
+  await page.goto('/lambda/code?function=worker');
+  const editor = page.getByLabel('Code for app.py', { exact: true });
+  await expect(editor).toHaveValue(/return 1/);
+  await expect(page.getByRole('button', { name: 'Deploy', exact: true })).toBeDisabled();
+  await editor.fill('def handler(event, context):\n    return 2\n');
+  await expect(page.getByText('Changes not deployed', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Deploy', exact: true }).click();
+  await expect.poll(() => deployed).toEqual({ files: { 'app.py': 'def handler(event, context):\n    return 2\n' } });
+  await expect(page.getByText('Successfully updated the function worker.', { exact: true })).toBeVisible();
 });
 
 test('Lambda function links retain context and show actual execution state', async ({ page }) => {
@@ -862,6 +963,38 @@ test('Lambda rejects invalid test events before invoking', async ({ page }) => {
 });
 
 const messagingQueueArn = 'arn:aws:sqs:eu-west-1:123456789012:orders-dead';
+test('SQS edit queue sends only changed attributes and DLQ redrive starts from the DLQ', async ({ page }) => {
+  const deadArn = 'arn:aws:sqs:eu-west-1:123456789012:orders-dead';
+  await inventory(page, 'sqs', { queues: [
+    { name: 'orders', arn: 'arn:aws:sqs:eu-west-1:123456789012:orders', attributes: { QueueArn: 'arn:aws:sqs:eu-west-1:123456789012:orders', VisibilityTimeout: '30', MessageRetentionPeriod: '345600', DelaySeconds: '0', MaximumMessageSize: '262144', ReceiveMessageWaitTimeSeconds: '0' } },
+    { name: 'orders-dead', arn: deadArn, attributes: { QueueArn: deadArn, VisibilityTimeout: '30' }, dead_letter_source_queues: ['http://local/orders'] },
+    { name: 'events.fifo', arn: 'arn:aws:sqs:eu-west-1:123456789012:events.fifo', attributes: { QueueArn: 'arn:aws:sqs:eu-west-1:123456789012:events.fifo', FifoQueue: 'true' } },
+  ] });
+  let attributes: any = null;
+  let redrive: any = null;
+  await page.route('**/api/sqs/queues/orders/attributes/', route => { attributes = route.request().postDataJSON(); return route.fulfill({ json: { updated: true } }); });
+  await page.route('**/api/sqs/queues/orders-dead/redrive/', route => { redrive = route.request().postDataJSON(); return route.fulfill({ json: { TaskHandle: 'task-1' } }); });
+  await page.goto('/sqs/attributes?queue=orders');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Edit orders' });
+  await dialog.getByLabel('Visibility timeout (seconds)', { exact: true }).fill('50000');
+  await expect(dialog.getByText('Enter a whole number from 0 to 43200.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+  await dialog.getByLabel('Visibility timeout (seconds)', { exact: true }).fill('60');
+  await dialog.getByText('Enabled', { exact: true }).click();
+  await dialog.getByRole('button', { name: /Queue ARN|Dead-letter queue/ }).click();
+  await expect(page.getByRole('option', { name: /events\.fifo/ })).toHaveCount(0);
+  await page.getByRole('option', { name: /orders-dead/ }).click();
+  await dialog.getByLabel('Maximum receives', { exact: true }).fill('5');
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => attributes).toEqual({ attributes: { VisibilityTimeout: '60', RedrivePolicy: JSON.stringify({ deadLetterTargetArn: deadArn, maxReceiveCount: 5 }) } });
+  await expect(page.getByText('Queue "orders" updated.', { exact: true })).toBeVisible();
+  await page.goto('/sqs/attributes?queue=orders-dead');
+  await page.getByRole('button', { name: 'Start DLQ redrive', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Start DLQ redrive' }).getByRole('button', { name: 'DLQ redrive', exact: true }).click();
+  await expect.poll(() => redrive).toEqual({ source_arn: deadArn });
+});
+
 const messagingTopicArn = 'arn:aws:sns:eu-west-1:123456789012:orders-events';
 test('SQS delivery overview links dead-letter queues and retains resource context', async ({ page }) => {
   await inventory(page, 'sqs', { queues: [
@@ -910,6 +1043,27 @@ test('SNS policy view uses actual statements and preserves topic on reload', asy
   await expect(page.getByRole('cell', { name: 'sns:Publish', exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/screenshots/sns-mobile.png', fullPage: true });
+});
+
+test('SNS access policy edits validate JSON and save with SetTopicAttributes', async ({ page }) => {
+  await inventory(page, 'sns', { topics: [{ arn: messagingTopicArn, attributes: { Policy: JSON.stringify({ Version: '2012-10-17', Statement: [] }) } }] });
+  let patch: any = null;
+  await page.route('**/api/sns/topics/**', route => {
+    if (route.request().method() !== 'PATCH') return route.fallback();
+    patch = route.request().postDataJSON();
+    return route.fulfill({ json: { topic_arn: messagingTopicArn, attributes: {} } });
+  });
+  await page.goto(`/sns/policy?${new URLSearchParams({ topic: messagingTopicArn })}`);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const editor = page.getByRole('textbox', { name: /Policy JSON|Topic access policy JSON/ });
+  await editor.fill('{bad');
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(page.getByText('The access policy must be valid JSON.', { exact: true })).toBeVisible();
+  expect(patch).toBeNull();
+  const policy = JSON.stringify({ Version: '2012-10-17', Statement: [{ Effect: 'Allow', Principal: { Service: 'events.amazonaws.com' }, Action: 'sns:Publish', Resource: messagingTopicArn }] });
+  await editor.fill(policy);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => patch).toEqual({ attribute_name: 'Policy', attribute_value: policy });
 });
 
 test('SNS never invents a default access policy', async ({ page }) => {
@@ -976,6 +1130,38 @@ test('DynamoDB normalizes live schema, TTL, streams and capacity and preserves t
   await expect(page.getByRole('cell', { name: 'ByStatus', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Keys only', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/screenshots/dynamodb-schema.png', fullPage: true });
+});
+
+test('DynamoDB query builder sends a typed key condition and PartiQL can write', async ({ page }) => {
+  await inventory(page, 'dynamodb', { tables: [dynamoReviewTable] });
+  let query: any = null;
+  let statement: any = null;
+  await page.route('**/api/dynamodb/tables/Orders/scan/', route => route.fulfill({ json: { items: [] } }));
+  await page.route('**/api/dynamodb/tables/Orders/query/', route => { query = route.request().postDataJSON(); return route.fulfill({ json: { items: [{ customerId: 'alice', orderDate: 3 }] } }); });
+  await page.route('**/api/dynamodb/partiql/', route => { statement = route.request().postDataJSON(); return route.fulfill({ json: { statement_type: 'DELETE', items: [] } }); });
+  await page.goto('/dynamodb/items?table=Orders');
+  await page.getByText('Query', { exact: true }).click();
+  await page.getByLabel('Partition key value', { exact: true }).fill('alice');
+  await page.getByRole('button', { name: /Sort key condition|orderDate \(Sort key\)/ }).first().click();
+  await page.getByRole('option', { name: 'Between', exact: true }).click();
+  await page.getByLabel('Sort key value', { exact: true }).fill('1');
+  await page.getByLabel('Sort key upper value', { exact: true }).fill('x');
+  await expect(page.getByText('Enter a number.', { exact: true })).toBeVisible();
+  await page.getByLabel('Sort key upper value', { exact: true }).fill('5');
+  await page.getByText('Sort descending', { exact: true }).click();
+  await page.getByRole('button', { name: 'Run', exact: true }).first().click();
+  await expect.poll(() => query).toMatchObject({
+    key_condition_expression: '#pk = :pk AND #sk BETWEEN :sk AND :sk2',
+    expression_attribute_names: { '#pk': 'customerId', '#sk': 'orderDate' },
+    expression_attribute_values: { ':pk': 'alice', ':sk': 1, ':sk2': 5 },
+    scan_index_forward: false,
+  });
+  await expect(page.getByText('Query: showing 1 items.', { exact: false })).toBeVisible();
+  await page.getByRole('tab', { name: 'PartiQL editor', exact: true }).click();
+  await page.getByRole('textbox').last().fill('DELETE FROM "Orders" WHERE customerId = \'alice\' AND orderDate = 3');
+  await page.getByRole('button', { name: 'Run', exact: true }).last().click();
+  await expect.poll(() => statement?.statement).toContain('DELETE FROM');
+  await expect(page.getByText('DELETE statement ran successfully.', { exact: true })).toBeVisible();
 });
 
 test('DynamoDB ignores an old scan after switching tables and reports scan failures', async ({ page }) => {
@@ -1094,7 +1280,7 @@ test('Route 53 filters records and edits through the dedicated endpoint while pr
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Value', { exact: true }).fill('192.0.2.99');
-  await dialog.getByRole('button', { name: 'Save Record', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   expect(payload).toMatchObject({ action: 'UPSERT', record_set: { Name: 'www.example.test.', Type: 'A', TTL: 0, Weight: 10, SetIdentifier: 'primary', ResourceRecords: [{ Value: '192.0.2.99' }] } });
   await filter.fill('cdn.');
@@ -1109,15 +1295,35 @@ test('Route 53 creates records with relative dotted names and apex names without
   await page.route('**/api/route53/hosted-zones/ZPUBLIC/record-sets/', async route => { payloads.push(route.request().postDataJSON()); await route.fulfill({ json: { change_info: { Status: 'PENDING' } } }); });
   await page.goto('/route53?zone=ZPUBLIC');
   for (const name of ['api.dev', '@']) {
-    await page.getByRole('button', { name: 'Create Record', exact: true }).click();
+    await page.getByRole('button', { name: 'Create record', exact: true }).click();
     const dialog = page.getByRole('dialog');
-    await dialog.getByLabel('Record Name', { exact: true }).fill(name);
+    await dialog.getByLabel('Record name', { exact: true }).fill(name);
     await dialog.getByLabel('Value', { exact: true }).fill('192.0.2.5');
-    await dialog.getByRole('button', { name: 'Create Record', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Create records', exact: true }).click();
     await expect(dialog).not.toBeVisible();
   }
   expect(payloads.map(p => p.action)).toEqual(['CREATE', 'CREATE']);
   expect(payloads.map(p => p.record_set.Name)).toEqual(['api.dev.example.test.', 'example.test.']);
+});
+
+test('Route 53 deletes a record and asks for "delete" before deleting a hosted zone', async ({ page }) => {
+  await inventory(page, 'route53', dnsReviewInventory);
+  let recordChange: any = null;
+  let zoneDeleted = false;
+  await page.route('**/api/route53/hosted-zones/ZPUBLIC/record-sets/', async route => { recordChange = route.request().postDataJSON(); await route.fulfill({ json: { change_info: { Status: 'PENDING' } } }); });
+  await page.route('**/api/route53/hosted-zones/ZPUBLIC/', async route => { zoneDeleted = route.request().method() === 'DELETE'; await route.fulfill({ json: {} }); });
+  await page.goto('/route53?zone=ZPUBLIC');
+  const row = page.getByRole('row').filter({ hasText: 'www.example.test.' }).first();
+  await row.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(() => recordChange?.action).toBe('DELETE');
+  expect(recordChange.record_set.Name).toBe('www.example.test.');
+  await page.getByRole('button', { name: 'Delete zone', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await dialog.getByLabel('Confirmation text').fill('delete');
+  await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect.poll(() => zoneDeleted).toBe(true);
 });
 
 test('Route 53 failed inventory never displays fabricated records or service health', async ({ page }) => {
@@ -1265,6 +1471,8 @@ test('ECR handles missing resources, failed loads, and partial image deletion wi
   await page.getByRole('table').getByRole('checkbox').first().check();
   await page.getByRole('button', { name: 'Delete images', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Deleting an image by digest removes all of its tags.');
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true })).toBeDisabled();
+  await page.getByRole('dialog').getByLabel('Confirmation text').fill('delete');
   await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByText(/Some images could not be deleted/)).toBeVisible();
   expect(deletion.repository_name).toBe('team/backend');
@@ -1288,7 +1496,7 @@ test('KMS reads nested metadata and preserves key routes, policies, and real sta
   await inventory(page, 'kms', kmsFixture());
   await page.goto('/kms/keys');
   const pendingRow = page.getByRole('row').filter({ hasText: 'key-pending' });
-  await expect(pendingRow).toContainText('PendingDeletion');
+  await expect(pendingRow).toContainText('Pending deletion');
   const unknownRow = page.getByRole('row').filter({ hasText: 'key-unknown' });
   await expect(unknownRow).not.toContainText('Enabled');
   await page.getByRole('button', { name: 'key-app', exact: true }).click();
@@ -1307,6 +1515,50 @@ test('KMS reads nested metadata and preserves key routes, policies, and real sta
   await page.screenshot({ path: 'test-results/screenshots/kms-key-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/screenshots/kms-key-mobile.png', fullPage: true });
+});
+
+test('KMS schedules key deletion with a 7-30 day waiting period and can cancel it', async ({ page }) => {
+  await inventory(page, 'kms', kmsFixture());
+  const requests: { path: string; body: any }[] = [];
+  await page.route('**/api/kms/deletion/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    requests.push({ path, body: route.request().postDataJSON() });
+    return route.fulfill({ json: path.endsWith('/schedule/') ? { key_id: 'key-app', deletion_date: '2026-11-01T12:00:00Z', key_state: 'PendingDeletion' } : { key_id: 'key-pending', key_state: 'Disabled' } });
+  });
+  await page.goto('/kms/details?key=key-app');
+  await page.getByRole('button', { name: 'Schedule key deletion', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Schedule key deletion' });
+  await expect(dialog.getByRole('spinbutton')).toHaveValue('30');
+  await expect(dialog.getByRole('button', { name: 'Schedule deletion', exact: true })).toBeDisabled();
+  await dialog.getByRole('spinbutton').fill('6');
+  await expect(dialog.getByText('The waiting period must be between 7 and 30 days.', { exact: true })).toBeVisible();
+  await dialog.getByRole('spinbutton').fill('10');
+  await dialog.getByText(/Confirm that you want to schedule this key for deletion after a 10 day waiting period/).click();
+  await dialog.getByRole('button', { name: 'Schedule deletion', exact: true }).click();
+  await expect.poll(() => requests[0]).toEqual({ path: '/api/kms/deletion/schedule/', body: { key_id: 'key-app', pending_window_in_days: 10 } });
+  await expect(page.getByText(/Key deletion scheduled for November 1, 2026/)).toBeVisible();
+  await page.goto('/kms/details?key=key-pending');
+  await expect(page.getByRole('button', { name: 'Schedule key deletion', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Cancel key deletion', exact: true }).click();
+  await expect.poll(() => requests[1]).toEqual({ path: '/api/kms/deletion/cancel/', body: { key_id: 'key-pending' } });
+});
+
+test('KMS key aliases can be created and deleted from the Aliases tab', async ({ page }) => {
+  await inventory(page, 'kms', kmsFixture());
+  const requests: { method: string; body: any }[] = [];
+  await page.route('**/api/kms/aliases/', route => { requests.push({ method: route.request().method(), body: route.request().postDataJSON() }); return route.fulfill({ json: {} }); });
+  await page.goto('/kms/aliases?key=key-app');
+  await expect(page.getByRole('cell', { name: 'alias/backup', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create alias', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create alias' });
+  await dialog.getByPlaceholder('alias/my-app-key').fill('alias/aws/reserved');
+  await expect(dialog.getByRole('button', { name: 'Create alias', exact: true })).toBeDisabled();
+  await dialog.getByPlaceholder('alias/my-app-key').fill('reports');
+  await dialog.getByRole('button', { name: 'Create alias', exact: true }).click();
+  await expect.poll(() => requests[0]).toEqual({ method: 'POST', body: { alias_name: 'alias/reports', target_key_id: 'key-app' } });
+  await page.getByRole('row').filter({ hasText: 'alias/backup' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Delete alias' }).getByRole('button', { name: 'Delete alias', exact: true }).click();
+  await expect.poll(() => requests[1]).toEqual({ method: 'DELETE', body: { key_id: 'key-app', alias_name: 'alias/backup' } });
 });
 
 function kmsRequestAction(path: string, method: string) {
@@ -1506,6 +1758,7 @@ test('SSM creation preserves whitespace without overwriting and editing creates 
   await expect(page.getByRole('heading', { name: '/app/prod/new', exact: true })).toBeVisible();
   expect(requests[0].overwrite).toBe(false);
   expect(requests[0].value).toBe('  keep whitespace\n');
+  expect(requests[0]).toMatchObject({ tier: 'Standard', data_type: 'text' });
   await page.getByRole('button', { name: 'Edit parameter', exact: true }).click();
   await dialog.getByRole('textbox', { name: 'New value', exact: true }).fill(' next version ');
   await dialog.getByRole('button', { name: 'Save new version', exact: true }).click();
@@ -1513,6 +1766,32 @@ test('SSM creation preserves whitespace without overwriting and editing creates 
   expect(requests[1].method).toBe('PUT');
   expect(requests[1].path).toBe('/api/ssm/parameters//app/prod/new/value/');
   expect(requests[1].value).toBe(' next version ');
+});
+
+test('SSM create enforces the tier value size and sends tier and KMS key', async ({ page }) => {
+  const fixture = ssmFixture();
+  let created: any = null;
+  await page.route('**/api/ssm/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/ssm/') return route.fulfill({ json: fixture });
+    created = route.request().postDataJSON();
+    return route.fulfill({ json: { name: '/app/secret', version: 1 } });
+  });
+  await page.goto('/ssm/parameters');
+  await page.getByRole('button', { name: 'Create parameter', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Parameter name', exact: true }).fill('/app/secret');
+  await dialog.getByRole('textbox', { name: 'Value', exact: true }).fill('x'.repeat(5000));
+  await expect(dialog.getByText('The value is larger than 4 KB, the standard tier limit.', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Create parameter', exact: true })).toBeDisabled();
+  await dialog.getByRole('button', { name: /^Tier/ }).click();
+  await page.getByRole('option', { name: 'Advanced', exact: true }).click();
+  await dialog.getByRole('button', { name: /^Parameter type/ }).click();
+  await page.getByRole('option', { name: 'SecureString', exact: true }).click();
+  await dialog.getByPlaceholder('alias/aws/ssm').fill('alias/app-key');
+  await dialog.getByRole('button', { name: 'Create parameter', exact: true }).click();
+  await expect.poll(() => created).toMatchObject({ type: 'SecureString', tier: 'Advanced', key_id: 'alias/app-key' });
+  expect(created.data_type).toBeUndefined();
 });
 
 test('SSM tags accept an empty value and parameter deletion requires confirmation', async ({ page }) => {
@@ -2510,15 +2789,15 @@ test('Athena creates workgroups with explicit output settings and keeps API erro
     return route.fulfill(fail ? { status: 400, json: { error: 'Workgroup already exists' } } : { json: { name: 'team-analytics' } });
   });
   await page.goto('/athena/');
-  await page.getByRole('button', { name: 'Create Workgroup', exact: true }).click();
+  await page.getByRole('button', { name: 'Create workgroup', exact: true }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('button', { name: 'Create Workgroup', exact: true })).toBeDisabled();
-  await dialog.getByRole('textbox', { name: 'Workgroup Name', exact: true }).fill('team-analytics');
-  await dialog.getByRole('textbox', { name: 'Output Location (S3 URI)', exact: true }).fill('s3://team-results/');
-  await dialog.getByRole('button', { name: 'Create Workgroup', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Create workgroup', exact: true })).toBeDisabled();
+  await dialog.getByRole('textbox', { name: 'Workgroup name', exact: true }).fill('team-analytics');
+  await dialog.getByRole('textbox', { name: 'Location of query result - optional', exact: true }).fill('s3://team-results/');
+  await dialog.getByRole('button', { name: 'Create workgroup', exact: true }).click();
   await expect(dialog.getByText('Workgroup already exists', { exact: true })).toBeVisible();
   fail = false;
-  await dialog.getByRole('button', { name: 'Create Workgroup', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Create workgroup', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   expect(requests[1]).toMatchObject({ name: 'team-analytics', output_location: 's3://team-results/' });
 });
@@ -3260,6 +3539,26 @@ test('CloudFront function creation sends actual code and publication is explicit
   await expect(page.getByRole('dialog')).toContainText('Publishing does not associate');
 });
 
+test('CloudTrail create trail uses the console defaults and starts logging', async ({ page }) => {
+  await inventory(page, 'cloudtrail', { trails: [] });
+  const calls: { path: string; body: any }[] = [];
+  await page.route('**/api/cloudtrail/trails/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() !== 'POST') return route.fulfill({ json: {} });
+    calls.push({ path, body: route.request().postDataJSON() });
+    return route.fulfill({ json: path.endsWith('/logging/') ? { is_logging: true } : { name: 'org-audit' } });
+  });
+  await page.goto('/cloudtrail/trails');
+  await page.getByRole('button', { name: 'Create trail', exact: true }).first().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Trail name', { exact: true }).fill('org-audit');
+  await dialog.getByLabel('S3 bucket name', { exact: true }).fill('audit-logs');
+  await dialog.getByRole('button', { name: 'Create trail', exact: true }).click();
+  await expect.poll(() => calls.length).toBe(2);
+  expect(calls[0].body).toMatchObject({ name: 'org-audit', is_multi_region_trail: true, include_global_service_events: true, is_organization_trail: false });
+  expect(calls[1]).toEqual({ path: '/api/cloudtrail/trails/org-audit/logging/', body: { enabled: true } });
+});
+
 const cloudTrailFixture = { name: 'learning-audit', arn: 'arn:aws:cloudtrail:eu-west-1:123456789012:trail/learning-audit', s3_bucket_name: 'audit-logs', home_region: 'eu-west-1', is_multi_region_trail: false, include_global_service_events: false, status: { IsLogging: false, LatestDeliveryError: 'AccessDenied: bucket policy denied delivery' } };
 const auditEvent = { EventId: 'event-1', EventName: 'DeleteBucket', EventTime: '2026-10-21T12:00:00Z', Username: 'learner', Resources: [{ ResourceName: 'demo-bucket', ResourceType: 'AWS::S3::Bucket' }], CloudTrailEvent: JSON.stringify({ eventSource: 's3.amazonaws.com', awsRegion: 'eu-west-1', sourceIPAddress: '192.0.2.1', userIdentity: { type: 'AssumedRole', arn: 'arn:aws:sts::123456789012:assumed-role/Student/session' }, errorCode: 'AccessDenied', errorMessage: 'Explicit deny', readOnly: false, requestParameters: { bucketName: 'demo-bucket' } }) };
 
@@ -3285,7 +3584,7 @@ test('CloudTrail event details preserve identity errors and raw record on reload
   await expect(page.getByRole('heading', { name: 'Event: DeleteBucket', exact: true })).toBeVisible();
   await expect(page.getByText('Explicit deny', { exact: true })).toBeVisible();
   await expect(page.getByText('arn:aws:sts::123456789012:assumed-role/Student/session', { exact: true })).toBeVisible();
-  await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('No', { exact: true }).first()).toBeVisible();
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Event: DeleteBucket', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/screenshots/cloudtrail-event-desktop.png', fullPage: true });
@@ -3328,7 +3627,7 @@ test('CloudTrail selectors preserve false and replace only after explicit save',
   });
   await page.goto('/cloudtrail/trails?trail=learning-audit&tab=selectors');
   await expect(page.getByText('WriteOnly', { exact: true })).toBeVisible();
-  await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
+  await expect(page.getByText('No', { exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Edit event selectors', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Event selector JSON', { exact: true }).fill('{bad');

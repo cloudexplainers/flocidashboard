@@ -19,7 +19,7 @@ import Box from "@cloudscape-design/components/box";
 import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
-import { publishSnsMessage, snsRequest } from "../api/client";
+import { publishSnsMessage, setSnsTopicAttribute, snsRequest } from "../api/client";
 import { useSession } from "../components/SessionContext";
 import { SnsFanout } from "../components/SnsFanout";
 import {
@@ -159,6 +159,9 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
   // Deleting Subscription / Topic
   const [deletingSubArn, setDeletingSubArn] = useState<string | null>(null);
   const [deletingTopic, setDeletingTopic] = useState(false);
+  const [policyDraft, setPolicyDraft] = useState<string | null>(null);
+  const [policyError, setPolicyError] = useState("");
+  const [savingPolicy, setSavingPolicy] = useState(false);
   const [actionAlert, setActionAlert] = useState<{
     type: "success" | "error" | "info";
     message: string;
@@ -198,6 +201,28 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
         ),
       );
   }, [requested, topics]);
+
+  const savePolicy = async () => {
+    if (!activeTopic || policyDraft === null) return;
+    try {
+      JSON.parse(policyDraft);
+    } catch {
+      setPolicyError("The access policy must be valid JSON.");
+      return;
+    }
+    setSavingPolicy(true);
+    setPolicyError("");
+    try {
+      await setSnsTopicAttribute(activeTopic.TopicArn, "Policy", policyDraft);
+      setPolicyDraft(null);
+      setActionAlert({ type: "success", message: `Access policy updated for ${activeTopic.TopicArn}.` });
+      await loadData();
+    } catch (err) {
+      setPolicyError(err instanceof Error ? err.message : "Failed to update the access policy.");
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
 
   const loadData = async () => {
     const generation = ++loadGeneration.current;
@@ -1049,9 +1074,21 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
                 label: "Access policy",
                 content: (
                   <SpaceBetween size="m">
-                    <Header variant="h3" description="Defines who can access the topic. By default, only the topic owner can publish or subscribe.">Access policy</Header>
+                    <Header variant="h3" description="Defines who can access the topic. By default, only the topic owner can publish or subscribe."
+                      actions={policyDraft === null
+                        ? <Button onClick={() => { setPolicyDraft(prettySnsPolicy(activeTopic.Policy || "") || ""); setPolicyError(""); }}>Edit</Button>
+                        : <SpaceBetween direction="horizontal" size="xs">
+                            <Button variant="link" disabled={savingPolicy} onClick={() => setPolicyDraft(null)}>Cancel</Button>
+                            <Button variant="primary" loading={savingPolicy} onClick={savePolicy}>Save changes</Button>
+                          </SpaceBetween>}>Access policy</Header>
+                    {policyError && <Alert type="error">{policyError}</Alert>}
                     <PolicySummary document={activeTopic.Policy || undefined} />
-                    <textarea
+                    {policyDraft !== null && (
+                      <FormField label="Policy JSON" description="Replaces the topic's access policy (SetTopicAttributes Policy).">
+                        <Textarea ariaLabel="Topic access policy JSON" rows={14} value={policyDraft} onChange={({ detail }) => setPolicyDraft(detail.value)} />
+                      </FormField>
+                    )}
+                    {policyDraft === null && <textarea
                       readOnly
                       rows={8}
                       value={
@@ -1069,7 +1106,7 @@ const SnsWorkspace: React.FC<Props> = ({ resourcePath, onNavigate }) => {
                         borderRadius: "4px",
                         border: "1px solid #23395b",
                       }}
-                    />
+                    />}
                   </SpaceBetween>
                 ),
               },

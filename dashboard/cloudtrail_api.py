@@ -18,7 +18,7 @@ def _required(value: Any, label: str) -> str:
     return cleaned
 
 
-def create_trail(name: str, s3_bucket_name: str, *, include_global_service_events: bool = False,
+def create_trail(name: str, s3_bucket_name: str, *, include_global_service_events: bool = True,
                  is_multi_region_trail: bool = False, is_organization_trail: bool = False) -> dict[str, Any]:
     clean_name = _required(name, 'Trail name')
     bucket = _required(s3_bucket_name, 'S3 bucket name')

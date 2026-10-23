@@ -137,6 +137,8 @@ def autoscaling_inventory() -> dict[str, Any]:
             'arn': group.get('AutoScalingGroupARN'),
             'launch_configuration_name': group.get('LaunchConfigurationName'),
             'launch_template': group.get('LaunchTemplate'),
+            # The console's "Launch template/configuration" column.
+            'launch_template_name': (group.get('LaunchTemplate') or {}).get('LaunchTemplateName'),
             'mixed_instances_policy': group.get('MixedInstancesPolicy'),
             'min_size': group.get('MinSize'),
             'max_size': group.get('MaxSize'),
@@ -203,10 +205,13 @@ def autoscaling_inventory() -> dict[str, Any]:
         'notification_configurations': _clean_response(notification_configurations),
         'tags': _clean_response(tags),
         'account_limits': account_limits,
-        'adjustment_types': adjustment_types,
-        'metric_collection_types': metric_collection_types,
-        'scaling_process_types': scaling_process_types,
-        'termination_policy_types': termination_policy_types,
+        # Reference values, not resources.
+        'reference': {
+            'adjustment_types': adjustment_types,
+            'metric_collection_types': metric_collection_types,
+            'scaling_process_types': scaling_process_types,
+            'termination_policy_types': termination_policy_types,
+        },
         'supported_from_sdk': [
             'CreateAutoScalingGroup',
             'UpdateAutoScalingGroup',

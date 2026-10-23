@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import io
 import json
+import urllib.request
 import zipfile
 from typing import Any
+from urllib.parse import urlparse
 
 from botocore.exceptions import ClientError
 
@@ -92,6 +94,89 @@ def update_function_code(name: str, code: Any, *, publish: bool = False) -> dict
     kwargs.update(FunctionName=validate_function_name(name), Publish=bool(publish))
     response = _lambda_client().update_function_code(**kwargs)
     return {'function_name': kwargs['FunctionName'], 'version': response.get('Version'), 'response': _clean_response(response)}
+
+
+MAX_PACKAGE_BYTES = 10 * 1024 * 1024
+MAX_EDITABLE_FILE_BYTES = 256 * 1024
+
+
+def _download_package(name: str) -> tuple[dict[str, Any], bytes]:
+    """GetFunction plus the deployment package from Code.Location.
+
+    Only the path of Code.Location is used; the request goes to the configured Floci
+    endpoint, so a function can't point the dashboard at another host.
+    """
+    function = _lambda_client().get_function(FunctionName=validate_function_name(name))
+    configuration = function.get('Configuration', {})
+    if configuration.get('PackageType') == 'Image':
+        raise ValueError('This function is deployed as a container image. Its code is edited by pushing a new image.')
+    location = urlparse((function.get('Code') or {}).get('Location') or '')
+    if not location.path:
+        raise ValueError('Floci did not return a code location for this function.')
+    endpoint = urlparse(FlociClientFactory().endpoint_url)
+    url = endpoint._replace(path=location.path, query=location.query, params='', fragment='').geturl()
+    with urllib.request.urlopen(url, timeout=10) as response:  # noqa: S310 - fixed scheme/host from config
+        package = response.read(MAX_PACKAGE_BYTES + 1)
+    if len(package) > MAX_PACKAGE_BYTES:
+        raise ValueError('The deployment package is larger than 10 MB, too large to edit in the console.')
+    return configuration, package
+
+
+def get_function_source(name: str) -> dict[str, Any]:
+    """The function's files, with the text of small text files, as the console's code editor shows them."""
+    configuration, package = _download_package(name)
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(package))
+    except zipfile.BadZipFile as exc:
+        raise ValueError('The deployment package is not a .zip file archive.') from exc
+    module = (configuration.get('Handler') or '').rsplit('.', 1)[0]
+    files = []
+    for info in archive.infolist():
+        if info.is_dir():
+            continue
+        entry: dict[str, Any] = {'name': info.filename, 'size': info.file_size, 'editable': False}
+        if info.file_size <= MAX_EDITABLE_FILE_BYTES:
+            try:
+                entry['content'] = archive.read(info).decode('utf-8')
+                entry['editable'] = True
+            except UnicodeDecodeError:
+                pass
+        files.append(entry)
+    handler_file = next((item['name'] for item in files if item['name'].rsplit('.', 1)[0] == module), None)
+    return {
+        'function_name': configuration.get('FunctionName') or name,
+        'runtime': configuration.get('Runtime'),
+        'handler': configuration.get('Handler'),
+        'code_sha256': configuration.get('CodeSha256'),
+        'handler_file': handler_file,
+        'files': files,
+    }
+
+
+def deploy_function_source(name: str, files: Any) -> dict[str, Any]:
+    """Deploy edited files: rebuild the current package with them replaced, keeping every other file."""
+    if not isinstance(files, dict) or not files:
+        raise ValueError('Files to deploy must be an object of file name to content')
+    _, package = _download_package(name)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(package)) as current, zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as updated:
+        names = set()
+        for info in current.infolist():
+            names.add(info.filename)
+            if info.filename in files:
+                updated.writestr(info, str(files[info.filename]))
+            else:
+                updated.writestr(info, current.read(info))
+        for file_name, content in files.items():
+            if file_name not in names:
+                updated.writestr(_required(file_name, 'File name'), str(content))
+    response = _lambda_client().update_function_code(FunctionName=validate_function_name(name), ZipFile=buffer.getvalue())
+    return {
+        'function_name': response.get('FunctionName') or name,
+        'code_sha256': response.get('CodeSha256'),
+        'last_update_status': response.get('LastUpdateStatus'),
+        'response': _clean_response(response),
+    }
 
 
 def delete_function(name: str, *, qualifier: str = '') -> dict[str, Any]:

@@ -155,7 +155,6 @@ def ssm_inventory() -> dict[str, Any]:
             'ListTagsForResource',
         ],
         'notes': [
-            'This page is inferred from the SSM AWS SDK API because service docs were not provided for this pass.',
             'Parameter values are intentionally not fetched; the page shows metadata, types, tiers, policies, and tags.',
             'Document details are expanded for the first 50 document identifiers to keep page loads bounded.',
             'AWS-owned patch baselines are shown separately from the per-operating-system defaults returned by GetDefaultPatchBaseline.',

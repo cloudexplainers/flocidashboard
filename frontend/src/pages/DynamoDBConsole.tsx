@@ -1,5 +1,6 @@
 import { normalizeDynamoTable } from './dynamoResources';
 import { DynamoTableSchema, capacityModeLabel } from '../components/DynamoTableSchema';
+import { DynamoQueryBuilder, DynamoItemsRequest } from '../components/DynamoQueryBuilder';
 import ConfirmActionModal from '../components/ConfirmActionModal';
 import { formatAwsDate, formatBytes } from '../format';
 import { useSession } from '../components/SessionContext';
@@ -109,6 +110,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
   const [selectedItemRows, setSelectedItemRows] = useState<any[]>([]);
   const [scanCursor, setScanCursor] = useState<any>(null);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [itemsRequest, setItemsRequest] = useState<DynamoItemsRequest>({ mode: 'scan' });
 
   // Create / Edit Item Modal
   const [itemModalOpen, setItemModalOpen] = useState(false);
@@ -165,13 +167,13 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
 
   const activeTable = selectedTables[0] || null;
 
-  const loadTableItems = async (tbl: TableItem, append = false) => {
+  const loadTableItems = async (tbl: TableItem, append = false, request: DynamoItemsRequest = itemsRequest) => {
     const requestGeneration = ++generation.current;
     if (!append) { setTableItems([]); setScanCursor(null); }
     setItemsError('');
     setLoadingItems(true);
     try {
-      const res = await fetchDynamoDbTableScan(tbl.TableName, 50, append ? scanCursor : undefined);
+      const res = await fetchDynamoDbTableScan(tbl.TableName, 50, append ? scanCursor : undefined, request);
       if (requestGeneration !== generation.current) return;
       setTableItems(previous => append ? [...previous, ...(res.items || [])] : res.items || []);
       setScanCursor(res.last_evaluated_key || null);
@@ -185,7 +187,8 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
 
   useEffect(() => {
     if (activeTable) {
-      loadTableItems(activeTable);
+      setItemsRequest({ mode: 'scan' });
+      loadTableItems(activeTable, false, { mode: 'scan' });
       setSelectedItemRows([]); setItemModalOpen(false);
       setReadUnits(String(activeTable.ProvisionedThroughput?.ReadCapacityUnits || 5));
       setWriteUnits(String(activeTable.ProvisionedThroughput?.WriteCapacityUnits || 5));
@@ -292,9 +295,13 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
     setRunningPartiql(true);
     const start = Date.now();
     try {
-      const res = await executeDynamoDbPartiQL(partiqlQuery.trim());
+      const res: any = await executeDynamoDbPartiQL(partiqlQuery.trim());
       setPartiqlResults(res.items || []);
       setPartiqlLatency(Date.now() - start);
+      if (res.statement_type && res.statement_type !== 'SELECT') {
+        setActionMessage({ type: 'success', text: `${res.statement_type} statement ran successfully.` });
+        if (activeTable) loadTableItems(activeTable);
+      }
     } catch (err: any) {
       setActionMessage({ type: 'error', text: err.message || 'PartiQL query failed' });
     } finally {
@@ -501,6 +508,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                 id: 'items',
                 content: (
                   <SpaceBetween size="m">
+                    <DynamoQueryBuilder table={activeTable} running={loadingItems} onRun={request => { setItemsRequest(request); loadTableItems(activeTable, false, request); }} />
                     <Box float="right">
                       <SpaceBetween direction="horizontal" size="xs">
                         <Button
@@ -561,10 +569,10 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                       selectionType="single"
                       selectedItems={selectedItemRows}
                       onSelectionChange={({ detail }) => setSelectedItemRows(detail.selectedItems)}
-                      empty={<Box textAlign="center">No items returned from scan.</Box>}
+                      empty={<Box textAlign="center">No items returned from {itemsRequest.mode === 'query' ? 'query' : 'scan'}.</Box>}
                     />
                     {scanCursor && <Button loading={loadingItems} onClick={() => loadTableItems(activeTable, true)}>Load more items</Button>}
-                    <Box variant="small">Showing {tableItems.length} scanned items{scanCursor ? '; more items are available.' : '.'} Table item counts are approximate.</Box>
+                    <Box variant="small">{itemsRequest.mode === 'query' ? 'Query' : 'Scan'}{itemsRequest.index_name ? ` of index ${itemsRequest.index_name}` : ''}: showing {tableItems.length} items{scanCursor ? '; more items are available.' : '.'} Table item counts are approximate.</Box>
                     {selectedItemRows[0] && <Container header={<Header variant="h3">Selected item document</Header>}><CodeSnippet language="json" code={JSON.stringify(selectedItemRows[0], null, 2)} /></Container>}
                   </SpaceBetween>
                 ),
@@ -574,7 +582,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                 id: 'partiql',
                 content: (
                   <SpaceBetween size="m">
-                    <FormField label="PartiQL statement" description="Runs ExecuteStatement. This console only allows read-only SELECT statements.">
+                    <FormField label="PartiQL statement" description="Runs ExecuteStatement. SELECT returns items; INSERT, UPDATE and DELETE change the table.">
                       <Textarea
                         rows={3}
                         value={partiqlQuery}

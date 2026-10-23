@@ -21,6 +21,10 @@ def docdb_inventory() -> dict[str, Any]:
         lambda: core._operation_items(docdb, 'describe_db_instances', 'DBInstances'),
         [],
     ) if 'DescribeDBInstances' in operations else []
+    # DescribeDBClusters/Instances return every RDS-family resource (RDS, Neptune,
+    # DocumentDB share one API). The docdb console lists only engine "docdb".
+    clusters = [item for item in clusters if item.get('Engine') == 'docdb']
+    instances = [item for item in instances if item.get('Engine') == 'docdb']
 
     return {
         'summary': {
@@ -67,6 +71,7 @@ def list_docdb_resources(factory: core.FlociClientFactory) -> list[dict[str, Any
                 'status': cluster.get('Status'),
             }
             for cluster in _safe_value(lambda: core._operation_items(docdb, 'describe_db_clusters', 'DBClusters'), [])
+            if cluster.get('Engine') == 'docdb'
         )
 
     if 'DescribeDBInstances' in operations:
@@ -78,6 +83,7 @@ def list_docdb_resources(factory: core.FlociClientFactory) -> list[dict[str, Any
                 'status': instance.get('DBInstanceStatus'),
             }
             for instance in _safe_value(lambda: core._operation_items(docdb, 'describe_db_instances', 'DBInstances'), [])
+            if instance.get('Engine') == 'docdb'
         )
 
     return resources

@@ -281,25 +281,38 @@ def describe_time_to_live(table_name: str) -> dict[str, Any]:
     }
 
 
-def execute_select_statement(statement: str, *, limit: int = 25) -> dict[str, Any]:
+PARTIQL_STATEMENTS = ('select', 'insert', 'update', 'delete')
+
+
+def execute_partiql_statement(statement: str, *, limit: int = 25) -> dict[str, Any]:
+    """ExecuteStatement, as the console's PartiQL editor runs it (reads and writes)."""
     clean_statement = (statement or '').strip()
     if not clean_statement:
         raise ValueError('Statement is required')
-    if not clean_statement.lower().startswith('select'):
-        raise ValueError('Only read-only SELECT statements are allowed')
+    verb = clean_statement.split(None, 1)[0].lower()
+    if verb not in PARTIQL_STATEMENTS:
+        raise ValueError('DynamoDB PartiQL supports SELECT, INSERT, UPDATE and DELETE statements')
 
-    bounded_limit = max(1, min(int(limit), 100))
     client = _dynamodb_client()
     if 'ExecuteStatement' not in client.meta.service_model.operation_names:
         raise ValueError('ExecuteStatement is not available in this boto3/Floci environment')
 
-    response = client.execute_statement(Statement=clean_statement, Limit=bounded_limit)
+    request: dict[str, Any] = {'Statement': clean_statement}
+    if verb == 'select':
+        # Limit only applies to reads.
+        request['Limit'] = max(1, min(int(limit), 100))
+    response = client.execute_statement(**request)
     return {
         'statement': clean_statement,
+        'statement_type': verb.upper(),
         'count': len(response.get('Items', [])),
         'items': [_deserialize_item(item) for item in response.get('Items', [])],
         'next_token': response.get('NextToken'),
     }
+
+
+# Kept for callers that still use the old name.
+execute_select_statement = execute_partiql_statement
 
 
 def parse_start_key(value: Any) -> dict[str, Any] | None:

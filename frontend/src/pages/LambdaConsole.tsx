@@ -1,4 +1,5 @@
 import { useSession } from '../components/SessionContext';
+import { LambdaCodeEditor } from '../components/LambdaCodeEditor';
 import { FunctionOverview, FunctionLogs } from '../components/FunctionOverview';
 import React, { useState, useEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
@@ -632,6 +633,8 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
                         </SpaceBetween>
                       </Alert>
                     )}
+
+                    <LambdaCodeEditor functionName={activeFunction.FunctionName} onDeployed={loadFunctions} />
 
                     <Container header={<Header variant="h3">Function details</Header>}>
                       <KeyValuePairs

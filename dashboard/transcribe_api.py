@@ -31,7 +31,7 @@ def start_transcription_job(
     *,
     media_uri: str,
     language_code: str = 'en-US',
-    media_format: str = 'mp4',
+    media_format: str = '',
     options: Any = None,
 ) -> dict[str, Any]:
     clean_name = _required(name, 'Transcription job name')
@@ -39,8 +39,9 @@ def start_transcription_job(
         'TranscriptionJobName': clean_name,
         'Media': {'MediaFileUri': _required(media_uri, 'Media URI')},
         'LanguageCode': language_code or 'en-US',
-        'MediaFormat': media_format or 'mp4',
     }
+    if (media_format or '').strip():
+        payload['MediaFormat'] = media_format.strip()
     if options not in (None, ''):
         if not isinstance(options, dict):
             raise ValueError('Job options must be a JSON object')

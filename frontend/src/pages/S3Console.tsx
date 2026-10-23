@@ -1,5 +1,6 @@
 import { useSession } from '../components/SessionContext';
 import React, { useState, useEffect, useRef } from 'react';
+import Toggle from '@cloudscape-design/components/toggle';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -204,6 +205,9 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
   const [loadingObjects, setLoadingObjects] = useState(false);
   const [objectFilter, setObjectFilter] = useState('');
   const [deleteObjectOpen, setDeleteObjectOpen] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
+  const showVersionsRef = useRef(false);
+  showVersionsRef.current = showVersions;
   const [deletingObject, setDeletingObject] = useState(false);
 
   // Object details
@@ -312,7 +316,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
     setObjectsError('');
     setSelectedObjects([]);
     try {
-      const data = await fetchS3Objects(bucket, nextPrefix);
+      const data = await fetchS3Objects(bucket, nextPrefix, showVersionsRef.current);
       if (generation !== detailGeneration.current) return;
       setListing(data);
     } catch (err) {
@@ -471,7 +475,9 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
     const obj = selectedObjects[0];
     setDeletingObject(true);
     const ok = await run(async () => {
-      await deleteS3Object(activeBucket.Name, obj.key);
+      const versionId = showVersions ? (obj as any).version_id : undefined;
+      await deleteS3Object(activeBucket.Name, obj.key, versionId);
+      if (versionId) return `Permanently deleted version ${versionId} of "${obj.key}".`;
       return versioningStatus === 'Enabled'
         ? `Deleted "${obj.key}". Versioning is enabled, so S3 added a delete marker and kept the previous versions.`
         : `Successfully deleted "${obj.key}".`;
@@ -600,7 +606,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
     setGeneratingPresign(true);
     setCopiedPresign(false);
     try {
-      const res = await presignS3Object(activeBucket.Name, selectedObjects[0].key, Number(presignExpires.value));
+      const res = await presignS3Object(activeBucket.Name, selectedObjects[0].key, Number(presignExpires.value), showVersions ? (selectedObjects[0] as any).version_id : undefined);
       setPresignedUrl(res.url);
     } catch (err) {
       setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to generate presigned URL' });
@@ -682,9 +688,12 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
   const filteredBuckets = buckets.filter(b => b.Name.toLowerCase().includes(filterText.toLowerCase()));
   const objectRows = [
     ...(listing?.folders || []).map(folder => ({ ...folder, key: folder.prefix, type: 'folder' as const })),
-    ...(listing?.objects || []).map(object => ({ ...object, type: 'file' as const })),
-  ].filter(row => row.name.toLowerCase().includes(objectFilter.toLowerCase()));
+    ...(listing?.objects || []).map(object => ({ ...object, deleteMarker: object.type === 'delete_marker', type: 'file' as const })),
+  ].map(row => ({ ...row, rowId: `${row.key}\u0000${(row as any).version_id ?? ''}` }))
+    .filter(row => row.name.toLowerCase().includes(objectFilter.toLowerCase()));
   const selectedObject = selectedObjects[0]?.type === 'file' ? selectedObjects[0] : null;
+  const selectedVersionId: string | undefined = showVersions ? (selectedObject as any)?.version_id : undefined;
+  const selectedIsDeleteMarker = Boolean((selectedObject as any)?.deleteMarker);
   const prefixParts = prefix.split('/').filter(Boolean);
   const openPrefix = (next: string) => {
     setPrefix(next);
@@ -807,9 +816,9 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                         actions={
                           <SpaceBetween direction="horizontal" size="xs">
                             <Button iconName="refresh" ariaLabel="Refresh objects" onClick={() => loadObjects(activeBucket.Name, prefix)} />
-                            <Button disabled={!selectedObject} iconName="download" onClick={() => selectedObject && window.open(s3DownloadUrl(activeBucket.Name, selectedObject.key), '_blank')}>Download</Button>
+                            <Button disabled={!selectedObject || selectedIsDeleteMarker} iconName="download" onClick={() => selectedObject && window.open(s3DownloadUrl(activeBucket.Name, selectedObject.key, selectedVersionId), '_blank')}>Download</Button>
                             <ButtonDropdown
-                              disabled={!selectedObject}
+                              disabled={!selectedObject || selectedIsDeleteMarker}
                               items={[
                                 { id: 'details', text: 'View details and tags' },
                                 { id: 'presign', text: 'Share with a presigned URL' },
@@ -842,11 +851,23 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                             openPrefix(href === '#' ? '' : href.slice(1));
                           }}
                         />
-                        <TextFilter
-                          filteringText={objectFilter}
-                          filteringPlaceholder="Find objects by prefix"
-                          onChange={({ detail }) => setObjectFilter(detail.filteringText)}
-                        />
+                        <SpaceBetween direction="horizontal" size="m" alignItems="center">
+                          <TextFilter
+                            filteringText={objectFilter}
+                            filteringPlaceholder="Find objects by prefix"
+                            onChange={({ detail }) => setObjectFilter(detail.filteringText)}
+                          />
+                          <Toggle
+                            checked={showVersions}
+                            onChange={({ detail }) => {
+                              setShowVersions(detail.checked);
+                              showVersionsRef.current = detail.checked;
+                              loadObjects(activeBucket.Name, prefix);
+                            }}
+                          >
+                            Show versions
+                          </Toggle>
+                        </SpaceBetween>
                       </SpaceBetween>
                     }
                     columnDefinitions={[
@@ -857,7 +878,8 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                           ? <Button variant="inline-link" iconName="folder" onClick={() => openPrefix(item.key)}>{item.name}/</Button>
                           : <Button variant="inline-link" onClick={() => handleInspectObject(item)}>{item.name}</Button>,
                       },
-                      { id: 'type', header: 'Type', cell: item => item.type === 'folder' ? 'Folder' : objectType(item.name), width: 110 },
+                      ...(showVersions ? [{ id: 'version', header: 'Version ID', cell: (item: any) => item.type === 'folder' ? '-' : (item.version_id || '-'), width: 220 }] : []),
+                      { id: 'type', header: 'Type', cell: (item: any) => item.type === 'folder' ? 'Folder' : item.deleteMarker ? 'Delete marker' : objectType(item.name), width: 130 },
                       { id: 'modified', header: 'Last modified', cell: item => item.type === 'folder' ? '-' : formatAwsDate((item as any).last_modified), width: 280 },
                       { id: 'size', header: 'Size', cell: item => item.type === 'folder' ? '-' : formatBytes((item as any).size), width: 110 },
                       { id: 'storageClass', header: 'Storage class', cell: item => item.type === 'folder' ? '-' : ((item as any).storage_class || '-'), width: 150 },
@@ -865,7 +887,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                     items={objectRows}
                     loading={loadingObjects}
                     loadingText="Loading objects"
-                    trackBy="key"
+                    trackBy="rowId"
                     selectionType="single"
                     selectedItems={selectedObjects}
                     onSelectionChange={({ detail }) => setSelectedObjects(detail.selectedItems)}
@@ -1153,12 +1175,14 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
         visible={deleteObjectOpen}
         header="Delete objects"
         confirmLabel="Delete objects"
-        confirmationText={versioningStatus === 'Enabled' ? 'delete' : 'permanently delete'}
+        confirmationText={versioningStatus === 'Enabled' && !selectedVersionId ? 'delete' : 'permanently delete'}
         loading={deletingObject}
         onConfirm={handleDeleteObject}
         onDismiss={() => setDeleteObjectOpen(false)}
       >
-        {versioningStatus === 'Enabled'
+        {selectedVersionId
+          ? <>Deleting version <strong>{selectedVersionId}</strong> of <strong>{selectedObject?.key}</strong> permanently removes that version{selectedIsDeleteMarker ? ' (a delete marker; removing it restores the previous version as current)' : ''}. This action can't be undone.</>
+          : versioningStatus === 'Enabled'
           ? <>Versioning is enabled, so deleting <strong>{selectedObject?.key}</strong> adds a delete marker. Previous versions remain in the bucket.</>
           : <>Deleting <strong>{selectedObject?.key}</strong> permanently removes it. This action can't be undone.</>}
       </ConfirmActionModal>
@@ -1338,7 +1362,7 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
       >
         <SpaceBetween size="m">
           <Box>Object: <Box variant="code">{selectedObject?.key}</Box></Box>
-          <FormField label="Time interval until the presigned URL expires" description="Anyone with the URL can download the object until it expires.">
+          <FormField label="Time interval until the presigned URL expires" description="Anyone with the URL can download the object until it expires. The console allows up to 12 hours.">
             <Select
               selectedOption={presignExpires}
               onChange={({ detail }) => setPresignExpires(detail.selectedOption as any)}
@@ -1346,7 +1370,6 @@ export const S3Console: React.FC<S3ConsoleProps> = ({ activeTab, onTabChange, re
                 { label: '15 minutes', value: '900' },
                 { label: '1 hour', value: '3600' },
                 { label: '12 hours', value: '43200' },
-                { label: '7 days', value: '604800' },
               ]}
             />
           </FormField>

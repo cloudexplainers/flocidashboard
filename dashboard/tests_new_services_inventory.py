@@ -97,7 +97,7 @@ class NewServiceInventoryHelperTests(SimpleTestCase):
             'BrokerId': 'broker-1',
             'BrokerName': 'orders',
             'BrokerArn': 'arn:aws:amazonmq:us-east-1:000000000000:broker:orders:broker-1',
-            'EngineType': 'RabbitMQ',
+            'EngineType': 'ActiveMQ',
             'BrokerState': 'RUNNING',
         }
         mq.list_users.return_value = {'Users': [{'Username': 'app'}]}
@@ -146,10 +146,16 @@ class NewServiceInventoryHelperTests(SimpleTestCase):
         docdb.meta = service_model('DescribeDBClusters', 'DescribeDBInstances')
         docdb.can_paginate.return_value = False
         docdb.describe_db_clusters.return_value = {
-            'DBClusters': [{'DBClusterIdentifier': 'docs', 'Status': 'available'}],
+            'DBClusters': [
+                {'DBClusterIdentifier': 'docs', 'Status': 'available', 'Engine': 'docdb'},
+                {'DBClusterIdentifier': 'graph', 'Status': 'available', 'Engine': 'neptune'},
+            ],
         }
         docdb.describe_db_instances.return_value = {
-            'DBInstances': [{'DBInstanceIdentifier': 'docs-1', 'DBInstanceStatus': 'available'}],
+            'DBInstances': [
+                {'DBInstanceIdentifier': 'docs-1', 'DBInstanceStatus': 'available', 'Engine': 'docdb'},
+                {'DBInstanceIdentifier': 'pg-1', 'DBInstanceStatus': 'available', 'Engine': 'postgres'},
+            ],
         }
         factory_mock.return_value.client.return_value = docdb
 

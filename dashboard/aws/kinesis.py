@@ -64,6 +64,8 @@ def kinesis_inventory() -> dict[str, Any]:
             'arn': stream_arn,
             'status': summary.get('StreamStatus') or description.get('StreamStatus'),
             'mode': summary.get('StreamModeDetails') or description.get('StreamModeDetails'),
+            # The console's "Capacity mode" column.
+            'capacity_mode': (summary.get('StreamModeDetails') or description.get('StreamModeDetails') or {}).get('StreamMode'),
             'retention_period_hours': summary.get('RetentionPeriodHours') or description.get('RetentionPeriodHours'),
             'created': summary.get('StreamCreationTimestamp') or description.get('StreamCreationTimestamp'),
             'enhanced_monitoring': summary.get('EnhancedMonitoring') or description.get('EnhancedMonitoring'),
@@ -136,7 +138,6 @@ def kinesis_inventory() -> dict[str, Any]:
             'UpdateStreamMode',
         ],
         'notes': [
-            'This page is inferred from the Kinesis AWS SDK API because service docs were not provided for this pass.',
             'Shard and consumer details are flattened from each stream for scanning.',
         ],
     }

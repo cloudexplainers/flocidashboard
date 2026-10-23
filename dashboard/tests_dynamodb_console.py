@@ -143,9 +143,9 @@ class DynamoDBApiTests(SimpleTestCase):
         self.assertEqual(response.json()['count'], 1)
         execute_mock.assert_called_once_with('SELECT * FROM "orders"', limit=5)
 
-    def test_partiql_rejects_non_select(self):
-        with self.assertRaisesMessage(ValueError, 'Only read-only SELECT statements are allowed'):
-            execute_select_statement('DELETE FROM "orders"')
+    def test_partiql_rejects_statements_dynamodb_does_not_support(self):
+        with self.assertRaisesMessage(ValueError, 'DynamoDB PartiQL supports SELECT, INSERT, UPDATE and DELETE statements'):
+            execute_select_statement('DROP TABLE "orders"')
 
 
 class DynamoDbTableManagementTests(SimpleTestCase):

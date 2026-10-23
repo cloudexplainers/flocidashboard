@@ -235,14 +235,14 @@ def put_lifecycle_hook(
     hook_name: str,
     transition: str,
     *,
-    default_result: str = 'CONTINUE',
+    default_result: str = 'ABANDON',
     heartbeat_timeout: Any = 3600,
 ) -> dict[str, Any]:
     response = _client().put_lifecycle_hook(
         AutoScalingGroupName=_required(name, 'Auto Scaling group name'),
         LifecycleHookName=_required(hook_name, 'Lifecycle hook name'),
         LifecycleTransition=_required(transition, 'Lifecycle transition'),
-        DefaultResult=(default_result or 'CONTINUE').strip().upper(),
+        DefaultResult=(default_result or 'ABANDON').strip().upper(),
         HeartbeatTimeout=_int_value(heartbeat_timeout, 'Heartbeat timeout', 3600),
     )
     return {'name': name, 'hook_name': hook_name, 'response': _clean_response(response)}

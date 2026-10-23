@@ -404,14 +404,15 @@ const s3Bucket = (name: string) => `/api/s3/buckets/${encodeURIComponent(name)}`
 export interface S3ObjectListing {
   prefix: string;
   folders: Array<{ prefix: string; name: string }>;
-  objects: Array<{ key: string; name: string; size: number | null; etag?: string; last_modified?: string; storage_class?: string }>;
+  objects: Array<{ key: string; name: string; size: number | null; etag?: string; last_modified?: string; storage_class?: string; version_id?: string; is_latest?: boolean; type?: string }>;
   is_truncated: boolean;
   key_count: number;
 }
 
 /** ListObjectsV2 with Delimiter "/" so prefixes show as folders, like the S3 console. */
-export async function fetchS3Objects(bucketName: string, prefix: string = ''): Promise<S3ObjectListing> {
-  const params = new URLSearchParams({ prefix, delimiter: '/', max_keys: '1000' });
+export async function fetchS3Objects(bucketName: string, prefix: string = '', versions = false): Promise<S3ObjectListing> {
+  // versions: ListObjectVersions, as with the console's "Show versions" toggle.
+  const params = new URLSearchParams({ prefix, delimiter: '/', max_keys: '1000', ...(versions ? { versions: '1' } : {}) });
   return requestJson(`${s3Bucket(bucketName)}/objects/?${params}`, { errorMessage: 'Failed to list objects' });
 }
 
@@ -444,14 +445,14 @@ export async function uploadS3Object(bucketName: string, key: string, content: {
   });
 }
 
-export function s3DownloadUrl(bucketName: string, key: string): string {
-  return `${s3Bucket(bucketName)}/objects/download/?${new URLSearchParams({ key })}`;
+export function s3DownloadUrl(bucketName: string, key: string, versionId?: string): string {
+  return `${s3Bucket(bucketName)}/objects/download/?${new URLSearchParams({ key, ...(versionId ? { versionId } : {}) })}`;
 }
 
-export async function presignS3Object(bucketName: string, key: string, expiresIn: number = 3600): Promise<{ url: string; expires_in: number }> {
+export async function presignS3Object(bucketName: string, key: string, expiresIn: number = 3600, versionId?: string): Promise<{ url: string; expires_in: number }> {
   return requestJson(`${s3Bucket(bucketName)}/objects/presign/`, {
     method: 'POST',
-    json: { key, expires_in: expiresIn },
+    json: { key, expires_in: expiresIn, ...(versionId ? { version_id: versionId } : {}) },
     errorMessage: `Failed to generate presigned URL`,
   });
 }
@@ -488,8 +489,12 @@ export async function putS3Notifications(bucketName: string, config: any): Promi
   });
 }
 
-export async function deleteS3Object(bucketName: string, key: string): Promise<any> {
-  return requestJson(`${s3Bucket(bucketName)}/objects/`, { method: 'DELETE', json: { keys: [{ key }] }, errorMessage: 'Failed to delete object' });
+export async function deleteS3Object(bucketName: string, key: string, versionId?: string): Promise<any> {
+  const result = await requestJson(`${s3Bucket(bucketName)}/objects/`, { method: 'DELETE', json: { keys: [{ key, ...(versionId ? { version_id: versionId } : {}) }] }, errorMessage: 'Failed to delete object' });
+  // DeleteObjects reports per-key failures in a 200 response.
+  const failure = Array.isArray(result?.errors) ? result.errors[0] : null;
+  if (failure) throw new Error(failure.Message || failure.message || failure.Code || 'Failed to delete object');
+  return result;
 }
 
 export async function createS3Folder(bucketName: string, folder: string): Promise<any> {
@@ -527,11 +532,12 @@ export async function simulateIamPolicy(principalArn: string, actionNames: strin
 }
 
 // DynamoDB Deepening APIs
-export async function fetchDynamoDbTableScan(tableName: string, limit: number = 50, startKey?: any): Promise<{ items: any[]; count: number; scanned_count: number; last_evaluated_key?: any }> {
-  return requestJson(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/scan/`, {
+export async function fetchDynamoDbTableScan(tableName: string, limit: number = 50, startKey?: any, request: Record<string, any> = {}): Promise<{ items: any[]; count: number; scanned_count: number; last_evaluated_key?: any }> {
+  const { mode = 'scan', ...body } = request;
+  return requestJson(`/api/dynamodb/tables/${encodeURIComponent(tableName)}/${mode === 'query' ? 'query' : 'scan'}/`, {
     method: 'POST',
-    json: { limit, exclusive_start_key: startKey },
-    errorMessage: 'Unable to scan table',
+    json: { ...body, limit, exclusive_start_key: startKey },
+    errorMessage: mode === 'query' ? 'Unable to query table' : 'Unable to scan table',
   });
 }
 
@@ -601,6 +607,16 @@ export async function createLambdaFunction(request: { name: string; role: string
     },
     errorMessage: 'Failed to create function',
   });
+}
+
+/** The function's package files (text files with content) from GetFunction's Code.Location. */
+export async function fetchLambdaSource(functionName: string): Promise<any> {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/source/`, { errorMessage: 'Unable to load the function code' });
+}
+
+/** UpdateFunctionCode with the edited files replaced in the current package. */
+export async function deployLambdaSource(functionName: string, files: Record<string, string>): Promise<any> {
+  return requestJson(`/api/lambda/functions/${encodeURIComponent(functionName)}/source/`, { method: 'PUT', json: { files }, errorMessage: 'Deploy failed' });
 }
 
 export async function deleteLambdaFunction(functionName: string): Promise<any> {
@@ -871,6 +887,16 @@ export async function deleteSqsQueue(queueName: string): Promise<any> {
   return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/`, { method: 'DELETE', errorMessage: 'Failed to delete queue' });
 }
 
+/** SetQueueAttributes. An empty RedrivePolicy removes the dead-letter queue. */
+export async function setSqsQueueAttributes(queueName: string, attributes: Record<string, string>): Promise<any> {
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/attributes/`, { method: 'POST', json: { attributes }, errorMessage: 'Failed to update queue' });
+}
+
+/** StartMessageMoveTask from a dead-letter queue. */
+export async function startSqsRedrive(queueName: string, payload: { source_arn?: string; destination_arn?: string; max_number_of_messages_per_second?: number }): Promise<any> {
+  return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/redrive/`, { method: 'POST', json: payload, errorMessage: 'Failed to start DLQ redrive' });
+}
+
 export async function purgeSqsQueue(queueName: string): Promise<any> {
   return requestJson(`/api/sqs/queues/${encodeURIComponent(queueName)}/purge/`, { method: 'POST', errorMessage: 'Failed to purge queue' });
 }
@@ -938,6 +964,11 @@ export async function publishSnsMessage(
     },
     errorMessage: 'Failed to publish message',
   });
+}
+
+/** SetTopicAttributes (Policy, DisplayName or DeliveryPolicy). */
+export async function setSnsTopicAttribute(topicArn: string, name: string, value: string): Promise<any> {
+  return requestJson(`/api/sns/topics/${encodeURIComponent(topicArn)}/`, { method: 'PATCH', json: { attribute_name: name, attribute_value: value }, errorMessage: 'Failed to update topic' });
 }
 
 // RDS Operational APIs
@@ -2136,14 +2167,19 @@ export async function postConsoleAction(path: string, payload: Record<string, un
   return data;
 }
 
+export async function deleteConsoleResource(path: string, errorMessage = 'Delete failed'): Promise<any> {
+  return requestJson(path, { method: 'DELETE', errorMessage });
+}
+
 /** Dedicated KMS endpoints; /api/kms/ is a read-only inventory, not an action dispatcher. */
 export async function executeKmsAction(action: string, payload: Record<string, any>): Promise<any> {
   const paths: Record<string, [string, string]> = {
-    create_key: ['POST', 'keys'], create_alias: ['POST', 'aliases'],
+    create_key: ['POST', 'keys'], create_alias: ['POST', 'aliases'], delete_alias: ['DELETE', 'aliases'],
     encrypt: ['POST', 'crypto/encrypt'], decrypt: ['POST', 'crypto/decrypt'],
     generate_data_key: ['POST', 'data-keys'], set_key_rotation: ['POST', 'rotation'],
     set_key_enabled: ['POST', 'key-state'], put_key_policy: ['PUT', 'key-policy'],
     create_grant: ['POST', 'grants'], revoke_grant: ['DELETE', 'grants'],
+    schedule_key_deletion: ['POST', 'deletion/schedule'], cancel_key_deletion: ['POST', 'deletion/cancel'],
   };
   const target = paths[action];
   if (!target) throw new Error(`Unsupported KMS action: ${action}`);

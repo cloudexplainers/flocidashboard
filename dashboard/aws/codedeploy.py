@@ -231,7 +231,6 @@ def codedeploy_inventory() -> dict[str, Any]:
             'DeregisterOnPremisesInstance',
         ],
         'notes': [
-            'This page is inferred from the CodeDeploy AWS SDK API because service docs are not available yet.',
             'Floci 1.5.28 persists CodeDeploy applications, deployment groups, deployment configs, on-prem instances, and tags across restart.',
             'Deployment lists are collected from applications and deployment groups, then de-duplicated before detail lookup.',
         ],

@@ -123,6 +123,22 @@ def transfer_inventory() -> dict[str, Any]:
             'web_apps': len(web_apps),
         },
         'servers': detailed_servers,
+        # Users as their own list (the console shows them per server), with the server ID
+        # so user actions can target them.
+        'users': [
+            {
+                'name': user.get('UserName'),
+                'user_name': user.get('UserName'),
+                'server_id': server.get('id'),
+                'arn': user.get('Arn'),
+                'role': user.get('Role'),
+                'home_directory': user.get('HomeDirectory'),
+                'home_directory_type': user.get('HomeDirectoryType'),
+                'ssh_public_key_count': user.get('SshPublicKeyCount'),
+            }
+            for server in detailed_servers
+            for user in server.get('users') or []
+        ],
         'workflows': _clean_response(workflows),
         'profiles': detailed_profiles,
         'certificates': detailed_certificates,

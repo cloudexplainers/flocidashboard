@@ -11,7 +11,7 @@ from .cloudtrail_api import create_trail, delete_trail, set_trail_logging, updat
 def cloudtrail_trails_create(request):
     try:
         body = parse_json_body(request)
-        return JsonResponse(create_trail(body.get('name', ''), body.get('s3_bucket_name', ''), include_global_service_events=body.get('include_global_service_events', False), is_multi_region_trail=body.get('is_multi_region_trail', False), is_organization_trail=body.get('is_organization_trail', False)))
+        return JsonResponse(create_trail(body.get('name', ''), body.get('s3_bucket_name', ''), include_global_service_events=body.get('include_global_service_events', True), is_multi_region_trail=body.get('is_multi_region_trail', False), is_organization_trail=body.get('is_organization_trail', False)))
     except Exception as exc:
         return handle_action_error(exc, service='cloudtrail', operation='create_trail')
 

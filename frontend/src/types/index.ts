@@ -4,6 +4,10 @@ export interface ActionField {
   required?: boolean;
   field_type?: string;
   help_text?: string;
+  /** Allowed values (AWS enum values), shown as a select. */
+  options?: string[];
+  /** Initial value; sent unless changed. */
+  default?: string | number | boolean | null;
 }
 
 export interface ServiceAction {

@@ -83,7 +83,7 @@ def create_domain(
     instance_type: str = 'm5.large.search',
     instance_count: Any = 1,
     ebs_enabled: Any = True,
-    volume_type: str = 'gp2',
+    volume_type: str = 'gp3',
     volume_size: Any = 10,
     tags: Any = None,
 ) -> dict[str, Any]:
@@ -96,7 +96,7 @@ def create_domain(
         },
         'EBSOptions': {
             'EBSEnabled': _bool(ebs_enabled),
-            'VolumeType': volume_type or 'gp2',
+            'VolumeType': volume_type or 'gp3',
             'VolumeSize': _int_value(volume_size, 'Volume size', 10),
         },
     }

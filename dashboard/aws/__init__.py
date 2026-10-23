@@ -261,6 +261,9 @@ class FlociClientFactory:
                 connect_timeout=2,
                 read_timeout=5,
                 s3={'addressing_style': 'auto'},
+                # Presigned URLs use SigV4, as the S3 console's do. botocore otherwise
+                # presigns with SigV2 for this client.
+                signature_version='s3v4',
             )
         else:
             # botocore rewrites a config's retries dict in place; pass a copy so
@@ -475,9 +478,41 @@ def _resource_service_key(name: str) -> str:
     return keys.get(name, name.replace('-resources', ''))
 
 
+_MANUAL_PAGE_TOKENS = ('NextToken', 'nextToken', 'NextPageToken')
+_MANUAL_PAGE_LIMIT = 100
+
+
 def _paginate(client, operation_name: str, result_key: str, **kwargs) -> list[Any]:
-    paginator = client.get_paginator(operation_name)
-    return paginator.paginate(**kwargs).build_full_result().get(result_key, [])
+    can_paginate = getattr(client, 'can_paginate', None)
+    if can_paginate is None or can_paginate(operation_name):
+        paginator = client.get_paginator(operation_name)
+        return paginator.paginate(**kwargs).build_full_result().get(result_key, [])
+
+    # botocore has no paginator for some list operations (Firehose, Athena work
+    # groups, Transcribe, ...). get_paginator would raise OperationNotPageableError,
+    # which callers swallow, so those lists always looked empty. Follow the
+    # operation's own continuation token instead.
+    operation = getattr(client, operation_name)
+    items: list[Any] = []
+    request = dict(kwargs)
+    seen: set[str] = set()
+    for _ in range(_MANUAL_PAGE_LIMIT):
+        response = operation(**request)
+        items.extend(response.get(result_key, []) or [])
+        token_key = next((key for key in _MANUAL_PAGE_TOKENS if response.get(key)), None)
+        if operation_name == 'list_delivery_streams' and response.get('HasMoreDeliveryStreams') and items:
+            token_key, token = 'ExclusiveStartDeliveryStreamName', items[-1]
+        elif operation_name == 'list_streams' and response.get('LastEvaluatedStreamArn'):
+            token_key, token = 'ExclusiveStartStreamArn', response['LastEvaluatedStreamArn']
+        elif token_key:
+            token = response[token_key]
+        else:
+            break
+        if not isinstance(token, str) or token in seen:
+            break
+        seen.add(token)
+        request[token_key] = token
+    return items
 
 
 def _operation_items(client, operation_name: str, result_key: str, **kwargs) -> list[Any]:

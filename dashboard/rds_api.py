@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
 
 from .aws import FlociClientFactory, _clean_response
 
@@ -138,6 +139,22 @@ def reboot_db_instance(identifier: str) -> dict[str, Any]:
     }
 
 
+def _final_snapshot_status(operation: str, result_key: str, **kwargs) -> dict[str, Any]:
+    """Check that the requested final snapshot exists.
+
+    AWS starts the snapshot as part of the delete. Floci 2.3 accepts the request but
+    creates no snapshot, so the console reports what actually happened.
+    """
+    identifier = next(iter(kwargs.values()))
+    try:
+        snapshots = getattr(_client(), operation)(**kwargs).get(result_key, [])
+    except (BotoCoreError, ClientError):
+        snapshots = []
+    snapshots = [item for item in snapshots if isinstance(item, dict)] if isinstance(snapshots, list) else []
+    status = snapshots[0].get('Status') if snapshots else None
+    return {'identifier': identifier, 'found': bool(snapshots), 'status': status if isinstance(status, str) else None}
+
+
 def delete_db_instance(identifier: str, *, skip_final_snapshot: bool = True, final_snapshot_identifier: str = '') -> dict[str, Any]:
     clean_identifier = _required(identifier, 'DB instance identifier')
     kwargs: dict[str, Any] = {
@@ -147,11 +164,16 @@ def delete_db_instance(identifier: str, *, skip_final_snapshot: bool = True, fin
     if not kwargs['SkipFinalSnapshot']:
         kwargs['FinalDBSnapshotIdentifier'] = _required(final_snapshot_identifier, 'Final snapshot identifier')
     response = _client(long_running=True).delete_db_instance(**kwargs)
-    return {
+    result = {
         'identifier': clean_identifier,
         'instance': _clean_response(response.get('DBInstance', {})),
         'response': _clean_response(response),
     }
+    if not kwargs['SkipFinalSnapshot']:
+        result['final_snapshot'] = _final_snapshot_status(
+            'describe_db_snapshots', 'DBSnapshots', DBSnapshotIdentifier=kwargs['FinalDBSnapshotIdentifier'],
+        )
+    return result
 
 
 def create_db_cluster(
@@ -193,11 +215,16 @@ def delete_db_cluster(identifier: str, *, skip_final_snapshot: bool = True, fina
     if not kwargs['SkipFinalSnapshot']:
         kwargs['FinalDBSnapshotIdentifier'] = _required(final_snapshot_identifier, 'Final snapshot identifier')
     response = _client(long_running=True).delete_db_cluster(**kwargs)
-    return {
+    result = {
         'identifier': clean_identifier,
         'cluster': _clean_response(response.get('DBCluster', {})),
         'response': _clean_response(response),
     }
+    if not kwargs['SkipFinalSnapshot']:
+        result['final_snapshot'] = _final_snapshot_status(
+            'describe_db_cluster_snapshots', 'DBClusterSnapshots', DBClusterSnapshotIdentifier=kwargs['FinalDBSnapshotIdentifier'],
+        )
+    return result
 
 
 def create_db_parameter_group(name: str, family: str, description: str) -> dict[str, Any]:

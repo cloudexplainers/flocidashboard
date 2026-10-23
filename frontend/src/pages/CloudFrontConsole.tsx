@@ -36,6 +36,14 @@ interface CloudFrontConsoleProps {
   onTabChange?: (tabId: string) => void;
 }
 
+/** AWS managed cache policies (fixed IDs in every account) plus legacy settings. */
+const MANAGED_CACHE_POLICIES = [
+  { value: '658327ea-f89d-4fab-a63d-7e88639e58f6', label: 'CachingOptimized', description: 'Managed. Recommended for S3 origins.' },
+  { value: '4135ea2d-6df8-44a3-9df3-4b5a84be39ad', label: 'CachingDisabled', description: 'Managed. For dynamic content.' },
+  { value: 'b2884449-e4de-46a7-ac36-70bc7f1ddd6d', label: 'CachingOptimizedForUncompressedObjects', description: 'Managed.' },
+  { value: '', label: 'Legacy cache settings', description: 'ForwardedValues with no query strings or cookies.' },
+];
+
 export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab, onTabChange, resourcePath = 'cloudfront', onNavigate }) => {
   const query = new URLSearchParams(resourcePath.split('?')[1] || '');
   const pinned = query.get('distribution');
@@ -69,6 +77,11 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
   const [originId, setOriginId] = useState('');
   const [distComment, setDistComment] = useState('');
   const [viewerProtocolPolicy, setViewerProtocolPolicy] = useState({ label: 'Redirect HTTP to HTTPS', value: 'redirect-to-https' });
+  // The console's default: cache policy (recommended) with the managed CachingOptimized policy.
+  const [cachePolicyId, setCachePolicyId] = useState(MANAGED_CACHE_POLICIES[0].value);
+  const customCachePolicies = (data.cache_policies || []).map((item: any) => item.CachePolicy || item)
+    .filter((policy: any) => policy?.Id && !MANAGED_CACHE_POLICIES.some(option => option.value === policy.Id))
+    .map((policy: any) => ({ value: policy.Id as string, label: (policy.CachePolicyConfig?.Name || policy.Id) as string, description: 'Custom policy' }));
   const [originType, setOriginType] = useState('s3');
   const [creatingDist, setCreatingDist] = useState(false);
 
@@ -168,6 +181,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
         origin_id: originId.trim() || undefined,
         comment: distComment.trim() || undefined,
         viewer_protocol_policy: viewerProtocolPolicy.value,
+        ...(cachePolicyId ? { cache_policy_id: cachePolicyId } : {}),
         enabled: true,
       });
       setActionMessage({ type: 'success', text: 'Distribution creation accepted. Check the reported deployment status.' });
@@ -363,7 +377,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                       },
                       {
                         id: 'domain',
-                        header: 'Domain Name',
+                        header: 'Domain name',
                         cell: (item: any) => {
                           const dom = item.DomainName || item.domain_name;
                           return dom ? <Link href={`https://${dom}`} external>{dom}</Link> : <span>Not reported</span>;
@@ -387,7 +401,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                       },
                       {
                         id: 'origins',
-                        header: 'Origins Count',
+                        header: 'Origins',
                         cell: (item: any) => item.Origins?.Quantity ?? item.Origins?.Items?.length ?? 'Not reported',
                         width: 130,
                       },
@@ -489,7 +503,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
                   <Table
                     columnDefinitions={[
                       { id: 'id', header: 'Origin ID', cell: (i: any) => <strong>{i.Id || 'Not reported'}</strong> },
-                      { id: 'domain', header: 'Domain Name', cell: (i: any) => <code>{i.DomainName || 'Not reported'}</code> },
+                      { id: 'domain', header: 'Domain name', cell: (i: any) => <code>{i.DomainName || 'Not reported'}</code> },
                       { id: 'path', header: 'Origin Path', cell: (i: any) => i.OriginPath || '/' },
                     ]}
                     items={activeDist?.Origins?.Items || []}
@@ -509,7 +523,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
             ),
           },
           {
-            label: `Cache Policies (${(data.cache_policies || []).length})`,
+            label: `Cache policies (${(data.cache_policies || []).length})`,
             id: 'cache-policies',
             content: (
               <Container
@@ -605,24 +619,32 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
           {actionMessage?.type === 'error' && <Alert type="error">{actionMessage.text}</Alert>}
           <FormField label="Origin type"><Select selectedOption={{ label: originType === 's3' ? 'Amazon S3' : 'Custom HTTP origin', value: originType }} options={[{ label: 'Amazon S3', value: 's3' }, { label: 'Custom HTTP origin', value: 'custom' }]} onChange={({ detail }) => setOriginType(detail.selectedOption.value!)} /></FormField>
           {originType === 'custom' && <Box>Origin connections use HTTPS on port 443.</Box>}
-          <FormField label="Origin Domain Name" description="Hostname of the S3 bucket or custom web server, without a scheme, port, or path.">
+          <FormField label="Origin domain" description="Hostname of the S3 bucket or custom web server, without a scheme, port, or path.">
             <Input value={originDomain} onChange={({ detail }) => setOriginDomain(detail.value)} placeholder="assets.example.com" />
           </FormField>
           <FormField label="Origin ID">
             <Input value={originId} onChange={({ detail }) => setOriginId(detail.value)} placeholder="s3-origin-1" />
           </FormField>
-          <FormField label="Viewer Protocol Policy">
+          <FormField label="Viewer protocol policy">
             <Select
               selectedOption={viewerProtocolPolicy}
               onChange={({ detail }) => setViewerProtocolPolicy(detail.selectedOption as any)}
               options={[
                 { label: 'Redirect HTTP to HTTPS', value: 'redirect-to-https' },
-                { label: 'HTTPS Only', value: 'https-only' },
+                { label: 'HTTPS only', value: 'https-only' },
                 { label: 'HTTP and HTTPS', value: 'allow-all' },
               ]}
             />
           </FormField>
-          <FormField label="Description / Comment">
+          <FormField label="Cache policy" description="Cache key and TTL settings for the default behavior. Legacy cache settings forward no query strings or cookies.">
+            <Select
+              ariaLabel="Cache policy"
+              selectedOption={[...MANAGED_CACHE_POLICIES, ...customCachePolicies].find(option => option.value === cachePolicyId) || null}
+              onChange={({ detail }) => setCachePolicyId(detail.selectedOption.value || '')}
+              options={[...MANAGED_CACHE_POLICIES, ...customCachePolicies]}
+            />
+          </FormField>
+          <FormField label="Description - optional">
             <Input value={distComment} onChange={({ detail }) => setDistComment(detail.value)} />
           </FormField>
         </SpaceBetween>

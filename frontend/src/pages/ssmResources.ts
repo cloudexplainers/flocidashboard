@@ -1,3 +1,4 @@
+import { formatAwsDate } from "../format";
 export interface SsmParameter {
   name: string;
   type?: string;
@@ -27,7 +28,7 @@ export function ssmParameters(data: any): SsmParameter[] {
 export function ssmDate(value?: string | number) {
   if (value == null || value === "") return "Unavailable";
   const date = new Date(typeof value === "number" ? value * 1000 : value);
-  return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "Unavailable" : formatAwsDate(date);
 }
 export const parameterUrl = (name: string) =>
   `/api/ssm/parameters/${encodeURIComponent(name)}/value/`;

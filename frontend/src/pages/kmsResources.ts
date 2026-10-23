@@ -1,3 +1,4 @@
+import { formatAwsDate } from "../format";
 export interface KmsKey {
   id: string;
   arn?: string;
@@ -78,7 +79,12 @@ export function kmsKeys(data: any): KmsKey[] {
 export function kmsDate(value?: string | number): string {
   if (value == null || value === "") return "Unavailable";
   const date = new Date(typeof value === "number" ? value * 1000 : value);
-  return Number.isNaN(date.getTime()) ? "Unavailable" : date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? "Unavailable" : formatAwsDate(date);
+}
+/** Key states as the KMS console shows them ("PendingDeletion" -> "Pending deletion"). */
+export function kmsStateLabel(state?: string): string | undefined {
+  if (!state) return state;
+  return state.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/ ([A-Z])/g, (_, letter: string) => ` ${letter.toLowerCase()}`);
 }
 export const canRotateKmsKey = (key: KmsKey) =>
   key.state === "Enabled" &&

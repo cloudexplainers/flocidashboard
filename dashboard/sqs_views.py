@@ -108,14 +108,19 @@ def sqs_queue_attributes(request, queue_name: str):
         return handle_action_error(exc, service='sqs', operation='set_queue_attributes')
 
 
+def _queue_arn(queue_name: str) -> str:
+    # The queue's real ARN, not one built from a guessed account and Region.
+    return get_queue_attributes(queue_name, ['QueueArn'])['attributes'].get('QueueArn') or ''
+
+
 @require_http_methods(['GET', 'POST'])
 def sqs_queue_redrive(request, queue_name: str):
     try:
         if request.method == 'GET':
-            source_arn = request.GET.get('source_arn') or f'arn:aws:sqs:us-east-1:000000000000:{queue_name}'
+            source_arn = request.GET.get('source_arn') or _queue_arn(queue_name)
             return JsonResponse(list_message_move_tasks(source_arn))
         body = parse_json_body(request)
-        source_arn = body.get('source_arn') or f'arn:aws:sqs:us-east-1:000000000000:{queue_name}'
+        source_arn = body.get('source_arn') or _queue_arn(queue_name)
         return JsonResponse(start_message_move_task(
             source_arn=source_arn,
             destination_arn=body.get('destination_arn') or None,
