@@ -210,6 +210,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ecs', 'fargate-microservice'): _tags(clf='3.3', saa='2.1 3.2 4.2'),
     ('rds', 'aurora-resilience'): _tags(clf='3.4', saa='2.2 3.3'),
     ('elasticloadbalancing', 'ha-web-tier'): _tags(clf='3.3 3.2', saa='2.2 2.1 3.2 3.4'),
+    ('s3', 'data-protection-tiers'): _tags(clf='3.6 4.1', saa='1.3 4.1 2.2'),
     # Level 5
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
     ('ec2', 's3-gateway-endpoint'): _tags(clf='3.5', saa='1.2 3.4 4.4'),
@@ -250,7 +251,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Cost optimization: avoid unneeded cost (rightsizing, purchasing options, lifecycle tiering).',
             'Sustainability: minimize the environmental impact of running workloads.',
         ],
-        'related_labs': [('cloudformation', 's3-sqs-stack'), ('s3', 'lifecycle-retention')],
+        'related_labs': [('cloudformation', 's3-sqs-stack'), ('s3', 'lifecycle-retention'), ('s3', 'data-protection-tiers')],
         'planned': None,
     },
     {

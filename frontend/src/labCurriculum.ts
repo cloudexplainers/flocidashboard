@@ -114,7 +114,7 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'Identity enforcement, remote operations, workflow orchestration, containers, and resilient architectures',
     badge: 'Senior',
     color: 'red',
-    description: 'Switch identities and prove IAM enforcement end to end, run commands on instances with SSM, orchestrate workflows with Step Functions Choice and Parallel states, deploy containerized microservices on ECS with Fargate, make databases resilient with RDS read replicas, point-in-time restore, and Aurora failover, and run a highly available web tier behind an Application Load Balancer with Auto Scaling.',
+    description: 'Switch identities and prove IAM enforcement end to end, run commands on instances with SSM, orchestrate workflows with Step Functions Choice and Parallel states, deploy containerized microservices on ECS with Fargate, make databases resilient with RDS read replicas, point-in-time restore, and Aurora failover, run a highly available web tier behind an Application Load Balancer with Auto Scaling, and protect and tier S3 data with Object Lock, storage classes, lifecycle rules, and cross-Region replication.',
     labs: [
       { service: 'iam', key: 'identity-enforcement-capstone', title: 'Switch identities and verify IAM enforcement', stepCount: 7 },
       { service: 'ec2', key: 'guided-ssm-command', title: 'Execute commands with SSM Run Command', stepCount: 3 },
@@ -123,6 +123,7 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'ecs', key: 'fargate-microservice', title: 'Deploy containerized microservices with Amazon ECS and AWS Fargate', stepCount: 6 },
       { service: 'rds', key: 'aurora-resilience', title: 'Design resilient databases with read replicas, point-in-time restore, and Aurora failover', stepCount: 10 },
       { service: 'elasticloadbalancing', key: 'ha-web-tier', title: 'Build a highly available web tier with an Application Load Balancer and Auto Scaling', stepCount: 12 },
+      { service: 's3', key: 'data-protection-tiers', title: 'Protect and tier S3 data with Object Lock, storage classes, lifecycle rules, and replication', stepCount: 13 },
     ],
   },
   {

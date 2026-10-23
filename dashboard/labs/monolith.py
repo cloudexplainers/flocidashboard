@@ -97,7 +97,7 @@ LAB_BATCH_ORDER = [
     {
         'service': 's3',
         'title': 'S3 labs',
-        'summary': 'Continue into application encryption and keys after storage: buckets, objects, versioning, policies, encryption, lifecycle, notifications, and multipart uploads.',
+        'summary': 'Continue into application encryption and keys after storage: buckets, objects, versioning, policies, encryption, lifecycle, notifications, multipart uploads, Object Lock, storage classes, and replication.',
     },
     {
         'service': 'kms',

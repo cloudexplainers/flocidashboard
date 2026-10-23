@@ -795,11 +795,36 @@ GetObject, a GetObject that failed with `NoSuchKey`, and DeleteObject; the tab l
 whose bucket was deleted shows `NoSuchBucket`. CloudTrail digest files and other objects in the bucket are not
 listed.
 
+## S3 data protection lab (2026-10-23)
+
+`s3/data-protection-tiers` (SAA 1.3, 4.1, 2.2), 13 steps, in `dashboard/labs/s3_data_protection_labs.py` (dispatched from
+`s3_labs.py`). It sits in Level 4 after the HA web tier lab. It covers Wave 1 item W1-3 with three buckets:
+`lab-records-vault` (Object Lock), `lab-records-archive` (versioned; tiers, lifecycle, replication source, Requester
+Pays) and `lab-records-dr` (versioned, us-west-2). Lifecycle transitions of current objects are already in
+`s3/lifecycle-retention`, so this lab's rule works on noncurrent versions instead.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the leftovers, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Object Lock at bucket creation | Versioning turns on with it; the default retention is applied to new versions and reported by `HeadObject`. | Nothing to label |
+| GOVERNANCE retention | A version delete without the bypass is `AccessDenied`; with `--bypass-governance-retention` it succeeds (also through `DeleteObjects`). | Nothing to label |
+| Legal hold | Blocks a delete even with the bypass; turning it off allows it. | Nothing to label |
+| COMPLIANCE retention | Refuses a delete with the bypass, shortening the date, and switching to GOVERNANCE; once the date passes, the delete works. | The lab keeps it for 60 s so Reset can clean up; Reset waits for it |
+| Storage classes | Every class (STANDARD_IA, ONEZONE_IA, INTELLIGENT_TIERING, GLACIER, GLACIER_IR, DEEP_ARCHIVE) is stored and reported, and `CopyObject` can change it. A GLACIER or DEEP_ARCHIVE object reads without a restore; `RestoreObject` is accepted but sets no `Restore` header. | Note in the step and its result |
+| Intelligent-Tiering configuration, lifecycle rules | Stored and returned as sent; no object changes tier or expires. | Notes in the steps |
+| Cross-Region Replication | A bucket created with `LocationConstraint=us-west-2` reports that Region. The rule is stored (Floci accepted it even before versioning was on, which AWS refuses), but no object reached the destination, and the role is not checked. | Note in the step; the result counts the destination's objects |
+| Requester Pays | Stored; GETs need no `x-amz-request-payer` and return no `x-amz-request-charged`. | Note in the step |
+
+The console still has no forms for Object Lock retention, legal holds, replication or Intelligent-Tiering (see below).
+`check_labs --service s3 --lab data-protection-tiers` passed on 2.3.0; it takes about a minute because Reset waits out
+the COMPLIANCE retention.
+
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
-| S3 lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication config (configuration only) | S3 data protection (Wave 1). Each needs its own label. |
+| S3 console: lifecycle UI (stored only at 2.3.0; `main` applies expiration), Object Lock retention and legal hold, replication and Intelligent-Tiering config (configuration only) | The S3 data protection lab (above) uses the API; the console forms each need their own label. |
 | EventBridge archive and replay, Lambda async destinations, Logs subscription filters, CloudWatch dashboards, IAM password policy and credential report, DynamoDB export to S3, Kinesis resharding, Secrets Manager replication, Step Functions aliases, Route 53 private-zone VPC association, CloudFront OAC, EC2 key pairs | All implemented by Floci 2.3.0 and unexposed; ranked by exam value in the audit. |
 | Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration, ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
 | Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |
