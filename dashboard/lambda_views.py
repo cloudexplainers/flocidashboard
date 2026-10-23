@@ -7,6 +7,9 @@ from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
 from .lambda_api import (
+    delete_event_invoke_config,
+    get_event_invoke_config,
+    put_event_invoke_config,
     add_permission, create_function, delete_alias, delete_event_source_mapping,
     delete_function, delete_function_url, get_event_templates, get_function_url,
     invoke_function, invoke_function_url, list_aliases, list_event_source_mappings,
@@ -205,3 +208,16 @@ def lambda_function_url_test(request):
         ))
     except Exception as exc:
         return _error(exc, 'invoke_function_url')
+
+
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def lambda_function_event_invoke_config(request, function_name: str):
+    operation = {'GET': 'get_function_event_invoke_config', 'PUT': 'put_function_event_invoke_config', 'DELETE': 'delete_function_event_invoke_config'}[request.method]
+    try:
+        if request.method == 'GET':
+            return JsonResponse(get_event_invoke_config(function_name))
+        if request.method == 'DELETE':
+            return JsonResponse(delete_event_invoke_config(function_name))
+        return JsonResponse(put_event_invoke_config(function_name, parse_json_body(request)))
+    except Exception as exc:
+        return _error(exc, operation)

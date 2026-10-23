@@ -674,3 +674,63 @@ def invoke_function_url(
             'error': str(err),
         }
 
+
+
+def _destination(value: Any, label: str) -> str | None:
+    if value in (None, ''):
+        return None
+    arn = str(value).strip()
+    if not arn.startswith('arn:') or not any(f':{svc}:' in arn for svc in ('sqs', 'sns', 'lambda', 'events', 's3')):
+        raise ValueError(f'{label} must be the ARN of an SQS queue, SNS topic, Lambda function, EventBridge bus or S3 bucket')
+    return arn
+
+
+def get_event_invoke_config(function_name: str) -> dict[str, Any]:
+    """Asynchronous invocation settings, or config=None when the function uses the defaults."""
+    from botocore.exceptions import ClientError
+    try:
+        config = _lambda_client().get_function_event_invoke_config(FunctionName=function_name)
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') == 'ResourceNotFoundException' and 'EventInvokeConfig' in str(exc):
+            return {'config': None}
+        raise
+    destinations = config.get('DestinationConfig') or {}
+    return {'config': {
+        'maximum_retry_attempts': config.get('MaximumRetryAttempts'),
+        'maximum_event_age_in_seconds': config.get('MaximumEventAgeInSeconds'),
+        'on_success': (destinations.get('OnSuccess') or {}).get('Destination') or '',
+        'on_failure': (destinations.get('OnFailure') or {}).get('Destination') or '',
+        'last_modified': config['LastModified'].isoformat() if hasattr(config.get('LastModified'), 'isoformat') else config.get('LastModified'),
+    }}
+
+
+def put_event_invoke_config(function_name: str, body: dict[str, Any]) -> dict[str, Any]:
+    """PutFunctionEventInvokeConfig (replaces the whole config) with the AWS limits Floci doesn't check."""
+    kwargs: dict[str, Any] = {'FunctionName': function_name}
+    retries = body.get('maximum_retry_attempts')
+    if retries not in (None, ''):
+        if isinstance(retries, bool) or str(retries) not in ('0', '1', '2'):
+            raise ValueError('Retry attempts must be 0, 1 or 2')
+        kwargs['MaximumRetryAttempts'] = int(retries)
+    age = body.get('maximum_event_age_in_seconds')
+    if age not in (None, ''):
+        try:
+            seconds = int(age)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('Maximum age of event must be a whole number of seconds') from exc
+        if not 60 <= seconds <= 21600:
+            raise ValueError('Maximum age of event must be from 60 seconds to 6 hours (21600 seconds)')
+        kwargs['MaximumEventAgeInSeconds'] = seconds
+    destinations = {}
+    for key, name, label in (('on_success', 'OnSuccess', 'On-success destination'), ('on_failure', 'OnFailure', 'On-failure destination')):
+        arn = _destination(body.get(key), label)
+        if arn:
+            destinations[name] = {'Destination': arn}
+    kwargs['DestinationConfig'] = destinations
+    _lambda_client().put_function_event_invoke_config(**kwargs)
+    return get_event_invoke_config(function_name)
+
+
+def delete_event_invoke_config(function_name: str) -> dict[str, Any]:
+    _lambda_client().delete_function_event_invoke_config(FunctionName=function_name)
+    return {'config': None, 'deleted': True}

@@ -1,3 +1,4 @@
+import { StepFunctionsAliases } from "../components/StepFunctionsAliases";
 import {
   StepExecutionView,
   executionDate,
@@ -745,6 +746,16 @@ const StepWorkspace: React.FC<StepFunctionsConsoleProps> = ({
                                   definition={editDefDoc}
                                 />
                               </Container>
+                            ),
+                          },
+                          {
+                            label: "Versions and aliases",
+                            id: "versions",
+                            content: (
+                              <StepFunctionsAliases
+                                key={activeMachineArn}
+                                stateMachineArn={activeMachineArn}
+                              />
                             ),
                           },
                           {

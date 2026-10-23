@@ -201,3 +201,85 @@ def update_state_machine(state_machine_arn: str, definition: Any, role_arn: str 
     if role_arn:
         payload['roleArn'] = role_arn
     return _clean_response(_stepfunctions_client().update_state_machine(**payload))
+
+
+def _iso(value: Any) -> Any:
+    return value.isoformat() if hasattr(value, 'isoformat') else value
+
+
+def list_versions_and_aliases(state_machine_arn: str) -> dict[str, Any]:
+    arn = validate_state_machine_arn(state_machine_arn)
+    client = _stepfunctions_client()
+    versions = []
+    for item in client.list_state_machine_versions(stateMachineArn=arn).get('stateMachineVersions', []):
+        detail = client.describe_state_machine(stateMachineArn=item['stateMachineVersionArn'])
+        versions.append({
+            'arn': item['stateMachineVersionArn'],
+            'version': item['stateMachineVersionArn'].rsplit(':', 1)[-1],
+            'description': detail.get('description') or '',
+            'revision_id': detail.get('revisionId') or '',
+            'creation_date': _iso(item.get('creationDate')),
+        })
+    versions.sort(key=lambda item: int(item['version']) if item['version'].isdigit() else 0, reverse=True)
+    aliases = []
+    for item in client.list_state_machine_aliases(stateMachineArn=arn).get('stateMachineAliases', []):
+        detail = client.describe_state_machine_alias(stateMachineAliasArn=item['stateMachineAliasArn'])
+        aliases.append({
+            'arn': item['stateMachineAliasArn'],
+            'name': detail.get('name'),
+            'description': detail.get('description') or '',
+            'routing': [{'version_arn': route['stateMachineVersionArn'], 'weight': route['weight']}
+                        for route in detail.get('routingConfiguration', [])],
+            'creation_date': _iso(detail.get('creationDate')),
+            'update_date': _iso(detail.get('updateDate')),
+        })
+    return {'state_machine_arn': arn, 'versions': versions, 'aliases': aliases}
+
+
+def _routing(routing: Any) -> list[dict[str, Any]]:
+    """An alias routes to one version, or splits traffic between two with weights adding up to 100."""
+    if not isinstance(routing, list) or not 1 <= len(routing) <= 2:
+        raise ValueError('Route the alias to one version, or to two versions with weights')
+    result = []
+    for route in routing:
+        if not isinstance(route, dict):
+            raise ValueError('Each route needs a version and a weight')
+        version = validate_state_machine_arn(route.get('version_arn', ''))
+        try:
+            weight = int(route.get('weight'))
+        except (TypeError, ValueError) as exc:
+            raise ValueError('Weights must be whole numbers from 0 to 100') from exc
+        if not 0 <= weight <= 100:
+            raise ValueError('Weights must be whole numbers from 0 to 100')
+        result.append({'stateMachineVersionArn': version, 'weight': weight})
+    if sum(route['weight'] for route in result) != 100:
+        raise ValueError('Weights must add up to 100')
+    if len({route['stateMachineVersionArn'] for route in result}) != len(result):
+        raise ValueError('Choose two different versions')
+    return result
+
+
+def create_state_machine_alias(name: str, routing: Any, description: str = '') -> dict[str, Any]:
+    clean = (name or '').strip()
+    if not clean or len(clean) > 80 or clean.isdigit():
+        raise ValueError("Alias name is required, up to 80 characters, and can't be only digits")
+    kwargs: dict[str, Any] = {'name': clean, 'routingConfiguration': _routing(routing)}
+    if description:
+        kwargs['description'] = description
+    response = _stepfunctions_client().create_state_machine_alias(**kwargs)
+    return {'alias_arn': response.get('stateMachineAliasArn')}
+
+
+def update_state_machine_alias(alias_arn: str, routing: Any, description: str | None = None) -> dict[str, Any]:
+    arn = validate_state_machine_arn(alias_arn)
+    kwargs: dict[str, Any] = {'stateMachineAliasArn': arn, 'routingConfiguration': _routing(routing)}
+    if description is not None:
+        kwargs['description'] = description
+    _stepfunctions_client().update_state_machine_alias(**kwargs)
+    return {'alias_arn': arn}
+
+
+def delete_state_machine_alias(alias_arn: str) -> dict[str, Any]:
+    arn = validate_state_machine_arn(alias_arn)
+    _stepfunctions_client().delete_state_machine_alias(stateMachineAliasArn=arn)
+    return {'alias_arn': arn, 'deleted': True}

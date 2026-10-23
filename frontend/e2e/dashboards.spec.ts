@@ -4700,3 +4700,86 @@ test('EC2 key pairs create a key shown once, import a public key and delete with
     ['delete', { key_name: 'existing' }],
   ]);
 });
+
+test('Lambda asynchronous invocation shows the defaults, saves destinations and removes the settings', async ({ page }) => {
+  await inventory(page, 'lambda', { functions: [{ FunctionName: 'worker', Runtime: 'python3.12' }] });
+  let config: any = null;
+  const sent: any[] = [];
+  await page.route('**/api/lambda/functions/worker/event-invoke-config/', route => {
+    const method = route.request().method();
+    if (method === 'PUT') {
+      const body = route.request().postDataJSON(); sent.push(body);
+      if (Number(body.maximum_retry_attempts) > 2) return route.fulfill({ status: 400, json: { error: 'Retry attempts must be 0, 1 or 2' } });
+      config = { ...body, maximum_retry_attempts: Number(body.maximum_retry_attempts), maximum_event_age_in_seconds: Number(body.maximum_event_age_in_seconds) };
+    }
+    if (method === 'DELETE') { config = null; return route.fulfill({ json: { config: null, deleted: true } }); }
+    return route.fulfill({ json: { config } });
+  });
+  await page.goto('/lambda/async?function=worker');
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'on-failure destination' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  await page.getByLabel('Maximum age of event (seconds)').fill('3600');
+  await page.getByLabel('On-failure destination').fill('arn:aws:sqs:eu-west-1:123456789012:worker-dlq');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Asynchronous invocation settings saved.')).toBeVisible();
+  expect(sent.at(-1)).toMatchObject({ maximum_event_age_in_seconds: 3600, on_failure: 'arn:aws:sqs:eu-west-1:123456789012:worker-dlq' });
+  await expect(page.getByText('SQS queue worker-dlq')).toBeVisible();
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Remove asynchronous invocation settings' }).getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByText('Settings removed.', { exact: false })).toBeVisible();
+});
+
+test('Step Functions versions and aliases create a weighted canary alias', async ({ page }) => {
+  const machine = 'arn:aws:states:eu-west-1:123456789012:stateMachine:orders';
+  await inventory(page, 'stepfunctions', { state_machines: [{ name: 'orders', stateMachineArn: machine, definition: { StartAt: 'Done', States: { Done: { Type: 'Pass', End: true } } } }] });
+  const versions = [{ arn: `${machine}:2`, version: '2', description: 'new pricing' }, { arn: `${machine}:1`, version: '1', description: '' }];
+  let aliases: any[] = [];
+  let created: any;
+  await page.route('**/api/stepfunctions/versions-aliases/**', route => route.fulfill({ json: { state_machine_arn: machine, versions, aliases } }));
+  await page.route('**/api/stepfunctions/aliases/', route => {
+    created = route.request().postDataJSON();
+    aliases = [{ arn: `${machine}:${created.name}`, name: created.name, routing: created.routing }];
+    return route.fulfill({ json: { alias_arn: `${machine}:${created.name}` } });
+  });
+  await page.goto('/stepfunctions/');
+  await page.getByRole('button', { name: 'orders', exact: true }).click();
+  await page.getByRole('tab', { name: 'Versions and aliases', exact: true }).click();
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'by weight' })).toBeVisible();
+  await expect(page.getByRole('row', { name: /new pricing/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Create alias', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Create alias' });
+  await dialog.getByLabel('Alias name').fill('prod');
+  await dialog.getByLabel('Additional version').click();
+  await dialog.getByRole('option', { name: /Version 1/ }).click();
+  await dialog.getByLabel('Weight of the additional version (%)').fill('10');
+  await expect(dialog.getByText('Version 2 gets 90%.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Save alias' }).click();
+  await expect.poll(() => created).toMatchObject({ name: 'prod', routing: [{ version_arn: `${machine}:2`, weight: 90 }, { version_arn: `${machine}:1`, weight: 10 }] });
+  await expect(page.getByRole('row', { name: /prod/ })).toContainText('Version 2: 90%, Version 1: 10%');
+});
+
+test('DynamoDB exports list a failed export and start a new one to S3', async ({ page }) => {
+  await inventory(page, 'dynamodb', { tables: [{ ...dynamoReviewTable, PointInTimeRecovery: true }] });
+  let exports: any[] = [{ arn: 'e1', status: 'FAILED', s3_bucket: 'missing-bucket', s3_prefix: '', export_type: 'FULL_EXPORT', export_format: 'DYNAMODB_JSON', failure_code: 'S3NoSuchBucket', failure_message: 'The bucket does not exist' }];
+  let started: any;
+  await page.route('**/api/dynamodb/tables/Orders/exports/', route => {
+    if (route.request().method() === 'POST') {
+      started = route.request().postDataJSON();
+      exports = [{ arn: 'e2', status: 'IN_PROGRESS', s3_bucket: started.s3_bucket, s3_prefix: started.s3_prefix, export_type: 'FULL_EXPORT', export_format: 'DYNAMODB_JSON' }, ...exports];
+      return route.fulfill({ json: { arn: 'e2', status: 'IN_PROGRESS' } });
+    }
+    return route.fulfill({ json: { table: 'Orders', exports } });
+  });
+  await page.goto('/dynamodb/exports?table=Orders');
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'point-in-time recovery' })).toBeVisible();
+  await expect(page.getByRole('row', { name: /missing-bucket/ })).toContainText('S3NoSuchBucket');
+  await page.getByRole('button', { name: 'Export to S3', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Export Orders to S3' });
+  await dialog.getByLabel('S3 bucket').fill('analytics-exports');
+  await dialog.getByLabel('S3 prefix').fill('orders');
+  await dialog.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(page.getByText('Export of Orders to s3://analytics-exports started.')).toBeVisible();
+  expect(started).toEqual({ s3_bucket: 'analytics-exports', s3_prefix: 'orders' });
+  await expect(page.getByRole('row', { name: /analytics-exports/ })).toContainText('IN_PROGRESS');
+});

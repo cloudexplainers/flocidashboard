@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- More Floci features the console didn't show (Lambda, Step Functions, DynamoDB, Kinesis):
+  - **Lambda async destinations:** a new Asynchronous invocation tab on each function shows and edits retry attempts, maximum event age and on-success/on-failure destinations, with the AWS limits Floci doesn't check.
+  - **Step Functions versions and aliases:** a new Versions and aliases tab publishes and deletes versions and creates, edits and deletes aliases, including two-version weighted routing for canary releases.
+  - **DynamoDB export to S3:** a new Exports to S3 tab lists a table's exports (with failure reasons) and starts full DynamoDB JSON exports. The console requires point-in-time recovery, as AWS does; Floci doesn't.
+  - **Kinesis resharding:** the Kinesis workbench gets Update shard count, Split shard (even split by default) and Merge shards (adjacent shards only).
+
 - More Floci features the console didn't show (IAM, Secrets Manager, EC2):
   - **IAM password policy:** a new Account settings page shows the account password policy (or that the IAM default applies) and edits it with the AWS limits. A Floci note says Floci enforces it on login profiles but accepts any password when no policy is set.
   - **IAM credential report:** a new Credential report page generates the report, waits until it's ready, and lists and downloads it.

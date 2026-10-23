@@ -946,6 +946,8 @@ LAMBDA_ACTIONS = (
     action('create_alias', 'Create alias', 'POST', '/api/lambda/functions/{function}/aliases/', 'create', fields=(action_field('name', 'Alias name', required=True), action_field('function_version', 'Function version', required=True), action_field('description', 'Description')), success_message='Alias created'),
     action('create_event_source_mapping', 'Create trigger', 'POST', '/api/lambda/functions/{function}/event-source-mappings/', 'create', fields=(action_field('options', 'Mapping JSON', required=True, field_type='object'),), success_message='Trigger created'),
     action('create_function_url_config', 'Create function URL', 'POST', '/api/lambda/functions/{function}/url/', 'create', fields=(action_field('options', 'URL configuration JSON', required=True, field_type='object'),), success_message='Function URL created'),
+    action('put_function_event_invoke_config', 'Configure asynchronous invocation', 'PUT', '/api/lambda/functions/{function}/event-invoke-config/', 'update', fields=(action_field('maximum_retry_attempts', 'Retry attempts', field_type='number', options=('0', '1', '2'), default='2'), action_field('maximum_event_age_in_seconds', 'Maximum age of event (seconds)', field_type='number', default=21600), action_field('on_success', 'On-success destination ARN'), action_field('on_failure', 'On-failure destination ARN')), success_message='Asynchronous invocation updated'),
+    action('delete_function_event_invoke_config', 'Remove asynchronous invocation config', 'DELETE', '/api/lambda/functions/{function}/event-invoke-config/', 'delete', safety='destructive', confirm='Remove the destinations and go back to the default retries?', success_message='Asynchronous invocation config removed'),
     action('put_function_concurrency', 'Set concurrency', 'PUT', '/api/lambda/functions/{function}/concurrency/', 'update', fields=(action_field('reserved_concurrency', 'Reserved concurrency', required=True, field_type='number'),), success_message='Concurrency updated'),
     action('add_permission', 'Add permission', 'POST', '/api/lambda/functions/{function}/permissions/', 'update', fields=(action_field('statement', 'Permission JSON', required=True, field_type='object'),), success_message='Permission added'),
     action('tag_resource', 'Tag function', 'POST', '/api/lambda/functions/{function}/tags/', 'update', fields=(action_field('resource_arn', 'Function ARN', required=True), action_field('tags', 'Tags', required=True, field_type='object')), success_message='Function tagged'),
@@ -1056,6 +1058,7 @@ DYNAMODB_ACTIONS = (
             action_field('limit', 'Limit', field_type='number'),
         ),
     ),
+    action('export_table_to_point_in_time', 'Export to S3', 'POST', '/api/dynamodb/tables/{table}/exports/', 'execute', description='Full export in DynamoDB JSON. Needs point-in-time recovery on.', fields=(action_field('s3_bucket', 'S3 bucket', required=True), action_field('s3_prefix', 'S3 prefix')), success_message='Export started'),
 )
 
 
@@ -1327,6 +1330,9 @@ KINESIS_ACTIONS = (
             action_field('sequence_number', 'Sequence number'),
         ),
     ),
+    action('update_shard_count', 'Update shard count', 'POST', '/api/kinesis/streams/{stream}/shard-count/', 'update', description='Uniform scaling for a provisioned stream: between half and double the open shards.', fields=(action_field('target_shard_count', 'Target shard count', required=True, field_type='number'),), success_message='Resharding started'),
+    action('split_shard', 'Split shard', 'POST', '/api/kinesis/streams/{stream}/shards/{shard}/split/', 'update', description='Closes the shard and opens two children that share its hash key range.', fields=(action_field('new_starting_hash_key', 'New starting hash key', help_text='Leave empty to split the range evenly.'),), success_message='Shard split'),
+    action('merge_shards', 'Merge shards', 'POST', '/api/kinesis/streams/{stream}/shards/{shard}/merge/', 'update', description='Closes two adjacent shards and opens one child covering both ranges.', fields=(action_field('adjacent_shard_id', 'Adjacent shard ID', required=True),), success_message='Shards merged'),
 )
 
 
@@ -2775,6 +2781,9 @@ STEPFUNCTIONS_ACTIONS = (
         confirm='Delete this state machine version?',
         success_message='State machine version deleted',
     ),
+    action('create_state_machine_alias', 'Create alias', 'POST', '/api/stepfunctions/aliases/', 'create', fields=(action_field('name', 'Alias name', required=True), action_field('routing', 'Routing (version_arn and weight)', required=True, field_type='object'), action_field('description', 'Description')), success_message='Alias created'),
+    action('update_state_machine_alias', 'Update alias routing', 'PUT', '/api/stepfunctions/aliases/', 'update', fields=(action_field('alias_arn', 'Alias ARN', required=True), action_field('routing', 'Routing (version_arn and weight)', required=True, field_type='object'), action_field('description', 'Description')), success_message='Alias updated'),
+    action('delete_state_machine_alias', 'Delete alias', 'DELETE', '/api/stepfunctions/aliases/', 'delete', safety='destructive', confirm='Delete this alias? Callers that start executions through it will fail.', fields=(action_field('alias_arn', 'Alias ARN', required=True),), success_message='Alias deleted'),
     action(
         'start_execution',
         'Start execution',
