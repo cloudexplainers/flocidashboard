@@ -867,6 +867,28 @@ Python's standard library has no AES, so the envelope steps encrypt the record w
 as a stand-in for AES-256-GCM, and the explanation says so. The KMS console already shows the key policy, rotation and
 grants the lab creates. `check_labs --service kms` passed on 2.3.0.
 
+## Route 53 routing and failover lab (2026-10-23)
+
+`route53/routing-failover` (SAA 2.2, 3.4), 8 steps, in `dashboard/labs/route53_labs.py`, the first Route 53 lab and
+its own batch after load balancing. It closes Level 4 and covers Wave 1 item W1-6: a public hosted zone
+`lab-shop.example.com`, HTTP health checks for a us-east-1 primary (192.0.2.10) and a us-west-2 standby
+(198.51.100.20), failover records for `www`, an apex alias to `www` with EvaluateTargetHealth, a 90/10 weighted pair
+for `api`, latency records for `app`, a failover drill, and a split-horizon private zone of the same name on VPC
+`lab-route53-vpc` (10.53.0.0/16). Wave 1 is now complete.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the leftovers, deliberately broken setups,
+steps out of order, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Hosted zones | Created with four placeholder name servers and NS and SOA records. Duplicate caller references and deleting a zone with records are refused, as on AWS. A private zone is accepted for a VPC that doesn't exist or has DNS hostnames off. | The private zone step checks the VPC attributes itself |
+| Health checks | Stored, but never probe: `GetHealthCheckStatus` reports "Success: HTTP Status Code 200" from checker 1.2.3.4 for any address. Accepts a 20-second interval and a threshold of 20. Drops Regions, Inverted, EnableSNI, MeasureLatency, calculated children and CloudWatch alarm settings. `UpdateHealthCheck` replaces the whole config with only the fields sent. Deleting a check a record uses is allowed. `GetHealthCheckCount`, `GetHealthCheckLastFailureReason` and `GetCheckerIpRanges` fail. | The step validates interval, threshold and target, and says Floci reports success without probing |
+| Records | Failover, weighted, latency, set identifiers, health check IDs, TTLs and alias targets are kept. GeoLocation and MultiValueAnswer are dropped. CREATE of an existing record, DELETE of a missing record and DELETE with values that differ are refused. Not validated: two PRIMARY records, weights above 255, a weighted record without a set identifier, mixed policies on one name, a CNAME at the apex, an alias to a missing name, a health check ID that doesn't exist. | Each record step checks those rules and repairs strays on a rerun |
+| DNS answers | Floci's DNS server (port 53 on its Docker network) answers A records in private zones to any client, with every value; the private zone's CNAME got an empty answer. Public zone names get NXDOMAIN. `TestDNSAnswer` and `ListQueryLoggingConfigs` fail. | The drill plays the resolver over the stored records: primary, then secondary with the primary failing, then primary with both failing (AWS fails open) |
+
+The Route 53 console already labels routing policies and shows private zone VPCs; its Floci note no longer says geolocation is stored.
+`check_labs --service route53` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

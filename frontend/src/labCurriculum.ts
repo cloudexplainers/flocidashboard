@@ -111,10 +111,10 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
   {
     id: 'level-4-senior',
     title: 'Level 4: Workflows, Containers & Enforcement',
-    subtitle: 'Identity enforcement, remote operations, workflow orchestration, containers, resilient architectures, and key management',
+    subtitle: 'Identity enforcement, remote operations, workflow orchestration, containers, resilient architectures, key management, and DNS failover',
     badge: 'Senior',
     color: 'red',
-    description: 'Switch identities and prove IAM enforcement end to end, run commands on instances with SSM, orchestrate workflows with Step Functions Choice and Parallel states, deploy containerized microservices on ECS with Fargate, make databases resilient with RDS read replicas, point-in-time restore, and Aurora failover, run a highly available web tier behind an Application Load Balancer with Auto Scaling, protect and tier S3 data with Object Lock, storage classes, lifecycle rules, and cross-Region replication, and manage a customer managed KMS key with a key policy, rotation, grants, envelope encryption, and SSE-KMS.',
+    description: 'Switch identities and prove IAM enforcement end to end, run commands on instances with SSM, orchestrate workflows with Step Functions Choice and Parallel states, deploy containerized microservices on ECS with Fargate, make databases resilient with RDS read replicas, point-in-time restore, and Aurora failover, run a highly available web tier behind an Application Load Balancer with Auto Scaling, protect and tier S3 data with Object Lock, storage classes, lifecycle rules, and cross-Region replication, manage a customer managed KMS key with a key policy, rotation, grants, envelope encryption, and SSE-KMS, and route users with Route 53 health checks, failover, weighted and latency records, and a split-horizon private zone.',
     labs: [
       { service: 'iam', key: 'identity-enforcement-capstone', title: 'Switch identities and verify IAM enforcement', stepCount: 7 },
       { service: 'ec2', key: 'guided-ssm-command', title: 'Execute commands with SSM Run Command', stepCount: 3 },
@@ -125,6 +125,7 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'elasticloadbalancing', key: 'ha-web-tier', title: 'Build a highly available web tier with an Application Load Balancer and Auto Scaling', stepCount: 12 },
       { service: 's3', key: 'data-protection-tiers', title: 'Protect and tier S3 data with Object Lock, storage classes, lifecycle rules, and replication', stepCount: 13 },
       { service: 'kms', key: 'key-management', title: 'Manage a customer managed KMS key with a key policy, rotation, grants, and envelope encryption', stepCount: 8 },
+      { service: 'route53', key: 'routing-failover', title: 'Route traffic and fail over between Regions with Route 53', stepCount: 8 },
     ],
   },
   {
