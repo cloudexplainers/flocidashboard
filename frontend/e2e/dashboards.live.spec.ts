@@ -506,6 +506,72 @@ test('S3 and Lambda live resource links preserve emulator resource selection', a
   }
 });
 
+test('S3 Object Lock, lifecycle, replication and Intelligent-Tiering forms against Floci', async ({ page }) => {
+  test.setTimeout(120_000);
+  const bucket = `ui-lock-${Date.now()}`;
+  const replica = `${bucket}-replica`;
+  const sdk = (code: string) => execFileSync(python, ['-c', `import boto3,json,sys\np=json.loads(sys.argv[1])\ns3=boto3.client('s3',endpoint_url=p['endpoint'],region_name='us-east-1',aws_access_key_id='test',aws_secret_access_key='test')\n${code}`, JSON.stringify({ bucket, replica, endpoint: flociEndpoint })], { encoding: 'utf8', timeout: 30_000 });
+  sdk("for b in (p['bucket'], p['replica']):\n  s3.create_bucket(Bucket=b)\n  s3.put_bucket_versioning(Bucket=b, VersioningConfiguration={'Status':'Enabled'})");
+  try {
+    await page.goto(`/s3/properties?bucket=${bucket}`);
+    await page.getByRole('button', { name: 'Edit Object Lock', exact: true }).click();
+    const lockDialog = page.getByRole('dialog');
+    await lockDialog.getByText('I acknowledge that turning on Object Lock is permanent', { exact: false }).click();
+    await lockDialog.getByText('Enable', { exact: true }).click();
+    await lockDialog.getByLabel('Default retention period').fill('1');
+    await lockDialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByText('Governance · 1 day', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Suspend', exact: true })).toBeDisabled();
+
+    // New objects get the default retention, and Floci enforces it and the legal hold.
+    sdk("s3.put_object(Bucket=p['bucket'], Key='report.txt', Body=b'v1')");
+    await page.goto(`/s3/objects?bucket=${bucket}`);
+    await page.getByRole('button', { name: 'report.txt', exact: true }).click();
+    const objectDialog = page.getByRole('dialog');
+    await expect(objectDialog.getByText('Governance', { exact: true })).toBeVisible();
+    await objectDialog.getByRole('button', { name: 'Turn on legal hold', exact: true }).click();
+    await expect(objectDialog.getByRole('button', { name: 'Turn off legal hold', exact: true })).toBeVisible();
+    expect(sdk("v=s3.list_object_versions(Bucket=p['bucket'])['Versions'][0]['VersionId']\ntry:\n  s3.delete_object(Bucket=p['bucket'], Key='report.txt', VersionId=v, BypassGovernanceRetention=True); print('deleted')\nexcept Exception as e: print(e.response['Error']['Code'])").trim()).toBe('AccessDenied');
+    await objectDialog.getByRole('button', { name: 'Turn off legal hold', exact: true }).click();
+    await expect(objectDialog.getByRole('button', { name: 'Turn on legal hold', exact: true })).toBeVisible();
+    await objectDialog.getByRole('button', { name: 'Close', exact: true }).click();
+
+    await page.getByRole('tab', { name: 'Management', exact: true }).click();
+    await page.getByRole('button', { name: 'Create lifecycle rule', exact: true }).click();
+    const lifecycle = page.getByRole('dialog');
+    await lifecycle.getByLabel('Lifecycle rule name').fill('expire-logs');
+    await lifecycle.getByLabel('Prefix', { exact: true }).fill('logs/');
+    await lifecycle.getByText('Expire current versions of objects', { exact: true }).click();
+    await lifecycle.getByLabel('Days after object creation to expire').fill('7');
+    await lifecycle.getByRole('button', { name: 'Create rule', exact: true }).click();
+    await expect(page.getByText('Expire current versions after 7 days', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Create replication rule', exact: true }).click();
+    const replication = page.getByRole('dialog');
+    await replication.getByLabel('Replication rule name').fill('to-replica');
+    await replication.getByRole('button', { name: 'Destination bucket' }).click();
+    await page.getByRole('option', { name: replica, exact: true }).click();
+    await replication.getByLabel('IAM role ARN').fill('arn:aws:iam::000000000000:role/s3-replication');
+    await replication.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('row').filter({ hasText: 'to-replica' })).toContainText(replica);
+
+    await page.getByRole('tab', { name: 'Properties', exact: true }).click();
+    await page.getByRole('button', { name: 'Create configuration', exact: true }).click();
+    const tiering = page.getByRole('dialog');
+    await tiering.getByLabel('Configuration name').fill('cold');
+    await tiering.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByRole('row').filter({ hasText: 'cold' })).toContainText('90 days');
+
+    const stored = JSON.parse(sdk("print(json.dumps({'lifecycle': s3.get_bucket_lifecycle_configuration(Bucket=p['bucket'])['Rules'], 'replication': s3.get_bucket_replication(Bucket=p['bucket'])['ReplicationConfiguration'], 'tiering': s3.list_bucket_intelligent_tiering_configurations(Bucket=p['bucket'])['IntelligentTieringConfigurationList'], 'lock': s3.get_object_lock_configuration(Bucket=p['bucket'])['ObjectLockConfiguration']}))"));
+    expect(stored.lifecycle).toEqual([{ ID: 'expire-logs', Status: 'Enabled', Filter: { Prefix: 'logs/' }, Expiration: { Days: 7 } }]);
+    expect(stored.replication.Rules[0].Destination).toEqual({ Bucket: `arn:aws:s3:::${replica}` });
+    expect(stored.tiering[0].Tierings).toEqual([{ Days: 90, AccessTier: 'ARCHIVE_ACCESS' }]);
+    expect(stored.lock).toEqual({ ObjectLockEnabled: 'Enabled', Rule: { DefaultRetention: { Mode: 'GOVERNANCE', Days: 1 } } });
+  } finally {
+    sdk("for b in (p['bucket'], p['replica']):\n  try:\n    r=s3.list_object_versions(Bucket=b)\n    for v in r.get('Versions',[])+r.get('DeleteMarkers',[]):\n      try: s3.put_object_legal_hold(Bucket=b, Key=v['Key'], VersionId=v['VersionId'], LegalHold={'Status':'OFF'})\n      except Exception: pass\n      s3.delete_object(Bucket=b, Key=v['Key'], VersionId=v['VersionId'], BypassGovernanceRetention=True)\n    s3.delete_bucket(Bucket=b)\n  except Exception as e: print(e)");
+  }
+});
+
 test('SNS to SQS live delivery links preserve resource context and received messages', async ({ page }) => {
   test.setTimeout(60_000);
   const name = `ui-messaging-${Date.now()}`;

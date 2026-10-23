@@ -1140,6 +1140,159 @@ test('S3 missing bucket link does not expose another bucket details', async ({ p
   await expect(page.getByRole('heading', { name: 'Bucket: available-bucket', exact: true })).toHaveCount(0);
 });
 
+async function s3Bucket(page: Page, name: string, { versioning = 'Enabled', lock = null as any } = {}) {
+  await inventory(page, 's3', { buckets: [{ Name: name, object_lock: lock ? { ObjectLockEnabled: 'Enabled' } : null }, { Name: `${name}-replica` }] });
+  await page.route(`**/api/s3/buckets/${name}/versioning/`, route => route.fulfill({ json: versioning === 'Disabled' ? {} : { Status: versioning } }));
+  await page.route(`**/api/s3/buckets/${name}/object-lock/`, route => route.request().method() === 'GET' ? route.fulfill({ json: { configuration: lock } }) : route.fallback());
+}
+
+test('S3 lifecycle rules check the AWS rules Floci skips and save the whole configuration', async ({ page }) => {
+  await s3Bucket(page, 'logs');
+  let saved: any = null;
+  await page.route('**/api/s3/buckets/logs/lifecycle/', route => {
+    if (route.request().method() === 'PUT') { saved = route.request().postDataJSON(); return route.fulfill({ json: saved }); }
+    return route.fulfill({ json: { rules: saved?.rules || [{ ID: 'old', Status: 'Enabled', Filter: {}, Expiration: { Date: '2030-01-01T00:00:00Z' } }] } });
+  });
+  await page.goto('/s3/management?bucket=logs');
+  await expect(page.getByText('Floci stores lifecycle rules and returns them, but never runs them', { exact: false })).toBeVisible();
+  await page.getByRole('row').filter({ hasText: 'old' }).getByRole('radio').check();
+  await expect(page.getByRole('button', { name: 'Edit', exact: true }).first()).toBeDisabled();
+  await page.getByRole('button', { name: 'Create lifecycle rule', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Lifecycle rule name').fill('archive-logs');
+  await dialog.getByLabel('Prefix', { exact: true }).fill('logs/');
+  await expect(dialog.getByTestId('lifecycle-form-error')).toHaveText('Choose at least one lifecycle rule action.');
+  await dialog.getByText('Move current versions of objects between storage classes', { exact: true }).click();
+  await dialog.getByLabel('Days after object creation 1').fill('10');
+  await expect(dialog.getByTestId('lifecycle-form-error')).toHaveText('Transitions of current versions to Standard-IA need at least 30 days.');
+  await dialog.getByLabel('Days after object creation 1').fill('30');
+  await dialog.getByText('Expire current versions of objects', { exact: true }).click();
+  await dialog.getByLabel('Days after object creation to expire').fill('30');
+  await expect(dialog.getByTestId('lifecycle-form-error')).toHaveText('Expiration must come after the last transition of current versions.');
+  await dialog.getByLabel('Days after object creation to expire').fill('365');
+  await dialog.getByRole('button', { name: 'Create rule', exact: true }).click();
+  await expect.poll(() => saved).toEqual({ rules: [
+    { ID: 'old', Status: 'Enabled', Filter: {}, Expiration: { Date: '2030-01-01T00:00:00Z' } },
+    { ID: 'archive-logs', Status: 'Enabled', Filter: { Prefix: 'logs/' }, Transitions: [{ Days: 30, StorageClass: 'STANDARD_IA' }], Expiration: { Days: 365 } },
+  ] });
+  await expect(page.getByText('Successfully created lifecycle rule "archive-logs".')).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'archive-logs' })).toContainText('Transition to Standard-IA after 30 daysExpire current versions after 365 days');
+});
+
+test('S3 replication needs versioning and saves a rule with the shared role', async ({ page }) => {
+  await s3Bucket(page, 'source');
+  let saved: any = null;
+  await page.route('**/api/s3/buckets/source/replication/', route => {
+    if (route.request().method() === 'PUT') { saved = route.request().postDataJSON(); return route.fulfill({ json: saved }); }
+    return route.fulfill({ json: { configuration: saved?.configuration || null } });
+  });
+  await page.goto('/s3/management?bucket=source');
+  await expect(page.getByText('Floci stores the replication configuration and returns it, but replicates nothing', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Create replication rule', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Replication rule name').fill('to-replica');
+  await expect(dialog.getByTestId('replication-form-error')).toHaveText('Choose a destination bucket.');
+  await dialog.getByRole('button', { name: 'Destination bucket' }).click();
+  await page.getByRole('option', { name: 'source-replica' }).click();
+  await dialog.getByLabel('IAM role ARN').fill('arn:aws:iam::123456789012:role/replication');
+  await dialog.getByText('Delete marker replication', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => saved).toEqual({ configuration: { Role: 'arn:aws:iam::123456789012:role/replication', Rules: [
+    { ID: 'to-replica', Priority: 0, Status: 'Enabled', Filter: {}, DeleteMarkerReplication: { Status: 'Enabled' }, Destination: { Bucket: 'arn:aws:s3:::source-replica' } },
+  ] } });
+  await expect(page.getByRole('row').filter({ hasText: 'to-replica' })).toContainText('source-replica');
+});
+
+test('S3 replication and Object Lock refuse a bucket without versioning', async ({ page }) => {
+  await s3Bucket(page, 'plain', { versioning: 'Disabled' });
+  await page.route('**/api/s3/buckets/plain/replication/', route => route.fulfill({ json: { configuration: null } }));
+  await page.goto('/s3/management?bucket=plain');
+  await expect(page.getByText('Replication requires Bucket Versioning on the source bucket.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create replication rule', exact: true })).toBeDisabled();
+  await page.getByRole('tab', { name: 'Properties', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit Object Lock', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Object Lock can be turned on only for a bucket with Bucket Versioning enabled.', { exact: false })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
+});
+
+test('S3 Object Lock turns on with default retention and blocks suspending versioning', async ({ page }) => {
+  let lock: any = null;
+  let saved: any = null;
+  await inventory(page, 's3', { buckets: [{ Name: 'vault' }] });
+  await page.route('**/api/s3/buckets/vault/versioning/', route => route.fulfill({ json: { Status: 'Enabled' } }));
+  await page.route('**/api/s3/buckets/vault/object-lock/', route => {
+    if (route.request().method() === 'PUT') {
+      saved = route.request().postDataJSON();
+      lock = { ObjectLockEnabled: 'Enabled', Rule: { DefaultRetention: saved.default_retention } };
+      return route.fulfill({ json: { configuration: lock } });
+    }
+    return route.fulfill({ json: { configuration: lock } });
+  });
+  await page.goto('/s3/properties?bucket=vault');
+  await expect(page.getByRole('button', { name: 'Suspend', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Edit Object Lock', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Floci enforces Object Lock as AWS does', { exact: false })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled();
+  await dialog.getByText('I acknowledge that turning on Object Lock is permanent', { exact: false }).click();
+  await dialog.getByText('Enable', { exact: true }).click();
+  await dialog.getByLabel('Default retention period').fill('30');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => saved).toEqual({ default_retention: { Mode: 'GOVERNANCE', Days: 30 } });
+  await expect(page.getByText('Governance · 30 days', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Suspend', exact: true })).toBeDisabled();
+});
+
+test('S3 object retention and legal hold edit one version and ask for the governance bypass', async ({ page }) => {
+  await s3Bucket(page, 'locked', { lock: { ObjectLockEnabled: 'Enabled' } });
+  const head = { content_type: 'text/plain', content_length: 2, versioning: 'v1', object_lock_mode: 'GOVERNANCE', object_lock_retain_until_date: '2099-01-01T00:00:00Z', object_lock_legal_hold_status: 'OFF' };
+  const requests: any[] = [];
+  await page.route('**/api/s3/buckets/locked/objects/?*', route => route.fulfill({ json: { bucket: 'locked', prefix: '', folders: [], is_truncated: false, key_count: 1, objects: [
+    { key: 'report.txt', name: 'report.txt', type: 'file', size: 2, last_modified: '2026-10-21T10:00:00Z' },
+  ] } }));
+  await page.route('**/api/s3/buckets/locked/objects/head/?*', route => route.fulfill({ json: head }));
+  await page.route('**/api/s3/buckets/locked/objects/tags/?*', route => route.fulfill({ json: { tags: [] } }));
+  await page.route('**/api/s3/buckets/locked/objects/legal-hold/', route => { requests.push(route.request().postDataJSON()); head.object_lock_legal_hold_status = 'ON'; return route.fulfill({ json: { status: 'ON' } }); });
+  await page.route('**/api/s3/buckets/locked/objects/retention/', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: {} }); });
+  await page.goto('/s3/objects?bucket=locked');
+  await page.getByRole('button', { name: 'report.txt', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Governance', { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Turn on legal hold', exact: true }).click();
+  await expect(dialog.getByText('Successfully turned on the legal hold.')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Turn off legal hold', exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Edit retention', exact: true }).click();
+  await dialog.getByText('Disable', { exact: true }).click();
+  await dialog.getByText('Bypass governance retention', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect.poll(() => requests).toEqual([
+    { key: 'report.txt', status: 'ON' },
+    { key: 'report.txt', mode: null, retain_until_date: null, bypass_governance_retention: true },
+  ]);
+});
+
+test('S3 Intelligent-Tiering archive configurations check the tier day limits', async ({ page }) => {
+  await s3Bucket(page, 'tiered');
+  let saved: any = null;
+  await page.route('**/api/s3/buckets/tiered/intelligent-tiering/', route => {
+    if (route.request().method() === 'PUT') { saved = route.request().postDataJSON(); return route.fulfill({ json: saved }); }
+    return route.fulfill({ json: { configurations: saved ? [saved.configuration] : [] } });
+  });
+  await page.goto('/s3/properties?bucket=tiered');
+  await page.getByRole('button', { name: 'Create configuration', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('never moves objects between access tiers', { exact: false })).toBeVisible();
+  await dialog.getByLabel('Configuration name').fill('cold');
+  await dialog.getByLabel('Archive Access tier days').fill('60');
+  await expect(dialog.getByTestId('tiering-form-error')).toHaveText('Archive Access tier days must be from 90 to 730.');
+  await dialog.getByLabel('Archive Access tier days').fill('90');
+  await dialog.getByText('Deep Archive Access tier', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect.poll(() => saved).toEqual({ configuration: { Id: 'cold', Status: 'Enabled', Tierings: [{ Days: 90, AccessTier: 'ARCHIVE_ACCESS' }, { Days: 180, AccessTier: 'DEEP_ARCHIVE_ACCESS' }] } });
+  await expect(page.getByRole('row').filter({ hasText: 'cold' })).toContainText('180 days');
+});
+
 test('Lambda code source edits a package file and deploys only changed files', async ({ page }) => {
   await inventory(page, 'lambda', { functions: [{ FunctionName: 'worker', Runtime: 'python3.12', Handler: 'app.handler', State: 'Active' }] });
   let deployed: any = null;
