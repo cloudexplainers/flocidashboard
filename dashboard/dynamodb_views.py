@@ -7,6 +7,8 @@ from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
 from .dynamodb_api import (
+    export_table_to_s3,
+    list_table_exports,
     create_table,
     delete_item,
     delete_table,
@@ -169,3 +171,14 @@ def dynamodb_table_backups(request, table_name: str):
     except Exception as exc:
         operation = 'describe_continuous_backups' if request.method == 'GET' else 'update_continuous_backups'
         return handle_action_error(exc, service='dynamodb', operation=operation)
+
+
+@require_http_methods(['GET', 'POST'])
+def dynamodb_table_exports(request, table_name: str):
+    try:
+        if request.method == 'GET':
+            return JsonResponse(list_table_exports(table_name))
+        body = parse_json_body(request)
+        return JsonResponse(export_table_to_s3(table_name, body.get('s3_bucket', ''), s3_prefix=body.get('s3_prefix') or ''))
+    except Exception as exc:
+        return handle_action_error(exc, service='dynamodb', operation='list_exports' if request.method == 'GET' else 'export_table_to_point_in_time')

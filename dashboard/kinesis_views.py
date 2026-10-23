@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
-from .kinesis_api import create_stream, get_records, put_record
+from .kinesis_api import create_stream, get_records, merge_shards, put_record, split_shard, update_shard_count
 
 
 @require_http_methods(['POST'])
@@ -48,3 +48,27 @@ def kinesis_records_get(request, stream_name: str, shard_id: str):
         ))
     except Exception as exc:
         return handle_action_error(exc, service='kinesis', operation='get_records')
+
+
+@require_http_methods(['POST'])
+def kinesis_shard_count(request, stream_name: str):
+    try:
+        return JsonResponse(update_shard_count(stream_name, parse_json_body(request).get('target_shard_count')))
+    except Exception as exc:
+        return handle_action_error(exc, service='kinesis', operation='update_shard_count')
+
+
+@require_http_methods(['POST'])
+def kinesis_shard_split(request, stream_name: str, shard_id: str):
+    try:
+        return JsonResponse(split_shard(stream_name, shard_id, parse_json_body(request).get('new_starting_hash_key')))
+    except Exception as exc:
+        return handle_action_error(exc, service='kinesis', operation='split_shard')
+
+
+@require_http_methods(['POST'])
+def kinesis_shard_merge(request, stream_name: str, shard_id: str):
+    try:
+        return JsonResponse(merge_shards(stream_name, shard_id, parse_json_body(request).get('adjacent_shard_id', '')))
+    except Exception as exc:
+        return handle_action_error(exc, service='kinesis', operation='merge_shards')

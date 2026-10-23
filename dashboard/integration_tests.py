@@ -226,3 +226,72 @@ class ConsoleFeatureLiveTests(SimpleTestCase):
         names = [item['key_name'] for item in self.call('get', '/api/ec2/key-pairs/')['key_pairs']]
         self.assertIn(self.name, names)
         self.call('delete', '/api/ec2/key-pairs/', {'key_name': self.name})
+
+    def test_lambda_async_config_round_trip(self):
+        import io
+        import zipfile
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr('index.py', 'def handler(event, context):\n    return event\n')
+        lam, sqs = self.factory.client('lambda'), self.factory.client('sqs')
+        lam.create_function(FunctionName=self.name, Runtime='python3.12', Handler='index.handler',
+                            Role='arn:aws:iam::000000000000:role/lambda', Code={'ZipFile': buffer.getvalue()})
+        self.addCleanup(lambda: lam.delete_function(FunctionName=self.name))
+        queue = sqs.create_queue(QueueName=self.name)['QueueUrl']
+        self.addCleanup(lambda: sqs.delete_queue(QueueUrl=queue))
+        queue_arn = sqs.get_queue_attributes(QueueUrl=queue, AttributeNames=['QueueArn'])['Attributes']['QueueArn']
+        path = f'/api/lambda/functions/{self.name}/event-invoke-config/'
+        self.assertIsNone(self.call('get', path)['config'])
+        saved = self.call('put', path, {'maximum_retry_attempts': 0, 'maximum_event_age_in_seconds': 120, 'on_failure': queue_arn})['config']
+        self.assertEqual((saved['maximum_retry_attempts'], saved['on_failure']), (0, queue_arn))
+        self.call('put', path, {'maximum_retry_attempts': 5}, expect=400)
+        self.call('delete', path)
+        self.assertIsNone(self.call('get', path)['config'])
+
+    def test_step_functions_weighted_alias(self):
+        sfn = self.factory.client('stepfunctions')
+        definition = json.dumps({'StartAt': 'Done', 'States': {'Done': {'Type': 'Pass', 'End': True}}})
+        created = sfn.create_state_machine(name=self.name, definition=definition, roleArn='arn:aws:iam::000000000000:role/sfn', publish=True)
+        machine = created['stateMachineArn']
+        self.addCleanup(lambda: sfn.delete_state_machine(stateMachineArn=machine))
+        v1 = created['stateMachineVersionArn']
+        v2 = sfn.update_state_machine(stateMachineArn=machine, definition=definition.replace('Done', 'Finished'), publish=True)['stateMachineVersionArn']
+        alias = self.call('post', '/api/stepfunctions/aliases/', {
+            'name': 'prod', 'routing': [{'version_arn': v2, 'weight': 90}, {'version_arn': v1, 'weight': 10}]})['alias_arn']
+        listed = self.call('get', f'/api/stepfunctions/versions-aliases/?state_machine_arn={machine}')
+        self.assertEqual(len(listed['versions']), 2)
+        self.assertEqual({route['weight'] for route in listed['aliases'][0]['routing']}, {90, 10})
+        self.call('put', '/api/stepfunctions/aliases/', {'alias_arn': alias, 'routing': [{'version_arn': v2, 'weight': 100}]})
+        self.call('delete', '/api/stepfunctions/aliases/', {'alias_arn': alias})
+        for version in (v1, v2):
+            sfn.delete_state_machine_version(stateMachineVersionArn=version)
+
+    def test_dynamodb_export_to_s3(self):
+        ddb, s3 = self.factory.client('dynamodb'), self.factory.client('s3')
+        ddb.create_table(TableName=self.name, KeySchema=[{'AttributeName': 'pk', 'KeyType': 'HASH'}],
+                         AttributeDefinitions=[{'AttributeName': 'pk', 'AttributeType': 'S'}], BillingMode='PAY_PER_REQUEST')
+        self.addCleanup(lambda: ddb.delete_table(TableName=self.name))
+        ddb.put_item(TableName=self.name, Item={'pk': {'S': 'a'}})
+        s3.create_bucket(Bucket=self.name)
+        path = f'/api/dynamodb/tables/{self.name}/exports/'
+        refused = self.call('post', path, {'s3_bucket': self.name}, expect=400)
+        self.assertIn('point-in-time recovery', refused['error'])
+        ddb.update_continuous_backups(TableName=self.name, PointInTimeRecoverySpecification={'PointInTimeRecoveryEnabled': True})
+        self.call('post', path, {'s3_bucket': self.name, 's3_prefix': 'exports'})
+        exports = self.call('get', path)['exports']
+        self.assertEqual(len(exports), 1)
+        self.assertIn(exports[0]['status'], {'IN_PROGRESS', 'COMPLETED'})
+
+    def test_kinesis_split_merge_and_scale(self):
+        kinesis = self.factory.client('kinesis')
+        kinesis.create_stream(StreamName=self.name, ShardCount=1)
+        self.addCleanup(lambda: kinesis.delete_stream(StreamName=self.name))
+        base = f'/api/kinesis/streams/{self.name}'
+        self.call('post', f'{base}/shards/shardId-000000000000/split/', {})
+        open_shards = [shard['ShardId'] for shard in kinesis.list_shards(StreamName=self.name)['Shards']
+                       if not shard['SequenceNumberRange'].get('EndingSequenceNumber')]
+        self.assertEqual(len(open_shards), 2)
+        self.call('post', f'{base}/shards/{open_shards[0]}/merge/', {'adjacent_shard_id': open_shards[1]})
+        self.call('post', f'{base}/shard-count/', {'target_shard_count': 2})
+        # AWS allows at most double the current count; Floci enforces it too.
+        self.call('post', f'{base}/shard-count/', {'target_shard_count': 8}, expect=400)

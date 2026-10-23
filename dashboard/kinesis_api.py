@@ -173,3 +173,63 @@ def get_records(
         'millis_behind_latest': response.get('MillisBehindLatest'),
         'next_shard_iterator': response.get('NextShardIterator'),
     }
+
+
+def _open_shards(stream: str) -> list[dict[str, Any]]:
+    shards = []
+    kwargs: dict[str, Any] = {'StreamName': stream}
+    while True:
+        response = _client().list_shards(**kwargs)
+        shards.extend(response.get('Shards', []))
+        if not response.get('NextToken'):
+            break
+        kwargs = {'NextToken': response['NextToken']}
+    return [shard for shard in shards if not shard.get('SequenceNumberRange', {}).get('EndingSequenceNumber')]
+
+
+def update_shard_count(stream_name: str, target_shard_count: Any) -> dict[str, Any]:
+    stream = _clean_required(stream_name, 'Stream name')
+    target = _positive_int(target_shard_count, 'Target shard count', 0)
+    response = _client().update_shard_count(StreamName=stream, TargetShardCount=target, ScalingType='UNIFORM_SCALING')
+    return {
+        'stream_name': stream,
+        'current_shard_count': response.get('CurrentShardCount'),
+        'target_shard_count': response.get('TargetShardCount'),
+    }
+
+
+def split_shard(stream_name: str, shard_id: str, new_starting_hash_key: Any = None) -> dict[str, Any]:
+    """Splits an open shard; without a hash key, at the middle of its range (an even split)."""
+    stream = _clean_required(stream_name, 'Stream name')
+    shard = _clean_required(shard_id, 'Shard ID')
+    match = next((item for item in _open_shards(stream) if item['ShardId'] == shard), None)
+    if not match:
+        raise ValueError(f'{shard} is not an open shard of {stream}')
+    low = int(match['HashKeyRange']['StartingHashKey'])
+    high = int(match['HashKeyRange']['EndingHashKey'])
+    if new_starting_hash_key in (None, ''):
+        key = (low + high + 1) // 2
+    else:
+        try:
+            key = int(str(new_starting_hash_key).strip())
+        except ValueError as exc:
+            raise ValueError('New starting hash key must be a whole number') from exc
+    # AWS requires the new key to fall strictly inside the shard's range; Floci doesn't check.
+    if not low < key <= high:
+        raise ValueError(f'New starting hash key must be greater than {low} and at most {high}')
+    _client().split_shard(StreamName=stream, ShardToSplit=shard, NewStartingHashKey=str(key))
+    return {'stream_name': stream, 'shard_id': shard, 'new_starting_hash_key': str(key)}
+
+
+def merge_shards(stream_name: str, shard_id: str, adjacent_shard_id: str) -> dict[str, Any]:
+    stream = _clean_required(stream_name, 'Stream name')
+    first = _clean_required(shard_id, 'Shard ID')
+    second = _clean_required(adjacent_shard_id, 'Adjacent shard ID')
+    shards = {item['ShardId']: item for item in _open_shards(stream)}
+    if first not in shards or second not in shards:
+        raise ValueError('Both shards must be open shards of this stream')
+    a, b = shards[first]['HashKeyRange'], shards[second]['HashKeyRange']
+    if int(a['EndingHashKey']) + 1 != int(b['StartingHashKey']) and int(b['EndingHashKey']) + 1 != int(a['StartingHashKey']):
+        raise ValueError('Shards can only be merged with an adjacent shard (their hash key ranges must touch)')
+    _client().merge_shards(StreamName=stream, ShardToMerge=first, AdjacentShardToMerge=second)
+    return {'stream_name': stream, 'shard_id': first, 'adjacent_shard_id': second}

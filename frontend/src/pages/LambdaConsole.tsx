@@ -1,4 +1,5 @@
 import { useSession } from '../components/SessionContext';
+import { LambdaAsyncConfig } from '../components/LambdaAsyncConfig';
 import { LambdaCodeEditor } from '../components/LambdaCodeEditor';
 import { FunctionOverview, FunctionLogs } from '../components/FunctionOverview';
 import React, { useState, useEffect, useRef } from 'react';
@@ -658,6 +659,7 @@ export const LambdaConsole: React.FC<LambdaConsoleProps> = ({ activeTab, onTabCh
                 ),
               },
               { label: 'Monitor', id: 'monitor', content: <FunctionLogs name={activeFunction.FunctionName} /> },
+              { label: 'Asynchronous invocation', id: 'async', content: <LambdaAsyncConfig functionName={activeFunction.FunctionName} /> },
               {
                 label: `Environment variables (${envVars.length})`,
                 id: 'env',

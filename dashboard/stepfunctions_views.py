@@ -10,6 +10,8 @@ from .stepfunctions_api import (
     create_state_machine, delete_state_machine, delete_state_machine_version,
     describe_execution, describe_state_machine, get_execution_history,
     publish_state_machine_version, start_execution, stop_execution, update_state_machine,
+    create_state_machine_alias, delete_state_machine_alias, list_versions_and_aliases,
+    update_state_machine_alias,
 )
 
 
@@ -155,3 +157,25 @@ def stepfunctions_task_callback(request):
         return JsonResponse({'success': success})
     except Exception as exc:
         return handle_action_error(exc, service='stepfunctions', operation='task_callback')
+
+
+@require_http_methods(['GET'])
+def stepfunctions_versions_aliases(request):
+    try:
+        return JsonResponse(list_versions_and_aliases(request.GET.get('state_machine_arn', '')))
+    except Exception as exc:
+        return handle_action_error(exc, service='stepfunctions', operation='list_state_machine_aliases')
+
+
+@require_http_methods(['POST', 'PUT', 'DELETE'])
+def stepfunctions_aliases(request):
+    operation = {'POST': 'create_state_machine_alias', 'PUT': 'update_state_machine_alias', 'DELETE': 'delete_state_machine_alias'}[request.method]
+    try:
+        body = parse_json_body(request)
+        if request.method == 'DELETE':
+            return JsonResponse(delete_state_machine_alias(body.get('alias_arn', '')))
+        if request.method == 'PUT':
+            return JsonResponse(update_state_machine_alias(body.get('alias_arn', ''), body.get('routing'), body.get('description')))
+        return JsonResponse(create_state_machine_alias(body.get('name', ''), body.get('routing'), body.get('description') or ''))
+    except Exception as exc:
+        return handle_action_error(exc, service='stepfunctions', operation=operation)

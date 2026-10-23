@@ -1,4 +1,5 @@
 import { normalizeDynamoTable } from './dynamoResources';
+import { DynamoDBExports } from '../components/DynamoDBExports';
 import { DynamoTableSchema, capacityModeLabel } from '../components/DynamoTableSchema';
 import { DynamoQueryBuilder, DynamoItemsRequest } from '../components/DynamoQueryBuilder';
 import ConfirmActionModal from '../components/ConfirmActionModal';
@@ -728,6 +729,11 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                     </Container>
                   </SpaceBetween>
                 ),
+              },
+              {
+                label: 'Exports to S3',
+                id: 'exports',
+                content: <DynamoDBExports key={activeTable.TableName} tableName={activeTable.TableName} pitrEnabled={pitrEnabled} />,
               },
               {
                 label: 'TTL and streams',

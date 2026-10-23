@@ -424,3 +424,47 @@ def update_point_in_time_recovery(table_name: str, *, enabled: bool) -> dict[str
         PointInTimeRecoverySpecification={'PointInTimeRecoveryEnabled': bool(enabled)},
     ).get('ContinuousBackupsDescription', {})
     return {'table': clean_name, 'continuous_backups': _json_safe(description)}
+
+
+def list_table_exports(table_name: str) -> dict[str, Any]:
+    clean_name = validate_table_name(table_name)
+    client = _dynamodb_client()
+    table_arn = client.describe_table(TableName=clean_name)['Table']['TableArn']
+    exports = []
+    for summary in client.list_exports(TableArn=table_arn).get('ExportSummaries', []):
+        detail = client.describe_export(ExportArn=summary['ExportArn']).get('ExportDescription', {})
+        exports.append(_json_safe({
+            'arn': detail.get('ExportArn'),
+            'status': detail.get('ExportStatus'),
+            'export_type': detail.get('ExportType') or summary.get('ExportType'),
+            'export_format': detail.get('ExportFormat'),
+            's3_bucket': detail.get('S3Bucket'),
+            's3_prefix': detail.get('S3Prefix') or '',
+            'manifest': detail.get('ExportManifest') or '',
+            'item_count': detail.get('ItemCount'),
+            'billed_size_bytes': detail.get('BilledSizeBytes'),
+            'start_time': detail.get('StartTime'),
+            'end_time': detail.get('EndTime'),
+            'failure_code': detail.get('FailureCode') or '',
+            'failure_message': detail.get('FailureMessage') or '',
+        }))
+    exports.sort(key=lambda item: str(item.get('start_time') or ''), reverse=True)
+    return {'table': clean_name, 'table_arn': table_arn, 'exports': exports}
+
+
+def export_table_to_s3(table_name: str, s3_bucket: str, *, s3_prefix: str = '') -> dict[str, Any]:
+    """Full export in DynamoDB JSON. AWS requires point-in-time recovery; Floci doesn't, so this checks it."""
+    clean_name = validate_table_name(table_name)
+    bucket = (s3_bucket or '').strip()
+    if not bucket:
+        raise ValueError('S3 bucket is required')
+    client = _dynamodb_client()
+    pitr = client.describe_continuous_backups(TableName=clean_name).get('ContinuousBackupsDescription', {})
+    if (pitr.get('PointInTimeRecoveryDescription') or {}).get('PointInTimeRecoveryStatus') != 'ENABLED':
+        raise ValueError('Turn on point-in-time recovery first: AWS exports a table only from its PITR backups')
+    table_arn = client.describe_table(TableName=clean_name)['Table']['TableArn']
+    kwargs: dict[str, Any] = {'TableArn': table_arn, 'S3Bucket': bucket, 'ExportFormat': 'DYNAMODB_JSON'}
+    if (s3_prefix or '').strip():
+        kwargs['S3Prefix'] = s3_prefix.strip().strip('/')
+    detail = client.export_table_to_point_in_time(**kwargs).get('ExportDescription', {})
+    return _json_safe({'table': clean_name, 'arn': detail.get('ExportArn'), 'status': detail.get('ExportStatus')})
