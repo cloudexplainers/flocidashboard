@@ -64,6 +64,7 @@ def wafv2_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'WAF v2 APIs are scope-aware, so the dashboard checks both REGIONAL and CLOUDFRONT resource scopes.',
+            'Floci stores web ACLs, rules and associations but does not inspect or filter any traffic.',
         ],
     }
 

@@ -35,6 +35,7 @@ import {
   updateDynamoDbPitr,
   updateDynamoDbTtl,
 } from '../api/client';
+import { FlociNote } from '../components/FlociNote';
 
 interface TableItem {
   KeySchema?: any[];
@@ -695,7 +696,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                       header={
                         <Header
                           variant="h3"
-                          description="Point-in-time recovery (PITR) provides continuous backups, so you can restore the table to any second in the recovery period."
+                          description="In AWS, point-in-time recovery (PITR) keeps continuous backups, so you can restore the table to any second in the recovery period."
                           actions={
                             <Button loading={savingPitr} disabled={pitrEnabled === undefined} onClick={handleTogglePitr}>
                               {pitrEnabled ? 'Turn off' : 'Turn on'}
@@ -706,6 +707,7 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                         </Header>
                       }
                     >
+                      <SpaceBetween size="m">
                       <Box>
                         Status:{' '}
                         {pitrEnabled === undefined ? (
@@ -716,6 +718,13 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                           <StatusIndicator type="stopped">Off</StatusIndicator>
                         )}
                       </Box>
+                      <FlociNote>
+                        Floci records whether PITR is on and reports it, but Floci 2.3.0
+                        can&apos;t restore a table: RestoreTableToPointInTime and on-demand
+                        backups (CreateBackup) are not implemented there. Newer Floci
+                        releases add them.
+                      </FlociNote>
+                      </SpaceBetween>
                     </Container>
                   </SpaceBetween>
                 ),

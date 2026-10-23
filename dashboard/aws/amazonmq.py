@@ -83,5 +83,6 @@ def amazonmq_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'The dashboard inspects brokers, users, and configurations when the local SDK model exposes those APIs.',
+            'Floci runs each broker as a real RabbitMQ container. Only the RabbitMQ engine and SINGLE_INSTANCE deployments are supported; ActiveMQ and multi-AZ modes are rejected.',
         ],
     }

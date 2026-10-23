@@ -65,6 +65,7 @@ def iot_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'This read-only inspector focuses on registry, policy, certificate, topic rule, job, and role-alias inventory.',
+            'Topic-level authorization is not enforced, and the plaintext MQTT listener on port 1883 accepts any client. Certificates and iot:Connect are checked only on the TLS listener (8883).',
         ],
     }
 

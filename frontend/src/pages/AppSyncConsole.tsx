@@ -1274,6 +1274,10 @@ const AppSyncWorkspace: React.FC<Props> = ({
                     "HTTP",
                   ].map((value) => ({
                     label: value === "NONE" ? "NONE (local resolver)" : value,
+                    description:
+                      value === "HTTP"
+                        ? "Floci doesn't resolve HTTP data sources: a resolver using one fails its field."
+                        : undefined,
                     value,
                   }))}
                   onChange={({ detail }) =>

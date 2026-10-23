@@ -299,6 +299,7 @@ def glue_inventory() -> dict[str, Any]:
             'default': 'read_csv_auto',
         },
         'notes': [
+            'Crawlers run when started and report SUCCEEDED, but a crawler schedule never starts a crawl on its own.',
         ],
     }
 

@@ -88,6 +88,7 @@ def pricing_inventory() -> dict[str, Any]:
         'notes': [
             'Attribute values are sampled from the first 10 services and first 5 attributes per service to keep page loads bounded.',
             'Price lists are the AmazonS3 lists in effect today, in USD (ListPriceLists needs a service, date and currency).',
+            'Prices come from a static snapshot bundled with Floci that covers a small set of services and Regions, not live AWS prices.',
         ],
     }
 

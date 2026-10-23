@@ -234,17 +234,19 @@ def autoscaling_inventory() -> dict[str, Any]:
             'PutLifecycleHook',
             'DescribeLifecycleHooks',
             'DeleteLifecycleHook',
-            'PutNotificationConfiguration',
-            'DescribeNotificationConfigurations',
-            'DeleteNotificationConfiguration',
-            'DescribeTags',
             'CreateOrUpdateTags',
             'DeleteTags',
             'DescribeAccountLimits',
         ],
         'notes': [
-            'This page uses the EC2 Auto Scaling SDK API and tolerates missing optional operations from local implementations.',
-            'Group detail expands lifecycle hooks, warm pool data, instance refreshes, policies, activities, notifications, and tags when available.',
+            'Floci scales a group only through its desired capacity: it launches and terminates EC2 instances to match it and registers them with its target groups. Suspending Launch or Terminate stops that.',
+            'Scaling policies are stored but never run. No CloudWatch alarm action triggers them and target tracking creates no alarms. Change the desired capacity to scale.',
+            'Scheduled actions are stored but never run at their scheduled time.',
+            'Lifecycle hooks are stored, but instances never wait in Pending:Wait or Terminating:Wait, and CompleteLifecycleAction changes nothing.',
+        ],
+        'not_supported': [
+            'Notification configurations (PutNotificationConfiguration, DescribeNotificationConfigurations, DeleteNotificationConfiguration)',
+            'DescribeTags and DescribeScalingProcessTypes',
         ],
     }
 

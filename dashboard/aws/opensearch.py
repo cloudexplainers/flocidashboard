@@ -165,6 +165,7 @@ def opensearch_inventory() -> dict[str, Any]:
             'Floci OpenSearch supports mock metadata mode and real container-backed domains exposed on ports 9400-9499.',
             'Supported interactive workflows include domain lifecycle, config updates, upgrades, tags, versions, and instance type limits.',
             'Real mode picks an OpenSearch or Elasticsearch image from the requested EngineVersion and marks the domain ready after cluster health is green or yellow.',
+            'Access policies, VPC options, fine-grained access control and encryption settings are stored and returned, but not enforced.',
         ],
     }
 

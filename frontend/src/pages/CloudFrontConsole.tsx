@@ -28,6 +28,7 @@ import {
   deleteCloudFrontFunction,
   publishCloudFrontFunction,
 } from '../api/client';
+import { FlociNote } from '../components/FlociNote';
 
 interface CloudFrontConsoleProps {
   activeTab?: string;
@@ -332,6 +333,7 @@ export const CloudFrontConsole: React.FC<CloudFrontConsoleProps> = ({ activeTab,
 
       <FormField label="Distribution context"><Select ariaLabel="Distribution context" placeholder="Select a distribution" selectedOption={activeDistId ? { label: activeDistId, value: activeDistId } : null} options={(data.distributions || []).map((distribution: any) => ({ label: distribution.Id || distribution.id, value: distribution.Id || distribution.id, description: distribution.DomainName || distribution.domain_name }))} onChange={({ detail }) => showTab(activeTab || 'origins', { distribution: detail.selectedOption.value! })} /></FormField>
       {pinned && !loading && !loadError && !activeDist && <Alert type="warning">Distribution not found in the active account and Region.</Alert>}
+      <FlociNote>Floci forwards viewer requests to the origin without caching, so cache policies and TTLs change nothing. Distributions report Deployed and invalidations Completed immediately. CloudFront Functions are stored but never run.</FlociNote>
       {activeDist && <Container header={<Header variant="h2" description={activeDist.DomainName || 'Domain not reported'} actions={<Button onClick={() => showTab('origins')}>View origins and behaviors</Button>}>Distribution overview</Header>}>
         <SpaceBetween size="m"><Grid gridDefinition={Array.from({ length: 6 }, () => ({ colspan: { default: 12, s: 4 } }))}>{[['Deployment status', activeDist.Status], ['Enabled', activeDist.Enabled == null ? null : activeDist.Enabled ? 'Yes' : 'No'], ['Last modified', activeDist.LastModifiedTime], ['ARN', activeDist.ARN], ['Price class', activeDist.PriceClass], ['HTTP version', activeDist.HttpVersion]].map(([label, value]) => <div key={label}><Box variant="awsui-key-label">{label}</Box><Box>{value == null ? 'Not reported' : String(value)}</Box></div>)}</Grid><div className="resource-flow cloudfront-request-flow"><section><Header variant="h3">Viewer</Header><p>{activeDist.DomainName || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Default behavior</Header><p>Target origin: {activeDist.DefaultCacheBehavior?.TargetOriginId || 'Not reported'}</p></section><span aria-hidden="true">→</span><section><Header variant="h3">Origins</Header>{(activeDist.Origins?.Items || []).map((origin: any) => <p key={origin.Id}>{origin.Id}: {origin.DomainName}</p>)}{!activeDist.Origins?.Items?.length && <p>Not reported</p>}</section></div></SpaceBetween>
       </Container>}

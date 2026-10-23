@@ -19,6 +19,7 @@ import Modal from '@cloudscape-design/components/modal';
 import Checkbox from '@cloudscape-design/components/checkbox';
 import Textarea from '@cloudscape-design/components/textarea';
 import StatusIndicator from '@cloudscape-design/components/status-indicator';
+import { FlociNote } from '../components/FlociNote';
 
 type Props = { resourcePath?: string; onNavigate: (path: string) => void };
 function useDetailColumns(): 1 | 2 {
@@ -95,6 +96,7 @@ function CloudTrailInventory({ section, eventId, onNavigate }: { section: string
     <Tabs activeTabId={section === 'trails' ? 'trails' : 'events'} onChange={({ detail }) => onNavigate(`cloudtrail/${detail.activeTabId}`)} tabs={[
       { id: 'events', label: 'Event history', content: <SpaceBetween size="m">
         <Alert type="info">Event history reflects the events returned by the current account and Region. Trail logging and S3 delivery are configured separately.</Alert>
+        <FlociNote>Floci records no management events, so event history stays empty. A logging trail does deliver S3 data events that match its event selectors (PutObject, GetObject, DeleteObject and other object calls) to its S3 bucket, as gzipped JSON files under AWSLogs/, by default about every 60 seconds. Open the trail bucket in the S3 console to read them.</FlociNote>
         <Container header={<Header variant="h2" counter={`(${events.length}${nextToken ? '+' : ''})`}>Events</Header>}><SpaceBetween size="m">
           <SpaceBetween direction="horizontal" size="s"><FormField label="Lookup attribute"><Select selectedOption={{ label: attribute, value: attribute }} options={['EventName', 'EventId', 'Username', 'EventSource', 'ResourceName', 'ResourceType', 'ReadOnly', 'AccessKeyId'].map(value => ({ label: value, value }))} onChange={({ detail }) => setAttribute(detail.selectedOption.value!)} /></FormField><FormField label="Lookup value"><Input value={value} onChange={({ detail }) => setValue(detail.value)} onKeyDown={({ detail }) => { if (detail.key === 'Enter') { const lookup = { attribute, value: value.trim() }; setApplied(lookup); load(lookup); } }} /></FormField><Button loading={loading} onClick={() => { const lookup = { attribute, value: value.trim() }; setApplied(lookup); load(lookup); }}>Search events</Button><Button disabled={loading} onClick={() => { setValue(''); setApplied({ attribute: '', value: '' }); load({ attribute: '', value: '' }); }}>Clear</Button></SpaceBetween>
           {applied.value && <Box>Applied lookup: {applied.attribute} = {applied.value}</Box>}

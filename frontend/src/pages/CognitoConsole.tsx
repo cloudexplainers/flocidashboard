@@ -553,6 +553,7 @@ export const CognitoConsole: React.FC<CognitoConsoleProps> = ({ activeTab, onTab
                         Create Identity Pool
                       </Button>
                     }
+                    description="Floci emulates identity pool management only. GetId and GetCredentialsForIdentity are not implemented, so an identity pool can't vend AWS credentials in Floci."
                   >
                     Federated Identity Pools
                   </Header>

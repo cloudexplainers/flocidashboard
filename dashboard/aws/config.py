@@ -118,7 +118,8 @@ def config_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'This page shows the management-plane inventory most useful for checking local compliance and recorder setup.',
-            'Compliance status always returns INSUFFICIENT_DATA because Floci stores resources but does not perform actual evaluation.',
+            'Floci records no resource configurations and never evaluates rules itself. Compliance comes only from evaluations reported with PutEvaluations or PutExternalEvaluation; until then it is INSUFFICIENT_DATA.',
+            'StartConfigRulesEvaluation marks the rule as invoked but does not call its Lambda function. Conformance packs are stored, not evaluated.',
         ],
     }
 

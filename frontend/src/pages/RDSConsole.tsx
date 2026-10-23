@@ -38,6 +38,7 @@ import {
   createRdsParameterGroup,
   deleteRdsParameterGroup,
 } from "../api/client";
+import { FlociNote } from '../components/FlociNote';
 
 type DBInstanceItem = RdsInstance;
 type DBClusterItem = RdsCluster;
@@ -1150,6 +1151,10 @@ const RdsWorkspace: React.FC<Props> = ({
             maintenance window. Applying changes immediately can interrupt
             connections.
           </Box>
+          <FlociNote>
+            Floci runs no maintenance window, so it applies every change at
+            once whether or not Apply immediately is checked.
+          </FlociNote>
         </SpaceBetween>
       </Modal>
 

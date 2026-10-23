@@ -1541,6 +1541,7 @@ BACKUP_ACTIONS = (
         'POST',
         '/api/backup/plans/',
         'create',
+        description='Floci stores the plan, but its rules never run on their schedule. Use Start backup job to create a recovery point.',
         fields=(action_field('backup_plan', 'Backup plan', required=True, field_type='object'),),
         success_message='Backup plan created',
     ),
@@ -1588,6 +1589,7 @@ BACKUP_ACTIONS = (
         'POST',
         '/api/backup/jobs/',
         'execute',
+        description='The job completes after a short delay and adds a recovery point to the vault. In Floci the recovery point holds no copy of the resource.',
         fields=(
             action_field('backup_vault_name', 'Backup vault name', required=True),
             action_field('resource_arn', 'Resource ARN', required=True),
@@ -2413,7 +2415,7 @@ EC2_ACTIONS = (
     action('release_elastic_ip', 'Release Elastic IP', 'DELETE', '/api/ec2/elastic-ips/{allocation}/', 'delete', safety='destructive', confirm='Release this Elastic IP?', success_message='Elastic IP released'),
     action('associate_elastic_ip', 'Associate Elastic IP', 'PUT', '/api/ec2/elastic-ips/{allocation}/association/', 'update', fields=(action_field('instance_id', 'Instance ID', required=True),), success_message='Elastic IP associated'),
     action('disassociate_elastic_ip', 'Disassociate Elastic IP', 'DELETE', '/api/ec2/elastic-ips/{allocation}/association/', 'delete', safety='destructive', confirm='Disassociate this Elastic IP?', fields=(action_field('association_id', 'Association ID', required=True),), success_message='Elastic IP disassociated'),
-    action('create_nat_gateway', 'Create NAT gateway', 'POST', '/api/ec2/nat-gateways/', 'create', fields=(action_field('subnet_id', 'Subnet ID', required=True), action_field('allocation_id', 'Allocation ID', required=True), action_field('connectivity_type', 'Connectivity type')), success_message='NAT gateway created'),
+    action('create_nat_gateway', 'Create NAT gateway', 'POST', '/api/ec2/nat-gateways/', 'create', description='Floci records the NAT gateway and reports it available at once, but it routes no traffic: instances reach the network through Docker networking, not through the gateway.', fields=(action_field('subnet_id', 'Subnet ID', required=True), action_field('allocation_id', 'Allocation ID', required=True), action_field('connectivity_type', 'Connectivity type')), success_message='NAT gateway created'),
     action('delete_nat_gateway', 'Delete NAT gateway', 'DELETE', '/api/ec2/nat-gateways/{nat_gateway}/', 'delete', safety='destructive', confirm='Delete this NAT gateway?', success_message='NAT gateway deleted'),
     action('create_vpc_endpoint', 'Create VPC endpoint', 'POST', '/api/ec2/vpc-endpoints/', 'create', fields=(action_field('vpc_id', 'VPC ID', required=True), action_field('service_name', 'Service name', required=True), action_field('endpoint_type', 'Endpoint type'), action_field('route_table_ids', 'Route table IDs', field_type='array'), action_field('subnet_ids', 'Subnet IDs', field_type='array'), action_field('security_group_ids', 'Security group IDs', field_type='array')), success_message='VPC endpoint created'),
     action('delete_vpc_endpoint', 'Delete VPC endpoint', 'DELETE', '/api/ec2/vpc-endpoints/{endpoint}/', 'delete', safety='destructive', confirm='Delete this VPC endpoint?', success_message='VPC endpoint deleted'),
@@ -2572,7 +2574,7 @@ IAM_ACTIONS = (
         fields=(action_field('user_name', 'User name', required=True), action_field('access_key_id', 'Access key ID', required=True)),
         success_message='Access key deleted',
     ),
-    action('get_access_key_last_used', 'Get access key usage', 'GET', '/api/iam/access-keys/{access_key}/last-used/', 'read', safety='safe'),
+    action('get_access_key_last_used', 'Get access key usage', 'GET', '/api/iam/access-keys/{access_key}/last-used/', 'read', safety='safe', description='Floci records no access-key usage, so this always reports the key as never used.'),
     action(
         'assume_role',
         'Assume role',
@@ -2933,8 +2935,9 @@ CONFIG_ACTIONS = (
         'POST',
         '/api/config/rules/evaluation/start/',
         'execute',
+        description='Floci marks the rule as invoked but does not evaluate it or call its Lambda function, so compliance does not change.',
         fields=(action_field('rule_names', 'Rule names', required=True, field_type='array'),),
-        success_message='Config rule evaluation started',
+        success_message='Evaluation request recorded. Floci does not run the evaluation.',
     ),
     action(
         'put_configuration_recorder',
@@ -4451,13 +4454,14 @@ AUTOSCALING_ACTIONS = (
         'POST',
         '/api/autoscaling/groups/{group}/policies/',
         'update',
+        description="Floci stores the policy but never runs it: no alarm can trigger it. To scale in Floci, set the group's desired capacity.",
         fields=(
             action_field('policy_name', 'Policy name', required=True),
             action_field('adjustment_type', 'Adjustment type', options=('ChangeInCapacity', 'ExactCapacity', 'PercentChangeInCapacity'), default='ChangeInCapacity'),
             action_field('scaling_adjustment', 'Scaling adjustment', required=True, field_type='number'),
             action_field('cooldown', 'Cooldown seconds', field_type='number', help_text="Leave blank to use the group's default cooldown (300 seconds unless changed)."),
         ),
-        success_message='Scaling policy saved',
+        success_message='Scaling policy saved. Floci stores it but does not run it.',
     ),
     action(
         'put_lifecycle_hook',
@@ -4465,13 +4469,14 @@ AUTOSCALING_ACTIONS = (
         'POST',
         '/api/autoscaling/groups/{group}/lifecycle-hooks/',
         'update',
+        description='Floci stores the hook, but instances never pause in a wait state for it.',
         fields=(
             action_field('hook_name', 'Hook name', required=True),
             action_field('transition', 'Lifecycle transition', required=True, options=('autoscaling:EC2_INSTANCE_LAUNCHING', 'autoscaling:EC2_INSTANCE_TERMINATING')),
             action_field('default_result', 'Default result', options=('ABANDON', 'CONTINUE'), default='ABANDON'),
             action_field('heartbeat_timeout', 'Heartbeat timeout seconds', field_type='number', default=3600),
         ),
-        success_message='Lifecycle hook saved',
+        success_message='Lifecycle hook saved. Floci stores it but instances do not wait for it.',
     ),
 )
 

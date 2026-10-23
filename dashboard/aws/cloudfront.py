@@ -103,6 +103,8 @@ def cloudfront_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'This page focuses on local CloudFront management inventory so CDN infrastructure created by IaC is visible in the dashboard.',
+            'Floci forwards viewer requests to the origin without caching. Distributions report Deployed and invalidations Completed immediately. CloudFront Functions are stored but never run, on viewer requests or in TestFunction.',
+            'Signed URLs and signed cookies are enforced for cache behaviors with trusted key groups.',
         ],
     }
 

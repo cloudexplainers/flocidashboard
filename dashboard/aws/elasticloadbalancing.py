@@ -216,6 +216,7 @@ def elasticloadbalancing_inventory() -> dict[str, Any]:
         'notes': [
             'This page combines the AWS elbv2 and classic elb SDK APIs under the Elastic Load Balancing service name.',
             'Target health is fetched per target group; listener rules are fetched per listener.',
+            'Classic Load Balancers are control plane only: listeners are recorded but Floci serves no traffic for them, and load balancer policies are not supported.',
         ],
     }
 

@@ -18,6 +18,7 @@ import Alert from '@cloudscape-design/components/alert';
 import TextFilter from '@cloudscape-design/components/text-filter';
 import { deleteConsoleResource, fetchConsoleInventory, postConsoleAction } from '../api/client';
 import ConfirmActionModal from '../components/ConfirmActionModal';
+import { FlociNote } from '../components/FlociNote';
 
 interface Route53ConsoleProps { resourcePath?: string; onNavigate?: (path: string) => void; }
 const zoneId = (zone: any) => String(zone.Id || zone.id || '').replace('/hostedzone/', '');
@@ -302,6 +303,7 @@ export const Route53Console: React.FC<Route53ConsoleProps> = ({ resourcePath = '
                 } },
               ]} empty={<Box textAlign="center">{recordFilter || typeFilter !== 'all' ? 'No records match your filters.' : 'No records reported for this hosted zone.'}</Box>} />
               <Box variant="small">Alias targets and routing policies are shown as returned by the endpoint. Editing alias records is unavailable here.</Box>
+              <FlociNote>Floci stores routing policies (failover, weighted, latency, geolocation and others) and health checks, but doesn&apos;t apply them. Its DNS server answers only private hosted zones and returns every matching value, whatever the routing policy. Health checks don&apos;t probe anything: GetHealthCheckStatus always reports success.</FlociNote>
             </SpaceBetween> },
             { id: 'details', label: 'Zone details', content: <KeyValuePairs columns={2} items={[
               { label: 'Hosted zone ID', value: activeZone.Id },

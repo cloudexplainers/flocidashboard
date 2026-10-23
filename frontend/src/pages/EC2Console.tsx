@@ -1143,7 +1143,7 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
           <FormField label={<>Description <i>- optional</i></>}>
             <Input value={ruleDescription} onChange={({ detail }) => setRuleDescription(detail.value)} placeholder="e.g. SSH for admin desktop" />
           </FormField>
-          <Box variant="small">Floci stores and returns security group rules, but local Docker networking does not enforce them.</Box>
+          <Box variant="small">Floci stores and returns security group rules, but doesn&apos;t enforce them unless it runs with FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true.</Box>
         </SpaceBetween>
       </Modal>
     </SpaceBetween>

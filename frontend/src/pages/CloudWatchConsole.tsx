@@ -29,6 +29,7 @@ import Alert from "@cloudscape-design/components/alert";
 import TextFilter from "@cloudscape-design/components/text-filter";
 import Tabs from "@cloudscape-design/components/tabs";
 import { cloudWatchRequest } from "../api/client";
+import { FlociNote } from '../components/FlociNote';
 
 interface CloudWatchConsoleProps {
   resourcePath?: string;
@@ -646,6 +647,14 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
               </ColumnLayout>
             </Container>
             <Container header={<Header variant="h2">Action targets</Header>}>
+              <SpaceBetween size="m">
+              <FlociNote>
+                Floci evaluates the alarm and changes its state, but of the actions
+                it runs only Application Auto Scaling scaling policies. SNS
+                notifications, EC2 actions and EC2 Auto Scaling policies listed here
+                don&apos;t run in Floci 2.3.0; newer Floci releases add SNS
+                notifications.
+              </FlociNote>
               <ColumnLayout columns={3} variant="text-grid">
                 {[
                   ["ALARM", openedAlarm.AlarmActions],
@@ -657,6 +666,7 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                   </Detail>
                 ))}
               </ColumnLayout>
+              </SpaceBetween>
             </Container>
           </SpaceBetween>
         ) : (

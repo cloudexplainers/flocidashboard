@@ -201,6 +201,7 @@ def apigateway_inventory() -> dict[str, Any]:
             'Floci supports API Gateway v1 REST APIs and API Gateway v2 HTTP APIs.',
             'The v1 execute plane is served under /restapis/{id}/{stage}/_user_request_/...',
             'This page shows management-plane resources; proxied traffic remains available through Floci directly.',
+            'API keys and usage plans are stored but not enforced: a method with apiKeyRequired runs without a valid key, throttle and quota settings are never applied, and GetUsage always reports zero.',
         ],
     }
 
