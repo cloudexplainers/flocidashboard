@@ -457,3 +457,26 @@ class TruncationAndCognitoTests(SimpleTestCase):
         client.list_tags_for_resource.assert_called_once_with(ResourceArn=pool['arn'])
         self.assertEqual(len(pool['users']), 75)
         self.assertTrue(pool['discovery_url'].startswith('http://localhost:4566/'))
+
+
+class RdsFinalSnapshotCheckTests(SimpleTestCase):
+    def test_failed_check_is_not_reported_as_missing_snapshot(self):
+        from dashboard.rds_api import _final_snapshot_status
+
+        client = MagicMock()
+        client.describe_db_snapshots.side_effect = client_error('InternalFailure', 'DescribeDBSnapshots', 'boom', 500)
+        with patch('dashboard.rds_api._client', return_value=client):
+            status = _final_snapshot_status('describe_db_snapshots', 'DBSnapshots', DBSnapshotIdentifier='final')
+
+        self.assertIsNone(status['found'])
+        self.assertEqual(status['error'], 'boom')
+
+    def test_not_found_means_snapshot_missing(self):
+        from dashboard.rds_api import _final_snapshot_status
+
+        client = MagicMock()
+        client.describe_db_snapshots.side_effect = client_error('DBSnapshotNotFound', 'DescribeDBSnapshots', status=404)
+        with patch('dashboard.rds_api._client', return_value=client):
+            status = _final_snapshot_status('describe_db_snapshots', 'DBSnapshots', DBSnapshotIdentifier='final')
+
+        self.assertFalse(status['found'])

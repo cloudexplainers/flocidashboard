@@ -148,8 +148,14 @@ def _final_snapshot_status(operation: str, result_key: str, **kwargs) -> dict[st
     identifier = next(iter(kwargs.values()))
     try:
         snapshots = getattr(_client(), operation)(**kwargs).get(result_key, [])
-    except (BotoCoreError, ClientError):
+    except ClientError as exc:
+        code = exc.response.get('Error', {}).get('Code') or ''
+        if code not in {'DBSnapshotNotFound', 'DBSnapshotNotFoundFault', 'DBClusterSnapshotNotFoundFault'}:
+            # The check failed; don't report that the snapshot is missing.
+            return {'identifier': identifier, 'found': None, 'status': None, 'error': exc.response.get('Error', {}).get('Message') or str(exc)}
         snapshots = []
+    except BotoCoreError as exc:
+        return {'identifier': identifier, 'found': None, 'status': None, 'error': str(exc)}
     snapshots = [item for item in snapshots if isinstance(item, dict)] if isinstance(snapshots, list) else []
     status = snapshots[0].get('Status') if snapshots else None
     return {'identifier': identifier, 'found': bool(snapshots), 'status': status if isinstance(status, str) else None}

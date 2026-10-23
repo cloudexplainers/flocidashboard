@@ -207,15 +207,52 @@ def step_create_fargate_profile() -> dict[str, Any]:
     )
 
 
+EKS_ACTIVE_WAIT_SECONDS = 180
+
+
+def _wait_for_active_cluster(timeout_seconds: float = EKS_ACTIVE_WAIT_SECONDS) -> dict[str, Any]:
+    """Wait for the cluster to be ACTIVE with an endpoint and CA, as update-kubeconfig needs.
+
+    Floci reports the cluster CREATING until its k3s control plane answers; a cold start
+    pulls the k3s image first.
+    """
+    eks = client('eks')
+    deadline = time.monotonic() + timeout_seconds
+    cluster: dict[str, Any] = {}
+    while True:
+        cluster = eks.describe_cluster(name=CLUSTER_NAME).get('cluster', {})
+        ready = (
+            cluster.get('status') == 'ACTIVE'
+            and cluster.get('endpoint')
+            and (cluster.get('certificateAuthority') or {}).get('data')
+        )
+        if ready or cluster.get('status') == 'FAILED' or time.monotonic() >= deadline:
+            return cluster
+        time.sleep(2)
+
+
 def step_generate_kubeconfig() -> dict[str, Any]:
     started = time.perf_counter()
     from dashboard.eks_api import get_kubeconfig
+    command = f'aws eks update-kubeconfig --name {CLUSTER_NAME} --region {REGION}'
+    cluster = _wait_for_active_cluster()
+    if cluster.get('status') != 'ACTIVE':
+        return result(
+            'control-plane-nodegroup',
+            'generate-kubeconfig',
+            command,
+            {'cluster': cluster},
+            False,
+            f'Cluster {CLUSTER_NAME} is {cluster.get("status") or "not ready"}; Floci is still starting its '
+            'Kubernetes control plane. Run this step again once the cluster is ACTIVE.',
+            started,
+        )
     resp = get_kubeconfig(CLUSTER_NAME, region=REGION)
     marker('kubeconfig', True)
     return result(
         'control-plane-nodegroup',
         'generate-kubeconfig',
-        f'aws eks update-kubeconfig --name {CLUSTER_NAME} --region {REGION}',
+        command,
         resp,
         True,
         f'Generated kubeconfig context for {CLUSTER_NAME}.',

@@ -67,6 +67,11 @@ const clusterPath = (name: string, tab = "overview") =>
 /** Success message for a delete, warning when the requested final snapshot was not created. */
 function deletionAlert(message: string, result: any): { type: "success" | "warning"; message: string } {
   const snapshot = result?.final_snapshot;
+  if (snapshot && snapshot.found == null && snapshot.error)
+    return {
+      type: "warning",
+      message: `${message} The final snapshot "${snapshot.identifier}" could not be checked: ${snapshot.error}`,
+    };
   if (snapshot && !snapshot.found)
     return {
       type: "warning",
