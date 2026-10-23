@@ -156,7 +156,7 @@ def autoscaling_lifecycle_hooks_put(request, name: str):
             body.get('hook_name', ''),
             body.get('transition', ''),
             default_result=body.get('default_result') or 'ABANDON',
-            heartbeat_timeout=body.get('heartbeat_timeout') or 3600,
+            heartbeat_timeout=body.get('heartbeat_timeout'),
         ))
     except Exception as exc:
         return handle_action_error(exc, service='autoscaling', operation='put_lifecycle_hook')
@@ -178,8 +178,8 @@ def autoscaling_policies_put(request, name: str):
             name,
             body.get('policy_name', ''),
             adjustment_type=body.get('adjustment_type') or 'ChangeInCapacity',
-            scaling_adjustment=body.get('scaling_adjustment') or 1,
-            cooldown=body.get('cooldown') or 60,
+            scaling_adjustment=body.get('scaling_adjustment'),
+            cooldown=body.get('cooldown'),
         ))
     except Exception as exc:
         return handle_action_error(exc, service='autoscaling', operation='put_scaling_policy')

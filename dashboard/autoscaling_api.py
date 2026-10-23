@@ -20,7 +20,9 @@ def _required(value: str, label: str) -> str:
 
 
 def _int_value(value: Any, label: str, default: int | None = None) -> int:
-    if value in (None, '') and default is not None:
+    if value in (None, ''):
+        if default is None:
+            raise ValueError(f'{label} is required')
         return default
     try:
         return int(value)
@@ -260,17 +262,21 @@ def put_scaling_policy(
     policy_name: str,
     *,
     adjustment_type: str = 'ChangeInCapacity',
-    scaling_adjustment: Any = 1,
-    cooldown: Any = 60,
+    scaling_adjustment: Any = None,
+    cooldown: Any = None,
 ) -> dict[str, Any]:
-    response = _client().put_scaling_policy(
-        AutoScalingGroupName=_required(name, 'Auto Scaling group name'),
-        PolicyName=_required(policy_name, 'Policy name'),
-        PolicyType='SimpleScaling',
-        AdjustmentType=(adjustment_type or 'ChangeInCapacity').strip(),
-        ScalingAdjustment=_int_value(scaling_adjustment, 'Scaling adjustment', 1),
-        Cooldown=_int_value(cooldown, 'Cooldown', 60),
-    )
+    kwargs: dict[str, Any] = {
+        'AutoScalingGroupName': _required(name, 'Auto Scaling group name'),
+        'PolicyName': _required(policy_name, 'Policy name'),
+        'PolicyType': 'SimpleScaling',
+        'AdjustmentType': (adjustment_type or 'ChangeInCapacity').strip(),
+        # A simple scaling policy needs an adjustment; don't guess one.
+        'ScalingAdjustment': _int_value(scaling_adjustment, 'Scaling adjustment'),
+    }
+    # Without Cooldown, AWS uses the group's default cooldown (300 seconds unless changed).
+    if cooldown not in (None, ''):
+        kwargs['Cooldown'] = _int_value(cooldown, 'Cooldown')
+    response = _client().put_scaling_policy(**kwargs)
     return {'name': name, 'policy_name': policy_name, 'response': _clean_response(response)}
 
 
