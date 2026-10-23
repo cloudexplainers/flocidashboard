@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { SecretReplication } from "../components/SecretReplication";
 import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
@@ -592,6 +593,11 @@ const SecretWorkspace: React.FC<Props> = ({
                         </SpaceBetween>
                       </Container>
                     ),
+                  },
+                  {
+                    id: "replication",
+                    label: "Replication",
+                    content: <SecretReplication secretId={secret.arn || secret.name} />,
                   },
                   {
                     id: "tags",

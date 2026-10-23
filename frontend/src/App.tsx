@@ -406,6 +406,7 @@ export const App: React.FC = () => {
             text: 'Network & Security',
             items: [
               { type: 'link' as const, text: 'Security Groups', href: 'ec2/security_groups' },
+              { type: 'link' as const, text: 'Key Pairs', href: 'ec2/key_pairs' },
               { type: 'link' as const, text: 'Virtual Private Clouds (VPC)', href: 'ec2/vpcs' },
               { type: 'link' as const, text: 'Subnets', href: 'ec2/subnets' },
               { type: 'link' as const, text: 'Route tables', href: 'ec2/routes' },
@@ -427,12 +428,14 @@ export const App: React.FC = () => {
               { type: 'link' as const, text: 'Users', href: 'iam/users' },
               { type: 'link' as const, text: 'User Groups', href: 'iam/groups' },
               { type: 'link' as const, text: 'Policies', href: 'iam/policies' },
+              { type: 'link' as const, text: 'Account settings', href: 'iam/account' },
             ],
           },
           {
             type: 'section' as const,
             text: 'Access Analysis',
             items: [
+              { type: 'link' as const, text: 'Credential report', href: 'iam/credential_report' },
               { type: 'link' as const, text: 'Policy Simulator', href: 'iam/simulator' },
               { type: 'link' as const, text: 'Session Identity & STS', href: 'environment' },
             ],

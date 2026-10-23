@@ -727,3 +727,94 @@ def update_role_trust_policy(role_name: str, document: Any) -> dict[str, Any]:
         PolicyDocument=json.dumps(doc),
     )
     return {'role_name': role, 'saved': True, 'document': doc}
+
+
+PASSWORD_POLICY_BOOLEANS = {
+    'require_symbols': 'RequireSymbols',
+    'require_numbers': 'RequireNumbers',
+    'require_uppercase_characters': 'RequireUppercaseCharacters',
+    'require_lowercase_characters': 'RequireLowercaseCharacters',
+    'allow_users_to_change_password': 'AllowUsersToChangePassword',
+    'hard_expiry': 'HardExpiry',
+}
+
+
+def get_password_policy() -> dict[str, Any]:
+    """Returns the account password policy, or None when the account uses the IAM default."""
+    from botocore.exceptions import ClientError
+    try:
+        policy = _iam_client().get_account_password_policy()['PasswordPolicy']
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') in {'NoSuchEntity', 'NoSuchEntityException'}:
+            return {'policy': None}
+        raise
+    return {'policy': policy}
+
+
+def _bounded_int(body: dict[str, Any], key: str, low: int, high: int, label: str) -> int | None:
+    value = body.get(key)
+    if value in (None, '', 0, '0'):
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f'{label} must be a number')
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'{label} must be a whole number') from exc
+    if not low <= number <= high:
+        raise ValueError(f'{label} must be from {low} to {high}')
+    return number
+
+
+def update_password_policy(body: dict[str, Any]) -> dict[str, Any]:
+    """UpdateAccountPasswordPolicy with the AWS limits checked first. Unset fields take IAM's defaults."""
+    kwargs: dict[str, Any] = {}
+    length = _bounded_int(body, 'minimum_password_length', 6, 128, 'Minimum password length')
+    if length is not None:
+        kwargs['MinimumPasswordLength'] = length
+    for key, name in PASSWORD_POLICY_BOOLEANS.items():
+        if key in body:
+            kwargs[name] = body[key] is True
+    max_age = _bounded_int(body, 'max_password_age', 1, 1095, 'Password expiration (days)')
+    if max_age is not None:
+        kwargs['MaxPasswordAge'] = max_age
+    reuse = _bounded_int(body, 'password_reuse_prevention', 1, 24, 'Password reuse prevention')
+    if reuse is not None:
+        kwargs['PasswordReusePrevention'] = reuse
+    _iam_client().update_account_password_policy(**kwargs)
+    return get_password_policy()
+
+
+def delete_password_policy() -> dict[str, Any]:
+    _iam_client().delete_account_password_policy()
+    return {'policy': None, 'deleted': True}
+
+
+def generate_credential_report() -> dict[str, Any]:
+    response = _iam_client().generate_credential_report()
+    return {'state': response.get('State'), 'description': response.get('Description') or ''}
+
+
+def get_credential_report() -> dict[str, Any]:
+    """Returns the latest credential report parsed from CSV, or report=None when none was generated."""
+    import csv
+    import io
+    from botocore.exceptions import ClientError
+    try:
+        response = _iam_client().get_credential_report()
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') in {'ReportNotPresent', 'ReportExpired', 'ReportInProgress'}:
+            return {'report': None, 'reason': exc.response['Error']['Code']}
+        raise
+    content = response.get('Content') or b''
+    text = content.decode('utf-8') if isinstance(content, bytes) else str(content)
+    rows = list(csv.DictReader(io.StringIO(text)))
+    generated = response.get('GeneratedTime')
+    return {
+        'report': {
+            'generated_time': generated.isoformat() if hasattr(generated, 'isoformat') else generated,
+            'columns': list(rows[0].keys()) if rows else [],
+            'rows': rows,
+            'csv': text,
+        },
+    }

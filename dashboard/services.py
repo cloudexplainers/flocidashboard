@@ -2257,6 +2257,9 @@ SECRETSMANAGER_ACTIONS = (
     action('untag_resource', 'Untag secret', 'DELETE', '/api/secretsmanager/secrets/{secret}/tags/', 'update', fields=(action_field('tag_keys', 'Tag keys', required=True, field_type='array'),), success_message='Tags removed'),
     action('update_secret_version_stage', 'Move version stage', 'POST', '/api/secretsmanager/secrets/{secret}/version-stage/', 'update', fields=(action_field('version_stage', 'Version stage', required=True), action_field('move_to_version_id', 'Move to version ID', required=True), action_field('remove_from_version_id', 'Remove from version ID')), success_message='Version stage updated'),
     action('get_random_password', 'Generate random password', 'POST', '/api/secretsmanager/random-password/', 'execute', fields=(action_field('PasswordLength', 'Password length', field_type='number'), action_field('ExcludePunctuation', 'Exclude punctuation', field_type='boolean')), success_message='Password generated'),
+    action('replicate_secret_to_regions', 'Replicate to Regions', 'POST', '/api/secretsmanager/secrets/{secret}/replication/', 'update', fields=(action_field('regions', 'Regions', required=True, field_type='array'), action_field('force_overwrite', 'Overwrite a secret of the same name', field_type='boolean')), success_message='Replication started'),
+    action('remove_regions_from_replication', 'Remove replica Regions', 'DELETE', '/api/secretsmanager/secrets/{secret}/replication/', 'delete', safety='destructive', confirm='Delete the replica secrets in these Regions?', fields=(action_field('regions', 'Regions', required=True, field_type='array'),), success_message='Replicas removed'),
+    action('stop_replication_to_replica', 'Promote replica', 'POST', '/api/secretsmanager/secrets/{secret}/replication/promote/', 'update', safety='destructive', confirm='Promote this replica to a standalone secret? It stops receiving updates.', fields=(action_field('region', 'Replica Region', required=True),), success_message='Replica promoted'),
 )
 
 
@@ -2385,6 +2388,8 @@ EC2_ACTIONS = (
         ),
         success_message='Command submitted',
     ),
+    action('create_key_pair', 'Create key pair', 'POST', '/api/ec2/key-pairs/', 'create', fields=(action_field('key_name', 'Key name', required=True), action_field('key_type', 'Key type', options=('rsa', 'ed25519'), default='rsa')), success_message='Key pair created'),
+    action('delete_key_pair', 'Delete key pair', 'DELETE', '/api/ec2/key-pairs/', 'delete', safety='destructive', confirm='Delete this key pair? Instances launched with it keep the public key.', fields=(action_field('key_name', 'Key name', required=True),), success_message='Key pair deleted'),
     action(
         'import_key_pair',
         'Import key pair',
@@ -2531,6 +2536,9 @@ IAM_ACTIONS = (
     ),
     action('remove_role_from_instance_profile', 'Remove role from instance profile', 'DELETE', '/api/iam/instance-profiles/{instance_profile}/roles/', 'update', fields=(action_field('role_name', 'Role name', required=True),), success_message='Role removed'),
     action('delete_instance_profile', 'Delete instance profile', 'DELETE', '/api/iam/instance-profiles/{instance_profile}/', 'delete', safety='destructive', confirm='Delete this instance profile?', success_message='Instance profile deleted'),
+    action('update_account_password_policy', 'Set password policy', 'PUT', '/api/iam/password-policy/', 'update', fields=(action_field('minimum_password_length', 'Minimum password length', field_type='number', default=8), action_field('require_symbols', 'Require symbols', field_type='boolean'), action_field('require_numbers', 'Require numbers', field_type='boolean'), action_field('require_uppercase_characters', 'Require uppercase letters', field_type='boolean'), action_field('require_lowercase_characters', 'Require lowercase letters', field_type='boolean'), action_field('allow_users_to_change_password', 'Allow users to change their password', field_type='boolean'), action_field('max_password_age', 'Password expiration (days)', field_type='number'), action_field('password_reuse_prevention', 'Remembered passwords', field_type='number'), action_field('hard_expiry', 'Expired passwords need an administrator reset', field_type='boolean')), success_message='Password policy saved'),
+    action('delete_account_password_policy', 'Delete password policy', 'DELETE', '/api/iam/password-policy/', 'delete', safety='destructive', confirm='Remove the password policy and go back to the IAM default?', success_message='Password policy deleted'),
+    action('generate_credential_report', 'Generate credential report', 'POST', '/api/iam/credential-report/', 'execute', safety='safe', success_message='Credential report generated'),
     action(
         'simulate_principal_policy',
         'Test permission',

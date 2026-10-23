@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { EC2KeyPairs } from '../components/EC2KeyPairs';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Table from '../components/ResourceTable';
@@ -642,6 +643,11 @@ export const EC2Console: React.FC<EC2ConsoleProps> = ({ activeTab, onTabChange }
                 )}
               </SpaceBetween>
             ),
+          },
+          {
+            label: 'Key pairs',
+            id: 'key_pairs',
+            content: <EC2KeyPairs />,
           },
           {
             label: `VPCs & Subnets (${vpcs.length} VPCs, ${subnets.length} Subnets)`,
