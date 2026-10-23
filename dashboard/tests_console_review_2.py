@@ -104,11 +104,15 @@ class WorkbenchFieldDefaultsTests(SimpleTestCase):
         self.assertIs(skip.default, True)
         self.assertIn('does not create Neptune snapshots', skip.help_text)
 
-    def test_transfer_actions_stay_in_transfer(self):
+    def test_every_action_stays_within_its_own_service_api(self):
         from dashboard.services import SERVICES
 
-        transfer = next(item for item in SERVICES if item.key == 'transfer')
-        self.assertTrue(all(action.path.startswith('/api/transfer/') for action in transfer.actions))
+        prefixes = {'elasticloadbalancing': ('elbv2', 'elasticloadbalancing'), 'cloudwatch': ('cloudwatch', 'logs')}
+        for service in SERVICES:
+            allowed = prefixes.get(service.key, (service.key,))
+            for action in service.actions:
+                with self.subTest(service=service.key, action=action.name):
+                    self.assertIn(action.path.split('/')[2], allowed)
 
 
 class AmazonMqUserCountTests(SimpleTestCase):
