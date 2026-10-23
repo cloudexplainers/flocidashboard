@@ -55,3 +55,25 @@ def cloudtrail_events(request):
         return JsonResponse(lookup_events(attribute=request.GET.get('attribute', ''), value=request.GET.get('value', ''), next_token=request.GET.get('next_token', '')))
     except Exception as exc:
         return handle_action_error(exc, service='cloudtrail', operation='lookup_events')
+
+
+@require_http_methods(['GET'])
+def cloudtrail_log_files(request, trail_name: str):
+    from .aws import collect_load_errors
+    from .cloudtrail_logs import list_log_files
+    try:
+        payload, errors = collect_load_errors(lambda: list_log_files(trail_name, before=request.GET.get('before', '')))
+        if errors:
+            payload['load_errors'] = errors
+        return JsonResponse(payload)
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudtrail', operation='list_log_files')
+
+
+@require_http_methods(['GET'])
+def cloudtrail_log_file(request, trail_name: str):
+    from .cloudtrail_logs import read_log_file
+    try:
+        return JsonResponse(read_log_file(trail_name, request.GET.get('key', '')))
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudtrail', operation='read_log_file')
