@@ -820,6 +820,29 @@ The console still has no forms for Object Lock retention, legal holds, replicati
 `check_labs --service s3 --lab data-protection-tiers` passed on 2.3.0; it takes about a minute because Reset waits out
 the COMPLIANCE retention.
 
+## Three-tier VPC with NAT lab (2026-10-23)
+
+`ec2/nat-three-tier` (SAA 1.2, 4.4, 3.4, 2.2), 10 steps, in `dashboard/labs/ec2_nat_labs.py` (dispatched from
+`ec2_labs.py`). It opens Level 5 and covers Wave 1 item W1-4 in its own VPC (`lab-three-tier-vpc`, 10.64.0.0/16), so
+`ec2/vpc-public-private` stays a short introduction.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the leftovers, deliberately broken setups, then
+reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| NAT gateway create | `available` at once, with a private IP from the subnet and the Elastic IP's public IP. | Note in the step |
+| NAT gateway rules | Accepts an Elastic IP another NAT gateway already uses, and a public NAT gateway with no Elastic IP (AWS refuses both). Also lets you delete the subnet holding a NAT gateway, detach the internet gateway, and release an Elastic IP in use. | The step checks the first two rules itself; Reset deletes in AWS order anyway |
+| NAT gateway delete | Gone at once (`NatGatewayNotFound`); AWS shows `deleted` for about an hour. A route to it stays `active`; AWS marks it `blackhole`. | Note in the routing step |
+| Traffic | Not routed. An instance launched in a subnet with no default route reached the internet: each instance container is also on Docker's bridge network, whose default route wins. | Note in the routing steps and the trace |
+| Elastic IPs | Allocated from a made-up pool; tags work; `DescribeAddresses` shows no association for an address a NAT gateway uses. | Note in the step |
+| DB subnet group | Accepts subnets in one zone (AWS requires two). | The step checks the zones itself |
+| S3 gateway endpoint | Stored with its route tables, but no prefix-list route appears in them. | Note in the step and its result |
+| Egress-only internet gateway, Reachability Analyzer | `UnsupportedOperation`. | Mentioned in the explanations only |
+
+The console still has no Elastic IP or NAT gateway tables (see "EC2 and VPC" above); they show in the inventory and
+the generic workbench. `check_labs --service ec2 --lab nat-three-tier` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

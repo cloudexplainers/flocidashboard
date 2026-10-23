@@ -10,7 +10,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 
 ## TL;DR
 
-- **The current 69 labs (410 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
+- **The current 70 labs (420 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
 - **There are big holes in high-weight SAA topics:** load balancing and Auto Scaling, Multi-AZ and read replicas, caching, Route 53 and DR, storage classes and tiering, the data and streaming domain (SAA 3.5), and nearly all of cost optimization (SAA domain 4, 20%).
 - **For CLF, coverage is lopsided.** The labs serve the hands-on parts of domains 2 and 3. Domain 1 (cloud concepts, 24%) and domain 4 (billing and support, 12%) are almost entirely conceptual, so labs can't cover them. Those need "exam lens" concept cards, not labs.
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
@@ -99,7 +99,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 29 | cognito/user-pool-signup-auth | 2.3 | 1.2 | Medium | User pools only; no identity pools or federation. |
 | 30 | cognito/user-groups-custom-attributes | — | 1.2 | Low | Dev. |
 | 31 | rds/db-instance-lifecycle | 3.4 | 3.3, 1.3 | ◐ | ✅ Now encrypted at creation with 7-day automated backups. Multi-AZ, read replicas, point-in-time restore and Aurora failover are in `rds/aurora-resilience` (W1-2). |
-| 32 | ec2/vpc-public-private | 3.5 | 1.2, 3.4 | ◐ | No NAT gateway, so the private subnet has no egress story. NAT is heavily tested (SAA 1.2, 4.4). |
+| 32 | ec2/vpc-public-private | 3.5 | 1.2, 3.4 | ◐ | No NAT gateway, so the private subnet has no egress story. NAT is heavily tested (SAA 1.2, 4.4). ✅ The NAT story is now in `ec2/nat-three-tier` (Level 5, W1-4). |
 | 33 | ec2/security-controls | 3.5 | 1.2 | High | Stateful SGs vs stateless NACLs. |
 | 34 | ec2/guided-imds | 3.3 | 1.2 | Low | Dev/Ops. |
 | 35 | ec2/guided-userdata | 3.1 | 2.2 | Low | Bootstrapping; a light touch on immutable infrastructure. |
@@ -187,19 +187,19 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | Task | Topic | Coverage | Covered by | Gap |
 |---|---|---|---|---|
 | 1.1 | Secure access | ● | 11 IAM labs, #21, #37 | **Multi-account: Organizations, SCPs, Control Tower**; MFA; IAM Identity Center; directory federation |
-| 1.2 | Secure workloads | ● | #27, #28, #29, #32, #33, #38, #62, #63, #64 | **NAT gateways**, WAF and Shield, GuardDuty and Macie, VPN and Direct Connect |
+| 1.2 | Secure workloads | ● | #27, #28, #29, #32, #33, #38, #62, #63, #64, ec2/nat-three-tier (NAT gateways) | WAF and Shield, GuardDuty and Macie, VPN and Direct Connect |
 | 1.3 | Data security controls | ◐ | #19, #20, #21, #22, #24, #26 | **KMS key policies and rotation, SSE-KMS, ACM/TLS, backups and replication (CRR, AWS Backup), Object Lock**, secret rotation |
 | 2.1 | Scalable, loosely coupled | ● | ~20 labs (SQS, SNS, EventBridge, Lambda, Step Functions, API Gateway, ECS) | **Load balancing (ALB), horizontal scaling, caching, CDN, read replicas**, storage types (block vs file) |
 | 2.2 | HA and fault tolerance | ◐ | #19, #44, #53, #61, #66 | **Multi-AZ, Route 53 failover, DR strategies (RPO/RTO), RDS Proxy, Aurora failover**, quotas and throttling, X-Ray |
 | 3.1 | Storage performance | ◐ | #25, S3 basics | **EBS volume types, EFS**, hybrid storage |
 | 3.2 | Elastic compute | ◐ | #50, #60, #65 | **Auto Scaling and scaling metrics, instance families, Lambda memory sizing**, Batch and EMR |
 | 3.3 | Database performance | ◐ | #14, #31 | **Read replicas, Aurora, ElastiCache, DynamoDB capacity and DAX, RDS Proxy** |
-| 3.4 | Network performance | ◐ | #32, #61, #62, #64 | **CloudFront, Global Accelerator, ALB vs NLB**, VPN, Direct Connect |
+| 3.4 | Network performance | ◐ | #32, #61, #62, #64, ec2/nat-three-tier | **CloudFront, Global Accelerator, ALB vs NLB**, VPN, Direct Connect |
 | 3.5 | Data ingestion and transformation | ○ | — | **Kinesis, Firehose, Glue, Athena, Lake Formation**, DataSync, data lakes, CSV-to-Parquet |
 | 4.1 | Cost-optimized storage | ◐ | #22, #25 | **Storage tiers and transitions, Intelligent-Tiering, Requester Pays, EBS types**, Backup retention, cost tools |
 | 4.2 | Cost-optimized compute | ○ | #60 touches Fargate | **Spot, RI, Savings Plans, instance sizing, ALB vs NLB vs GWLB**, scaling strategies |
 | 4.3 | Cost-optimized databases | ○ | — | **DynamoDB on-demand vs provisioned, Aurora Serverless**, snapshot retention, DMS |
-| 4.4 | Cost-optimized networking | ◐ | #62, #63 (endpoints) | **NAT per AZ vs shared, VPC peering vs Transit Gateway**, CloudFront, API throttling |
+| 4.4 | Cost-optimized networking | ◐ | #62, #63 (endpoints), ec2/nat-three-tier (NAT per AZ vs shared, NAT vs gateway endpoint) | **VPC peering vs Transit Gateway**, CloudFront, API throttling |
 
 **SAA reading:** domain 1 is the best-covered, and domain 2.1 is excellent. The largest weighted gaps are, in order:
 
@@ -244,7 +244,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 | Area | What's accepted | What's not simulated |
 |---|---|---|
 | S3 | Storage classes on upload, lifecycle **transitions**, Intelligent-Tiering, replication, Requester Pays, Transfer Acceleration, website config, SSE-KMS | Objects never move tiers. A GLACIER object is readable without a restore. Replication copied nothing. |
-| VPC | NAT gateway + EIP, VPC peering, Transit Gateway, flow logs | Egress and peering reachability were not tested; assume not simulated until proven |
+| VPC | NAT gateway + EIP, private NAT gateway, VPC peering, Transit Gateway, flow logs | Checked 2026-10-23 for NAT: no traffic is routed or translated. An instance in a subnet with no default route reached the internet through Docker's bridge. A NAT gateway is `available` at once; Floci accepts an EIP already used by another NAT gateway, a public NAT gateway with no EIP, releasing an EIP in use, and deleting a subnet that holds a NAT gateway (AWS refuses all four). A route to a deleted NAT gateway stays `active` (AWS: `blackhole`). Egress-only internet gateways and Reachability Analyzer are unsupported. Peering reachability is untested. |
 | Edge | CloudFront distribution, Global Accelerator | No edge caching |
 | Route 53 | Hosted zones, failover and weighted records, health checks | `test-dns-answer` failed; DNS answers were not verified |
 | Org governance | Organizations, OUs, create-account, SCP create and attach, IAM Identity Center instance, Control Tower list | SCP enforcement wasn't observable. The test ran in the management account, which AWS also exempts, so the result is inconclusive. |
@@ -298,7 +298,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 | ✅ W1-1 | **Highly available web tier** (shipped 2026-10-23 as `elasticloadbalancing/ha-web-tier`, 12 steps, SAA 2.2, 2.1, 3.2 and 3.4; Floci stores the target tracking policy without running it and replaces every instance at once in a refresh): launch template, ALB across 2 AZ subnets, target group with health check, ASG (min 2), target-tracking policy, scale out, curl the ALB | `elbv2_labs.py` (new) + `autoscaling` | ~11 | 2.1, 2.2, 3.2, 3.4, 4.2 | 3.2, 3.3 | ✅ (confirm ALB forwards to ASG targets, not just fixed responses) | The single most-tested SAA architecture, and nothing covers it today |
 | ✅ W1-2 | **RDS and Aurora resilience** (shipped 2026-10-23 as `rds/aurora-resilience`, 10 steps, SAA 2.2 and 3.3; Floci's point-in-time restore and replicas copy the source once, Multi-AZ runs no standby): Postgres Multi-AZ with encryption and backup retention, read replica, manual snapshot, forced failover; then an Aurora cluster with a reader and a cluster snapshot | `rds_labs.py` (extend) | ~10 | 2.2, 3.3, 1.3, 4.3 | 3.4 | ✅ | Read replicas vs Multi-AZ is a top SAA trap |
 | ✅ W1-3 | **S3 data protection and storage tiers** (shipped 2026-10-23 as `s3/data-protection-tiers`, 13 steps, SAA 1.3, 4.1 and 2.2; Object Lock is enforced, while storage classes, Intelligent-Tiering, lifecycle rules, replication and Requester Pays are stored without effect): upload with storage classes, lifecycle transitions to STANDARD_IA, GLACIER, and expiry, Intelligent-Tiering, Object Lock compliance (real deny), cross-Region replication config, Requester Pays | `s3_labs.py` (extend) | ~10 | 1.3, 4.1, 2.2 | 3.6, 4.1 | ✅ / ⚠️ (tiering and replication are config only) | Covers SAA 4.1, the largest single cost task |
-| W1-4 | **Three-tier VPC with NAT**: extend the VPC lab with an EIP, a NAT gateway in the public subnet, a private default route via NAT, and a database subnet tier; exam lens on one NAT per AZ vs a shared NAT, and NAT vs gateway endpoint cost | `ec2_labs.py` (extend #32 or add a new lab) | ~8 | 1.2, 3.4, 4.4 | 3.5 | ⚠️ Control plane (check whether private-instance egress works) | NAT is in three SAA task statements |
+| ✅ W1-4 | **Three-tier VPC with NAT** (shipped 2026-10-23 as `ec2/nat-three-tier`, 10 steps, SAA 1.2, 4.4, 3.4 and 2.2; Floci stores the NAT gateways and routes but routes no traffic, so the lab checks the configuration, including the AWS rules Floci skips): extend the VPC lab with an EIP, a NAT gateway in the public subnet, a private default route via NAT, and a database subnet tier; exam lens on one NAT per AZ vs a shared NAT, and NAT vs gateway endpoint cost | `ec2_labs.py` (extend #32 or add a new lab) | ~8 | 1.2, 3.4, 4.4 | 3.5 | ⚠️ Control plane (check whether private-instance egress works) | NAT is in three SAA task statements |
 | W1-5 | **KMS key management**: customer managed key with key policy, automatic rotation, grant, envelope encryption via `generate-data-key`, SSE-KMS bucket default | `kms_labs.py` (extend) | ~7 | 1.3 | 2.2 | ✅ / ⚠️ (key policy not enforced; inspect only) | Keys, rotation, and access policies are explicit SAA 1.3 skills |
 | W1-6 | **Route 53 routing and failover**: hosted zone, health check, failover primary and secondary records, weighted records; exam lens on all routing policies | `route53_labs.py` (new) | ~7 | 2.2, 3.4 | 3.5 | ⚠️ Records verifiable; resolution not | Route 53 underpins every DR answer |
 

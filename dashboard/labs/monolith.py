@@ -167,7 +167,7 @@ LAB_BATCH_ORDER = [
     {
         'service': 'ec2',
         'title': 'EC2 networking labs',
-        'summary': 'Continue into declarative infrastructure as code after VPC routing, security controls, gateway endpoints, and interface endpoints.',
+        'summary': 'Continue into declarative infrastructure as code after VPC routing, security controls, NAT gateways and three-tier subnets, gateway endpoints, and interface endpoints.',
     },
     {
         'service': 'rds',

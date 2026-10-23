@@ -129,11 +129,12 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
   {
     id: 'level-5-principal',
     title: 'Level 5: Private Networking & Platform',
-    subtitle: 'Private connectivity, route troubleshooting, Kubernetes, and infrastructure as code',
+    subtitle: 'NAT gateways, private connectivity, route troubleshooting, Kubernetes, and infrastructure as code',
     badge: 'Expert',
     color: 'red',
-    description: 'Diagnose and repair a broken route, reach S3 and SQS privately through gateway and interface endpoints, provision an EKS control plane with node groups and Fargate profiles, and manage infrastructure as code with CloudFormation stacks updated through reviewed change sets.',
+    description: 'Build a three-tier VPC with a NAT gateway in each Availability Zone and an isolated data tier, diagnose and repair a broken route, reach S3 and SQS privately through gateway and interface endpoints, provision an EKS control plane with node groups and Fargate profiles, and manage infrastructure as code with CloudFormation stacks updated through reviewed change sets.',
     labs: [
+      { service: 'ec2', key: 'nat-three-tier', title: 'Build a three-tier VPC with a NAT gateway in each Availability Zone', stepCount: 10 },
       { service: 'ec2', key: 'guided-broken-route', title: 'Diagnose and repair a broken route', stepCount: 4 },
       { service: 'ec2', key: 's3-gateway-endpoint', title: 'Connect a private VPC to S3 with a gateway endpoint', stepCount: 7 },
       { service: 'ec2', key: 'guided-private-s3', title: 'Connect privately to S3 through a VPC endpoint', stepCount: 3 },
