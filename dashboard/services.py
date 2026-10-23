@@ -1615,7 +1615,7 @@ BACKUP_ACTIONS = (
         'Stop backup job',
         'POST',
         '/api/backup/jobs/{job}/stop/',
-        'delete',
+        'execute',
         safety='destructive',
         confirm='Stop this running backup job?',
         success_message='Backup job stopped',
@@ -4434,7 +4434,7 @@ AUTOSCALING_ACTIONS = (
         'Detach instances',
         'DELETE',
         '/api/autoscaling/groups/{group}/instances/',
-        'delete',
+        'update',
         safety='destructive',
         fields=(
             action_field('instance_ids', 'Instance IDs', required=True, field_type='array'),
