@@ -208,6 +208,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('stepfunctions', 'order-processing-workflow'): _tags(saa='2.1'),
     ('stepfunctions', 'parallel-retry-workflow'): _tags(saa='2.1'),
     ('ecs', 'fargate-microservice'): _tags(clf='3.3', saa='2.1 3.2 4.2'),
+    ('rds', 'aurora-resilience'): _tags(clf='3.4', saa='2.2 3.3'),
     # Level 5
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
     ('ec2', 's3-gateway-endpoint'): _tags(clf='3.5', saa='1.2 3.4 4.4'),
@@ -414,8 +415,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Read replicas offload reads; caching with ElastiCache can cut database load further.',
             'Keep snapshot retention to what recovery requirements need. DMS and SCT handle homogeneous and heterogeneous migrations.',
         ],
-        'related_labs': [('dynamodb', 'crud-query'), ('rds', 'db-instance-lifecycle')],
-        'planned': 'W1-2 RDS and Aurora resilience; W2-3 DynamoDB at scale',
+        'related_labs': [('dynamodb', 'crud-query'), ('rds', 'db-instance-lifecycle'), ('rds', 'aurora-resilience')],
+        'planned': 'W2-3 DynamoDB at scale',
     },
 ]
 

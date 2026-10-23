@@ -38,7 +38,7 @@ class NewServiceLabsLifecycleTests(TestCase):
         mock_rds.delete_db_parameter_group.return_value = {}
 
         labs = labs_for_service('rds')
-        self.assertEqual(len(labs), 1)
+        self.assertEqual(len(labs), 2)
         lab = labs[0]
         self.assertEqual(lab['key'], 'db-instance-lifecycle')
 

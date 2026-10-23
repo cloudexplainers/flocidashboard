@@ -169,7 +169,7 @@ LAB_BATCH_ORDER = [
     {
         'service': 'rds',
         'title': 'RDS & Aurora labs',
-        'summary': 'Master relational database provisioning, custom parameter groups, endpoint configuration, storage scaling, and reboot recovery.',
+        'summary': 'Master relational database provisioning, custom parameter groups, storage scaling, read replicas, point-in-time restore, and Aurora failover.',
     },
     {
         'service': 'ecs',
