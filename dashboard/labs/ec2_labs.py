@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 from django.core.cache import cache
 
 from dashboard.aws import _clean_response
+from . import ec2_nat_labs as nat_three_tier
 from .ec2_guided import GUIDED_EC2_LABS
 from .monolith import (
     AWS_ACCOUNT_ID,
@@ -2678,11 +2679,16 @@ LABS = [
     EC2_SECURITY_CONTROLS_LAB,
     EC2_S3_GATEWAY_ENDPOINT_LAB,
     EC2_SQS_INTERFACE_ENDPOINT_LAB,
+    nat_three_tier.LAB,
     *GUIDED_EC2_LABS,
 ]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'ec2' and lab_key == 'nat-three-tier':
+        from .ec2_nat_labs import run_step as nat_run_step
+        return nat_run_step(step_key)
+
     if service_key == 'ec2' and lab_key.startswith('guided-'):
         from .ec2_guided import run_guided_step
         return run_guided_step(lab_key, step_key)
@@ -2764,6 +2770,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'ec2' and lab_key == 'nat-three-tier':
+        from .ec2_nat_labs import status as nat_status
+        return nat_status()
+
     if service_key == 'ec2' and lab_key.startswith('guided-'):
         from .ec2_guided import guided_status
         return guided_status(lab_key)
@@ -3104,6 +3114,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'ec2' and lab_key == 'nat-three-tier':
+        from .ec2_nat_labs import reset as nat_reset
+        return nat_reset()
+
     if service_key == 'ec2' and lab_key.startswith('guided-'):
         from .ec2_guided import reset_guided_lab
         return reset_guided_lab(lab_key)

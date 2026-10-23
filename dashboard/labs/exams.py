@@ -212,6 +212,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('elasticloadbalancing', 'ha-web-tier'): _tags(clf='3.3 3.2', saa='2.2 2.1 3.2 3.4'),
     ('s3', 'data-protection-tiers'): _tags(clf='3.6 4.1', saa='1.3 4.1 2.2'),
     # Level 5
+    ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
     ('ec2', 's3-gateway-endpoint'): _tags(clf='3.5', saa='1.2 3.4 4.4'),
     ('ec2', 'guided-private-s3'): _tags(clf='3.5', saa='1.2 4.4'),
@@ -379,7 +380,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Dedicated Hosts (physical servers, useful for per-socket licensing), Dedicated Instances, and Capacity Reservations cover isolation and capacity needs.',
             'Data transfer into AWS is generally free; transfer out to the internet, between Regions, and between AZs is charged.',
         ],
-        'related_labs': [('ecs', 'fargate-microservice')],
+        'related_labs': [('ecs', 'fargate-microservice'), ('ec2', 'nat-three-tier')],
         'planned': 'W3-6 Cost visibility; W3-7 Purchasing options exam lens',
     },
     {
