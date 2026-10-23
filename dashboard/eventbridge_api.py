@@ -369,3 +369,124 @@ def test_emulator_event_pattern(event_pattern: Any, event: Any) -> dict[str, Any
     matched = response['Result']
     return {'result': matched, 'engine': 'emulator',
             'summary': 'Floci matched the sample event.' if matched else 'Floci did not match the sample event.'}
+
+
+def _bus_arn(client, bus: str) -> str:
+    """Accepts a bus name or ARN and returns the ARN EventBridge archives need."""
+    bus = (bus or '').strip() or 'default'
+    if bus.startswith('arn:'):
+        return bus
+    return client.describe_event_bus(Name=bus)['Arn']
+
+
+def _iso(value: Any) -> str | None:
+    return value.isoformat() if hasattr(value, 'isoformat') else value
+
+
+def list_archives_and_replays() -> dict[str, Any]:
+    client = _events_client()
+    archives = []
+    for summary in client.list_archives().get('Archives', []):
+        detail = client.describe_archive(ArchiveName=summary['ArchiveName'])
+        archives.append({
+            'name': detail.get('ArchiveName'),
+            'arn': detail.get('ArchiveArn'),
+            'event_source_arn': detail.get('EventSourceArn'),
+            'description': detail.get('Description') or '',
+            'event_pattern': detail.get('EventPattern') or '',
+            'state': detail.get('State'),
+            'retention_days': detail.get('RetentionDays') or 0,
+            'event_count': detail.get('EventCount') or 0,
+            'size_bytes': detail.get('SizeBytes') or 0,
+            'creation_time': _iso(detail.get('CreationTime')),
+        })
+    replays = []
+    for summary in client.list_replays().get('Replays', []):
+        detail = client.describe_replay(ReplayName=summary['ReplayName'])
+        replays.append({
+            'name': detail.get('ReplayName'),
+            'arn': detail.get('ReplayArn'),
+            'state': detail.get('State'),
+            'state_reason': detail.get('StateReason') or '',
+            'event_source_arn': detail.get('EventSourceArn'),
+            'destination_arn': (detail.get('Destination') or {}).get('Arn'),
+            'event_start_time': _iso(detail.get('EventStartTime')),
+            'event_end_time': _iso(detail.get('EventEndTime')),
+            'event_last_replayed_time': _iso(detail.get('EventLastReplayedTime')),
+            'replay_start_time': _iso(detail.get('ReplayStartTime')),
+            'replay_end_time': _iso(detail.get('ReplayEndTime')),
+        })
+    return {'archives': archives, 'replays': replays}
+
+
+def create_archive(name: str, event_bus: str, *, event_pattern: Any = None,
+                   retention_days: Any = 0, description: str = '') -> dict[str, Any]:
+    archive_name = _clean_required(name, 'Archive name')
+    client = _events_client()
+    kwargs: dict[str, Any] = {'ArchiveName': archive_name, 'EventSourceArn': _bus_arn(client, event_bus)}
+    if event_pattern not in (None, ''):
+        kwargs['EventPattern'] = normalize_event_detail(event_pattern)
+    try:
+        days = int(retention_days or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Retention days must be a whole number (0 keeps events indefinitely)') from exc
+    if days < 0:
+        raise ValueError('Retention days must be 0 or more')
+    kwargs['RetentionDays'] = days
+    if (description or '').strip():
+        kwargs['Description'] = description.strip()
+    response = client.create_archive(**kwargs)
+    return {'name': archive_name, 'arn': response.get('ArchiveArn'), 'state': response.get('State')}
+
+
+def delete_archive(name: str) -> dict[str, Any]:
+    archive_name = _clean_required(name, 'Archive name')
+    _events_client().delete_archive(ArchiveName=archive_name)
+    return {'name': archive_name, 'deleted': True}
+
+
+def _parse_time(value: Any, label: str):
+    from datetime import datetime, timezone
+    text = (value or '').strip() if isinstance(value, str) else ''
+    if not text:
+        raise ValueError(f'{label} is required')
+    try:
+        parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError as exc:
+        raise ValueError(f'{label} must be an ISO 8601 date and time') from exc
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def start_replay(name: str, archive_name: str, *, start_time: Any, end_time: Any,
+                 destination_bus: str = '', rule_arns: list[str] | None = None,
+                 description: str = '') -> dict[str, Any]:
+    replay_name = _clean_required(name, 'Replay name')
+    archive = _clean_required(archive_name, 'Archive')
+    start = _parse_time(start_time, 'Start time')
+    end = _parse_time(end_time, 'End time')
+    if end <= start:
+        raise ValueError('End time must be after start time')
+    client = _events_client()
+    detail = client.describe_archive(ArchiveName=archive)
+    # A replay must go back to the bus the archive records from.
+    destination: dict[str, Any] = {'Arn': _bus_arn(client, destination_bus) if (destination_bus or '').strip() else detail['EventSourceArn']}
+    filters = [arn.strip() for arn in (rule_arns or []) if isinstance(arn, str) and arn.strip()]
+    if filters:
+        destination['FilterArns'] = filters
+    kwargs: dict[str, Any] = {
+        'ReplayName': replay_name,
+        'EventSourceArn': detail['ArchiveArn'],
+        'EventStartTime': start,
+        'EventEndTime': end,
+        'Destination': destination,
+    }
+    if (description or '').strip():
+        kwargs['Description'] = description.strip()
+    response = client.start_replay(**kwargs)
+    return {'name': replay_name, 'arn': response.get('ReplayArn'), 'state': response.get('State')}
+
+
+def cancel_replay(name: str) -> dict[str, Any]:
+    replay_name = _clean_required(name, 'Replay name')
+    response = _events_client().cancel_replay(ReplayName=replay_name)
+    return {'name': replay_name, 'state': response.get('State')}

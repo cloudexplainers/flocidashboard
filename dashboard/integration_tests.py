@@ -133,3 +133,57 @@ class FlociCompatibilityTests(SimpleTestCase):
             'session_token': credentials['SessionToken'],
         })
         self.assertIn(f'assumed-role/{self.name}/', assumed.identity()['arn'])
+
+
+class ConsoleFeatureLiveTests(SimpleTestCase):
+    """Drives the console endpoints for features added from the accuracy review against Floci."""
+
+    def setUp(self):
+        self.factory = FlociClientFactory()
+        self.assertTrue(self.factory.health()['ok'])
+        self.name = f'console-{uuid.uuid4().hex[:10]}'
+        self.http = Client()
+
+    def call(self, method, path, body=None, expect=200):
+        kwargs = {} if body is None else {'data': json.dumps(body), 'content_type': 'application/json'}
+        response = getattr(self.http, method)(path, **kwargs)
+        self.assertEqual(response.status_code, expect, response.content)
+        return response.json()
+
+    def test_eventbridge_archive_and_replay(self):
+        from datetime import datetime, timedelta, timezone
+        events = self.factory.client('events')
+        self.addCleanup(lambda: events.delete_archive(ArchiveName=self.name))
+        self.call('post', '/api/eventbridge/archives/create/', {
+            'name': self.name, 'event_bus_name': 'default', 'event_pattern': {'source': [self.name]}})
+        events.put_events(Entries=[{'Source': self.name, 'DetailType': 'Test', 'Detail': '{}'}])
+        archives = self.call('get', '/api/eventbridge/archives/')['archives']
+        archive = next(item for item in archives if item['name'] == self.name)
+        self.assertEqual(archive['event_count'], 1)
+        now = datetime.now(timezone.utc)
+        replay = self.call('post', '/api/eventbridge/replays/start/', {
+            'name': self.name, 'archive_name': self.name,
+            'start_time': (now - timedelta(hours=1)).isoformat(), 'end_time': now.isoformat()})
+        self.assertIn(replay['state'], {'STARTING', 'RUNNING', 'COMPLETED'})
+
+    def test_cloudwatch_dashboard_round_trip(self):
+        body = {'widgets': [{'type': 'text', 'x': 0, 'y': 0, 'width': 6, 'height': 2, 'properties': {'markdown': 'hi'}}]}
+        self.call('put', '/api/cloudwatch/dashboards/', {'dashboard_name': self.name, 'dashboard_body': body})
+        listed = self.call('get', '/api/cloudwatch/dashboards/')['dashboards']
+        saved = next(item for item in listed if item['name'] == self.name)
+        self.assertEqual(json.loads(saved['body']), body)
+        self.call('delete', '/api/cloudwatch/dashboards/', {'dashboard_name': self.name})
+
+    def test_logs_subscription_filter_round_trip(self):
+        logs, kinesis = self.factory.client('logs'), self.factory.client('kinesis')
+        group = f'/console/{self.name}'
+        logs.create_log_group(logGroupName=group)
+        self.addCleanup(lambda: logs.delete_log_group(logGroupName=group))
+        kinesis.create_stream(StreamName=self.name, ShardCount=1)
+        self.addCleanup(lambda: kinesis.delete_stream(StreamName=self.name))
+        arn = kinesis.describe_stream_summary(StreamName=self.name)['StreamDescriptionSummary']['StreamARN']
+        self.call('put', '/api/cloudwatch/subscription-filters/', {
+            'log_group_name': group, 'filter_name': 'errors', 'filter_pattern': 'ERROR', 'destination_arn': arn})
+        listed = self.call('get', f'/api/cloudwatch/subscription-filters/?log_group_name={group}')
+        self.assertEqual([item['filter_name'] for item in listed['subscription_filters']], ['errors'])
+        self.call('delete', '/api/cloudwatch/subscription-filters/', {'log_group_name': group, 'filter_name': 'errors'})

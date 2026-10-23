@@ -4469,3 +4469,109 @@ test('Auto Scaling workbench labels instance refresh and Set instance health wit
   await page.getByRole('button', { name: 'Execute Set instance health', exact: true }).click();
   await expect.poll(() => health).toEqual({ health_status: 'Unhealthy' });
 });
+
+test('EventBridge archives list events, create an archive and start a replay limited to a rule', async ({ page }) => {
+  await inventory(page, 'eventbridge', { event_buses: [{ name: 'default', arn: 'arn:aws:events:us-east-1:000000000000:event-bus/default', rules: [{ name: 'orders-to-queue', arn: 'arn:aws:events:us-east-1:000000000000:rule/orders-to-queue', state: 'ENABLED', event_pattern: '{"source":["shop"]}', targets: [] }] }] });
+  const archive = { name: 'orders-archive', event_source_arn: 'arn:aws:events:us-east-1:000000000000:event-bus/default', state: 'ENABLED', retention_days: 0, event_count: 4, event_pattern: '{"source":["shop"]}', creation_time: '2026-10-23T10:00:00+00:00' };
+  let archives: any[] = [archive];
+  let replays: any[] = [];
+  let created: any; let started: any;
+  await page.route('**/api/eventbridge/archives/', route => route.fulfill({ json: { archives, replays } }));
+  await page.route('**/api/eventbridge/archives/create/', route => { created = route.request().postDataJSON(); archives = [...archives, { ...archive, name: created.name, event_count: 0 }]; return route.fulfill({ json: { name: created.name, state: 'ENABLED' } }); });
+  await page.route('**/api/eventbridge/replays/start/', route => { started = route.request().postDataJSON(); replays = [{ name: started.name, state: 'COMPLETED', event_source_arn: 'arn:aws:events:us-east-1:000000000000:archive/orders-archive', destination_arn: archive.event_source_arn }]; return route.fulfill({ json: { name: started.name, state: 'STARTING' } }); });
+  await page.goto('/eventbridge/archives');
+  await expect(page.getByTestId('floci-note')).toContainText('replay-name');
+  const archiveTable = page.getByRole('table').first();
+  await expect(archiveTable.getByRole('row', { name: /orders-archive/ })).toContainText('Indefinite');
+  await expect(archiveTable.getByRole('row', { name: /orders-archive/ })).toContainText('4');
+
+  await page.getByRole('button', { name: 'Create archive', exact: true }).click();
+  const createDialog = page.getByRole('dialog', { name: 'Create archive' });
+  await createDialog.getByLabel('Archive name').fill('all-default');
+  await createDialog.getByLabel('Retention period (days)').fill('7');
+  await createDialog.getByRole('button', { name: 'Create archive', exact: true }).click();
+  await expect(page.getByText('Archive "all-default" created.')).toBeVisible();
+  expect(created).toMatchObject({ name: 'all-default', event_bus_name: 'default', retention_days: 7 });
+
+  await archiveTable.getByRole('row', { name: /orders-archive/ }).getByRole('radio').check();
+  await page.getByRole('button', { name: 'Start replay', exact: true }).click();
+  const replayDialog = page.getByRole('dialog', { name: 'Start replay' });
+  await expect(replayDialog.getByText('default', { exact: true })).toBeVisible();
+  await replayDialog.getByRole('button', { name: /All rules/ }).click();
+  await replayDialog.getByRole('option', { name: 'orders-to-queue' }).click();
+  await replayDialog.getByRole('button', { name: 'Start replay', exact: true }).click();
+  expect(started).toMatchObject({ archive_name: 'orders-archive', rule_arns: ['arn:aws:events:us-east-1:000000000000:rule/orders-to-queue'] });
+  expect(Date.parse(started.end_time)).toBeGreaterThan(Date.parse(started.start_time));
+  await expect(page.getByRole('table').nth(1).getByText('COMPLETED')).toBeVisible();
+  await page.screenshot({ path: 'test-results/screenshots/eventbridge-archives.png', fullPage: true });
+});
+
+test('EventBridge archives show a load error in place and an empty state', async ({ page }) => {
+  await inventory(page, 'eventbridge', eventRoutingInventory);
+  await page.route('**/api/eventbridge/archives/', route => route.fulfill({ status: 500, json: { error: 'Archives exploded' } }));
+  await page.goto('/eventbridge/archives');
+  await expect(page.getByText('Archives exploded')).toBeVisible();
+  await expect(page.getByText('No archives. Create one to start keeping events.')).toBeVisible();
+});
+
+test('CloudWatch dashboards render text and metric widgets and save an edited body', async ({ page }) => {
+  await inventory(page, 'cloudwatch', { metrics: [] });
+  const body = JSON.stringify({ widgets: [
+    { type: 'text', x: 0, y: 0, width: 24, height: 2, properties: { markdown: '# Orders overview' } },
+    { type: 'metric', x: 0, y: 2, width: 12, height: 6, properties: { title: 'Invocations', stat: 'Sum', metrics: [['AWS/Lambda', 'Invocations', 'FunctionName', 'orders'], ['...', 'billing']] } },
+    { type: 'log', x: 12, y: 2, width: 12, height: 6, properties: { title: 'Recent errors', query: 'fields @message' } },
+  ] });
+  let saved: any;
+  const statRequests: URL[] = [];
+  await page.route('**/api/cloudwatch/dashboards/', route => {
+    if (route.request().method() === 'PUT') { saved = route.request().postDataJSON(); return route.fulfill({ json: { dashboard_name: saved.dashboard_name, validation_messages: [] } }); }
+    return route.fulfill({ json: { dashboards: [{ name: 'orders', size: body.length, last_modified: '2026-10-23T10:00:00+00:00', body }] } });
+  });
+  await page.route('**/api/cloudwatch/metric-statistics/**', route => { statRequests.push(new URL(route.request().url())); return route.fulfill({ json: { datapoints: [] } }); });
+  await page.goto('/cloudwatch/dashboards');
+  await expect(page.getByRole('table').first().getByRole('row', { name: /orders/ })).toContainText('3');
+  await page.getByRole('table').first().getByRole('row', { name: /orders/ }).getByRole('radio').check();
+  await expect(page.getByText('# Orders overview')).toBeVisible();
+  await expect(page.getByText('Invocations', { exact: true })).toBeVisible();
+  await expect(page.getByText("The console doesn't draw log widgets.", { exact: false })).toBeVisible();
+  await expect.poll(() => statRequests.map(url => url.searchParams.get('statistic'))).toContain('Sum');
+  expect(JSON.parse(statRequests[0].searchParams.get('dimensions') || '[]')).toEqual([{ Name: 'FunctionName', Value: 'orders' }]);
+  await page.getByRole('button', { name: /^Metric Metric/ }).first().click();
+  await expect(page.getByRole('option', { name: /FunctionName=billing/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: 'Edit orders' });
+  await expect(editor.getByLabel('Dashboard name')).toBeDisabled();
+  await editor.getByLabel('Dashboard body').fill('{"widgets": [');
+  await editor.getByRole('button', { name: 'Save dashboard' }).click();
+  await expect(editor.getByText('Dashboard body must be valid JSON.')).toBeVisible();
+  expect(saved).toBeUndefined();
+  await editor.getByLabel('Dashboard body').fill('{"widgets": []}');
+  await editor.getByRole('button', { name: 'Save dashboard' }).click();
+  await expect(page.getByText('Dashboard "orders" saved.')).toBeVisible();
+  expect(saved).toEqual({ dashboard_name: 'orders', dashboard_body: '{"widgets": []}' });
+  await page.screenshot({ path: 'test-results/screenshots/cloudwatch-dashboards.png', fullPage: true });
+});
+
+test('CloudWatch log groups list subscription filters and send new ones to the backend', async ({ page }) => {
+  await inventory(page, 'cloudwatch', { log_groups: [{ name: '/app/worker' }] });
+  await page.route('**/api/cloudwatch/log-streams/', route => route.fulfill({ json: { streams: [] } }));
+  let filters: any[] = [{ filter_name: 'errors', filter_pattern: 'ERROR', destination_arn: 'arn:aws:kinesis:us-east-1:000000000000:stream/app-logs', distribution: 'ByLogStream' }];
+  let put: any;
+  await page.route('**/api/cloudwatch/subscription-filters/**', route => {
+    if (route.request().method() === 'PUT') { put = route.request().postDataJSON(); filters = [...filters, { ...put }]; return route.fulfill({ json: { filter_name: put.filter_name } }); }
+    expect(new URL(route.request().url()).searchParams.get('log_group_name')).toBe('/app/worker');
+    return route.fulfill({ json: { subscription_filters: filters } });
+  });
+  await page.goto('/cloudwatch/logs');
+  await expect(page.getByText('Kinesis stream: arn:aws:kinesis:us-east-1:000000000000:stream/app-logs')).toBeVisible();
+  await page.getByRole('button', { name: 'Create subscription filter' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Subscription filter' });
+  await dialog.getByLabel('Filter name').fill('all-to-lambda');
+  await dialog.getByLabel('Destination ARN').fill('arn:aws:lambda:us-east-1:000000000000:function:shipper');
+  await dialog.getByRole('button', { name: 'Save filter' }).click();
+  await expect(page.getByText('Subscription filter "all-to-lambda" saved.')).toBeVisible();
+  expect(put).toMatchObject({ log_group_name: '/app/worker', filter_name: 'all-to-lambda', filter_pattern: '', distribution: 'ByLogStream' });
+  await expect(page.getByRole('button', { name: 'Create subscription filter' })).toBeDisabled();
+});

@@ -1,4 +1,5 @@
 """Validated operations for the CloudWatch console."""
+import json
 import math
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -115,5 +116,90 @@ def retention(request):
                 raise ValueError('Invalid retention period')
             FlociClientFactory().client('logs').put_retention_policy(logGroupName=group, retentionInDays=days)
         return JsonResponse({'log_group_name': group})
+    except Exception as exc:
+        return handle_action_error(exc, service='logs', operation=operation)
+
+
+def _iso(value):
+    return value.isoformat() if hasattr(value, 'isoformat') else value
+
+
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def dashboards(request):
+    """Lists dashboards with their bodies, saves one (PutDashboard), or deletes one."""
+    operation = {'GET': 'list_dashboards', 'PUT': 'put_dashboard', 'DELETE': 'delete_dashboards'}[request.method]
+    try:
+        cloudwatch = FlociClientFactory().client('cloudwatch')
+        if request.method == 'GET':
+            items = []
+            for entry in cloudwatch.list_dashboards().get('DashboardEntries', []):
+                body = cloudwatch.get_dashboard(DashboardName=entry['DashboardName']).get('DashboardBody') or '{}'
+                items.append({
+                    'name': entry.get('DashboardName'),
+                    'arn': entry.get('DashboardArn'),
+                    'last_modified': _iso(entry.get('LastModified')),
+                    'size': entry.get('Size'),
+                    'body': body,
+                })
+            return JsonResponse({'dashboards': items})
+        body = parse_json_body(request)
+        name = _required(body, 'dashboard_name')
+        if request.method == 'DELETE':
+            cloudwatch.delete_dashboards(DashboardNames=[name])
+            return JsonResponse({'dashboard_name': name, 'deleted': True})
+        dashboard_body = body.get('dashboard_body')
+        if isinstance(dashboard_body, (dict, list)):
+            dashboard_body = json.dumps(dashboard_body)
+        if not isinstance(dashboard_body, str) or not dashboard_body.strip():
+            raise ValueError('Dashboard body is required')
+        try:
+            parsed = json.loads(dashboard_body)
+        except json.JSONDecodeError as exc:
+            raise ValueError('Dashboard body must be valid JSON') from exc
+        if not isinstance(parsed, dict) or not isinstance(parsed.get('widgets'), list):
+            raise ValueError('Dashboard body must be an object with a "widgets" list')
+        response = cloudwatch.put_dashboard(DashboardName=name, DashboardBody=dashboard_body)
+        return JsonResponse({'dashboard_name': name, 'validation_messages': response.get('DashboardValidationMessages', [])})
+    except Exception as exc:
+        return handle_action_error(exc, service='cloudwatch', operation=operation)
+
+
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def subscription_filters(request):
+    """Lists, creates or replaces, and deletes CloudWatch Logs subscription filters for one log group."""
+    operation = {'GET': 'describe_subscription_filters', 'PUT': 'put_subscription_filter', 'DELETE': 'delete_subscription_filter'}[request.method]
+    try:
+        logs = FlociClientFactory().client('logs')
+        if request.method == 'GET':
+            group = (request.GET.get('log_group_name') or '').strip()
+            if not group:
+                raise ValueError('Log group name is required')
+            filters = logs.describe_subscription_filters(logGroupName=group).get('subscriptionFilters', [])
+            return JsonResponse({'log_group_name': group, 'subscription_filters': [{
+                'filter_name': item.get('filterName'),
+                'filter_pattern': item.get('filterPattern') or '',
+                'destination_arn': item.get('destinationArn'),
+                'role_arn': item.get('roleArn') or '',
+                'distribution': item.get('distribution') or '',
+                'creation_time': item.get('creationTime'),
+            } for item in filters]})
+        body = parse_json_body(request)
+        group, name = _required(body, 'log_group_name'), _required(body, 'filter_name')
+        if request.method == 'DELETE':
+            logs.delete_subscription_filter(logGroupName=group, filterName=name)
+            return JsonResponse({'log_group_name': group, 'filter_name': name, 'deleted': True})
+        pattern = body.get('filter_pattern', '')
+        if not isinstance(pattern, str):
+            raise ValueError('Filter pattern must be text (empty matches every event)')
+        kwargs = dict(logGroupName=group, filterName=name, filterPattern=pattern,
+                      destinationArn=_required(body, 'destination_arn'))
+        if isinstance(body.get('role_arn'), str) and body['role_arn'].strip():
+            kwargs['roleArn'] = body['role_arn'].strip()
+        distribution = body.get('distribution') or 'ByLogStream'
+        if distribution not in ('ByLogStream', 'Random'):
+            raise ValueError('Distribution must be ByLogStream or Random')
+        kwargs['distribution'] = distribution
+        logs.put_subscription_filter(**kwargs)
+        return JsonResponse({'log_group_name': group, 'filter_name': name})
     except Exception as exc:
         return handle_action_error(exc, service='logs', operation=operation)

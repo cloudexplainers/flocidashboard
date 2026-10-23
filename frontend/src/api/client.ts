@@ -2491,3 +2491,11 @@ export async function snsRequest(path = '', method = 'GET', payload?: Record<str
   if (!response.ok || data.error) throw new Error(data.error || `SNS request failed (${response.status})`);
   return data;
 }
+
+/**
+ * JSON request to a dashboard endpoint under /api/<service>/. Throws the backend's normalized
+ * error message, so callers can show it in place.
+ */
+export async function serviceRequest(service: string, path = '', method = 'GET', payload?: Record<string, unknown>): Promise<any> {
+  return requestJson(`/api/${service}/${path}`, { method, json: payload, errorMessage: `${service} request failed` });
+}

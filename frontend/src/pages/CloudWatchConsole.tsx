@@ -30,6 +30,8 @@ import TextFilter from "@cloudscape-design/components/text-filter";
 import Tabs from "@cloudscape-design/components/tabs";
 import { cloudWatchRequest } from "../api/client";
 import { FlociNote } from '../components/FlociNote';
+import { CloudWatchDashboards } from '../components/CloudWatchDashboards';
+import { LogSubscriptionFilters } from '../components/LogSubscriptionFilters';
 
 interface CloudWatchConsoleProps {
   resourcePath?: string;
@@ -900,6 +902,11 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
               ),
             },
             {
+              label: "Dashboards",
+              id: "dashboards",
+              content: <CloudWatchDashboards />,
+            },
+            {
               label: `CloudWatch Logs (${logGroups.length})`,
               id: "logs",
               content: (
@@ -972,6 +979,12 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
                         No log groups reported. Create a log group in your
                         application to inspect its streams.
                       </Box>
+                    )}
+                    {selectedLogGroup?.value && (
+                      <LogSubscriptionFilters
+                        key={`subscriptions-${selectedLogGroup.value}`}
+                        groupName={selectedLogGroup.value}
+                      />
                     )}
                     {selectedLogGroup?.value && (
                       <LogStreamExplorer
