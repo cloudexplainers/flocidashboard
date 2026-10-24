@@ -143,6 +143,7 @@ def dynamodb_inventory() -> dict[str, Any]:
         'notes': [
             'Global-table replicas added with UpdateTable are reported as ACTIVE, but Floci creates no table in the replica Region and replicates nothing.',
             'Provisioned capacity is stored but never enforced (no throttling), and Application Auto Scaling policies never change it. CreateBackup and RestoreTableToPointInTime are unsupported.',
+            'Floci runs on one node, so an eventually consistent read always returns the latest write; ConsistentRead still doubles the reported read capacity, and consistent reads on a GSI are rejected as on AWS.',
         ],
         'streams_supported': [
             'ListStreams',
