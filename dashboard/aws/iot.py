@@ -65,6 +65,7 @@ def iot_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'Topic-level authorization is not enforced, and the plaintext MQTT listener on port 1883 accepts any client. Certificates and iot:Connect are checked only on the TLS listener (8883).',
+            'Shadow updates merge only the top-level keys of desired and reported: a nested object replaces the stored one instead of being merged into it. The shadow document has no delta or metadata sections (the MQTT update/delta topic is still published).',
         ],
     }
 

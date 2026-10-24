@@ -351,6 +351,7 @@ def ses_inventory() -> dict[str, Any]:
             'Emails are always stored locally and can be inspected through /_aws/ses.',
             'SMTP relay failures are logged but do not affect the SES API response.',
             'SES v1 and SES v2 share identity, template, and sent-message state.',
+            'Receipt rule sets and rules are stored, but Floci receives no inbound mail, so their actions never run.',
         ],
     }
 

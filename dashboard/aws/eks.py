@@ -247,6 +247,7 @@ def eks_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'Floci starts a k3s container for each cluster. In mock mode clusters are marked ACTIVE immediately with no Kubernetes behind them.',
+            'Add-ons are recorded metadata only: creating or updating one installs nothing in the cluster, and it reports ACTIVE at once. The one exception is eks-pod-identity-agent, which turns on Pod Identity credential injection.',
         ],
     }
 

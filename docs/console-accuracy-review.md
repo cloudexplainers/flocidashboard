@@ -975,9 +975,24 @@ console. Each was checked live on a throwaway Floci 2.3.0 before it got a consol
 | Route 53 private-zone VPC association | Route 53, Create hosted zone (Private) and the zone's VPCs tab | `AssociateVPCWithHostedZone` and `DisassociateVPCFromHostedZone` work. Floci doesn't check that the VPC exists, lets the last VPC be removed (AWS refuses), and refuses VPCs on public zones as AWS does. Its DNS server answers a private zone's A records to any client, associated or not. | The console checks the VPC exists, keeps at least one VPC, and the Floci note says resolution isn't limited to the VPCs |
 | CloudFront origin access control | CloudFront, Origin access tab, and Create distribution (S3 origins) | Create, list, get and delete work, distributions keep `OriginAccessControlId`, and deleting a control in use is refused. `UpdateOriginAccessControl` returns 405. The bucket policy isn't checked against the distribution. | No edit (create a new control instead); the tab shows which distributions use each control and the bucket policy statement to add |
 
+## Smaller partial behaviors (2026-10-24)
+
+The last open item from the gap fixes: smaller features Floci 2.3.0 only partly supports, now labeled where the
+console offers them, checked against Floci's source at the `2.3.0` tag. Unit tests in `PartialBehaviorLabelTests`
+(`dashboard/tests_floci_gap_fixes.py`) keep the labels in place.
+
+| Feature | Floci 2.3.0 | Console says |
+| --- | --- | --- |
+| ECS placement strategies and constraints | Stored and returned, never used: every task runs as a container on the Floci host. Capacity provider strategies are applied. | Inventory note |
+| EKS add-ons | Recorded metadata only, `ACTIVE` at once, nothing installed in the cluster; `eks-pod-identity-agent` turns on Pod Identity injection. | Inventory note |
+| OpenSearch `UpgradeDomain` | Checks the upgrade path, then only changes the stored version; `GetUpgradeHistory` stays empty and a running container keeps its image. | Inventory note and the Upgrade domain action description |
+| Logs Insights | `fields`, `filter` (`=`, `!=`, `==`), `sort`, `dedup`, `limit`. Other commands fail the query; an `and`/`or` filter compares only the first condition, without an error. | Inventory note and the Start Logs Insights query action description |
+| CloudFormation | `ValidateTemplate` accepts anything and returns no parameters; unsupported resource types reach `CREATE_COMPLETE` with a placeholder ID and nothing created; stack policies are no-ops. | Floci note in Create stack (the success text no longer says "Template syntax is valid"), inventory notes, action description, and the CloudFormation lab's validate step |
+| IoT device shadows | Only top-level keys of `desired`/`reported` are merged (a nested object replaces the stored one); the document has no `delta` or `metadata`. | Inventory note and the Update device shadow action description |
+| SES receipt rules | Stored; Floci receives no inbound mail, so rules never run. The console doesn't offer them. | Inventory note |
+
 ## Recommended next work
 
 | Item | Why not here |
 | --- | --- |
-| Re-check version-specific notes when the image moves past 2.3.0 | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration (`main` applies it; the Management tab note says it never runs), ELBv2 HTTPS and stickiness. Better still, detect support at run time. |
-| Smaller partial behaviors left unlabeled | ECS placement strategies, EKS add-ons, OpenSearch `UpgradeDomain`, Logs Insights subset, CloudFormation stub resources, IoT shadow merge, SES receipt rules: either not offered by the console or low exam value. |
+| Re-check version-specific notes when the image moves past 2.3.0 (on 2026-10-24 `floci/floci:latest` was still the 2.3.0 image; only nightlies are newer) | CloudWatch alarm actions (SNS on `main`), DynamoDB backups and PITR restore, ECR `PutImage`, S3 lifecycle expiration (`main` applies it; the Management tab note says it never runs), ELBv2 HTTPS and stickiness. Better still, detect support at run time. |

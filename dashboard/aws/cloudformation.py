@@ -185,7 +185,11 @@ def cloudformation_inventory() -> dict[str, Any]:
             'ListStackSetOperations',
         ],
         'protocol': 'Query XML',
-        'notes': [],
+        'notes': [
+            'ValidateTemplate accepts any template and returns no parameters or capabilities; template errors show up only when a stack is created.',
+            'Resource types Floci doesn\'t support still reach CREATE_COMPLETE with a placeholder physical ID; nothing is created for them, and the stack events say so.',
+            'Stack policies are accepted but not stored or enforced.',
+        ],
     }
 
 

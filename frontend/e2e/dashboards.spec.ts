@@ -3706,6 +3706,7 @@ test('CloudFormation template validation uses returned metadata and expires when
   await page.getByRole('button', { name: 'Create stack', exact: true }).click();
   const modal = page.getByRole('dialog');
   await expect(modal.getByLabel('Template Body (YAML or JSON)', { exact: true })).toHaveValue('');
+  await expect(modal.getByTestId('floci-note')).toContainText('accepts any template');
   await modal.getByLabel('Template Body (YAML or JSON)', { exact: true }).fill(JSON.stringify(cfnTemplate));
   await modal.getByRole('button', { name: 'Validate Template', exact: true }).click();
   await expect(modal.getByText('Validated queue template', { exact: true })).toBeVisible();

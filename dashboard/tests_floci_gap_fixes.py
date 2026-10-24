@@ -277,3 +277,45 @@ class StoredOnlyLabelTests(SimpleTestCase):
 
         client.get_resource_policy.return_value = {'Name': 'db'}
         self.assertIsNone(secretsmanager_inventory()['secrets'][0]['resource_policy'])
+
+
+class PartialBehaviorLabelTests(SimpleTestCase):
+    """Smaller features Floci only partly supports are labeled where the console offers them."""
+
+    def _action(self, service_key, name):
+        return next(action for action in get_service(service_key).actions if action.name == name)
+
+    def test_partial_actions_say_what_floci_does(self):
+        self.assertIn('stats, parse', self._action('cloudwatch', 'start_logs_insights_query').description)
+        self.assertIn('top-level keys', self._action('iot', 'update_thing_shadow').description)
+        self.assertIn('keeps its original image', self._action('opensearch', 'upgrade_domain').description)
+        self.assertIn('accepts any template', self._action('cloudformation', 'validate_template').description)
+
+    def _notes(self, module_name, inventory_name):
+        import importlib
+        from contextlib import ExitStack
+
+        module = importlib.import_module(f'dashboard.aws.{module_name}')
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(module.core, 'FlociClientFactory'))
+            for helper in ('_paginate', '_operation_items'):
+                stack.enter_context(patch.object(module.core, helper, return_value=[], create=True))
+            if hasattr(module, '_safe_value'):
+                stack.enter_context(patch.object(module, '_safe_value', return_value=[]))
+            if hasattr(module, '_ses_mailbox'):
+                stack.enter_context(patch.object(module, '_ses_mailbox', return_value={}))
+            return ' '.join(getattr(module, inventory_name)()['notes'])
+
+    def test_inventory_notes_label_partial_behaviors(self):
+        expected = {
+            ('ecs', 'ecs_inventory'): 'Placement strategies and placement constraints are stored',
+            ('eks', 'eks_inventory'): 'Add-ons are recorded metadata only',
+            ('opensearch', 'opensearch_inventory'): 'An upgrade only changes the stored engine version',
+            ('iot', 'iot_inventory'): 'merge only the top-level keys',
+            ('ses', 'ses_inventory'): 'Receipt rule sets and rules are stored',
+            ('cloudformation', 'cloudformation_inventory'): 'ValidateTemplate accepts any template',
+            ('cloudwatch', 'cloudwatch_inventory'): 'Logs Insights runs a subset',
+        }
+        for (module_name, inventory_name), text in expected.items():
+            with self.subTest(module=module_name):
+                self.assertIn(text, self._notes(module_name, inventory_name))

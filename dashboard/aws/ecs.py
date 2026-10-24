@@ -333,6 +333,7 @@ def ecs_inventory() -> dict[str, Any]:
             'By default Floci ECS launches real Docker containers for tasks.',
             'Set FLOCI_SERVICES_ECS_MOCK=true to run tasks as in-process stubs for CI or tests.',
             'When mock mode is false, Floci needs access to the Docker socket.',
+            'Placement strategies and placement constraints are stored and returned, but Floci doesn\'t use them to place tasks: every task runs as a container on the Floci host. Capacity provider strategies (base and weight) are applied.',
         ],
     }
 
