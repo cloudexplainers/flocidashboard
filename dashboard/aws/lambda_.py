@@ -198,7 +198,6 @@ def lambda_inventory() -> dict[str, Any]:
         'not_implemented': [
             'Layer permission operations',
             'Provisioned concurrency operations',
-            'Dead-letter and async/event invoke config operations',
             'InvokeWithResponseStream',
             'Code signing management beyond GetFunctionCodeSigningConfig',
             'GetAccountSettings',
@@ -209,6 +208,8 @@ def lambda_inventory() -> dict[str, Any]:
             'Bind-mount hot reload uses S3Bucket=hot-reload and requires explicit configuration.',
             'Reserved concurrency is enforced; provisioned concurrency is not implemented.',
             'The memory size is passed to the function but CPU does not scale with it. Function URLs with AWS_IAM auth also answer unsigned requests, and UpdateAlias does not clear routing weights.',
+            'Async invocations are real: event invoke configs (retries, maximum event age), SQS destinations, and dead-letter queues work, with the first retry about a minute later. Once an OnFailure destination is set, failed events go only there, not to the DLQ. Synchronous invokes return no LogResult tail.',
+            'Inside a function, KMS calls use the execution role and Floci checks kms:Decrypt against key/* rather than the key ARN.',
         ],
     }
 

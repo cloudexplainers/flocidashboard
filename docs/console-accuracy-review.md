@@ -1240,6 +1240,26 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service cloudformation` passed for this lab on 2.3.0.
 
+## Lambda event lifecycle lab (2026-10-24)
+
+`lambda/async-error-handling` (DVA 1.2, 2.3, 4.1; SAA 2.1; CLF 3.3), 8 steps, in `dashboard/labs/lambda_lifecycle_labs.py`
+(a fifth Lambda lab, dispatched from `lambda_labs.py`, and the fifth lab of Level 6: Developer Workflows). It is Wave D item
+D-5: queues `lab-order-events-success`, `lab-order-events-failure` and `lab-order-events-dlq`, role `lab-order-events-role`,
+function `lab-order-events`, and KMS key alias `alias/lab-order-events`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Synchronous errors | A handler exception returns HTTP 200 with `FunctionError: Unhandled` and the error payload. No `LogResult` tail comes back with `--log-type Tail`. | Reported as real; the step says to read the log group |
+| Event invoke config | `MaximumRetryAttempts` and `MaximumEventAgeInSeconds` are stored and used; the first retry comes about a minute after the failure. | Reported as real; the failure step waits up to 150 seconds |
+| Destinations | SQS OnSuccess and OnFailure get AWS-shaped records (`condition`, `approximateInvokeCount`, request and response payloads). | Reported as real |
+| Dead-letter queue | Gets the original event with `RequestID`, `ErrorCode` and `ErrorMessage` attributes, but only while no OnFailure destination is set. | The DLQ step runs first, with retries off, and the failure step reads only the OnFailure queue |
+| KMS from Lambda | The function's boto3 uses role credentials and Floci enforces the role policy; the encryption context is enforced; `kms:Decrypt` is evaluated against `key/*`, so a policy naming the key ARN is denied. | The role grants Decrypt on `key/*` and the step says to name the key ARN on AWS |
+
+The Lambda console notes listed dead-letter and event invoke config operations as not implemented; they now describe what
+works. `check_labs --service lambda` passed for this lab on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
