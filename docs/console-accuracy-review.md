@@ -1101,6 +1101,29 @@ tagged as `public.ecr.aws/docker/library/ubuntu:22.04` because the sandbox can't
 
 `check_labs --service ec2 --lab block-file-storage` passed on 2.3.0.
 
+## Backup and DR plan lab (2026-10-24)
+
+`backup/backup-dr-plan` (SAA 2.2, 1.3, 4.1; CLF 3.6), 7 steps, in `dashboard/labs/backup_labs.py` (a new lab service,
+registered in `monolith.py` after Kinesis). It covers Wave 2 item W2-6: KMS key `alias/lab-backup-vault`, vault
+`lab-orders-vault` with an access policy that denies `backup:DeleteRecoveryPoint` and a vault lock (7 to 2,555 days,
+3-day grace), copy vault `lab-orders-vault-dr` in us-west-2, plan `lab-orders-plan` (rule `daily-35-days` at
+`cron(0 5 * * ? *)`, kept 35 days and copied to the DR vault; rule `monthly-7-years`, cold after 90 days, kept 2,555),
+role `lab-backup-role`, selection `tagged-daily` on the tag `backup=daily`, table `lab-orders-backup`, and a DR
+strategy chooser over four workloads.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Backup jobs | `StartBackupJob` reaches COMPLETED and creates a recovery point, which holds no data. | Reported as real, with a note that nothing is copied |
+| Vault lock | Enforced: `DeleteRecoveryPoint` inside the minimum retention is refused. | The step shows the refused delete |
+| Access policy | Stored, never evaluated. | The step checks the policy denies deletes |
+| Plan rules | Schedules never run, lifecycle isn't validated (cold storage under 90 days before delete is accepted), and plan tags are dropped. | The steps check the cron, the 90-day cold storage minimum and both retentions |
+| Selections | `ListOfTags` and `Conditions` are dropped, so the stored selection matches nothing. | The lab checks the tags it sent and that the table carries the tag |
+| Restore, copy and more | `StartRestoreJob`, `StartCopyJob`, `GetRecoveryPointRestoreMetadata`, report plans, frameworks and `ListProtectedResources` fail with AuthorizationHeaderMalformed (misrouted). | The step records the refused restore; the DR step works out RPO and RTO itself |
+
+`check_labs --service backup` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
