@@ -219,6 +219,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('lambda', 'performance-cost'): _tags(clf='3.3', saa='3.2 4.2'),
     ('ec2', 'block-file-storage'): _tags(clf='3.6', saa='3.1 4.1'),
     ('backup', 'backup-dr-plan'): _tags(clf='3.6', saa='2.2 1.3 4.1'),
+    ('cloudfront', 'edge-delivery'): _tags(clf='3.2', saa='3.4 4.4'),
     # Level 5
     ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
@@ -337,7 +338,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Edge locations serve CloudFront, Route 53, and Global Accelerator close to users.',
         ],
         'related_labs': [('ec2', 'vpc-public-private'), ('elasticloadbalancing', 'ha-web-tier'), ('route53', 'routing-failover'),
-                         ('backup', 'backup-dr-plan')],
+                         ('backup', 'backup-dr-plan'), ('cloudfront', 'edge-delivery')],
         'planned': None,
     },
     {
