@@ -81,7 +81,8 @@ class ExamTracksApiTests(SimpleTestCase):
 
         loosely_coupled = {(lab['service'], lab['key']) for lab in tasks['2.1']['labs']}
         self.assertIn(('sns', 'sqs-fanout'), loosely_coupled)
-        self.assertEqual(tasks['3.5']['labs'], [])
+        ingestion = {(lab['service'], lab['key']) for lab in tasks['3.5']['labs']}
+        self.assertIn(('kinesis', 'streaming-data-lake'), ingestion)
         self.assertIn('data-ingestion', tasks['3.5']['concepts'])
 
     def test_exams_endpoint_and_catalog_include_tags(self):

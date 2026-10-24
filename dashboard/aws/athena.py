@@ -134,7 +134,7 @@ def athena_inventory() -> dict[str, Any]:
             'FLOCI_SERVICES_ATHENA_DUCK_URL',
         ],
         'notes': [
-            "Floci runs queries in DuckDB (its floci-duck container) against the data in Floci's S3 and writes the results as CSV to the query's output location. With FLOCI_SERVICES_ATHENA_MOCK=true, queries succeed at once with no rows.",
+            "Floci runs queries in DuckDB (its floci-duck container) against the data in Floci's S3 and writes the results as CSV to the query's output location. A workgroup's result location is ignored: without a query-level location, results go to s3://floci-athena-results/. Workgroup scan limits are not applied and DataScannedInBytes is always 0. With FLOCI_SERVICES_ATHENA_MOCK=true, queries succeed at once with no rows.",
             'This page previews only the first few result rows of a completed query.',
         ],
     }

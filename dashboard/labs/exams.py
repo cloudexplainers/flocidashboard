@@ -214,6 +214,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('kms', 'key-management'): _tags(clf='2.2', saa='1.3'),
     ('route53', 'routing-failover'): _tags(clf='3.5 3.2', saa='2.2 3.4'),
     ('elasticache', 'cache-aside'): _tags(clf='3.4', saa='3.3 2.1'),
+    ('kinesis', 'streaming-data-lake'): _tags(clf='3.7 3.6', saa='3.5 4.1'),
     # Level 5
     ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
@@ -356,8 +357,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Purpose-built AI services: Lex (chatbots), Polly (text to speech), Transcribe (speech to text), Comprehend (text analysis), Rekognition (images and video), Textract (document text).',
             'Analytics: Athena queries data in S3 with SQL, Kinesis handles streaming data, Glue catalogs and transforms data, and Amazon Quick builds dashboards.',
         ],
-        'related_labs': [],
-        'planned': 'W2-2 Streaming ingestion to a data lake',
+        'related_labs': [('kinesis', 'streaming-data-lake')],
+        'planned': None,
     },
     {
         'key': 'data-ingestion',
@@ -369,8 +370,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Lake Formation secures and governs a data lake built on S3. Amazon EMR runs big-data frameworks such as Spark.',
             'DataSync and Storage Gateway move or bridge on-premises data into AWS.',
         ],
-        'related_labs': [],
-        'planned': 'W2-2 Streaming ingestion to a data lake',
+        'related_labs': [('kinesis', 'streaming-data-lake')],
+        'planned': None,
     },
     {
         'key': 'pricing-models',
