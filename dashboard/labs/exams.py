@@ -217,6 +217,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('kinesis', 'streaming-data-lake'): _tags(clf='3.7 3.6', saa='3.5 4.1'),
     ('dynamodb', 'capacity-at-scale'): _tags(clf='3.4', saa='4.3 3.3 2.2'),
     ('lambda', 'performance-cost'): _tags(clf='3.3', saa='3.2 4.2'),
+    ('ec2', 'block-file-storage'): _tags(clf='3.6', saa='3.1 4.1'),
     # Level 5
     ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),

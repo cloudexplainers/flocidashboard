@@ -273,6 +273,7 @@ def ec2_inventory() -> dict[str, Any]:
             "Key pairs hold real keys: CreateKeyPair returns a usable private key, and Floci copies the key pair's public key into the instance container for SSH.",
             'Floci serves IMDS-compatible metadata on the configured host IMDS port, default 9169.',
             'Security group rules are stored and returned, but Floci applies them to instance traffic only when it runs with FLOCI_NETWORK_SECURITY_GROUP_ENFORCEMENT_ENABLED=true.',
+            'An attached EBS volume is a real loop device in the instance container, so filesystems and data survive detach and attach. IOPS and throughput limits are not checked, and CreateSnapshot is unsupported.',
         ],
     }
 
