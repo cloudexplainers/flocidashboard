@@ -85,9 +85,21 @@ class ExamTracksApiTests(SimpleTestCase):
         self.assertIn(('kinesis', 'streaming-data-lake'), ingestion)
         self.assertIn('data-ingestion', tasks['3.5']['concepts'])
 
+    def test_developer_track_reuses_existing_labs(self):
+        tracks = exam_tracks(all_labs())
+        dva = next(exam for exam in tracks['exams'] if exam['code'] == 'DVA-C02')
+        tasks = {task['id']: task for domain in dva['domains'] for task in domain['tasks']}
+        self.assertEqual(len(tasks), 13)
+        lambda_labs = {(lab['service'], lab['key']) for lab in tasks['1.2']['labs']}
+        self.assertIn(('lambda', 'sqs-event-source'), lambda_labs)
+        optimize = {(lab['service'], lab['key']) for lab in tasks['4.3']['labs']}
+        self.assertIn(('sns', 'filter-policies'), optimize)
+        self.assertIn('deployment-strategies', tasks['3.4']['concepts'])
+        self.assertIn('tracing-xray', tasks['4.2']['concepts'])
+
     def test_exams_endpoint_and_catalog_include_tags(self):
         exams = self.client.get(reverse('dashboard:labs-exams')).json()
-        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03'])
+        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02'])
         self.assertEqual(len(exams['concepts']), len(CONCEPT_CARDS))
 
         catalog = self.client.get(reverse('dashboard:labs-catalog')).json()
