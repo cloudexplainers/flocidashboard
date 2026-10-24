@@ -25,6 +25,7 @@ from .monolith import (
     _verify_role,
     _wait_for_verification,
 )
+from . import dynamodb_scale_labs as capacity_at_scale
 from .iam_labs import (
     _run_iam_create_role,
 )
@@ -1050,10 +1051,13 @@ def _reset_dynamodb_lambda_writes() -> dict[str, Any]:
     }
 
 
-LABS = [DYNAMODB_CRUD_QUERY_LAB, DYNAMODB_LAMBDA_WRITES_LAB]
+LABS = [DYNAMODB_CRUD_QUERY_LAB, DYNAMODB_LAMBDA_WRITES_LAB, capacity_at_scale.LAB]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'dynamodb' and lab_key == 'capacity-at-scale':
+        from .dynamodb_scale_labs import run_step as scale_run_step
+        return scale_run_step(step_key)
     if service_key == 'dynamodb' and lab_key == 'crud-query':
         runners = {
             'create-table': _run_dynamodb_create_table,
@@ -1084,6 +1088,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'dynamodb' and lab_key == 'capacity-at-scale':
+        from .dynamodb_scale_labs import status as scale_status
+        return scale_status()
     if service_key == 'dynamodb' and lab_key == 'crud-query':
         table_deleted_verification = _verify_dynamodb_table_deleted()
         table_deleted = (
@@ -1175,6 +1182,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'dynamodb' and lab_key == 'capacity-at-scale':
+        from .dynamodb_scale_labs import reset as scale_reset
+        return scale_reset()
     if service_key == 'dynamodb' and lab_key == 'crud-query':
         return _reset_dynamodb_crud_query()
 
