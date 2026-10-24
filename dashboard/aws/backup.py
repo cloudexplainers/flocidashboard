@@ -110,6 +110,7 @@ def backup_inventory() -> dict[str, Any]:
             'A recovery point is metadata only: Floci copies no data, so there is nothing to restore. Restore jobs, copy jobs, report plans, frameworks and legal holds are not supported.',
             'Backup plan schedules never run. Start a backup job yourself to create a recovery point.',
             'Vault notifications are stored but never published to SNS. Vault access policies are stored but not evaluated: a Deny does not block any vault operation.',
+            'A vault lock is enforced: deleting a recovery point younger than the minimum retention is refused. Backup selections drop ListOfTags and Conditions, so a tag-based selection matches nothing, and plan lifecycle rules are not validated.',
         ],
     }
 
