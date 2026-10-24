@@ -1197,6 +1197,27 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 `check_labs --service apigateway` passed for this lab on 2.3.0. (The older `lambda-request` lab's last step could not
 run in the sandbox because its python3.11 Lambda image could not be pulled; that is unrelated to this lab.)
 
+## DynamoDB application patterns lab (2026-10-24)
+
+`dynamodb/application-patterns` (DVA 1.3, 1.1; SAA 3.3; CLF 3.4), 8 steps, in `dashboard/labs/dynamodb_patterns_labs.py`
+(a fourth DynamoDB lab, dispatched from `dynamodb_labs.py`, and the third lab of Level 6: Developer Workflows). It is
+Wave D item D-3: one on-demand table `lab-ddbapp-store` (PK and SK, sparse `GSI1` on GSI1PK and GSI1SK projecting
+`total`) holding customer `CUST#c-100` with a profile, 40 orders and a note, accounts `ACCT#alice` and `ACCT#bob`,
+product `PRODUCT#p-1` (stock and details) and transfer records.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Batch writes | The 25-item limit is enforced and consumed capacity is reported; nothing is ever throttled, so `UnprocessedItems` is always empty. | The step runs the retry loop and says it had nothing to resend |
+| Conditions and locking | Real, including `ReturnValuesOnConditionCheckFailure` returning the existing item. | Reported as real |
+| Transactions | Real: all-or-nothing, cancellation reasons per item, idempotent `ClientRequestToken`, `IdempotentParameterMismatchException`, doubled write capacity. | Reported as real |
+| Consistency | Consistent reads report 1 read unit and eventual reads 0.5, and a consistent query on a GSI is rejected; an eventually consistent read always sees the latest write (one node). | The step says reads are never stale on Floci |
+| Queries | Paging matches AWS (a final empty page), filters report ScannedCount, reserved words such as `total` are rejected without a placeholder, and the INCLUDE projection is applied. | Reported as real |
+| PartiQL | SELECT, INSERT (`DuplicateItemException` on a second insert) and conditional UPDATE behave as on AWS. | Reported as real |
+
+`check_labs --service dynamodb` passed for this lab on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

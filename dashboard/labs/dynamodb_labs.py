@@ -26,6 +26,7 @@ from .monolith import (
     _wait_for_verification,
 )
 from . import dynamodb_scale_labs as capacity_at_scale
+from . import dynamodb_patterns_labs as application_patterns
 from .iam_labs import (
     _run_iam_create_role,
 )
@@ -1051,10 +1052,13 @@ def _reset_dynamodb_lambda_writes() -> dict[str, Any]:
     }
 
 
-LABS = [DYNAMODB_CRUD_QUERY_LAB, DYNAMODB_LAMBDA_WRITES_LAB, capacity_at_scale.LAB]
+LABS = [DYNAMODB_CRUD_QUERY_LAB, DYNAMODB_LAMBDA_WRITES_LAB, capacity_at_scale.LAB, application_patterns.LAB]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'dynamodb' and lab_key == 'application-patterns':
+        from .dynamodb_patterns_labs import run_step as patterns_run_step
+        return patterns_run_step(step_key)
     if service_key == 'dynamodb' and lab_key == 'capacity-at-scale':
         from .dynamodb_scale_labs import run_step as scale_run_step
         return scale_run_step(step_key)
@@ -1088,6 +1092,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'dynamodb' and lab_key == 'application-patterns':
+        from .dynamodb_patterns_labs import status as patterns_status
+        return patterns_status()
     if service_key == 'dynamodb' and lab_key == 'capacity-at-scale':
         from .dynamodb_scale_labs import status as scale_status
         return scale_status()
@@ -1182,6 +1189,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'dynamodb' and lab_key == 'application-patterns':
+        from .dynamodb_patterns_labs import reset as patterns_reset
+        return patterns_reset()
     if service_key == 'dynamodb' and lab_key == 'capacity-at-scale':
         from .dynamodb_scale_labs import reset as scale_reset
         return scale_reset()
