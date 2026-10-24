@@ -1124,6 +1124,30 @@ Checked live on a throwaway Floci 2.3.0 (a full run, then reset):
 
 `check_labs --service backup` passed on 2.3.0.
 
+## Edge delivery lab (2026-10-24)
+
+`cloudfront/edge-delivery` (SAA 3.4, 4.4; CLF 3.2), 9 steps, in `dashboard/labs/cloudfront_labs.py` (a new lab
+service, registered in `monolith.py` after Backup). It covers Wave 2 item W2-7: buckets `lab-edge-site` (index.html,
+404.html) and `lab-edge-assets` (`assets/app.css`) with Block Public Access, origin access control `lab-edge-oac`,
+cache policies `lab-edge-html` (0 / 300 / 3,600 s) and `lab-edge-assets` (0 / 1 day / 1 year), a distribution with the
+comment `lab-edge-delivery` (default behavior to the site origin, `/assets/*` to the assets origin, both
+redirect-to-https, 404 to `/404.html`, `PriceClass_100`), OAC bucket policies, an invalidation of `/index.html`, and
+accelerator `lab-edge-accelerator` with a UDP 7777 listener and endpoint groups in us-east-1 and eu-west-1 on Elastic
+IPs named `lab-edge-game`. Requests go to Floci with the distribution's domain in the Host header.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Serving | Real: a request with the distribution's domain in the Host header is routed by path pattern to the right S3 origin, `/` returns the default root object, a missing key returns the custom error page with its response code, and a disabled distribution returns 404. | Reported as real |
+| Caching | None: a changed object is served at once, so TTLs and invalidations have no effect. Invalidations complete immediately. | The policy step checks the TTLs; the invalidation step says what AWS would have served |
+| Viewer protocol | `redirect-to-https` and `https-only` are stored; plain HTTP gets 200. | The distribution step checks every behavior |
+| Origin access | OAC is stored. Bucket policies (even a Deny on everyone but the distribution) and Block Public Access don't stop an anonymous S3 read. | The steps check the OAC, the Block Public Access flags and the AWS:SourceArn condition, and record the anonymous read |
+| Validation | A cache behavior that targets a missing origin is accepted. Deleting an enabled distribution is refused (DistributionNotDisabled). `ListCachePolicies` returns no managed policies. | The distribution step checks behavior targets; reset disables before deleting |
+| Global Accelerator | Accelerators (two static IPs, DEPLOYED at once), listeners and endpoint groups are stored, in any Region. Floci validates the traffic dial (0 to 100), port ranges, one endpoint group per Region, and deleting only a disabled accelerator. No traffic flows, every endpoint reports HEALTHY, and any endpoint ID is accepted. Custom routing accelerators are unsupported. | The steps check the Elastic IPs, the UDP listener and the health checks, and work out the traffic split for the dial drill |
+
+`check_labs --service cloudfront` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

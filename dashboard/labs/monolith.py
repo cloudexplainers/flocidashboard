@@ -97,6 +97,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'backup':
         from .backup_labs import LABS
         return LABS
+    if service_key == 'cloudfront':
+        from .cloudfront_labs import LABS
+        return LABS
     return []
 
 
@@ -200,6 +203,11 @@ LAB_BATCH_ORDER = [
         'service': 'backup',
         'title': 'Backup & disaster recovery lab',
         'summary': 'Protect data with AWS Backup: an encrypted, locked vault, a cross-Region copy vault, daily and monthly rules, a tag-based selection, an on-demand backup, and a DR strategy chosen from RPO and RTO.',
+    },
+    {
+        'service': 'cloudfront',
+        'title': 'Edge delivery lab',
+        'summary': 'Serve private S3 origins through CloudFront with origin access control, cache policies per path, a custom error page, and an invalidation, then front a UDP game in two Regions with Global Accelerator and drain a Region with the traffic dial.',
     },
     {
         'service': 'elasticloadbalancing',
@@ -512,6 +520,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'backup':
         from .backup_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'cloudfront':
+        from .cloudfront_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -607,6 +618,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'backup':
         from .backup_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'cloudfront':
+        from .cloudfront_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -708,6 +722,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'backup':
         from .backup_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'cloudfront':
+        from .cloudfront_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:

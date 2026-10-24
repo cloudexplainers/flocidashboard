@@ -103,6 +103,8 @@ def cloudfront_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'Signed URLs and signed cookies are enforced for cache behaviors with trusted key groups.',
+            'A distribution serves requests sent to Floci with its domain in the Host header: it routes by path to the origin, applies the default root object and custom error responses, and returns 404 when disabled. Nothing is cached, so TTLs and invalidations have no effect.',
+            'HTTP is not redirected to HTTPS, origin access control is not enforced on S3 origins, and a cache behavior that targets a missing origin is accepted.',
         ],
     }
 
