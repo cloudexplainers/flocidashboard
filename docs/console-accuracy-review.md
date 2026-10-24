@@ -1033,6 +1033,29 @@ run, steps out of order, then reset):
 
 `check_labs --service kinesis` passed on 2.3.0.
 
+## DynamoDB at scale lab (2026-10-24)
+
+`dynamodb/capacity-at-scale` (SAA 4.3, 3.3, 2.2), 8 steps, in `dashboard/labs/dynamodb_scale_labs.py` (delegated from
+`dynamodb_labs.py`, so it sits in the DynamoDB batch). It covers Wave 2 item W2-3: provisioned table
+`lab-orders-at-scale` with a NEW_AND_OLD_IMAGES stream, sized to 240 RCU and 120 WCU for 120 strongly consistent 6 KB
+reads and 40 2.5 KB writes a second, read and write scalable targets from the sized capacity to 4x with 70% target
+tracking, on-demand table `lab-sessions` with TTL on `expires_at`, audit table `lab-order-audit` fed by Lambda
+`lab-order-shipped-audit` (role `lab-order-audit-role`) through a stream mapping filtered to MODIFY records whose new
+status is SHIPPED, 7-day PITR, and a `us-west-2` replica.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the leftovers, steps out of order, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Capacity | Provisioned throughput is stored and reported; requests are never throttled. Switching billing mode back and forth is allowed at once (AWS limits switches). | The step checks the capacity against the math |
+| Application Auto Scaling | Scalable targets and target tracking policies are stored, and the policies create their CloudWatch alarms. DynamoDB publishes no consumed-capacity metrics, so nothing ever scales. | The step checks the targets and policies and counts the alarms |
+| TTL | Really deletes expired items, usually within 15 to 60 seconds (AWS: up to a few days). | The step waits up to 150 seconds and checks live items stay |
+| Streams to Lambda | The event source mapping is real: nested filter patterns, retries and bisect settings apply, and the function's scoped `PutItem` is enforced. The mapping reads the stream without checking the role. | The step checks the role's stream and write statements itself |
+| PITR | `UpdateContinuousBackups` stores the flag and window. `RestoreTableToPointInTime` and `CreateBackup` return UnknownOperationException. | The step records the refused restore |
+| Global table | A replica added with `ReplicaUpdates` is listed as ACTIVE, but no table exists in the replica Region and nothing is copied. | The step checks the stream and write auto scaling prerequisites and reports the missing table |
+
+`check_labs --service dynamodb --lab capacity-at-scale` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
