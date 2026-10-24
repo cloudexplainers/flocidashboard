@@ -10,6 +10,8 @@ from botocore.exceptions import ClientError
 from django.core.cache import cache
 
 from dashboard.aws import _clean_response
+
+from . import cloudformation_sam_labs as sam_environments
 from .monolith import (
     AWS_ACCOUNT_ID,
     AWS_REGION,
@@ -814,10 +816,13 @@ def _reset_cloudformation_s3_sqs() -> dict[str, Any]:
     }
 
 
-LABS = [CLOUDFORMATION_S3_SQS_LAB]
+LABS = [CLOUDFORMATION_S3_SQS_LAB, sam_environments.LAB]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'cloudformation' and lab_key == 'sam-environments':
+        from .cloudformation_sam_labs import run_step as sam_run_step
+        return sam_run_step(step_key)
     if service_key == 'cloudformation' and lab_key == 's3-sqs-stack':
         runners = {
             'validate-template': _run_cloudformation_validate_template,
@@ -839,6 +844,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'cloudformation' and lab_key == 'sam-environments':
+        from .cloudformation_sam_labs import status as sam_status
+        return sam_status()
     if service_key == 'cloudformation' and lab_key == 's3-sqs-stack':
         deleted_verification = _verify_cloudformation_deleted()
         deleted_verified = deleted_verification.get('status') == 'passed'
@@ -974,6 +982,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'cloudformation' and lab_key == 'sam-environments':
+        from .cloudformation_sam_labs import reset as sam_reset
+        return sam_reset()
     if service_key == 'cloudformation' and lab_key == 's3-sqs-stack':
         return _reset_cloudformation_s3_sqs()
 

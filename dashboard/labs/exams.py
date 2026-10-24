@@ -285,6 +285,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('codepipeline', 'lambda-cicd'): _tags(clf='3.1', dva='3.4 3.1 3.3 4.1'),
     ('apigateway', 'rest-api-developer'): _tags(clf='2.3', saa='1.2', dva='2.1 1.1 3.2 3.3'),
     ('dynamodb', 'application-patterns'): _tags(clf='3.4', saa='3.3', dva='1.3 1.1'),
+    ('cloudformation', 'sam-environments'): _tags(clf='3.1', saa='2.2', dva='3.3 3.1 3.2 1.2'),
 }
 
 

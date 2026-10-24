@@ -189,6 +189,7 @@ def cloudformation_inventory() -> dict[str, Any]:
             'ValidateTemplate accepts any template and returns no parameters or capabilities; template errors show up only when a stack is created.',
             'Resource types Floci doesn\'t support still reach CREATE_COMPLETE with a placeholder physical ID; nothing is created for them, and the stack events say so.',
             'Stack policies are accepted but not stored or enforced.',
+            'The SAM transform runs, but it drops a function\'s Policies (the generated role gets only basic execution), Ref on AWS::Serverless::LayerVersion returns no ARN, AutoPublishAlias points the alias at $LATEST, and a stack update publishes no new version.',
         ],
     }
 

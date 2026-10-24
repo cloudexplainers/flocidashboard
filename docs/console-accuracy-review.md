@@ -1218,6 +1218,28 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service dynamodb` passed for this lab on 2.3.0.
 
+## Serverless environments lab (2026-10-24)
+
+`cloudformation/sam-environments` (DVA 3.3, 3.1, 3.2, 1.2; SAA 2.2; CLF 3.1), 7 steps, in
+`dashboard/labs/cloudformation_sam_labs.py` (a second CloudFormation lab, dispatched from `cloudformation_labs.py`, and the
+fourth lab of Level 6: Developer Workflows). It is Wave D item D-4: bucket `lab-sam-artifacts` (layer, two function
+releases, packaged template), AppConfig application `lab-sam-flags` with `dev` and `prod` environments, feature flag
+profile `quote-flags` and strategy `lab-sam-all-at-once`, and stacks `lab-sam-dev` and `lab-sam-prod` built from one SAM
+template (layer `lab-sam-pricing-<stage>`, table `lab-sam-quotes-<stage>`, role, function `lab-sam-quote-<stage>` with
+alias `live`).
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| SAM transform | Runs with change sets: Globals, AutoPublishAlias (a version and an alias) and SimpleTable work. | Reported as real |
+| Function policies | The transform drops `Policies` (policy templates and inline statements); the generated role gets only `AWSLambdaBasicExecutionRole`, and Floci enforces the role for DynamoDB (AccessDenied). | The template declares its role with an inline policy and passes it with `GetAtt` |
+| SAM layers | `Ref` on `AWS::Serverless::LayerVersion` returns `<LogicalId>-<hash>`, not an ARN, so the function fails and the stack rolls back. | The template uses `AWS::Lambda::LayerVersion` |
+| Versions and alias | The alias points at `$LATEST`, and an update with a new CodeUri modifies the function without publishing a version. | The deploy and update steps say what AWS would do |
+| AppConfig | Per-environment flags reach the function through the data API; deployments finish at once; constraints are not validated. | The flags step deletes the out-of-range version it was allowed to create and says why |
+
+`check_labs --service cloudformation` passed for this lab on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

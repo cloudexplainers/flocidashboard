@@ -315,6 +315,7 @@ def appconfig_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'This page shows hosted configuration content as its size and a short UTF-8 preview.',
+            'Deployments finish at once whatever the strategy\'s duration and bake time, and feature flag constraints are not validated when a version is created.',
         ],
     }
 
