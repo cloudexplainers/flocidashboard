@@ -122,7 +122,7 @@ class LabsRegistryAuditTests(SimpleTestCase):
 class LabsPageTests(SimpleTestCase):
     def test_labs_package_facades_preserve_public_api(self):
         self.assertIs(facade_run_lab_step, run_lab_step)
-        self.assertEqual(len(all_labs()), 76)
+        self.assertEqual(len(all_labs()), 77)
         self.assertTrue(labs_for_service('iam'))
         self.assertTrue(issubclass(Lab, dict))
         self.assertTrue(issubclass(LabStep, dict))
@@ -135,7 +135,7 @@ class LabsPageTests(SimpleTestCase):
         response = self.client.get(reverse('dashboard:labs-catalog'))
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data['total_labs'], 76)
+        self.assertEqual(data['total_labs'], 77)
         self.assertIn('services', data)
         self.assertIn('labs', data)
         self.assertGreaterEqual(len(data['services']), 20)
@@ -614,7 +614,7 @@ class LabsRunnerTests(SimpleTestCase):
     def test_ec2_lab_registry_includes_public_private_vpc_workflow(self):
         labs = labs_for_service('ec2')
 
-        self.assertEqual(len(labs), 12)
+        self.assertEqual(len(labs), 13)
         self.assertEqual(labs[0]['key'], 'vpc-public-private')
         self.assertEqual(
             [step['key'] for step in labs[0]['steps']],

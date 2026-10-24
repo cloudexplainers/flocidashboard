@@ -1077,6 +1077,30 @@ Checked live on a throwaway Floci 2.3.0 (a full run, then reset):
 
 `check_labs --service lambda --lab performance-cost` passed on 2.3.0.
 
+## Block and file storage lab (2026-10-24)
+
+`ec2/block-file-storage` (SAA 3.1, 4.1), 8 steps, in `dashboard/labs/ec2_storage_labs.py` (delegated from
+`ec2_labs.py`, after the NAT lab). It covers Wave 2 item W2-5: instances `lab-storage-app-1` and `lab-storage-app-2` in
+us-east-1a (group `lab-storage-app`), encrypted gp3 volume `lab-storage-gp3` (20 GiB, 3,000 IOPS, 125 MiB/s, grown to
+40 GiB and 6,000 IOPS), encrypted io2 volume `lab-storage-io2` (100 GiB, 16,000 IOPS), and EFS file system
+`lab-storage-shared` with mount targets in us-east-1a and us-east-1b (group `lab-storage-efs`, NFS only from the app
+group), lifecycle to IA and Archive, backups, a TLS-only policy, and an `/orders` access point. Shell work runs
+through SSM Run Command.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, then reset; the Ubuntu image was pulled from Docker Hub and
+tagged as `public.ecr.aws/docker/library/ubuntu:22.04` because the sandbox can't reach ECR's CDN):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Volume limits | `CreateVolume` accepts any IOPS and throughput (20,000 IOPS on a 20 GiB gp3, 64,000 on a 20 GiB io2). | The steps check the gp3 and io2 limits and show the monthly cost |
+| Attach and format | The attachment is a loop device in the privileged instance container, so `mkfs.ext4`, `mount` and the file are real. The instance's `BlockDeviceMappings` lists only the root volume. | Reported as real |
+| Modify | `ModifyVolume` completes at once and the device grows; shrinking is refused; a second change within six hours is allowed. Online `resize2fs` doesn't take effect, so the step unmounts, resizes and remounts. | The step reports the refused shrink |
+| Move | Detach and attach to another instance keep the data. Attaching across AZs, and deleting an attached volume, are refused. `DeleteVolume` fails with InternalError while an instance still has the device mounted. | Reset terminates the instances before deleting volumes |
+| Snapshots | `CreateSnapshot` returns UnsupportedOperation. | The move step records the refusal |
+| EFS | File systems, mount targets, security groups, lifecycle, backup policy, file system policy and access points are stored. No NFS server runs, every mount target reports AZ `us-east-1a` and IP `10.0.0.10`, a second mount target in one AZ is refused, and `DescribeFileSystems` with an unknown creation token raises FileSystemNotFound (AWS returns an empty list). | The steps check the subnets' AZs, the NFS rule, and every setting |
+
+`check_labs --service ec2 --lab block-file-storage` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
