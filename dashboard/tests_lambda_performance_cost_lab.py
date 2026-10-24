@@ -261,7 +261,16 @@ class LambdaPerformanceCostLabTests(SimpleTestCase):
         self.assertEqual(status['passed_steps'], 8)
 
     def test_messages_report_what_happened_and_what_floci_skips(self):
-        results = self.run_all()
+        # Pin the sweep's durations to Floci's flat profile: the real hashing loop varies with machine load.
+        original = self.fake._run
+
+        def flat(config, version, event):
+            body = original(config, version, event)
+            if event.get('rounds') == lab.ROUNDS:
+                body['handler_ms'] = 30.0
+            return body
+        with patch.object(self.fake, '_run', side_effect=flat):
+            results = self.run_all()
         self.assertEqual(results['memory-sizing']['json']['Chosen']['MemoryMB'], 128)
         self.assertIn('does not scale CPU', results['memory-sizing']['verification']['message'])
         self.assertEqual(self.fake.versions['1']['MemorySize'], 128)

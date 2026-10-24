@@ -287,6 +287,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('dynamodb', 'application-patterns'): _tags(clf='3.4', saa='3.3', dva='1.3 1.1'),
     ('cloudformation', 'sam-environments'): _tags(clf='3.1', saa='2.2', dva='3.3 3.1 3.2 1.2'),
     ('lambda', 'async-error-handling'): _tags(clf='3.3', saa='2.1', dva='1.2 2.3 4.1'),
+    ('cloudwatch', 'serverless-observability'): _tags(clf='2.2', saa='2.2', dva='4.2 4.1'),
 }
 
 
@@ -501,8 +502,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Reads are eventually consistent by default; ConsistentRead=true returns the latest write at twice the read cost and is not available on global secondary indexes.',
             'An LSI shares the partition key and must be created with the table; a GSI can use any key and be added later. Conditional writes, optimistic locking with a version attribute, and transactions keep concurrent writers safe.',
         ],
-        'related_labs': [('dynamodb', 'crud-query'), ('dynamodb', 'capacity-at-scale')],
-        'planned': 'D-3 DynamoDB application patterns',
+        'related_labs': [('dynamodb', 'application-patterns'), ('dynamodb', 'crud-query'), ('dynamodb', 'capacity-at-scale')],
+        'planned': None,
     },
     {
         'key': 'encryption-for-developers',
@@ -527,8 +528,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Lambda encrypts environment variables at rest; use a customer managed KMS key and encryption helpers for values that must stay encrypted until runtime, or read them from Secrets Manager or Parameter Store SecureString.',
             'Multi-tenant apps isolate tenants by a tenant ID in the partition key plus IAM conditions such as dynamodb:LeadingKeys, or by separate tables, buckets, or accounts.',
         ],
-        'related_labs': [('secretsmanager', 'secret-lifecycle'), ('ssm', 'parameter-store-config'), ('lambda', 'runtime-config')],
-        'planned': 'D-5 Lambda event lifecycle and errors',
+        'related_labs': [('lambda', 'async-error-handling'), ('secretsmanager', 'secret-lifecycle'), ('ssm', 'parameter-store-config'), ('lambda', 'runtime-config')],
+        'planned': None,
     },
     {
         'key': 'deployment-strategies',
@@ -540,8 +541,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'For Lambda, CodeDeploy shifts an alias between versions with Canary10Percent5Minutes, Linear10PercentEvery1Minute, or AllAtOnce, and rolls back automatically when a CloudWatch alarm fires or a hook fails.',
             'Elastic Beanstalk offers all at once, rolling, rolling with an additional batch, immutable, traffic splitting, and blue/green (swap environment URLs).',
         ],
-        'related_labs': [('lambda', 'performance-cost'), ('cloudformation', 's3-sqs-stack')],
-        'planned': 'D-1 CI/CD pipeline for a Lambda service',
+        'related_labs': [('codepipeline', 'lambda-cicd'), ('lambda', 'performance-cost'), ('cloudformation', 's3-sqs-stack')],
+        'planned': None,
     },
     {
         'key': 'tracing-xray',
@@ -551,10 +552,10 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Logging records events, monitoring watches metrics against thresholds, and observability combines logs, metrics, and traces to explain why something happened.',
             'X-Ray traces a request across services. Annotations are indexed key-value pairs you can filter on; metadata is not indexed. Turn on active tracing for Lambda and API Gateway, and run the X-Ray daemon or the CloudWatch agent on EC2 and ECS.',
             'The embedded metric format (EMF) writes JSON log lines that CloudWatch turns into custom metrics without PutMetricData calls.',
-            'Floci does not support X-Ray and does not turn EMF lines into metrics, so tracing stays conceptual here.',
+            'Floci does not support X-Ray and does not turn EMF lines into metrics, so the observability lab turns on active tracing and logs an EMF line but cannot show the trace or the extracted metric.',
         ],
-        'related_labs': [('cloudwatch', 'metric-alarms'), ('cloudwatch', 'log-groups-metric-filters')],
-        'planned': 'D-6 Observability for a serverless app',
+        'related_labs': [('cloudwatch', 'serverless-observability'), ('cloudwatch', 'metric-alarms'), ('cloudwatch', 'log-groups-metric-filters')],
+        'planned': None,
     },
     {
         'key': 'developer-tooling',
@@ -566,8 +567,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'SDKs retry throttling and 5xx errors with exponential backoff and jitter; add your own retries, timeouts, and circuit breakers for third-party calls.',
             'Amazon Q Developer suggests code, explains code, and generates unit tests in the IDE and console.',
         ],
-        'related_labs': [('lambda', 'create-invoke-logs'), ('cloudformation', 's3-sqs-stack')],
-        'planned': 'D-4 Serverless packaging with SAM and AppConfig',
+        'related_labs': [('cloudformation', 'sam-environments'), ('lambda', 'create-invoke-logs'), ('cloudformation', 's3-sqs-stack')],
+        'planned': None,
     },
 ]
 

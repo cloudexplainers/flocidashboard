@@ -121,7 +121,8 @@ test('Developer study track lists DVA-C02 domains with labs and concept cards', 
   await page.getByText('Domain 3: Deployment', { exact: true }).click();
   const cicd = page.getByTestId('exam-task-DVA-C02-3.4');
   await cicd.getByText('Concept: Deployment strategies and CI/CD services').click();
-  await expect(cicd.getByText(/Planned lab: D-1/)).toBeVisible();
+  await expect(cicd.getByRole('button', { name: /^#\d+ Ship a Lambda service through a CI\/CD pipeline/ })).toBeVisible();
+  await expect(cicd.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
@@ -199,7 +200,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
   await page.goto('/labs/?service=iam&lab=create-user-alice');
   await page.getByRole('button', { name: /Next: #3\./ }).click();
   release();
-  await expect(page.getByText('Lesson #3 of 84', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #3 of 85', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
   await expect(page.getByRole('button', { name: '▶ Run all remaining steps', exact: true })).toBeEnabled();
 });
@@ -218,7 +219,7 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('button', { name: /Next: #2\./ }).click();
   release();
-  await expect(page.getByText('Lesson #2 of 84', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #2 of 85', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);

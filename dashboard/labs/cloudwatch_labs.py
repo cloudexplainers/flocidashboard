@@ -12,6 +12,8 @@ from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
 
+from . import cloudwatch_observability_labs as serverless_observability
+
 REGION = 'us-east-1'
 ACCOUNT = '000000000000'
 CACHE_PREFIX = 'floci-lab:cloudwatch:'
@@ -178,7 +180,7 @@ LOGS_FILTERS_LAB = {
     ],
 }
 
-LABS = [METRIC_ALARMS_LAB, LOGS_FILTERS_LAB]
+LABS = [METRIC_ALARMS_LAB, LOGS_FILTERS_LAB, serverless_observability.LAB]
 
 
 def client(name: str):
@@ -454,31 +456,37 @@ def step_get_metric_statistics() -> dict[str, Any]:
     return result('log-groups-metric-filters', 'get-metric-statistics', METRIC_STATS_COMMAND, payload, verified, message, started)
 
 
-RUNNERS = {
-    'metric-alarms': {
-        'create-metric-alarm': step_create_alarm,
-        'publish-healthy-metrics': step_publish_healthy,
-        'publish-error-spike': step_publish_spike,
-        'describe-alarms': step_describe_alarms,
-    },
-    'log-groups-metric-filters': {
-        'create-log-group': step_create_log_group,
-        'put-retention-policy': step_put_retention_policy,
-        'create-log-stream': step_create_log_stream,
-        'put-metric-filter': step_put_metric_filter,
-        'put-log-events': step_put_log_events,
-        'get-metric-statistics': step_get_metric_statistics,
-    },
-}
-
-
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
-    if lab_key not in RUNNERS or step_key not in RUNNERS[lab_key]:
-        raise ValueError(f'Unknown CloudWatch lab step: {lab_key}/{step_key}')
-    return RUNNERS[lab_key][step_key]()
+    if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
+        from .cloudwatch_observability_labs import run_step as observability_run_step
+        return observability_run_step(step_key)
+    if service_key == 'cloudwatch' and lab_key == 'metric-alarms':
+        runners = {
+            'create-metric-alarm': step_create_alarm,
+            'publish-healthy-metrics': step_publish_healthy,
+            'publish-error-spike': step_publish_spike,
+            'describe-alarms': step_describe_alarms,
+        }
+        if step_key in runners:
+            return runners[step_key]()
+    if service_key == 'cloudwatch' and lab_key == 'log-groups-metric-filters':
+        runners = {
+            'create-log-group': step_create_log_group,
+            'put-retention-policy': step_put_retention_policy,
+            'create-log-stream': step_create_log_stream,
+            'put-metric-filter': step_put_metric_filter,
+            'put-log-events': step_put_log_events,
+            'get-metric-statistics': step_get_metric_statistics,
+        }
+        if step_key in runners:
+            return runners[step_key]()
+    raise ValueError(f'Unknown CloudWatch lab step: {lab_key}/{step_key}')
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
+        from .cloudwatch_observability_labs import status as observability_status
+        return observability_status()
     if lab_key == 'metric-alarms':
         keys = {
             'create-metric-alarm': 'alarm',
@@ -517,6 +525,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
+        from .cloudwatch_observability_labs import reset as observability_reset
+        return observability_reset()
     started = time.perf_counter()
     cw = client('cloudwatch')
     logs = client('logs')
