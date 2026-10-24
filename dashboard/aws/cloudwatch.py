@@ -122,6 +122,7 @@ def cloudwatch_inventory() -> dict[str, Any]:
             'metrics_protocol': 'Query XML and JSON 1.1',
         },
         'notes': [
+            'Logs Insights runs a subset of the query language: fields, filter with =, != or ==, sort, dedup and limit. Other commands (stats, parse) and operators fail the query; a filter joining conditions with and/or compares only the first and returns too few or too many rows without an error.',
         ],
     }
 

@@ -126,7 +126,10 @@ CLOUDFORMATION_S3_SQS_LAB = {
             'key': 'validate-template',
             'title': 'Validate the infrastructure template',
             'command': 'aws cloudformation validate-template --template-body file://storage-messaging-stack.json',
-            'explanation': 'Checks the template structure before creating any resources.',
+            'explanation': (
+                'On AWS this checks the template structure before creating any resources. '
+                'Floci accepts any template here and returns no parameters, so a mistake shows up only when the stack is created.'
+            ),
             'artifact_label': 'storage-messaging-stack.json',
             'artifact': CLOUDFORMATION_TEMPLATE_TEXT,
         },

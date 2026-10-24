@@ -1096,6 +1096,7 @@ CLOUDWATCH_ACTIONS = (
         '/api/cloudwatch/logs-insights/query/',
         'read',
         safety='safe',
+        description='Floci runs fields, filter (=, !=), sort, dedup and limit. stats, parse and other operators fail the query; a filter with and/or compares only the first condition.',
         fields=(
             action_field('log_group_name', 'Log group name', required=True),
             action_field('query_string', 'Query string', field_type='textarea', required=True),
@@ -1217,6 +1218,7 @@ IOT_ACTIONS = (
         'POST',
         '/api/iot/things/{thing_name}/shadow/',
         'update',
+        description='Floci merges only the top-level keys of desired and reported (a nested object replaces the stored one) and returns no delta section.',
         fields=(
             action_field('thing_name', 'Thing name', required=True),
             action_field('payload', 'Shadow state JSON', required=True, field_type='textarea'),
@@ -2851,6 +2853,7 @@ CLOUDFORMATION_ACTIONS = (
         '/api/cloudformation/templates/validate/',
         'read',
         safety='safe',
+        description='Floci accepts any template here; errors show up only when you create a stack.',
         fields=(action_field('template_body', 'Template body', required=True, field_type='textarea'),),
         success_message='Template validated',
     ),
@@ -4013,6 +4016,7 @@ OPENSEARCH_ACTIONS = (
         'POST',
         '/api/opensearch/domains/upgrade/',
         'update',
+        description='Floci checks the upgrade path and stores the new version at once; a running domain container keeps its original image.',
         fields=(
             action_field('domain_name', 'Domain name', required=True),
             action_field('target_version', 'Target version', required=True),

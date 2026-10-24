@@ -37,6 +37,7 @@ import {
   executeCloudFormationChangeSet,
   deleteCloudFormationChangeSet,
 } from "../api/client";
+import { FlociNote } from "../components/FlociNote";
 
 const SAMPLE_TEMPLATE = `AWSTemplateFormatVersion: '2010-09-09'
 Description: Floci Serverless Application Stack
@@ -1052,6 +1053,12 @@ const StackWorkspace: React.FC<Props> = ({
         }
       >
         <SpaceBetween size="m">
+          <FlociNote>
+            Validate Template accepts any template and returns no parameters,
+            so a mistake shows up only when the stack is created. Resource
+            types Floci doesn&rsquo;t support still reach CREATE_COMPLETE but
+            nothing is created for them; the stack events say which ones.
+          </FlociNote>
           {validationResult && (
             <Alert
               type={validationResult.valid ? "success" : "error"}
@@ -1060,7 +1067,7 @@ const StackWorkspace: React.FC<Props> = ({
               }
             >
               {validationResult.valid
-                ? validationResult.description || "Template syntax is valid."
+                ? validationResult.description || "Floci accepted the template."
                 : validationResult.error}
             </Alert>
           )}
