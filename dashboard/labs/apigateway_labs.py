@@ -12,6 +12,8 @@ from botocore.exceptions import ClientError
 from django.core.cache import cache
 
 from dashboard.aws import _clean_response
+
+from . import apigateway_developer_labs as rest_api_developer
 from .monolith import (
     AWS_ACCOUNT_ID,
     AWS_REGION,
@@ -688,10 +690,13 @@ def _reset_apigw_lambda_request() -> dict[str, Any]:
     }
 
 
-LABS = [APIGW_LAMBDA_REQUEST_LAB]
+LABS = [APIGW_LAMBDA_REQUEST_LAB, rest_api_developer.LAB]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'apigateway' and lab_key == 'rest-api-developer':
+        from .apigateway_developer_labs import run_step as developer_run_step
+        return developer_run_step(step_key)
     if service_key == 'apigateway' and lab_key == 'lambda-request':
         runners = {
             'create-role': lambda: _run_lambda_create_role('lambda-request', 'apigateway'),
@@ -711,6 +716,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'apigateway' and lab_key == 'rest-api-developer':
+        from .apigateway_developer_labs import status as developer_status
+        return developer_status()
     if service_key == 'apigateway' and lab_key == 'lambda-request':
         role_verification = _verify_lambda_role()
         policy_verification = _verify_lambda_role_policy()
@@ -766,6 +774,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'apigateway' and lab_key == 'rest-api-developer':
+        from .apigateway_developer_labs import reset as developer_reset
+        return developer_reset()
     if service_key == 'apigateway' and lab_key == 'lambda-request':
         return _reset_apigw_lambda_request()
 

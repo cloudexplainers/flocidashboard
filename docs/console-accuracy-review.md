@@ -1172,6 +1172,31 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service codepipeline` passed on 2.3.0.
 
+## API Gateway developer lab (2026-10-24)
+
+`apigateway/rest-api-developer` (DVA 2.1, 1.1, 3.2, 3.3; SAA 1.2; CLF 2.3), 7 steps, in
+`dashboard/labs/apigateway_developer_labs.py` (a second API Gateway lab, dispatched from `apigateway_labs.py`, and the
+second lab of Level 6: Developer Workflows). It is Wave D item D-2: role `lab-apidev-lambda-role`, backend
+`lab-apidev-orders` (tested with a sample proxy event), REST API `lab-apidev-api` with `GET /orders` (Lambda proxy),
+`POST /orders` (validator `lab-apidev-body`, model `NewOrder`, MOCK integration with a mapping template) and
+`GET /profile` (MOCK), TOKEN authorizer `lab-apidev-token` backed by `lab-apidev-authorizer`, user pool
+`lab-apidev-users` with client `lab-apidev-web` and Cognito authorizer `lab-apidev-cognito`, stages `dev` and `prod`
+with their own stage variables, API key `lab-apidev-partner` and usage plan `lab-apidev-partners` on prod.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Lambda proxy and stage variables | Real: the backend receives the stage variables and the authorizer context in its event. | Reported as real |
+| TOKEN authorizer | Real: 401 when the header is missing or the function raises Unauthorized, 403 for a Deny policy, 200 with the context passed on. | Reported as real |
+| Cognito authorizer | Real: 401 without a token or with a forged one, 200 with the user pool's ID token; claims reach the mapping template. | Reported as real |
+| Request validation and MOCK | Real: a body missing a required property gets 400 with the schema error; the MOCK integration answers from its mapping template. | Reported as real |
+| Stages | Each stage keeps its own variables and deployment ID, but every stage serves the latest configuration rather than the deployment it points at. Canary settings are dropped. | The prod step checks the deployment each stage points at; the planned canary was left out |
+| API keys and usage plans | `apiKeyRequired` is enforced (403 without a key), and a key works only on stages its usage plan covers (403 on dev). Throttles and quotas are never applied, and a plan reads back with only its name. `UpdateUsagePlan` rejects `/throttle/*` and `/quota/*` paths. | The step shows the 403 on dev, says calls past the quota still succeed, checks the plan it sent, and replaces the plan on a rerun |
+
+`check_labs --service apigateway` passed for this lab on 2.3.0. (The older `lambda-request` lab's last step could not
+run in the sandbox because its python3.11 Lambda image could not be pulled; that is unrelated to this lab.)
+
 ## Recommended next work
 
 | Item | Why not here |

@@ -158,9 +158,10 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'CI/CD pipelines, API development, data access patterns, packaging, error handling, and observability',
     badge: 'Developer',
     color: 'blue',
-    description: 'Ship code the way the Developer – Associate exam expects: build and unit test a Lambda service with CodeBuild, trace a failing build to its phase, release it through a CodePipeline with a manual approval, and shift a live alias with a CodeDeploy canary and roll it back.',
+    description: 'Ship code the way the Developer – Associate exam expects: build and unit test a Lambda service with CodeBuild, trace a failing build to its phase, release it through a CodePipeline with a manual approval, and shift a live alias with a CodeDeploy canary and roll it back. Then build a REST API with dev and prod stages, a Lambda authorizer, a Cognito authorizer, request validation, and an API key.',
     labs: [
       { service: 'codepipeline', key: 'lambda-cicd', title: 'Ship a Lambda service through a CI/CD pipeline with CodeBuild, CodePipeline, and CodeDeploy', stepCount: 9 },
+      { service: 'apigateway', key: 'rest-api-developer', title: 'Build a REST API with stages, Lambda and Cognito authorizers, request validation, and API keys', stepCount: 7 },
     ],
   },
 ];

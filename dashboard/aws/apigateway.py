@@ -200,7 +200,8 @@ def apigateway_inventory() -> dict[str, Any]:
         'notes': [
             'Floci supports API Gateway v1 REST APIs and API Gateway v2 HTTP APIs.',
             'The v1 execute plane is served under /restapis/{id}/{stage}/_user_request_/...',
-            'API keys and usage plans are stored but not enforced: a method with apiKeyRequired runs without a valid key, throttle and quota settings are never applied, and GetUsage always reports zero.',
+            'A method with apiKeyRequired refuses calls without a valid key (403), and a key works only on the stages its usage plan covers. Usage plan throttle and quota settings are never applied (a plan reads back with only its name), and GetUsage always reports zero.',
+            'Stage canary settings are dropped, and every stage serves the latest REST API configuration rather than the deployment it points at.',
         ],
     }
 
