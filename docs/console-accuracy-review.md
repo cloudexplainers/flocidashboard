@@ -1260,6 +1260,28 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 The Lambda console notes listed dead-letter and event invoke config operations as not implemented; they now describe what
 works. `check_labs --service lambda` passed for this lab on 2.3.0.
 
+## Serverless observability lab (2026-10-24)
+
+`cloudwatch/serverless-observability` (DVA 4.2, 4.1; SAA 2.2; CLF 2.2), 8 steps, in
+`dashboard/labs/cloudwatch_observability_labs.py` (a third CloudWatch lab, dispatched from `cloudwatch_labs.py`, and the
+last lab of Level 6: Developer Workflows). It is Wave D item D-6: log group `/aws/lambda/lab-obs-orders`, role
+`lab-obs-orders-role`, function `lab-obs-orders`, metric filters `lab-obs-order-errors` and `lab-obs-order-latency`
+(namespace `LabObs/Orders`), topic `lab-obs-alerts`, alarm `lab-obs-order-errors`, and dashboard `lab-obs-orders`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Function logs | stdout reaches the log group; `LoggingConfig` (JSON format, levels) is stored but lines stay plain text. | The handler writes its own JSON |
+| Metric filters | JSON patterns publish counts and field values with units. `FilterLogEvents` ignores JSON patterns. | Reported as real; the lab reads lines back with a plain term |
+| Custom metrics | PutMetricData from the function works, but a role policy with a `cloudwatch:namespace` condition is denied. EMF lines are not extracted. | The role leaves the condition out and says to add it on AWS; the EMF gap is reported |
+| Logs Insights | `fields`, `filter field = "x"`, `sort`, `limit` work; `stats` fails. | The step counts levels itself when stats fails |
+| Alarms | Evaluated for real (ALARM in about 15 seconds); actions never notify SNS. | The step checks the state and the configured actions |
+| Dashboards | Stored and returned as sent. | Reported as real |
+| Tracing | `TracingConfig` is stored; X-Ray returns `UnknownOperationException`. | The step checks the setting and says no traces exist |
+
+`check_labs --service cloudwatch` passed for this lab on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

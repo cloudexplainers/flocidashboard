@@ -158,13 +158,14 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'CI/CD pipelines, API development, data access patterns, packaging, error handling, and observability',
     badge: 'Developer',
     color: 'blue',
-    description: 'Ship code the way the Developer – Associate exam expects: build and unit test a Lambda service with CodeBuild, trace a failing build to its phase, release it through a CodePipeline with a manual approval, and shift a live alias with a CodeDeploy canary and roll it back. Then build a REST API with dev and prod stages, a Lambda authorizer, a Cognito authorizer, request validation, and an API key, and write DynamoDB code that survives retries and races with conditions, version checks, and transactions. Finally, deploy one SAM template to dev and prod and release a feature with an AppConfig flag, and handle asynchronous Lambda failures with retries, destinations, a dead-letter queue, and an encrypted secret.',
+    description: 'Ship code the way the Developer – Associate exam expects: build and unit test a Lambda service with CodeBuild, trace a failing build to its phase, release it through a CodePipeline with a manual approval, and shift a live alias with a CodeDeploy canary and roll it back. Then build a REST API with dev and prod stages, a Lambda authorizer, a Cognito authorizer, request validation, and an API key, and write DynamoDB code that survives retries and races with conditions, version checks, and transactions. Finally, deploy one SAM template to dev and prod and release a feature with an AppConfig flag, and handle asynchronous Lambda failures with retries, destinations, a dead-letter queue, and an encrypted secret, then instrument the service with structured logs, metric filters, custom metrics, an alarm, and a dashboard.',
     labs: [
       { service: 'codepipeline', key: 'lambda-cicd', title: 'Ship a Lambda service through a CI/CD pipeline with CodeBuild, CodePipeline, and CodeDeploy', stepCount: 9 },
       { service: 'apigateway', key: 'rest-api-developer', title: 'Build a REST API with stages, Lambda and Cognito authorizers, request validation, and API keys', stepCount: 7 },
       { service: 'dynamodb', key: 'application-patterns', title: 'Build DynamoDB application patterns: key design, conditional writes, locking, transactions, and paging', stepCount: 8 },
       { service: 'cloudformation', key: 'sam-environments', title: 'Deploy one SAM template to dev and prod, with a Lambda layer and AppConfig feature flags', stepCount: 7 },
       { service: 'lambda', key: 'async-error-handling', title: 'Handle Lambda events and failures with test events, async retries, destinations, a DLQ, and KMS', stepCount: 8 },
+      { service: 'cloudwatch', key: 'serverless-observability', title: 'Instrument a serverless app with structured logs, metric filters, custom metrics, alarms, and dashboards', stepCount: 8 },
     ],
   },
 ];
