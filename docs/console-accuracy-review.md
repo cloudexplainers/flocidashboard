@@ -1013,6 +1013,26 @@ group opened to 0.0.0.0/0, the eviction policy set back to noeviction, then rese
 
 `check_labs --service elasticache` passed on 2.3.0.
 
+## Streaming data lake lab (2026-10-24)
+
+`kinesis/streaming-data-lake` (SAA 3.5, 4.1), 9 steps, in `dashboard/labs/kinesis_labs.py`, the first Kinesis lab
+and its own batch after ElastiCache. It covers Wave 2 item W2-2: buckets `lab-clickstream-lake` and
+`lab-clickstream-athena-results`, on-demand stream `lab-clickstream`, delivery stream `lab-clickstream-to-s3` (role
+`lab-clickstream-firehose-role`), Glue database `lab_clickstream` with tables `raw_clicks` (JSON, partition projection
+on `dt`) and `curated_clicks` (Parquet), and workgroup `lab-clickstream`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the leftovers, a new batch after a finished
+run, steps out of order, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Kinesis | On-demand mode and retention changes are kept; an on-demand stream has one shard (AWS: four). PutRecords and TRIM_HORIZON replay are real. | The step reports the shard count |
+| Firehose | A Kinesis-source stream really reads the stream and flushes to S3 within seconds at a 0-second buffer, evaluating `!{timestamp:yyyy-MM-dd}`. Accepts an expression prefix without an error prefix, and `PutRecord` on a Kinesis-source stream (AWS refuses both). Delivers with a role that has no permissions. Parquet conversion is stored, but with `FLOCI_AUTH_VALIDATE_SIGNATURES=true` the converter's read of its staging object fails (InvalidAccessKeyId) and the batch goes to the error output. | The step checks the error prefix and role policy itself |
+| Glue | Databases and tables are stored. `StartCrawler` reports SUCCEEDED and creates no tables. Partition projection properties are stored and ignored. | The step creates the table through the Glue API |
+| Athena | Runs SQL in a `floci-duck` DuckDB sidecar over Glue tables, reading Hive `dt=` folders and JSON or Parquet. DuckDB dialect: `CREATE EXTERNAL TABLE`, `MSCK REPAIR TABLE`, CTAS `WITH (...)` and `UNLOAD` fail; `COPY ... TO 's3://...' (FORMAT PARQUET, PARTITION_BY (dt))` works. A workgroup's result location is ignored (results go to `s3://floci-athena-results/` unless the query sets one), `DataScannedInBytes` is 0, and the scan cutoff is never applied. The sidecar downloads DuckDB's httpfs extension on first use, so it needs internet access. | The query steps compare counts with the batch and name the results bucket; the Parquet step shows the CTAS and runs the COPY |
+
+`check_labs --service kinesis` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

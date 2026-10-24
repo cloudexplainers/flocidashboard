@@ -10,7 +10,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 
 ## TL;DR
 
-- **The current 73 labs (444 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
+- **The current 74 labs (453 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
 - **There are big holes in high-weight SAA topics:** load balancing and Auto Scaling, Multi-AZ and read replicas, caching, Route 53 and DR, storage classes and tiering, the data and streaming domain (SAA 3.5), and nearly all of cost optimization (SAA domain 4, 20%).
 - **For CLF, coverage is lopsided.** The labs serve the hands-on parts of domains 2 and 3. Domain 1 (cloud concepts, 24%) and domain 4 (billing and support, 12%) are almost entirely conceptual, so labs can't cover them. Those need "exam lens" concept cards, not labs.
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
@@ -174,7 +174,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 3.4 | Databases | ◐ | #14, #31, #39, elasticache/cache-aside (Aurora source of truth, ElastiCache in front) | EC2-hosted vs managed, DMS |
 | 3.5 | Network | ● | #21, #32, #33, #36, #61, #62, #63, #64, route53/routing-failover (hosted zones, routing policies) | VPN and Direct Connect (concept) |
 | 3.6 | Storage | ◐ | 13 S3 labs | **Storage classes, EBS, instance store, EFS**, FSx, Storage Gateway, **AWS Backup** |
-| 3.7 | AI/ML and analytics | ○ | — | Athena, Kinesis, Glue (labbable); SageMaker AI, Lex, Quick (concept) |
+| 3.7 | AI/ML and analytics | ◐ | kinesis/streaming-data-lake (Kinesis, Firehose, Glue, Athena) | SageMaker AI, Lex, Quick (concept) |
 | 3.8 | Other categories | ◐ | SQS, SNS, EventBridge labs | SES, CodeBuild and CodePipeline, X-Ray, IoT Core, Amplify, Connect, WorkSpaces |
 | 4.1 | Pricing models | ○ / 📖 | — | On-Demand, RI, Spot, Savings Plans, data transfer, storage tiers |
 | 4.2 | Billing and cost tools | ○ | — | **Budgets, Cost Explorer**, Organizations consolidated billing, cost allocation tags |
@@ -195,7 +195,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 3.2 | Elastic compute | ◐ | #50, #60, #65 | **Auto Scaling and scaling metrics, instance families, Lambda memory sizing**, Batch and EMR |
 | 3.3 | Database performance | ◐ | #14, #31, elasticache/cache-aside (cache-aside, TTLs, invalidation, eviction policy, Multi-AZ replication group) | **Read replicas, Aurora, DynamoDB capacity and DAX, RDS Proxy** |
 | 3.4 | Network performance | ◐ | #32, #61, #62, #64, ec2/nat-three-tier, route53/routing-failover (latency and weighted routing) | **CloudFront, Global Accelerator, ALB vs NLB**, VPN, Direct Connect |
-| 3.5 | Data ingestion and transformation | ○ | — | **Kinesis, Firehose, Glue, Athena, Lake Formation**, DataSync, data lakes, CSV-to-Parquet |
+| 3.5 | Data ingestion and transformation | ● | kinesis/streaming-data-lake (Data Streams, Firehose to partitioned S3, Glue table with partition projection, Athena, JSON to Parquet) | Lake Formation, DataSync, Glue ETL jobs |
 | 4.1 | Cost-optimized storage | ◐ | #22, #25 | **Storage tiers and transitions, Intelligent-Tiering, Requester Pays, EBS types**, Backup retention, cost tools |
 | 4.2 | Cost-optimized compute | ○ | #60 touches Fargate | **Spot, RI, Savings Plans, instance sizing, ALB vs NLB vs GWLB**, scaling strategies |
 | 4.3 | Cost-optimized databases | ○ | — | **DynamoDB on-demand vs provisioned, Aurora Serverless**, snapshot retention, DMS |
@@ -235,7 +235,7 @@ Probed on Floci 2.3.0, 2026-10-22. "Lab-ready" means a lab could have meaningful
 | EFS file system, mount target, IA lifecycle | Succeeded | SAA 3.1, 4.1; CLF 3.6 |
 | EBS `create-volume` (gp3, io2) and `modify-volume` | Succeeded | SAA 3.1, 4.1 |
 | Spot instance request | Launched a real instance | SAA 4.2; CLF 4.1 |
-| Kinesis put-record, Firehose stream, Athena query execution | Accepted. **End-to-end delivery (Firehose → S3 → Athena rows) is not yet verified.** | SAA 3.5; CLF 3.7 |
+| Kinesis put-record, Firehose stream, Athena query execution | Verified end to end 2026-10-24: Firehose read the stream and wrote S3 objects under the evaluated `!{timestamp}` prefix within seconds, and Athena (DuckDB SQL) returned the right counts from a Glue table over the `dt=` folders. Athena DDL and CTAS are unsupported, and Firehose Parquet conversion fails with signature validation on (see W2-2) | SAA 3.5; CLF 3.7 |
 
 ### Control plane only: config is stored, behavior is not simulated
 
@@ -274,7 +274,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 | ALB + ASG, scaling | ✅ Behaves | Lab |
 | Multi-AZ, read replicas, Aurora, snapshots | ✅ Behaves (use Postgres) | Lab |
 | Caching (ElastiCache) | ✅ Behaves | Lab |
-| Data lake and streaming | ⚠️ Partly verified | Lab, after confirming Firehose → S3 → Athena end to end |
+| Data lake and streaming | ✅ Behaves (Athena speaks DuckDB SQL) | Lab |
 | Lambda sizing and concurrency, DynamoDB capacity | ✅ Behaves | Lab |
 | Object Lock, permission boundaries | ✅ Behaves | Lab |
 | NAT, peering, TGW, CloudFront, Global Accelerator, Route 53 | ⚠️ Control plane | Lab that teaches configuration and design, with an explicit "what Floci doesn't simulate" note |
@@ -307,7 +307,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 | # | Proposed lab | Steps | SAA | CLF | Floci |
 |---|---|---|---|---|---|
 | ✅ W2-1 | **Cache-aside with ElastiCache** (shipped 2026-10-24 as `elasticache/cache-aside`, 8 steps, SAA 3.3 and 2.1; the cache, the Aurora database and the Lambda reader are real, while the replica, security groups, AZs and the eviction policy are stored only, so the lab checks them itself): Redis cluster, a Lambda or EC2 reader that checks the cache before RDS, TTL | ~8 | 2.1, 3.3 | 3.4 | ✅ (Lambda reaches the cache over Floci's Docker network) |
-| W2-2 | **Streaming ingestion to a data lake**: Kinesis stream, Firehose to S3, Glue crawler and table, Athena query; exam lens on Data Streams vs Firehose and on Parquet | ~10 | 3.5 | 3.7 | ⚠️ Verify end to end first |
+| ✅ W2-2 | **Streaming ingestion to a data lake** (shipped 2026-10-24 as `kinesis/streaming-data-lake`, 9 steps, SAA 3.5 and 4.1; the stream, Firehose delivery and Athena queries are real, while the crawler, workgroup limits, and Athena DDL are not, so the lab defines the table through Glue and runs the DuckDB equivalent of CTAS): Kinesis stream, Firehose to S3, Glue crawler and table, Athena query; exam lens on Data Streams vs Firehose and on Parquet | ~10 | 3.5 | 3.7 | ✅ Verified end to end |
 | W2-3 | **DynamoDB at scale**: provisioned vs on-demand, Application Auto Scaling target, TTL, Streams to Lambda, PITR, global table replica | ~9 | 3.3, 4.3, 2.2 | 3.4 | ✅ (no `CreateBackup` or restore) |
 | W2-4 | **Lambda performance and cost**: memory sizing, versions, alias with weighted routing, reserved concurrency, function URL | ~7 | 3.2, 4.2 | 3.3 | ✅ (provisioned concurrency inconclusive) |
 | W2-5 | **Block and file storage**: EBS gp3 vs io2, modify-volume, attach to an instance; EFS with mount targets in 2 AZs and an IA lifecycle | ~8 | 3.1, 4.1 | 3.6 | ✅ (no snapshots) |
