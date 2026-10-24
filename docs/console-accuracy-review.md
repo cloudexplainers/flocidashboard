@@ -991,6 +991,28 @@ console offers them, checked against Floci's source at the `2.3.0` tag. Unit tes
 | IoT device shadows | Only top-level keys of `desired`/`reported` are merged (a nested object replaces the stored one); the document has no `delta` or `metadata`. | Inventory note and the Update device shadow action description |
 | SES receipt rules | Stored; Floci receives no inbound mail, so rules never run. The console doesn't offer them. | Inventory note |
 
+## ElastiCache cache-aside lab (2026-10-24)
+
+`elasticache/cache-aside` (SAA 3.3, 2.1), 8 steps, in `dashboard/labs/elasticache_labs.py`, the first ElastiCache lab
+and its own batch after RDS. It starts Wave 2 (W2-1): VPC `lab-cache-vpc` (10.61.0.0/16) with private subnets in
+us-east-1a and us-east-1b, security groups `lab-cache-app` and `lab-cache-redis` (6379 from the app group only), cache
+subnet group `lab-cache-subnets`, parameter group `lab-cache-redis7` with `maxmemory-policy allkeys-lru`, replication
+group `lab-product-cache` (primary and replica, Multi-AZ, automatic failover, encryption at rest), Aurora PostgreSQL
+cluster `lab-cache-products-db` with a seeded `products` table, and Lambda `lab-product-reader` running cache-aside.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the leftovers, steps out of order, a cache
+group opened to 0.0.0.0/0, the eviction policy set back to noeviction, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Replication group | One Valkey 7.1 container per group, proxied on Floci's host from port 6379 up; the primary and reader endpoints are the same address. The replica is a record: `INFO replication` shows `role:master`, `connected_slaves:0`. Multi-AZ with one node is accepted (AWS refuses). `TestFailover` and `DescribeEvents` are unsupported. Nodes have no `PreferredAvailabilityZone` or `SecurityGroups`. | The step checks a replica, failover, Multi-AZ, encryption, subnet and parameter groups, and says the nodes share one container |
+| Parameter group | Stored and reported `in-sync`, not applied: the container keeps `maxmemory-policy noeviction` and `maxmemory 0`. | The step checks the stored value; the miss step reports the container's real policy |
+| Network | Subnet group keeps both subnets and zones. Security groups aren't enforced, and Lambda `VpcConfig` is stored but the function runs on Floci's Docker network. | The step checks the ingress rule names only the app group |
+| Lambda reader | Reaches the cache at the primary endpoint (`floci:<port>`) and Floci at `AWS_ENDPOINT_URL`. GET, SET with EX, TTL and DEL are real. | Miss, hit and invalidation are observed, not simulated |
+| Data API authorization | With IAM enforcement on, `rds-data:ExecuteStatement` is allowed only by `Resource: "*"`; the cluster ARN, `cluster:*` and `arn:aws:rds:*` are denied. The caller needs no `secretsmanager:GetSecretValue`. | The role policy has the scoped statements plus a labeled `FlociOnlyDataApi` statement to delete on AWS |
+
+`check_labs --service elasticache` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

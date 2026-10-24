@@ -88,6 +88,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'route53':
         from .route53_labs import LABS
         return LABS
+    if service_key == 'elasticache':
+        from .elasticache_labs import LABS
+        return LABS
     return []
 
 
@@ -176,6 +179,11 @@ LAB_BATCH_ORDER = [
         'service': 'rds',
         'title': 'RDS & Aurora labs',
         'summary': 'Master relational database provisioning, custom parameter groups, storage scaling, read replicas, point-in-time restore, and Aurora failover.',
+    },
+    {
+        'service': 'elasticache',
+        'title': 'ElastiCache caching lab',
+        'summary': 'Speed up reads with cache-aside: a Multi-AZ Redis-compatible replication group in private subnets, an eviction policy, an Aurora source of truth, and a Lambda reader that caches with a TTL and invalidates on writes.',
     },
     {
         'service': 'elasticloadbalancing',
@@ -479,6 +487,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'route53':
         from .route53_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'elasticache':
+        from .elasticache_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -565,6 +576,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'route53':
         from .route53_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'elasticache':
+        from .elasticache_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -657,6 +671,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'route53':
         from .route53_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'elasticache':
+        from .elasticache_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:

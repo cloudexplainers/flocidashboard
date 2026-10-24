@@ -169,13 +169,11 @@ def elasticache_inventory() -> dict[str, Any]:
             'DescribeUsers',
             'CreateUserGroup',
             'DescribeUserGroups',
-            'CreateSnapshot',
-            'DescribeSnapshots',
-            'DescribeEvents',
         ],
         'notes': [
             'CreateReplicationGroup starts a real Valkey or Redis Docker container and exposes it through a local TCP proxy port.',
             'Supported interactive workflows include replication-group lifecycle, ElastiCache users, user access strings, and IAM auth token validation.',
+            'Floci serves the primary and reader endpoints from one container: replicas, Multi-AZ and TestFailover are not simulated, nodes keep no Availability Zone or security groups, and parameter group values are stored but not applied to the engine. Snapshots and DescribeEvents are unsupported.',
         ],
     }
 

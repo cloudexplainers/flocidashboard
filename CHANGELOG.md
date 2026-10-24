@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- New lab, ElastiCache cache-aside (SAA 3.3, 2.1): "Speed up reads with an ElastiCache cache-aside pattern", 8 steps (last lab of Level 4, first ElastiCache lab, starting Wave 2). It puts a cache subnet group in two private subnets with a cache security group that allows port 6379 only from the app security group, sets `maxmemory-policy allkeys-lru` in a redis7 parameter group, creates a Multi-AZ replication group with a primary and a replica, automatic failover and encryption at rest, seeds an Aurora PostgreSQL product table through the Data API, and deploys a Lambda reader in the private subnets that checks the cache before the database. A miss reads the database and caches the product with a 300-second TTL, five repeat reads come from the cache without a query, and a price update writes the database and deletes the cached copy so the next read caches the new price. The cache, the database and the reader are real on Floci 2.3.0; the lab checks what Floci only stores: the security group rule, the subnet group zones, the eviction policy, and the replica and Multi-AZ settings (Floci accepts Multi-AZ with one node). Notes say what Floci doesn't do: one Valkey container serves both endpoints with no replicas, nodes keep no AZs or security groups, the parameter group isn't applied (the container stays on `noeviction`), `TestFailover` is unsupported, Lambda VPC settings change nothing, and Data API calls are authorized only against `Resource: "*"`, so the role has a labeled `FlociOnlyDataApi` statement to delete on AWS. The catalog is now 73 labs across 23 services and 444 steps.
+
 ## 2.0.2 — 2026-10-23
 
 - More Floci features the console didn't show (Route 53, CloudFront):

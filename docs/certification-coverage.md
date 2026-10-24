@@ -10,7 +10,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 
 ## TL;DR
 
-- **The current 72 labs (436 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
+- **The current 73 labs (444 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
 - **There are big holes in high-weight SAA topics:** load balancing and Auto Scaling, Multi-AZ and read replicas, caching, Route 53 and DR, storage classes and tiering, the data and streaming domain (SAA 3.5), and nearly all of cost optimization (SAA domain 4, 20%).
 - **For CLF, coverage is lopsided.** The labs serve the hands-on parts of domains 2 and 3. Domain 1 (cloud concepts, 24%) and domain 4 (billing and support, 12%) are almost entirely conceptual, so labs can't cover them. Those need "exam lens" concept cards, not labs.
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
@@ -171,7 +171,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 3.1 | Deploying and operating | ● | #9, #35, #57, #66 | Console vs CLI vs IaC is already implicit. Make it explicit. |
 | 3.2 | Global infrastructure | ◐ | Subnets pin AZs in #32 and #33, route53/routing-failover (failover and latency routing across Regions) | Multi-AZ HA, edge locations |
 | 3.3 | Compute | ◐ | #15, #60, #65, guided EC2 | **Instance types, Auto Scaling, load balancers** |
-| 3.4 | Databases | ◐ | #14, #31, #39 | **Aurora, ElastiCache**, EC2-hosted vs managed, DMS |
+| 3.4 | Databases | ◐ | #14, #31, #39, elasticache/cache-aside (Aurora source of truth, ElastiCache in front) | EC2-hosted vs managed, DMS |
 | 3.5 | Network | ● | #21, #32, #33, #36, #61, #62, #63, #64, route53/routing-failover (hosted zones, routing policies) | VPN and Direct Connect (concept) |
 | 3.6 | Storage | ◐ | 13 S3 labs | **Storage classes, EBS, instance store, EFS**, FSx, Storage Gateway, **AWS Backup** |
 | 3.7 | AI/ML and analytics | ○ | — | Athena, Kinesis, Glue (labbable); SageMaker AI, Lex, Quick (concept) |
@@ -189,11 +189,11 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 1.1 | Secure access | ● | 11 IAM labs, #21, #37 | **Multi-account: Organizations, SCPs, Control Tower**; MFA; IAM Identity Center; directory federation |
 | 1.2 | Secure workloads | ● | #27, #28, #29, #32, #33, #38, #62, #63, #64, ec2/nat-three-tier (NAT gateways) | WAF and Shield, GuardDuty and Macie, VPN and Direct Connect |
 | 1.3 | Data security controls | ◐ | #19, #20, #21, #22, #24, #26, s3/data-protection-tiers (Object Lock, CRR config), kms/key-management (key policies, rotation, grants, envelope encryption, SSE-KMS) | **ACM/TLS, AWS Backup**, secret rotation |
-| 2.1 | Scalable, loosely coupled | ● | ~20 labs (SQS, SNS, EventBridge, Lambda, Step Functions, API Gateway, ECS) | **Load balancing (ALB), horizontal scaling, caching, CDN, read replicas**, storage types (block vs file) |
+| 2.1 | Scalable, loosely coupled | ● | ~20 labs (SQS, SNS, EventBridge, Lambda, Step Functions, API Gateway, ECS), elasticache/cache-aside (caching) | **Load balancing (ALB), horizontal scaling, CDN, read replicas**, storage types (block vs file) |
 | 2.2 | HA and fault tolerance | ◐ | #19, #44, #53, #61, #66, route53/routing-failover (health checks, failover records, failover drill) | **Multi-AZ, DR strategies (RPO/RTO), RDS Proxy, Aurora failover**, quotas and throttling, X-Ray |
 | 3.1 | Storage performance | ◐ | #25, S3 basics | **EBS volume types, EFS**, hybrid storage |
 | 3.2 | Elastic compute | ◐ | #50, #60, #65 | **Auto Scaling and scaling metrics, instance families, Lambda memory sizing**, Batch and EMR |
-| 3.3 | Database performance | ◐ | #14, #31 | **Read replicas, Aurora, ElastiCache, DynamoDB capacity and DAX, RDS Proxy** |
+| 3.3 | Database performance | ◐ | #14, #31, elasticache/cache-aside (cache-aside, TTLs, invalidation, eviction policy, Multi-AZ replication group) | **Read replicas, Aurora, DynamoDB capacity and DAX, RDS Proxy** |
 | 3.4 | Network performance | ◐ | #32, #61, #62, #64, ec2/nat-three-tier, route53/routing-failover (latency and weighted routing) | **CloudFront, Global Accelerator, ALB vs NLB**, VPN, Direct Connect |
 | 3.5 | Data ingestion and transformation | ○ | — | **Kinesis, Firehose, Glue, Athena, Lake Formation**, DataSync, data lakes, CSV-to-Parquet |
 | 4.1 | Cost-optimized storage | ◐ | #22, #25 | **Storage tiers and transitions, Intelligent-Tiering, Requester Pays, EBS types**, Backup retention, cost tools |
@@ -223,7 +223,7 @@ Probed on Floci 2.3.0, 2026-10-22. "Lab-ready" means a lab could have meaningful
 | RDS Postgres/MySQL as real containers, `--multi-az`, `--storage-encrypted`, forced-failover reboot | Instances `available` with real ports | SAA 2.2, 3.3, 1.3 |
 | RDS **Postgres** read replica and DB snapshot | Both succeeded | SAA 2.2, 3.3, 4.3 |
 | Aurora PostgreSQL/MySQL clusters, Serverless v2 config, reader instance, cluster snapshot | All succeeded (real containers) | SAA 3.3, 4.3; CLF 3.4 |
-| ElastiCache Redis (backed by Valkey) | A real container started | SAA 2.1, 3.3; CLF 3.4 |
+| ElastiCache Redis (backed by Valkey) | A real container started. Checked again 2026-10-24: a Lambda on Floci's Docker network reached it at the primary endpoint and ran GET, SET with EX, TTL and DEL; the replica, AZs, security groups and parameter group are stored only (see W2-1) | SAA 2.1, 3.3; CLF 3.4 |
 | CloudWatch alarms evaluating real `put-metric-data` | The alarm reached `ALARM` without `set-alarm-state` | SAA 2.2, 3.2 |
 | CloudWatch Logs metric filters and retention | Two "HTTP 500" lines produced a metric Sum of 2; the 200 line didn't count | CLF 2.2; SAA 2.2 |
 | Secrets Manager rotation with a Lambda | Floci invoked all four rotation steps and promoted the new version (it pre-creates an empty AWSPENDING version, which the lab's function handles) | SAA 1.2, 1.3; CLF 2.3 |
@@ -306,7 +306,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 
 | # | Proposed lab | Steps | SAA | CLF | Floci |
 |---|---|---|---|---|---|
-| W2-1 | **Cache-aside with ElastiCache**: Redis cluster, a Lambda or EC2 reader that checks the cache before RDS, TTL | ~8 | 2.1, 3.3 | 3.4 | ✅ (confirm network reachability from Lambda) |
+| ✅ W2-1 | **Cache-aside with ElastiCache** (shipped 2026-10-24 as `elasticache/cache-aside`, 8 steps, SAA 3.3 and 2.1; the cache, the Aurora database and the Lambda reader are real, while the replica, security groups, AZs and the eviction policy are stored only, so the lab checks them itself): Redis cluster, a Lambda or EC2 reader that checks the cache before RDS, TTL | ~8 | 2.1, 3.3 | 3.4 | ✅ (Lambda reaches the cache over Floci's Docker network) |
 | W2-2 | **Streaming ingestion to a data lake**: Kinesis stream, Firehose to S3, Glue crawler and table, Athena query; exam lens on Data Streams vs Firehose and on Parquet | ~10 | 3.5 | 3.7 | ⚠️ Verify end to end first |
 | W2-3 | **DynamoDB at scale**: provisioned vs on-demand, Application Auto Scaling target, TTL, Streams to Lambda, PITR, global table replica | ~9 | 3.3, 4.3, 2.2 | 3.4 | ✅ (no `CreateBackup` or restore) |
 | W2-4 | **Lambda performance and cost**: memory sizing, versions, alias with weighted routing, reserved concurrency, function URL | ~7 | 3.2, 4.2 | 3.3 | ✅ (provisioned concurrency inconclusive) |
