@@ -213,6 +213,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('s3', 'data-protection-tiers'): _tags(clf='3.6 4.1', saa='1.3 4.1 2.2'),
     ('kms', 'key-management'): _tags(clf='2.2', saa='1.3'),
     ('route53', 'routing-failover'): _tags(clf='3.5 3.2', saa='2.2 3.4'),
+    ('elasticache', 'cache-aside'): _tags(clf='3.4', saa='3.3 2.1'),
     # Level 5
     ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4'),
@@ -420,7 +421,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Read replicas offload reads; caching with ElastiCache can cut database load further.',
             'Keep snapshot retention to what recovery requirements need. DMS and SCT handle homogeneous and heterogeneous migrations.',
         ],
-        'related_labs': [('dynamodb', 'crud-query'), ('rds', 'db-instance-lifecycle'), ('rds', 'aurora-resilience')],
+        'related_labs': [('dynamodb', 'crud-query'), ('rds', 'db-instance-lifecycle'), ('rds', 'aurora-resilience'),
+                         ('elasticache', 'cache-aside')],
         'planned': 'W2-3 DynamoDB at scale',
     },
 ]
