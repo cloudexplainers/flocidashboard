@@ -1148,6 +1148,30 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service cloudfront` passed on 2.3.0.
 
+## CI/CD pipeline lab (2026-10-24)
+
+`codepipeline/lambda-cicd` (DVA 3.4, 3.1, 3.3, 4.1; CLF 3.1), 9 steps, in `dashboard/labs/codepipeline_labs.py` (a new
+lab service, registered in `monolith.py` as the last batch, and the first lab of Level 6: Developer Workflows). It is
+Wave D item D-1 from the DVA-C02 plan: a versioned bucket `lab-cicd-artifacts` with the source at
+`source/quote-service.zip`, build project `lab-cicd-build` (S3 source, `python:3.12-slim`, `STAGE=ci`, zipped S3
+artifacts), function `lab-cicd-quote` with alias `live`, pipeline `lab-cicd-pipeline` (S3 source, CodeBuild, manual
+approval), CodeDeploy application `lab-cicd-app` with deployment group `lab-cicd-live`
+(`CodeDeployDefault.LambdaCanary10Percent5Minutes`, alarm `lab-cicd-quote-errors`, automatic rollback), and the roles
+`lab-cicd-codebuild-role`, `lab-cicd-pipeline-role`, `lab-cicd-lambda-role` and `lab-cicd-codedeploy-role`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Builds | Real: the source zip is pulled from S3 and each buildspec phase runs with `sh` in a container of the project image; a failing unit test fails PRE_BUILD and the build. The image must be pullable from Docker Hub (`aws/codebuild/standard` images fault). | Reported as real; a pull failure names the image |
+| Build logs | The `/aws/codebuild/<project>` stream is created but stays empty. The failed phase's `contexts` hold the command output. | The failing-build step reads the failed phase and says the log was empty |
+| Artifacts | Zipped with `base-directory` honored, but always written as `<project>-<build number>.zip` at the bucket root, ignoring path, name and namespace. Build numbers keep counting after the project is deleted. | The steps look for the AWS path first, then Floci's name, and say which they found |
+| Pipeline | S3 source, CodeBuild and manual approval actions run; the approval waits for a token and `PutApprovalResult` finishes the execution. A project with source type `CODEPIPELINE` gets no source files and fails. | The project keeps its S3 source (the same object the source stage reads), and the pipeline step explains why |
+| CodeDeploy | Lambda canaries and linear configs shift the alias for real, in seconds instead of minutes (a 10% canary is visible for about 5 seconds). Alarms are stored, never evaluated. `StopDeployment` leaves the alias weights as they were. Target versions aren't validated. | The canary step samples the alias weight; the rollback step redeploys version 1 with `LambdaAllAtOnce` |
+| CodeCommit | Unsupported. | The source step uses S3 and says why |
+
+`check_labs --service codepipeline` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

@@ -281,6 +281,8 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ec2', 'sqs-interface-endpoint'): _tags(clf='3.5', saa='1.2 3.4'),
     ('eks', 'control-plane-nodegroup'): _tags(clf='3.3', saa='2.1 3.2'),
     ('cloudformation', 's3-sqs-stack'): _tags(clf='3.1', saa='2.2', dva='3.3 3.4'),
+    # Level 6
+    ('codepipeline', 'lambda-cicd'): _tags(clf='3.1', dva='3.4 3.1 3.3 4.1'),
 }
 
 

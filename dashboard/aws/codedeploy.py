@@ -232,6 +232,8 @@ def codedeploy_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'ContinueDeployment is accepted but does nothing. PutLifecycleEventHookExecutionStatus does not check that the deployment exists.',
+            'Lambda deployments shift alias traffic for real, canary and linear, but each interval takes seconds instead of minutes. Target versions are not validated.',
+            'Stopping a deployment leaves the alias weights where they were, and alarm-based automatic rollback is stored but never triggered.',
         ],
     }
 

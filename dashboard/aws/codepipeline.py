@@ -72,6 +72,7 @@ def codepipeline_inventory() -> dict[str, Any]:
         'available_sdk_operations': sorted(operations),
         'notes': [
             'This page shows the definition, state and executions of the first 50 pipelines only.',
+            'Executions run S3 source, CodeBuild, and manual approval actions for real; approvals wait for PutApprovalResult. A CodeBuild project with source type CODEPIPELINE gets no source files, so point the project at the same S3 object instead.',
         ],
     }
 
