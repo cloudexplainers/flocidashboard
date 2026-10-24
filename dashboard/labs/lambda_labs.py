@@ -12,6 +12,8 @@ from botocore.exceptions import ClientError
 from django.core.cache import cache
 
 from dashboard.aws import _clean_response
+
+from . import lambda_performance_labs as performance_cost
 from .monolith import (
     AWS_ACCOUNT_ID,
     AWS_REGION,
@@ -1646,10 +1648,14 @@ LABS = [
     LAMBDA_CREATE_INVOKE_LOGS_LAB,
     LAMBDA_RUNTIME_CONFIG_LAB,
     LAMBDA_SQS_EVENT_SOURCE_LAB,
+    performance_cost.LAB,
 ]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'lambda' and lab_key == 'performance-cost':
+        from .lambda_performance_labs import run_step as performance_run_step
+        return performance_run_step(step_key)
     if service_key == 'lambda' and lab_key == 'create-invoke-logs':
         runners = {
             'create-role': _run_lambda_create_role,
@@ -1691,6 +1697,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'lambda' and lab_key == 'performance-cost':
+        from .lambda_performance_labs import status as performance_status
+        return performance_status()
     if service_key == 'lambda' and lab_key == 'create-invoke-logs':
         role_verification = _verify_lambda_role()
         policy_verification = _verify_lambda_role_policy()
@@ -1809,6 +1818,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'lambda' and lab_key == 'performance-cost':
+        from .lambda_performance_labs import reset as performance_reset
+        return performance_reset()
     if service_key == 'lambda' and lab_key == 'create-invoke-logs':
         return _reset_lambda_create_invoke_logs()
 

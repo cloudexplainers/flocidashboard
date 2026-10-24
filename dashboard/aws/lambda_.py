@@ -208,6 +208,7 @@ def lambda_inventory() -> dict[str, Any]:
             'S3-based deployments support reactive hot reload when the source object changes.',
             'Bind-mount hot reload uses S3Bucket=hot-reload and requires explicit configuration.',
             'Reserved concurrency is enforced; provisioned concurrency is not implemented.',
+            'The memory size is passed to the function but CPU does not scale with it. Function URLs with AWS_IAM auth also answer unsigned requests, and UpdateAlias does not clear routing weights.',
         ],
     }
 
