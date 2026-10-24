@@ -10,7 +10,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 
 ## TL;DR
 
-- **The current 79 labs (493 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
+- **The current 80 labs (502 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
 - **There are big holes in high-weight SAA topics:** load balancing and Auto Scaling, Multi-AZ and read replicas, caching, Route 53 and DR, storage classes and tiering, the data and streaming domain (SAA 3.5), and nearly all of cost optimization (SAA domain 4, 20%).
 - **For CLF, coverage is lopsided.** The labs serve the hands-on parts of domains 2 and 3. Domain 1 (cloud concepts, 24%) and domain 4 (billing and support, 12%) are almost entirely conceptual, so labs can't cover them. Those need "exam lens" concept cards, not labs.
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
@@ -454,7 +454,7 @@ The existing **Levels** view should stay the default. Exam tracks are a lens on 
 | 3.1 | ◐ | lambda/create-invoke-logs (zip package), ecs/fargate-microservice (container image), ssm/parameter-store-config, ec2/guided-userdata | **Layers, SAM packaging, AppConfig per environment** |
 | 3.2 | ◐ | apigateway/lambda-request, lambda/sqs-event-source, eventbridge/application-spine (all secondary) | **API Gateway stages, mock integrations, deploying a stack to a second environment** |
 | 3.3 | ◐ | cloudformation/s3-sqs-stack (change set), lambda/performance-cost (aliases) | **SAM templates, test events, per-environment API deployments** |
-| 3.4 | ○ | lambda/performance-cost (weighted alias), cloudformation/s3-sqs-stack (both secondary) | **CodeBuild, CodePipeline, CodeDeploy, deployment strategies and rollback** |
+| 3.4 | ● | **codepipeline/lambda-cicd** (CodeBuild, CodePipeline with approval, CodeDeploy canary and rollback), lambda/performance-cost (weighted alias), cloudformation/s3-sqs-stack | Blue/green for ECS and EC2, Elastic Beanstalk (cards) |
 | 4.1 | ◐ | cloudwatch/log-groups-metric-filters, sqs/dead-letter-redrive, ec2/guided-broken-route, cloudwatch/metric-alarms | **Querying logs (Logs Insights), reading build and deployment logs** |
 | 4.2 | ◐ | cloudwatch/metric-alarms (custom metrics), log-groups-metric-filters, elasticloadbalancing/ha-web-tier (health checks) | **Structured logging, alerts to SNS**; X-Ray is unsupported (card) |
 | 4.3 | ● | sns/filter-policies (subscription filter policies are skill 4.3.4), lambda/performance-cost, elasticache/cache-aside, cloudfront/edge-delivery, sqs/batch-messages | — |
@@ -486,14 +486,14 @@ Built after Wave 2 and before Wave 3. Each lab follows the existing pattern and 
 
 | # | Proposed lab | Steps | DVA | Also | Floci |
 |---|---|---|---|---|---|
-| D-1 | **CI/CD pipeline for a Lambda service**: source zip in S3, CodeBuild project with a buildspec (install, unit tests, package), a failing build read from its phases, CodePipeline with source, build, and manual approval stages, then a CodeDeploy canary from version 1 to 2 of a Lambda alias, and a rollback | ~9 | 3.4, 3.1, 3.3, 4.1 | — | ✅ build, pipeline, and canary real (canary runs in seconds) |
+| ✅ D-1 | **CI/CD pipeline for a Lambda service** (shipped 2026-10-24 as `codepipeline/lambda-cicd`, 9 steps, DVA 3.4, 3.1, 3.3 and 4.1, the first lab of Level 6: Developer Workflows; builds, the pipeline and the canary are real, while build logs stay empty and alarms never stop a deployment, so the lab reads the failed phase and rolls back by redeploying): source zip in S3, CodeBuild project with a buildspec (install, unit tests, package), a failing build read from its phases, CodePipeline with source, build, and manual approval stages, then a CodeDeploy canary from version 1 to 2 of a Lambda alias, and a rollback | ~9 | 3.4, 3.1, 3.3, 4.1 | — | ✅ build, pipeline, and canary real (canary runs in seconds) |
 | D-2 | **API Gateway for developers**: REST API with dev and prod stages and stage variables, a Lambda TOKEN authorizer, a Cognito authorizer, a request validator with a model, a MOCK integration with a mapping template, an API key with a usage plan, and a canary on prod | ~10 | 2.1, 1.1, 3.2, 3.3 | SAA 1.2 | ✅ authorizers, validation, keys; ⚠️ throttles, quotas, canary stored only |
 | D-3 | **DynamoDB application patterns**: key design, conditional writes, optimistic locking with a version attribute, a transfer with `TransactWriteItems` and an idempotency token, strongly consistent reads, query vs scan with paging, batch writes | ~8 | 1.3, 1.1 | SAA 3.3 | ✅ |
 | D-4 | **Serverless packaging with SAM and AppConfig**: a Lambda layer, a SAM template with `AutoPublishAlias` deployed as a dev stack and then a prod stack, and an AppConfig feature flag the function reads per environment | ~8 | 3.1, 3.2, 3.3, 1.2 | — | ✅ |
 | D-5 | **Lambda event lifecycle and errors**: async invoke with retries and maximum event age, OnSuccess and OnFailure destinations, a DLQ, a test event, an environment variable encrypted with a customer managed key | ~8 | 1.2, 2.3 | SAA 2.1 | ✅ destinations real (2026-10-23 probe) |
 | D-6 | **Observability for a serverless app**: structured JSON logs, a metric filter on a JSON field, a Logs Insights query, custom metrics with PutMetricData and EMF, an alarm that notifies SNS, a dashboard | ~8 | 4.2, 4.1 | SAA 2.2 | ⚠️ EMF and complex Insights queries not supported; X-Ray concept only |
 
-**Projected DVA coverage:** today 5 of 13 task statements are ● hands-on (1.1, 2.1, 2.2, 2.3, 4.3). After Wave D, all 13 are, with X-Ray and Private CA left to concept cards.
+**Projected DVA coverage:** before Wave D, 5 of 13 task statements were ● hands-on (1.1, 2.1, 2.2, 2.3, 4.3); D-1 makes 3.4 hands-on. After Wave D, all 13 are, with X-Ray and Private CA left to concept cards.
 
 ---
 

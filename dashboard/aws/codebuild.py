@@ -217,7 +217,9 @@ def codebuild_inventory() -> dict[str, Any]:
         ],
         'notes': [
             'Floci CodeBuild stores project, report-group, and source-credential state and runs builds inside real Docker containers.',
-            'Buildspec install, pre_build, build, and post_build phases run sequentially, with output streamed to /aws/codebuild/<project> in CloudWatch Logs.',
+            'Buildspec install, pre_build, build, and post_build phases run sequentially with sh. Each build gets a /aws/codebuild/<project> log stream, but the stream stays empty; a failed phase\'s context holds the command output instead.',
+            'The build image must be one Docker can pull (aws/codebuild/standard images are not on Docker Hub, so such builds fault). S3 artifacts are always named <project>-<build number>.zip at the bucket root, whatever the path, name, and namespace settings.',
+            'A project with source type CODEPIPELINE gets no source files when a pipeline runs it, so its build fails; StartBuild ignores sourceLocationOverride.',
             'NO_SOURCE builds skip source injection; S3 artifacts are copied from the build container and uploaded to an existing bucket.',
             'Build execution is asynchronous: StartBuild returns IN_PROGRESS and BatchGetBuilds can be polled until buildComplete is true.',
         ],
