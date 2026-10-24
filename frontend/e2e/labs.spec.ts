@@ -112,6 +112,18 @@ test('exam progress is weighted by domain', async ({ page, request }) => {
   await expect(page.getByLabel('Exam-weighted lab progress')).toHaveAttribute('value', String(expected));
 });
 
+test('Developer study track lists DVA-C02 domains with labs and concept cards', async ({ page }) => {
+  await page.goto('/labs/?track=DVA-C02');
+  await expect(page.getByText('DVA-C02 · AWS Certified Developer – Associate')).toBeVisible();
+  await page.getByText('Domain 4: Troubleshooting and Optimization', { exact: true }).click();
+  const optimize = page.getByTestId('exam-task-DVA-C02-4.3');
+  await expect(optimize.getByRole('button', { name: 'Route selected SNS messages with subscription filters' })).toBeVisible();
+  await page.getByText('Domain 3: Deployment', { exact: true }).click();
+  const cicd = page.getByTestId('exam-task-DVA-C02-3.4');
+  await cicd.getByText('Concept: Deployment strategies and CI/CD services').click();
+  await expect(cicd.getByText(/Planned lab: D-1/)).toBeVisible();
+});
+
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
   await page.goto('/labs/?track=NOT-AN-EXAM');
   await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();

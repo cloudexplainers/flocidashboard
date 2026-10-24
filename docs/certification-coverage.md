@@ -1,6 +1,6 @@
-# Certification Coverage: CLF-C02 and SAA-C03
+# Certification Coverage: CLF-C02, SAA-C03, and DVA-C02
 
-This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**. It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
+This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
 
 It is a planning document. No labs are built here; pick from [the plan](#5-prioritized-lab-plan).
 
@@ -15,6 +15,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 - **For CLF, coverage is lopsided.** The labs serve the hands-on parts of domains 2 and 3. Domain 1 (cloud concepts, 24%) and domain 4 (billing and support, 12%) are almost entirely conceptual, so labs can't cover them. Those need "exam lens" concept cards, not labs.
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
 - **Recommended Wave 1 (six labs):** HA web tier (ALB + ASG), RDS/Aurora resilience, S3 data protection and storage tiers, a NAT/three-tier VPC extension, KMS key management, and Route 53 routing and failover.
+- **Developer – Associate (DVA-C02) is the third track (2026-10-24).** Every DVA task statement already has a lab, but deployment (domain 3) is thin: no CodeBuild, CodePipeline, or CodeDeploy lab, and no API Gateway stages or authorizers. Floci 2.3.0 runs real builds, pipelines, and Lambda canary deployments, so **Wave D** (six labs, [§7](#7-developer--associate-dva-c02)) comes next, before Wave 3.
 - **UI direction:** add exam and task tags to each lab in one Python registry, then add a "Study track" switcher (Levels · CLF-C02 · SAA-C03) with domain-weighted progress and concept cards for objectives that can't be labbed. The same structure extends to every other certification.
 
 ---
@@ -425,7 +426,78 @@ The existing **Levels** view should stay the default. Exam tracks are a lens on 
 
 ---
 
-## 7. Extending to other certification tracks
+## 7. Developer – Associate (DVA-C02)
+
+**Added 2026-10-24.** Checked against the [DVA-C02 exam guide](https://docs.aws.amazon.com/aws-certification/latest/developer-associate-02/developer-associate-02.html) and a disposable Floci **2.3.0** emulator (`compose.labs.yml`, port 14566, IAM enforcement and signature validation on). The tags live in `dashboard/labs/exams.py` like the other tracks, so the labs page has a **DVA-C02 Developer – Associate** study track.
+
+### Exam guide
+
+| Domain (weight) | Task statements |
+|---|---|
+| 1 Development with AWS Services (32%) | 1.1 Develop code for applications hosted on AWS · 1.2 Develop code for AWS Lambda · 1.3 Use data stores in application development |
+| 2 Security (26%) | 2.1 Implement authentication and/or authorization for applications and AWS services · 2.2 Implement encryption by using AWS services · 2.3 Manage sensitive data in application code |
+| 3 Deployment (24%) | 3.1 Prepare application artifacts to be deployed to AWS · 3.2 Test applications in development environments · 3.3 Automate deployment testing · 3.4 Deploy code by using AWS CI/CD services |
+| 4 Troubleshooting and Optimization (18%) | 4.1 Assist in a root cause analysis · 4.2 Instrument code for observability · 4.3 Optimize applications by using AWS services and features |
+
+50 scored and 15 unscored questions; passing score 720. The current guide also names Amazon Q Developer (skills 1.1.11 and 3.3.6), AWS AppConfig (3.1.5), and AWS Private CA (2.2.2).
+
+### Coverage by task statement (existing 79 labs)
+
+| Task | Coverage | Covered by | Gap |
+|---|---|---|---|
+| 1.1 | ● | 21 labs: all SQS labs, SNS fan-out and filters, S3 notifications, EventBridge application spine, Scheduler, both Step Functions labs, API Gateway to Lambda, Kinesis data lake, S3 SDK labs | API transformations and validation (1.1.6), retry and circuit-breaker code for third parties (1.1.13) |
+| 1.2 | ◐ | lambda/create-invoke-logs, runtime-config, sqs-event-source, performance-cost, dynamodb/lambda-writes, capacity-at-scale (stream processor) | **Layers, destinations and DLQs for async events, test events** |
+| 1.3 | ◐ | dynamodb/crud-query, capacity-at-scale, elasticache/cache-aside, S3 labs, rds/db-instance-lifecycle | **Conditional writes, optimistic locking, transactions, consistent reads, query vs scan paging, key design** |
+| 2.1 | ● | 11 IAM labs (access keys, roles, STS, the identity capstone), Cognito user pools and groups, S3 presigned URLs and bucket policy, IMDS and instance roles | **Bearer tokens on an API: Lambda and Cognito authorizers** |
+| 2.2 | ● | kms/key-alias-encrypt-decrypt, kms/key-management (rotation, grants, envelope encryption), s3/default-encryption | Client-side vs server-side and certificates are concept-only (card) |
+| 2.3 | ● | secretsmanager/secret-lifecycle, ssm/parameter-store-config, lambda/runtime-config | Encrypted Lambda environment variables, masking, multi-tenant access (card) |
+| 3.1 | ◐ | lambda/create-invoke-logs (zip package), ecs/fargate-microservice (container image), ssm/parameter-store-config, ec2/guided-userdata | **Layers, SAM packaging, AppConfig per environment** |
+| 3.2 | ◐ | apigateway/lambda-request, lambda/sqs-event-source, eventbridge/application-spine (all secondary) | **API Gateway stages, mock integrations, deploying a stack to a second environment** |
+| 3.3 | ◐ | cloudformation/s3-sqs-stack (change set), lambda/performance-cost (aliases) | **SAM templates, test events, per-environment API deployments** |
+| 3.4 | ○ | lambda/performance-cost (weighted alias), cloudformation/s3-sqs-stack (both secondary) | **CodeBuild, CodePipeline, CodeDeploy, deployment strategies and rollback** |
+| 4.1 | ◐ | cloudwatch/log-groups-metric-filters, sqs/dead-letter-redrive, ec2/guided-broken-route, cloudwatch/metric-alarms | **Querying logs (Logs Insights), reading build and deployment logs** |
+| 4.2 | ◐ | cloudwatch/metric-alarms (custom metrics), log-groups-metric-filters, elasticloadbalancing/ha-web-tier (health checks) | **Structured logging, alerts to SNS**; X-Ray is unsupported (card) |
+| 4.3 | ● | sns/filter-policies (subscription filter policies are skill 4.3.4), lambda/performance-cost, elasticache/cache-aside, cloudfront/edge-delivery, sqs/batch-messages | — |
+
+Every task statement already has at least one lab, so the track works today. Six concept cards cover what labs can't: DynamoDB access patterns, encryption for developers, sensitive data handling, deployment strategies, X-Ray tracing, and developer tooling (SAM, SDK retries, Amazon Q Developer).
+
+### What Floci 2.3.0 does for developer services
+
+Probed 2026-10-24 with real SDK calls.
+
+| Area | Result |
+|---|---|
+| **CodeBuild** | **Behaves.** A build pulls the source zip from S3, runs every buildspec phase with `sh` in a real Docker container of the project's image, passes environment variables, fails the build on a non-zero exit (the failed phase's context holds the command output, such as a failing unit test), and uploads a zip artifact (honoring `base-directory`). The image must be pullable by the Docker host (`aws/codebuild/standard:7.0` is not on Docker Hub, so the build faults; `python:3.12-slim` works). The artifact is always named `<project>-<build number>.zip` at the bucket root, whatever the path and name settings. The log group and stream are created but stay empty. `sourceLocationOverride` on `StartBuild` is ignored. |
+| **CodePipeline** | **Behaves.** An S3 source → CodeBuild → manual approval pipeline runs: the build really runs, the approval waits for a token, and `PutApprovalResult` finishes the execution. A project with source type `CODEPIPELINE` gets no source files from the pipeline, so its build fails; a project with an S3 source pointing at the same object works. |
+| **CodeDeploy (Lambda)** | **Behaves, on a fast clock.** Deployment groups, Lambda deployment configs (built-in and custom) and AppSpec deployments shift the alias for real: a canary sets the alias weight (for example 10%) and completes, and linear configs step the weight up, but intervals take seconds instead of minutes. Stopping a deployment leaves the alias weights where they were (no automatic rollback), alarm-based rollback is stored only, and target versions aren't validated. |
+| **CodeCommit** | Unsupported (`UnknownOperation`). Labs use an S3 source instead. |
+| **AWS AppConfig** | **Behaves.** Applications, environments, feature-flag profiles, hosted versions, deployment strategies and deployments work, and the AppConfig Data API returns the deployed flag values. Deployments complete instantly. |
+| **API Gateway REST** | **Mostly behaves.** Lambda TOKEN authorizers (401 and 403, context passed to the backend), Cognito user pool authorizers, request validators with JSON schema models, `apiKeyRequired`, MOCK integrations with mapping templates, and per-stage variables in the Lambda event all work. **Stored only:** usage plan throttles and quotas, and canary settings. `${stageVariables.x}` in a Lambda integration URI is not substituted. `TestInvokeMethod` fails. |
+| **DynamoDB application patterns** | **Behaves.** Condition expressions (`ConditionalCheckFailed`), optimistic locking, `TransactWriteItems` (all-or-nothing, cancellation reasons, idempotent client tokens), `TransactGetItems`, batch writes, paging with `LastEvaluatedKey`, and PartiQL. |
+| **AWS SAM** | **Behaves.** CloudFormation runs the `AWS::Serverless-2016-10-31` transform: a SAM function with `AutoPublishAlias` creates the function, a version and an alias, and `SimpleTable` creates a table. |
+| **Lambda layers** | **Behaves.** A published layer is mounted under `/opt` and its Python module imports. |
+| **CloudWatch Logs** | **Partial.** Simple Logs Insights queries (`fields`, `limit`) work; `filter` on JSON fields and `stats` fail. Embedded metric format lines are not turned into metrics. |
+| **X-Ray, AWS Private CA** | Unsupported. |
+| **SSM SecureString** | Stored; `GetParameter` without `WithDecryption` returns plaintext (AWS returns ciphertext). |
+
+### Wave D: Developer labs
+
+Built after Wave 2 and before Wave 3. Each lab follows the existing pattern and says in each step what Floci only stores versus enforces.
+
+| # | Proposed lab | Steps | DVA | Also | Floci |
+|---|---|---|---|---|---|
+| D-1 | **CI/CD pipeline for a Lambda service**: source zip in S3, CodeBuild project with a buildspec (install, unit tests, package), a failing build read from its phases, CodePipeline with source, build, and manual approval stages, then a CodeDeploy canary from version 1 to 2 of a Lambda alias, and a rollback | ~9 | 3.4, 3.1, 3.3, 4.1 | — | ✅ build, pipeline, and canary real (canary runs in seconds) |
+| D-2 | **API Gateway for developers**: REST API with dev and prod stages and stage variables, a Lambda TOKEN authorizer, a Cognito authorizer, a request validator with a model, a MOCK integration with a mapping template, an API key with a usage plan, and a canary on prod | ~10 | 2.1, 1.1, 3.2, 3.3 | SAA 1.2 | ✅ authorizers, validation, keys; ⚠️ throttles, quotas, canary stored only |
+| D-3 | **DynamoDB application patterns**: key design, conditional writes, optimistic locking with a version attribute, a transfer with `TransactWriteItems` and an idempotency token, strongly consistent reads, query vs scan with paging, batch writes | ~8 | 1.3, 1.1 | SAA 3.3 | ✅ |
+| D-4 | **Serverless packaging with SAM and AppConfig**: a Lambda layer, a SAM template with `AutoPublishAlias` deployed as a dev stack and then a prod stack, and an AppConfig feature flag the function reads per environment | ~8 | 3.1, 3.2, 3.3, 1.2 | — | ✅ |
+| D-5 | **Lambda event lifecycle and errors**: async invoke with retries and maximum event age, OnSuccess and OnFailure destinations, a DLQ, a test event, an environment variable encrypted with a customer managed key | ~8 | 1.2, 2.3 | SAA 2.1 | ✅ destinations real (2026-10-23 probe) |
+| D-6 | **Observability for a serverless app**: structured JSON logs, a metric filter on a JSON field, a Logs Insights query, custom metrics with PutMetricData and EMF, an alarm that notifies SNS, a dashboard | ~8 | 4.2, 4.1 | SAA 2.2 | ⚠️ EMF and complex Insights queries not supported; X-Ray concept only |
+
+**Projected DVA coverage:** today 5 of 13 task statements are ● hands-on (1.1, 2.1, 2.2, 2.3, 4.3). After Wave D, all 13 are, with X-Ray and Private CA left to concept cards.
+
+---
+
+## 8. Extending to other certification tracks
 
 The structure above is exam-agnostic. A new track needs three things:
 
@@ -437,7 +509,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 
 | Track | Fit with today's labs | Likely new labs | Floci constraints |
 |---|---|---|---|
-| **Developer – Associate** | Very high. The ~10 labs marked Dev/Ops in §2 (SQS batch and delay, Cognito groups, CORS, IMDS) plus most serverless labs already fit. | Lambda layers and destinations, API Gateway stages and authorizers, DynamoDB conditional writes and transactions, CodeBuild, CodePipeline, and CodeDeploy, SAM and CloudFormation packaging | X-Ray unsupported |
+| **Developer – Associate (DVA-C02)** | **Track live since 2026-10-24; see [§7](#7-developer--associate-dva-c02).** | Wave D (D-1 to D-6) | X-Ray, CodeCommit, and Private CA unsupported |
 | **CloudOps Engineer – Associate (SOA-C03)**, which replaced SysOps (SOA-C02, retired 2025-09-29) | Medium. CloudWatch, SSM Run Command, the route-repair lab, and CloudFormation fit. | CloudWatch agent and dashboards, alarms to auto-remediation, Backup, ASG ops, Config remediation | SSM Automation, Patch Manager, and Session Manager unsupported; composite alarms unsupported |
 | **DevOps Engineer – Professional** | Medium. CloudFormation, ECS, EKS, and EventBridge. | Blue/green and canary deployments (Lambda aliases are verified), CodePipeline, StackSets, drift, event-driven remediation | Pipeline execution depth unverified |
 | **Solutions Architect – Professional** (training vendors report SAP-C02's last day as 2026-11-16 with a successor to follow; not confirmed on aws.amazon.com) | Builds on the SAA track. | Multi-account network hub (TGW), cross-account roles at scale, DR across Regions, migration with DMS | Hybrid networking and real multi-Region behavior are mostly concept |
@@ -450,7 +522,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 
 ---
 
-## 8. Keeping this current
+## 9. Keeping this current
 
 - **When AWS revises a guide,** update `EXAM_GUIDES`. The "no orphan objective" test then flags labs tagged with removed task IDs.
 - **When Floci upgrades,** rerun the probe for anything marked control plane, unsupported, or inconclusive in §4. Several topics, especially SCP and KMS key-policy enforcement, S3 replication, and NAT egress, would move labs from "configuration only" to "prove it works."
