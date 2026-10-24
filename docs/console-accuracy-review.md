@@ -1056,6 +1056,27 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run over the lefto
 
 `check_labs --service dynamodb --lab capacity-at-scale` passed on 2.3.0.
 
+## Lambda performance and cost lab (2026-10-24)
+
+`lambda/performance-cost` (SAA 3.2, 4.2), 8 steps, in `dashboard/labs/lambda_performance_labs.py` (delegated from
+`lambda_labs.py`, so it sits in the Lambda batch). It covers Wave 2 item W2-4: function `lab-price-quote` (role
+`lab-price-quote-role`) with a CPU-bound pricing loop, a memory sweep over 128, 512, 1,024 and 1,769 MB with a cost per
+million requests, version 1 (standard pricing) and version 2 (volume discount), alias `live` with a 20% canary,
+reserved concurrency of 5 tested with 8 simultaneous calls, an AWS_IAM function URL on the alias, and promotion to
+version 2.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Memory | The configured size reaches the function (`context.memory_limit_in_mb`), but CPU doesn't scale with it: the loop took about 40 ms at every size. No `LogResult` tail is returned. | The sweep reports flat durations and picks the smallest size under the target |
+| Versions and aliases | Real: versions keep their memory and environment, and weighted routing sends about the configured share to the extra version (10 of 50 at 20%). `UpdateAlias` never clears `AdditionalVersionWeights`, even with an empty map. | Promotion ignores a leftover weight on the primary version and says AWS clears it; re-pointing the alias at version 1 recreates it |
+| Reserved concurrency | Enforced: with 5 reserved, 5 of 8 simultaneous calls ran and 3 got TooManyRequestsException. A reservation of 0 throttles every call. | The step counts the throttles |
+| Provisioned concurrency | `PutProvisionedConcurrencyConfig` is routed to the S3 handler (AuthorizationHeaderMalformed, "This endpoint belongs to s3"). | Explained, not configured |
+| Function URLs | Served at `<id>.lambda-url.<region>.floci:4566`. Calling Floci's endpoint with that Host header invokes the alias with a version 2.0 HTTP event. AWS_IAM auth also answers unsigned requests. | The step signs its request, checks the auth type and CORS itself, and reports the unsigned answer |
+
+`check_labs --service lambda --lab performance-cost` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
