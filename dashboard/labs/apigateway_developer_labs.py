@@ -989,7 +989,7 @@ def step_api_key_usage_plan() -> dict[str, Any]:
         message += (', and read the plan back with only its name, so the step checked the plan it sent.'
                     if not any(stored.get(name) for name in ('apiStages', 'throttle', 'quota')) else '.')
     elif all(status == 429 for status in over_quota):
-        message += f' Calls past the quota got 429, as on AWS.'
+        message += ' Calls past the quota got 429, as on AWS.'
     _marker('api-key-usage-plan', {'SentPlan': sent_plan, 'message': message})
     verified, check = _check_api_key()
     return _result('api-key-usage-plan', API_KEY_COMMAND, response, verified, message if verified else check, started)
