@@ -179,7 +179,9 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 3.8 | Other categories | ◐ | SQS, SNS, EventBridge labs | SES, CodeBuild and CodePipeline, X-Ray, IoT Core, Amplify, Connect, WorkSpaces |
 | 4.1 | Pricing models | ◐ / 📖 | costexplorer/cost-visibility (On-Demand prices from the Price List API, a Spot request, three-year cost of each purchasing option), pricing-models card | Data transfer pricing (card) |
 | 4.2 | Billing and cost tools | ● | iam/multi-account-guardrails (consolidated billing tiers, CostCenter tag policy), costexplorer/cost-visibility (tag audit, Budgets with actual and forecast alerts, Cost Explorer by service and tag, Cost Anomaly Detection) | Cost allocation tag activation (unsupported in Floci), Pricing Calculator |
-| 4.3 | Support and resources | 📖 | — | Support plans, re:Post, Trusted Advisor, Health, APN |
+| 4.3 | Support and resources | 📖 + quiz | support-resources card, 6-question practice quiz | Support plans, re:Post, Trusted Advisor, Health, APN. Floci has no Support, Trusted Advisor or Health API, so this stays concept-only. |
+
+**Practice quizzes (2026-10-25):** every CLF task statement also has a practice quiz in the study track (Wave C item C-1).
 
 **CLF reading:** more than a third of CLF weight (all of domains 1 and 4 = 36%, plus parts of 2.1, 2.4, and 3.2) is conceptual. The highest-value CLF additions are concept cards plus a few lightweight labs: account hardening, cost tools, and governance services.
 
@@ -326,6 +328,18 @@ A lab can teach configuration and inspection with these, but it must not claim t
 | ✅ W3-5 | **Edge security and throttling** (shipped 2026-10-25 as `wafv2/edge-throttling`, 7 steps, SAA 1.2, 4.4 and 2.2, CLF 2.4; API keys are enforced, while WAF never blocks and usage plans drop throttle and quota, so the lab evaluates the web ACL and a token bucket itself): WAF rate-based rule on the ALB or API, API Gateway REST usage plan, API key, throttling | ~7 | 1.2, 2.2, 4.4 | 2.4 | ⚠️ (check whether WAF and usage-plan limits are enforced) |
 | ✅ W3-6 | **Cost visibility** (shipped 2026-10-25 as `costexplorer/cost-visibility`, 7 steps, SAA 4.2 and 4.1, CLF 4.2 and 4.1; budgets, monitors and Spot requests are stored, while spend is synthetic and alerts, forecasts, anomalies and RI or Savings Plans offerings are missing, so the lab evaluates them from sample spend): Budgets with an alert, Cost Explorer query, tag strategy, Pricing API lookup, Spot request | ~6 | 4.x | 4.1, 4.2 | ⚠️ Synthetic data |
 | ✅ W3-7 | **Purchasing options exam lens** (shipped 2026-10-25: the `pricing-models` card now covers Compute vs EC2 Instance Savings Plans, Standard vs Convertible RIs, payment options, Dedicated Hosts vs Instances and Capacity Reservations, and the cost-visibility lab ends with a purchasing option per workload): On-Demand, RI, Savings Plans, Spot, Dedicated Hosts and Instances | — | 4.2 | 4.1 | 📖 Concept card |
+
+### Wave C: close out Cloud Practitioner (CLF-C02)
+
+Started 2026-10-25. Before Wave C, labs covered 13 of the 19 CLF task statements; 1.1, 1.2, 1.3, 1.4, 2.1 and 4.3 had concept cards only. A probe of Floci 2.3.0 found DMS (replication instances, endpoints, tasks that start and stop, endpoints protected while in use), DataSync (agents, locations, tasks; executions unsupported), the Pricing Calculator (workload estimates only, total cost 0), Service Quotas (list and increase requests) and Elastic Beanstalk (environments go Ready and Green at once) as control planes. There is no Support, Trusted Advisor, Health, Well-Architected Tool, Storage Gateway or Application Migration Service, and SSM patch baselines and maintenance windows can't be created. So 4.3 stays concept-only with a quiz.
+
+| # | Item | Steps | SAA | CLF | Floci |
+|---|---|---|---|---|---|
+| ✅ C-1 | **Practice quizzes** (shipped 2026-10-25 in `dashboard/labs/quizzes.py`): 76 exam-style questions, 3 to 6 for every CLF task statement, with explanations, a best score per task in the browser, and a "quizzes passed" count in the track header | — | — | all 19 | — |
+| C-2 | **Shared responsibility tour**: the same app on EC2, RDS, Lambda and S3, with who patches, encrypts and controls access on each | ~7 | 1.1 | 2.1 | ⚠️ Patching control plane only |
+| C-3 | **Migration toolkit**: 7 Rs portfolio, DataSync NFS to S3, DMS full load and CDC with cutover, Beanstalk replatform | ~7 | 4.3 | 1.3, 3.4 | ⚠️ Control plane |
+| C-4 | **Well-Architected review**: deploy a CloudFormation workload, review it pillar by pillar, fix it with a change set, review again | ~7 | 2.2 | 1.2, 1.1 | ✅ / ⚠️ |
+| C-5 | **Cloud economics**: on-premises TCO vs pay as you go, elasticity, rightsizing from metrics, Pricing Calculator, Lightsail bundles, Service Quotas | ~7 | 4.2 | 1.4, 1.1 | ⚠️ Synthetic prices |
 
 ### Small extensions to existing labs (quick wins)
 

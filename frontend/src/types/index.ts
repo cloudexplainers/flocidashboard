@@ -87,11 +87,20 @@ export interface ExamTaskLab {
   primary: boolean;
 }
 
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  /** Indexes of the correct options; more than one makes it a "choose N" question. */
+  answers: number[];
+  explanation: string;
+}
+
 export interface ExamTask {
   id: string;
   title: string;
   labs: ExamTaskLab[];
   concepts: string[];
+  quiz?: QuizQuestion[];
 }
 
 export interface ExamDomain {

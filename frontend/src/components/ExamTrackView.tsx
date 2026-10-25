@@ -11,6 +11,7 @@ import StatusIndicator from '@cloudscape-design/components/status-indicator';
 import { ConceptCard, ExamDomain, ExamTrack, LabExamTag } from '../types';
 import { getCurriculumItem } from '../labCurriculum';
 import { LabCompletionMap } from '../labCompletion';
+import { PracticeQuiz, quizPassed, useQuizScores } from './PracticeQuiz';
 
 /** "SAA-C03" + "2.1" -> "SAA 2.1" */
 export function examTagLabel(tag: Pick<LabExamTag, 'exam' | 'task'>): string {
@@ -110,6 +111,9 @@ const ConceptCardView: React.FC<{
 
 export const ExamTrackView: React.FC<ExamTrackViewProps> = ({ exam, concepts, completed, onOpenLab }) => {
   const progress = examProgress(exam, completed);
+  const quizScores = useQuizScores();
+  const quizTasks = exam.domains.flatMap((domain) => domain.tasks).filter((task) => (task.quiz?.length ?? 0) > 0);
+  const quizzesPassed = quizTasks.filter((task) => quizPassed(quizScores[`${exam.code}:${task.id}`])).length;
 
   return (
     <SpaceBetween size="m">
@@ -134,6 +138,13 @@ export const ExamTrackView: React.FC<ExamTrackViewProps> = ({ exam, concepts, co
             description={`Completed labs, weighted by each domain's share of the exam. Hands-on labs cover ${progress.tasksWithLabs} of ${progress.taskCount} task statements; the rest have concept cards.`}
             status={progress.weighted === 100 ? 'success' : 'in-progress'}
           />
+          {quizTasks.length > 0 && (
+            <div data-testid={`quiz-progress-${exam.code}`}>
+              <Box variant="small" color="text-body-secondary">
+                Practice quizzes passed: {quizzesPassed} of {quizTasks.length} task statements (70% or better).
+              </Box>
+            </div>
+          )}
         </SpaceBetween>
       </ColumnLayout>
 
@@ -181,6 +192,13 @@ export const ExamTrackView: React.FC<ExamTrackViewProps> = ({ exam, concepts, co
                       .map((card) => (
                         <ConceptCardView key={card.key} card={card} completed={completed} onOpenLab={onOpenLab} />
                       ))}
+                    {task.quiz && task.quiz.length > 0 && (
+                      <PracticeQuiz
+                        quizId={`${exam.code}:${task.id}`}
+                        questions={task.quiz}
+                        best={quizScores[`${exam.code}:${task.id}`]}
+                      />
+                    )}
                   </SpaceBetween>
                 </div>
               ))}

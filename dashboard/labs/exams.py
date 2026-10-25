@@ -587,7 +587,9 @@ def tags_for_lab(service: str, key: str) -> list[dict[str, Any]]:
 
 
 def exam_tracks(labs: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return each exam guide with the labs and concept cards attached to every task."""
+    """Return each exam guide with the labs, concept cards, and practice quiz attached to every task."""
+    from .quizzes import quiz_for_task
+
     exams = []
     for code, guide in EXAM_GUIDES.items():
         domains = []
@@ -601,7 +603,7 @@ def exam_tracks(labs: list[dict[str, Any]]) -> dict[str, Any]:
                     if tag['exam'] == code and tag['task'] == task['id']
                 ]
                 concepts = [card['key'] for card in CONCEPT_CARDS if (code, task['id']) in card['exams']]
-                tasks.append({**task, 'labs': task_labs, 'concepts': concepts})
+                tasks.append({**task, 'labs': task_labs, 'concepts': concepts, 'quiz': quiz_for_task(code, task['id'])})
             domains.append({**{k: v for k, v in domain.items() if k != 'tasks'}, 'tasks': tasks})
         exams.append({**{k: v for k, v in guide.items() if k != 'domains'}, 'domains': domains})
     concepts = [
