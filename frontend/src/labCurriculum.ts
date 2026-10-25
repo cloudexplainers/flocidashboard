@@ -174,10 +174,11 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'Account hardening, multi-account guardrails, audit and compliance, network scale-out, edge security, and cost visibility',
     badge: 'Architect',
     color: 'grey',
-    description: 'Run AWS the way a platform team does: harden an account with a password policy, MFA that is required before anything else works, a permissions boundary on a delegated developer, an external-access review, a credential report audit, and a root user check. Then grow into many accounts with AWS Organizations: OUs for security and workloads, member accounts, SCP guardrails evaluated through the OU tree, a CostCenter tag policy, and a delegated security administrator on one consolidated bill.',
+    description: 'Run AWS the way a platform team does: harden an account with a password policy, MFA that is required before anything else works, a permissions boundary on a delegated developer, an external-access review, a credential report audit, and a root user check. Then grow into many accounts with AWS Organizations: OUs for security and workloads, member accounts, SCP guardrails evaluated through the OU tree, a CostCenter tag policy, and a delegated security administrator on one consolidated bill. Then audit it: a CloudTrail trail with S3 data events, AWS Config checking bucket versioning, GuardDuty and Security Hub alerts routed through EventBridge, and a chooser for which service answers which question.',
     labs: [
       { service: 'iam', key: 'account-hardening', title: 'Harden an AWS account with a password policy, MFA, permissions boundaries, and access reviews', stepCount: 7 },
       { service: 'iam', key: 'multi-account-guardrails', title: 'Govern multiple accounts with AWS Organizations, OUs, SCP guardrails, and tag policies', stepCount: 7 },
+      { service: 'cloudtrail', key: 'governance-tour', title: 'Audit and secure an account with CloudTrail, Config, GuardDuty, and Security Hub', stepCount: 8 },
     ],
   },
 ];

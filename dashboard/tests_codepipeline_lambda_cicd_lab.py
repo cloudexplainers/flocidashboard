@@ -412,7 +412,7 @@ class LambdaCicdLabTests(SimpleTestCase):
         self.assertIn(('DVA-C02', '4.1'), tasks)
         primary = [tag for tag in LAB_EXAM_TAGS[(SERVICE, LAB)] if tag['exam'] == 'DVA-C02' and tag['primary']]
         self.assertEqual(primary[0]['task'], '3.4')
-        self.assertEqual(LAB_BATCH_ORDER[-1]['service'], SERVICE)
+        self.assertIn(SERVICE, [batch['service'] for batch in LAB_BATCH_ORDER])
 
     def test_every_step_says_how_floci_emulates_it(self):
         for step in lab.LAB['steps']:

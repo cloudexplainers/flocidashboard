@@ -1333,6 +1333,29 @@ organization):
 
 `check_labs --service iam --lab multi-account-guardrails` passed on 2.3.0.
 
+## Governance tour lab (2026-10-25)
+
+`cloudtrail/governance-tour` (SAA 1.3, 1.2; CLF 2.2, 2.4), 8 steps, in `dashboard/labs/cloudtrail_labs.py` (a new
+lab service, Level 7, Wave 3 item W3-3). It creates the audit bucket `lab-governance-trail-logs` (Block Public
+Access, versioning, a policy that lets only CloudTrail scoped to `lab-governance-trail` and Config write, HTTPS only),
+the multi-Region trail `lab-governance-trail` with log file validation and S3 data events for
+`lab-governance-payroll`, a Config recorder with role `lab-governance-config-role` and the managed rule
+`lab-governance-s3-versioning`, a GuardDuty detector with the EventBridge rule `lab-governance-guardduty-high`
+(severity 7 and up) and Security Hub with `lab-governance-securityhub-critical` (new CRITICAL and HIGH findings),
+both sending to the topic `lab-governance-alerts`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| CloudTrail | Trail, logging status and event selectors are stored; the bucket policy isn't checked, no log files arrive, and `LookupEvents` is empty. | The step checks the bucket policy itself and says nothing can be audited |
+| Config | Recorder, delivery channel and rule are stored; only one recorder per Region. The rule stays `INSUFFICIENT_DATA` and `ListDiscoveredResources` is unsupported. | The step evaluates bucket versioning itself (one compliant, one not) and reuses an existing recorder |
+| GuardDuty | Detector create, get and list work; sample findings and filters are misrouted. | The step matches four sample findings against the rule itself |
+| EventBridge numeric matching | Unsupported in `TestEventPattern` and delivery. | The lab's matcher handles numeric ranges and arrays |
+| Security Hub | Enable and describe work; standards and findings are misrouted, and `DisableSecurityHub` is misrouted to S3, so the hub stays on after reset. | The step checks its own EventBridge rule too, so status drops after reset |
+
+`check_labs --service cloudtrail --lab governance-tour` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
