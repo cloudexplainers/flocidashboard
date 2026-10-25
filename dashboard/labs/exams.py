@@ -296,6 +296,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('wafv2', 'edge-throttling'): _tags(clf='2.4', saa='1.2 4.4 2.2', dva='2.1'),
     ('costexplorer', 'cost-visibility'): _tags(clf='4.2 4.1', saa='4.2 4.1'),
     ('ec2', 'shared-responsibility'): _tags(clf='2.1 3.3 3.4 3.6', saa='1.1'),
+    ('dms', 'migration-toolkit'): _tags(clf='1.3 3.4 3.6', saa='4.3 3.5'),
 }
 
 
@@ -342,7 +343,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'AWS DMS migrates databases with minimal downtime; AWS SCT converts schemas between different engines.',
             'Snow Family devices and DataSync move large data sets when network transfer is too slow.',
         ],
-        'related_labs': [],
+        'related_labs': [('dms', 'migration-toolkit')],
         'planned': None,
     },
     {

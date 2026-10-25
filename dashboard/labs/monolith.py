@@ -112,6 +112,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'costexplorer':
         from .costexplorer_labs import LABS
         return LABS
+    if service_key == 'dms':
+        from .dms_labs import LABS
+        return LABS
     return []
 
 
@@ -265,6 +268,11 @@ LAB_BATCH_ORDER = [
         'service': 'costexplorer',
         'title': 'Cost visibility lab',
         'summary': 'Finish the learning path by controlling cost: cost allocation tags, AWS Budgets with actual and forecast alerts, Cost Explorer by service and tag, Cost Anomaly Detection, Price List lookups, a Spot request, and a purchasing option for each workload.',
+    },
+    {
+        'service': 'dms',
+        'title': 'Migration lab',
+        'summary': 'Plan and run a migration: a portfolio sorted into the 7 Rs with the CAF perspectives, DataSync for a file share (and when Snowball wins), a DMS full load with change data capture and cutover, and a replatform onto Elastic Beanstalk.',
     },
 ]
 
@@ -567,6 +575,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'costexplorer':
         from .costexplorer_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'dms':
+        from .dms_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -677,6 +688,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'costexplorer':
         from .costexplorer_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'dms':
+        from .dms_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -793,6 +807,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'costexplorer':
         from .costexplorer_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'dms':
+        from .dms_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
