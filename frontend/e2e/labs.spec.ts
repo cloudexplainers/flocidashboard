@@ -79,7 +79,8 @@ test('SAA study track groups labs by domain and opens labs from tasks', async ({
   const databaseCost = page.getByTestId('exam-task-SAA-C03-4.3');
   await expect(databaseCost.getByRole('button', { name: 'Run DynamoDB at scale with capacity planning, auto scaling, TTL, streams, and global tables' })).toBeVisible();
   await databaseCost.getByText('Concept: Billing, budgets, and cost management tools').click();
-  await expect(databaseCost.getByText(/Planned lab: W3-6/)).toBeVisible();
+  await expect(databaseCost.getByRole('button', { name: /Track and control AWS costs with tags/ }).first()).toBeVisible();
+  await expect(databaseCost.getByText(/Planned lab:/)).toHaveCount(0);
 
   const secureAccess = page.getByTestId('exam-task-SAA-C03-1.1');
   await secureAccess.getByRole('button', { name: 'Create a role with a trust policy' }).click();
@@ -200,7 +201,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
   await page.goto('/labs/?service=iam&lab=create-user-alice');
   await page.getByRole('button', { name: /Next: #3\./ }).click();
   release();
-  await expect(page.getByText('Lesson #3 of 90', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #3 of 91', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
   await expect(page.getByRole('button', { name: '▶ Run all remaining steps', exact: true })).toBeEnabled();
 });
@@ -219,7 +220,7 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('button', { name: /Next: #2\./ }).click();
   release();
-  await expect(page.getByText('Lesson #2 of 90', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #2 of 91', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);

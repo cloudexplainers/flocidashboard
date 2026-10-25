@@ -1399,6 +1399,28 @@ Checked live on a throwaway Floci 2.3.0 (a full run, two more runs without reset
 
 `check_labs --service wafv2 --lab edge-throttling` passed on 2.3.0.
 
+## Cost visibility lab (2026-10-25)
+
+`costexplorer/cost-visibility` (SAA 4.2, 4.1; CLF 4.2, 4.1), 7 steps, in `dashboard/labs/costexplorer_labs.py` (a new
+lab service, Level 7, Wave 3 items W3-6 and W3-7). It creates buckets `lab-cost-platform-artifacts` and
+`lab-cost-analytics-raw` and the queue `lab-cost-orphan-jobs` (tagged by CostCenter and Environment), the topic
+`lab-cost-alerts`, budgets `lab-cost-platform-monthly` and `lab-cost-ri-utilization`, the custom anomaly monitor
+`lab-cost-platform-monitor` with subscription `lab-cost-anomaly-alerts`, and two one-time Spot requests that it
+cancels at once (terminating their instances).
+
+Checked live on a throwaway Floci 2.3.0 (a full run, two more runs without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Tags | Resource tags and the Resource Groups Tagging API work (`TagResources` on S3 is not reflected in bucket tagging); cost allocation tag activation is unsupported. | Records the activation call |
+| Budgets | Budgets, notifications, subscribers and actions are stored; actual spend stays $0 and nothing alerts. | Evaluates alerts against sample spend |
+| Cost Explorer | `GetCostAndUsage` returns synthetic near-zero amounts by service and tag; forecasts, rightsizing, cost categories and recommendations are unsupported. | Forecasts from sample daily spend |
+| Anomaly detection | Monitors and subscriptions are stored (one SERVICE monitor per account, as in AWS); `GetAnomalies` is unsupported. | Uses a custom tag monitor and finds the spike itself |
+| Pricing | `GetProducts` serves On-Demand prices for common instance types (no Reserved terms); RI offerings and Savings Plans are unsupported. | Uses typical discounts for the purchasing options |
+| Spot | Price history is synthetic; every request is fulfilled at once, even below the market. | Cancels and terminates straight away and says so |
+
+`check_labs --service costexplorer --lab cost-visibility` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
