@@ -291,6 +291,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     # Level 7
     ('iam', 'account-hardening'): _tags(clf='2.3 2.2', saa='1.1', dva='2.1'),
     ('iam', 'multi-account-guardrails'): _tags(clf='4.2 2.2', saa='1.1'),
+    ('cloudtrail', 'governance-tour'): _tags(clf='2.2 2.4', saa='1.3 1.2'),
 }
 
 
@@ -374,8 +375,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'AWS Artifact provides AWS compliance reports and agreements.',
             'Encryption at rest (KMS) and in transit (TLS certificates from ACM) protect data.',
         ],
-        'related_labs': [('cloudwatch', 'metric-alarms'), ('kms', 'key-alias-encrypt-decrypt'), ('kms', 'key-management')],
-        'planned': 'W3-3 Governance services tour',
+        'related_labs': [('cloudtrail', 'governance-tour'), ('cloudwatch', 'metric-alarms'), ('kms', 'key-alias-encrypt-decrypt'), ('kms', 'key-management')],
+        'planned': None,
     },
     {
         'key': 'security-services',
@@ -387,8 +388,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Trusted Advisor checks for security and cost best practices. Third-party security products are available in AWS Marketplace.',
             'Security information lives in the AWS Security Center, Security Blog, and Knowledge Center.',
         ],
-        'related_labs': [],
-        'planned': 'W3-3 Governance services tour; W3-5 Edge security and throttling',
+        'related_labs': [('cloudtrail', 'governance-tour')],
+        'planned': 'W3-5 Edge security and throttling',
     },
     {
         'key': 'global-infrastructure',
