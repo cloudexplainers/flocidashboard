@@ -290,6 +290,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('cloudwatch', 'serverless-observability'): _tags(clf='2.2', saa='2.2', dva='4.2 4.1'),
     # Level 7
     ('iam', 'account-hardening'): _tags(clf='2.3 2.2', saa='1.1', dva='2.1'),
+    ('iam', 'multi-account-guardrails'): _tags(clf='4.2 2.2', saa='1.1'),
 }
 
 
@@ -464,7 +465,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'AWS Organizations consolidated billing gives one bill, combined volume discounts, and shared RI and Savings Plans benefits.',
             'Cost allocation tags (AWS-generated or user-defined) must be activated before they appear in billing reports such as the Cost and Usage Report.',
         ],
-        'related_labs': [('sqs', 'queue-configuration')],
+        'related_labs': [('sqs', 'queue-configuration'), ('iam', 'multi-account-guardrails')],
         'planned': 'W3-6 Cost visibility',
     },
     {

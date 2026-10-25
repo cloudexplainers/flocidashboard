@@ -11,6 +11,7 @@ from django.core.cache import cache
 
 from dashboard.aws import _clean_response
 from . import iam_account_hardening_labs as account_hardening
+from . import iam_organizations_labs as multi_account
 from .monolith import (
     AWS_ACCOUNT_ID,
     _error_code,
@@ -2516,10 +2517,15 @@ LABS = [
     IAM_INSTANCE_PROFILE_LAB,
     IAM_ENFORCEMENT_CAPSTONE_LAB,
     account_hardening.LAB,
+    multi_account.LAB,
 ]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'iam' and lab_key == 'multi-account-guardrails':
+        from .iam_organizations_labs import run_step as organizations_run_step
+        return organizations_run_step(step_key)
+
     if service_key == 'iam' and lab_key == 'account-hardening':
         from .iam_account_hardening_labs import run_step as hardening_run_step
         return hardening_run_step(step_key)
@@ -2635,6 +2641,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'iam' and lab_key == 'multi-account-guardrails':
+        from .iam_organizations_labs import status as organizations_status
+        return organizations_status()
+
     if service_key == 'iam' and lab_key == 'account-hardening':
         from .iam_account_hardening_labs import status as hardening_status
         return hardening_status()
@@ -2938,6 +2948,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'iam' and lab_key == 'multi-account-guardrails':
+        from .iam_organizations_labs import reset as organizations_reset
+        return organizations_reset()
+
     if service_key == 'iam' and lab_key == 'account-hardening':
         from .iam_account_hardening_labs import reset as hardening_reset
         return hardening_reset()
