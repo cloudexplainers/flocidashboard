@@ -298,6 +298,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ec2', 'shared-responsibility'): _tags(clf='2.1 3.3 3.4 3.6', saa='1.1'),
     ('dms', 'migration-toolkit'): _tags(clf='1.3 3.4 3.6', saa='4.3 3.5'),
     ('cloudformation', 'well-architected-review'): _tags(clf='1.2 1.1 3.1', saa='2.2 2.1'),
+    ('pricing', 'cloud-economics'): _tags(clf='1.4 1.1 4.1', saa='4.2'),
 }
 
 
@@ -357,7 +358,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Rightsizing matches instance type and size to actual use.',
             'Automation (infrastructure as code, scaling) reduces manual effort and errors.',
         ],
-        'related_labs': [('cloudformation', 's3-sqs-stack')],
+        'related_labs': [('pricing', 'cloud-economics'), ('cloudformation', 's3-sqs-stack')],
         'planned': None,
     },
     {

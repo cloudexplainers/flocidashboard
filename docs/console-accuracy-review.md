@@ -1483,6 +1483,28 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service cloudformation --lab well-architected-review` passed on 2.3.0.
 
+## Cloud economics lab (2026-10-25)
+
+`pricing/cloud-economics` (CLF 1.4, 1.1, 4.1; SAA 4.2), 7 steps, in `dashboard/labs/pricing_labs.py` (a new lab
+service registered in `monolith.py`, the last lab of Level 8, Wave C item C-5). It creates the Pricing Calculator
+estimate `lab-econ-orders-platform`, the launch template `lab-econ-web` and Auto Scaling group `lab-econ-web-asg`,
+CloudWatch metrics in `Lab/Economics` for `reports-01`, and a Dedicated Host tagged `lab-econ-byol-host`, which it
+releases in the same step.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Price List | `GetProducts` returns On-Demand prices for t3.micro, m5.large and c5.large only. | Other sizes use typical list prices, labeled as such |
+| Pricing Calculator | Workload estimates are stored; usage lines are rejected and the total stays $0. | Prices the estimate itself |
+| Auto Scaling | Desired capacity 1 to 2 and back launches and terminates real instances (about 50 s round trip). | Real elastic capacity |
+| CloudWatch | `PutMetricData` with back-dated points and daily `GetMetricStatistics` work; requests with about 100 or more points fail with SerializationException. | Sends 20 points per call |
+| Compute Optimizer | Not emulated. | Recommends the size from the metrics |
+| Dedicated Hosts | m5.large hosts allocate with 2 sockets and 48 cores and release cleanly. | Real host capacity for the BYOL math |
+| Lightsail | `GetBundles` returns prices and transfer allowances. | Real bundle prices |
+
+`check_labs --service pricing --lab cloud-economics` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

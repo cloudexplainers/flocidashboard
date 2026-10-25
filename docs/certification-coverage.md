@@ -161,10 +161,10 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 
 | Task | Topic | Coverage | Covered by | Gap |
 |---|---|---|---|---|
-| 1.1 | Benefits of the AWS Cloud | ◐ | cloudformation/well-architected-review (a full copy created and deleted in seconds, each benefit matched to evidence), cloud-value card | Mostly conceptual |
+| 1.1 | Benefits of the AWS Cloud | ◐ | cloudformation/well-architected-review (a full copy created and deleted in seconds, each benefit matched to evidence), pricing/cloud-economics (economies of scale and trading fixed for variable cost), cloud-value card | Mostly conceptual |
 | 1.2 | Well-Architected pillars | ● | cloudformation/well-architected-review (six-pillar review, change set fixes, failure drill, design principles), well-architected card | Well-Architected Tool (not in Floci) |
 | 1.3 | Migration and the CAF | ● | dms/migration-toolkit (7 Rs portfolio, CAF perspectives, DataSync vs Snowball, DMS full load and CDC, cutover, Beanstalk replatform), migration-caf card | Application Migration Service, Storage Gateway, schema conversion (not in Floci) |
-| 1.4 | Cloud economics | 📖 / ◐ | #66 (automation) | Rightsizing and BYOL are concepts. |
+| 1.4 | Cloud economics | ● | pricing/cloud-economics (three-year TCO against an on-premises rack, elastic Auto Scaling, rightsizing from CPU metrics, BYOL on a Dedicated Host, Lightsail vs EC2), #66 (automation), cloud-economics card | Compute Optimizer (not in Floci) |
 | 2.1 | Shared responsibility | ● | ec2/shared-responsibility (guest OS on EC2, RDS maintenance window, Lambda runtime, S3 data protection, responsibility matrix, shared controls), shared-responsibility card | Patch Manager scans (unsupported in Floci) |
 | 2.2 | Security, governance, compliance | ● | #20, #21, #24, #54, #55, cloudtrail/governance-tour (CloudTrail trail and data events, Config recorder and managed rule, GuardDuty, Security Hub) | Inspector, Shield, Artifact (concept) |
 | 2.3 | Access management | ● | 11 IAM labs, #27, #28, #29, #37, iam/account-hardening (password policy, virtual MFA, deny without MFA, permissions boundary, credential report, root user check) | **IAM Identity Center**, federation |
@@ -177,7 +177,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 3.6 | Storage | ◐ | 13 S3 labs, ec2/block-file-storage (EBS gp3 and io2, EFS), backup/backup-dr-plan (vault, plan, retention) | **Storage classes**, instance store (concept), FSx, Storage Gateway |
 | 3.7 | AI/ML and analytics | ◐ | kinesis/streaming-data-lake (Kinesis, Firehose, Glue, Athena) | SageMaker AI, Lex, Quick (concept) |
 | 3.8 | Other categories | ◐ | SQS, SNS, EventBridge labs | SES, CodeBuild and CodePipeline, X-Ray, IoT Core, Amplify, Connect, WorkSpaces |
-| 4.1 | Pricing models | ◐ / 📖 | costexplorer/cost-visibility (On-Demand prices from the Price List API, a Spot request, three-year cost of each purchasing option), pricing-models card | Data transfer pricing (card) |
+| 4.1 | Pricing models | ◐ / 📖 | costexplorer/cost-visibility (On-Demand prices from the Price List API, a Spot request, three-year cost of each purchasing option), pricing/cloud-economics (Dedicated Host, Lightsail bundles, data transfer out), pricing-models card | Data transfer pricing (card) |
 | 4.2 | Billing and cost tools | ● | iam/multi-account-guardrails (consolidated billing tiers, CostCenter tag policy), costexplorer/cost-visibility (tag audit, Budgets with actual and forecast alerts, Cost Explorer by service and tag, Cost Anomaly Detection) | Cost allocation tag activation (unsupported in Floci), Pricing Calculator |
 | 4.3 | Support and resources | 📖 + quiz | support-resources card, 6-question practice quiz | Support plans, re:Post, Trusted Advisor, Health, APN. Floci has no Support, Trusted Advisor or Health API, so this stays concept-only. |
 
@@ -333,13 +333,15 @@ A lab can teach configuration and inspection with these, but it must not claim t
 
 Started 2026-10-25. Before Wave C, labs covered 13 of the 19 CLF task statements; 1.1, 1.2, 1.3, 1.4, 2.1 and 4.3 had concept cards only. A probe of Floci 2.3.0 found DMS (replication instances, endpoints, tasks that start and stop, endpoints protected while in use), DataSync (agents, locations, tasks; executions unsupported), the Pricing Calculator (workload estimates only, total cost 0), Service Quotas (list and increase requests) and Elastic Beanstalk (environments go Ready and Green at once) as control planes. There is no Support, Trusted Advisor, Health, Well-Architected Tool, Storage Gateway or Application Migration Service, and SSM patch baselines and maintenance windows can't be created. So 4.3 stays concept-only with a quiz.
 
+Wave C finished on 2026-10-25: labs now cover 18 of the 19 CLF task statements, and every task has a practice quiz.
+
 | # | Item | Steps | SAA | CLF | Floci |
 |---|---|---|---|---|---|
 | ✅ C-1 | **Practice quizzes** (shipped 2026-10-25 in `dashboard/labs/quizzes.py`): 76 exam-style questions, 3 to 6 for every CLF task statement, with explanations, a best score per task in the browser, and a "quizzes passed" count in the track header | — | — | all 19 | — |
 | ✅ C-2 | **Shared responsibility tour** (shipped 2026-10-25 as `ec2/shared-responsibility`, 7 steps, CLF 2.1 with 3.3, 3.4 and 3.6, SAA 1.1, in Level 8; the guest OS, Lambda runtime, RDS settings and Block Public Access are real, while patch baselines can't be created and AWS-RunPatchBaseline never runs, so the lab reads the guest OS itself): the same app on EC2, RDS, Lambda and S3, with who patches, encrypts and controls access on each, a responsibility matrix built from what was deployed, and twelve tasks sorted into AWS, customer and shared | 7 | 1.1 | 2.1 | ⚠️ Patching control plane only |
 | ✅ C-3 | **Migration toolkit** (shipped 2026-10-25 as `dms/migration-toolkit`, 7 steps, CLF 1.3 with 3.4 and 3.6, SAA 4.3 and 3.5, a new lab service; DMS, DataSync and Beanstalk are control planes and no data moves, so the lab applies the table mappings and compares DataSync with Snowball itself): 7 Rs portfolio with the CAF perspectives, DataSync NFS to S3, DMS full load and CDC with cutover, Beanstalk replatform | 7 | 4.3 | 1.3, 3.4 | ⚠️ Control plane |
 | ✅ C-4 | **Well-Architected review** (shipped 2026-10-25 as `cloudformation/well-architected-review`, 7 steps, CLF 1.2 with 1.1 and 3.1, SAA 2.2 and 2.1; the stacks, change set and SQS redrive are real, and the lab scores the pillars itself because the Well-Architected Tool is not emulated): deploy a CloudFormation workload, review it pillar by pillar, fix it with a change set, a failure drill, review again, and a disposable full copy matched to the design principles and cloud benefits | 7 | 2.2 | 1.2, 1.1 | ✅ |
-| C-5 | **Cloud economics**: on-premises TCO vs pay as you go, elasticity, rightsizing from metrics, Pricing Calculator, Lightsail bundles, Service Quotas | ~7 | 4.2 | 1.4, 1.1 | ⚠️ Synthetic prices |
+| ✅ C-5 | **Cloud economics** (shipped 2026-10-25 as `pricing/cloud-economics`, 7 steps, CLF 1.4 with 1.1 and 4.1, SAA 4.2, a new lab service; the Auto Scaling group, metrics, Dedicated Host and Lightsail bundles are real, while the Price List covers three instance types and Pricing Calculator totals stay at $0, so the lab fills in typical list prices and does the math itself): Price List lookups, a Pricing Calculator estimate, on-premises TCO vs pay as you go, elastic capacity, rightsizing from metrics, BYOL on a Dedicated Host, Lightsail vs EC2 | 7 | 4.2 | 1.4, 1.1 | ⚠️ Partial prices |
 
 ### Small extensions to existing labs (quick wins)
 
