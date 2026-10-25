@@ -109,6 +109,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'wafv2':
         from .wafv2_labs import LABS
         return LABS
+    if service_key == 'costexplorer':
+        from .costexplorer_labs import LABS
+        return LABS
     return []
 
 
@@ -257,6 +260,11 @@ LAB_BATCH_ORDER = [
         'service': 'wafv2',
         'title': 'Edge security & throttling lab',
         'summary': 'Protect an API: required API keys with bronze and gold usage plans, a WAF web ACL with IP, geo, rate-based and managed rules on the API stage, an evaluation of sample attacks, and a token-bucket look at what each plan lets through.',
+    },
+    {
+        'service': 'costexplorer',
+        'title': 'Cost visibility lab',
+        'summary': 'Finish the learning path by controlling cost: cost allocation tags, AWS Budgets with actual and forecast alerts, Cost Explorer by service and tag, Cost Anomaly Detection, Price List lookups, a Spot request, and a purchasing option for each workload.',
     },
 ]
 
@@ -556,6 +564,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'wafv2':
         from .wafv2_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'costexplorer':
+        from .costexplorer_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -663,6 +674,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'wafv2':
         from .wafv2_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'costexplorer':
+        from .costexplorer_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -776,6 +790,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'wafv2':
         from .wafv2_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'costexplorer':
+        from .costexplorer_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:

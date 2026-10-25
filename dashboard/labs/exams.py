@@ -294,6 +294,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('cloudtrail', 'governance-tour'): _tags(clf='2.2 2.4', saa='1.3 1.2'),
     ('ec2', 'network-scale-out'): _tags(clf='3.5', saa='3.4 4.4'),
     ('wafv2', 'edge-throttling'): _tags(clf='2.4', saa='1.2 4.4 2.2', dva='2.1'),
+    ('costexplorer', 'cost-visibility'): _tags(clf='4.2 4.1', saa='4.2 4.1'),
 }
 
 
@@ -451,13 +452,15 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
         'exams': [(CLF, '4.1'), (SAA, '4.2')],
         'points': [
             'On-Demand: pay by the second or hour with no commitment.',
-            'Savings Plans and Reserved Instances: commit for 1 or 3 years for a lower rate. RI discounts can be shared across accounts in an AWS Organization.',
+            'Savings Plans commit to a $/hour spend for 1 or 3 years: Compute Savings Plans apply to any instance family, size, Region and OS plus Fargate and Lambda; EC2 Instance Savings Plans give a bigger discount for one family in one Region.',
+            'Reserved Instances commit to one instance configuration for 1 or 3 years. Standard RIs give the deepest discount (up to about 72%) and can be sold on the RI Marketplace; Convertible RIs can be exchanged for another family, OS or tenancy for a smaller discount. Zonal RIs also reserve capacity in one AZ; regional RIs do not.',
+            'Payment options: All Upfront saves the most, then Partial Upfront, then No Upfront. RI and Savings Plans discounts are shared across accounts in an AWS Organization unless sharing is turned off.',
             'Spot Instances: spare capacity at a deep discount, but AWS can reclaim it with a two-minute warning; good for fault-tolerant, flexible jobs.',
-            'Dedicated Hosts (physical servers, useful for per-socket licensing), Dedicated Instances, and Capacity Reservations cover isolation and capacity needs.',
+            'Dedicated Hosts are whole physical servers you control, for per-socket or per-core licenses (BYOL) and host affinity; Dedicated Instances run on hardware dedicated to your account without host visibility. On-Demand Capacity Reservations guarantee capacity in one AZ with no term and can be combined with Savings Plans.',
             'Data transfer into AWS is generally free; transfer out to the internet, between Regions, and between AZs is charged.',
         ],
-        'related_labs': [('ecs', 'fargate-microservice'), ('ec2', 'nat-three-tier'), ('lambda', 'performance-cost')],
-        'planned': 'W3-6 Cost visibility; W3-7 Purchasing options exam lens',
+        'related_labs': [('costexplorer', 'cost-visibility'), ('ecs', 'fargate-microservice'), ('ec2', 'nat-three-tier'), ('lambda', 'performance-cost')],
+        'planned': None,
     },
     {
         'key': 'billing-tools',
@@ -468,8 +471,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'AWS Organizations consolidated billing gives one bill, combined volume discounts, and shared RI and Savings Plans benefits.',
             'Cost allocation tags (AWS-generated or user-defined) must be activated before they appear in billing reports such as the Cost and Usage Report.',
         ],
-        'related_labs': [('sqs', 'queue-configuration'), ('iam', 'multi-account-guardrails')],
-        'planned': 'W3-6 Cost visibility',
+        'related_labs': [('costexplorer', 'cost-visibility'), ('sqs', 'queue-configuration'), ('iam', 'multi-account-guardrails')],
+        'planned': None,
     },
     {
         'key': 'support-resources',
