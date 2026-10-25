@@ -12,6 +12,7 @@ from django.core.cache import cache
 from dashboard.aws import _clean_response
 
 from . import cloudformation_sam_labs as sam_environments
+from . import cloudformation_well_architected_labs as well_architected
 from .monolith import (
     AWS_ACCOUNT_ID,
     AWS_REGION,
@@ -816,10 +817,13 @@ def _reset_cloudformation_s3_sqs() -> dict[str, Any]:
     }
 
 
-LABS = [CLOUDFORMATION_S3_SQS_LAB, sam_environments.LAB]
+LABS = [CLOUDFORMATION_S3_SQS_LAB, sam_environments.LAB, well_architected.LAB]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'cloudformation' and lab_key == 'well-architected-review':
+        from .cloudformation_well_architected_labs import run_step as wa_run_step
+        return wa_run_step(step_key)
     if service_key == 'cloudformation' and lab_key == 'sam-environments':
         from .cloudformation_sam_labs import run_step as sam_run_step
         return sam_run_step(step_key)
@@ -844,6 +848,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'cloudformation' and lab_key == 'well-architected-review':
+        from .cloudformation_well_architected_labs import status as wa_status
+        return wa_status()
     if service_key == 'cloudformation' and lab_key == 'sam-environments':
         from .cloudformation_sam_labs import status as sam_status
         return sam_status()
@@ -982,6 +989,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'cloudformation' and lab_key == 'well-architected-review':
+        from .cloudformation_well_architected_labs import reset as wa_reset
+        return wa_reset()
     if service_key == 'cloudformation' and lab_key == 'sam-environments':
         from .cloudformation_sam_labs import reset as sam_reset
         return sam_reset()

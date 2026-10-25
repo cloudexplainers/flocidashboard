@@ -161,8 +161,8 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 
 | Task | Topic | Coverage | Covered by | Gap |
 |---|---|---|---|---|
-| 1.1 | Benefits of the AWS Cloud | 📖 | — | Concept |
-| 1.2 | Well-Architected pillars | 📖 | — | Concept. Could tag each lab with its primary pillar. |
+| 1.1 | Benefits of the AWS Cloud | ◐ | cloudformation/well-architected-review (a full copy created and deleted in seconds, each benefit matched to evidence), cloud-value card | Mostly conceptual |
+| 1.2 | Well-Architected pillars | ● | cloudformation/well-architected-review (six-pillar review, change set fixes, failure drill, design principles), well-architected card | Well-Architected Tool (not in Floci) |
 | 1.3 | Migration and the CAF | ● | dms/migration-toolkit (7 Rs portfolio, CAF perspectives, DataSync vs Snowball, DMS full load and CDC, cutover, Beanstalk replatform), migration-caf card | Application Migration Service, Storage Gateway, schema conversion (not in Floci) |
 | 1.4 | Cloud economics | 📖 / ◐ | #66 (automation) | Rightsizing and BYOL are concepts. |
 | 2.1 | Shared responsibility | ● | ec2/shared-responsibility (guest OS on EC2, RDS maintenance window, Lambda runtime, S3 data protection, responsibility matrix, shared controls), shared-responsibility card | Patch Manager scans (unsupported in Floci) |
@@ -336,9 +336,9 @@ Started 2026-10-25. Before Wave C, labs covered 13 of the 19 CLF task statements
 | # | Item | Steps | SAA | CLF | Floci |
 |---|---|---|---|---|---|
 | ✅ C-1 | **Practice quizzes** (shipped 2026-10-25 in `dashboard/labs/quizzes.py`): 76 exam-style questions, 3 to 6 for every CLF task statement, with explanations, a best score per task in the browser, and a "quizzes passed" count in the track header | — | — | all 19 | — |
-| ✅ C-2 | **Shared responsibility tour** (shipped 2026-10-25 as `ec2/shared-responsibility`, 7 steps, CLF 2.1 with 3.3, 3.4 and 3.6, SAA 1.1, the first lab of Level 8; the guest OS, Lambda runtime, RDS settings and Block Public Access are real, while patch baselines can't be created and AWS-RunPatchBaseline never runs, so the lab reads the guest OS itself): the same app on EC2, RDS, Lambda and S3, with who patches, encrypts and controls access on each, a responsibility matrix built from what was deployed, and twelve tasks sorted into AWS, customer and shared | 7 | 1.1 | 2.1 | ⚠️ Patching control plane only |
+| ✅ C-2 | **Shared responsibility tour** (shipped 2026-10-25 as `ec2/shared-responsibility`, 7 steps, CLF 2.1 with 3.3, 3.4 and 3.6, SAA 1.1, in Level 8; the guest OS, Lambda runtime, RDS settings and Block Public Access are real, while patch baselines can't be created and AWS-RunPatchBaseline never runs, so the lab reads the guest OS itself): the same app on EC2, RDS, Lambda and S3, with who patches, encrypts and controls access on each, a responsibility matrix built from what was deployed, and twelve tasks sorted into AWS, customer and shared | 7 | 1.1 | 2.1 | ⚠️ Patching control plane only |
 | ✅ C-3 | **Migration toolkit** (shipped 2026-10-25 as `dms/migration-toolkit`, 7 steps, CLF 1.3 with 3.4 and 3.6, SAA 4.3 and 3.5, a new lab service; DMS, DataSync and Beanstalk are control planes and no data moves, so the lab applies the table mappings and compares DataSync with Snowball itself): 7 Rs portfolio with the CAF perspectives, DataSync NFS to S3, DMS full load and CDC with cutover, Beanstalk replatform | 7 | 4.3 | 1.3, 3.4 | ⚠️ Control plane |
-| C-4 | **Well-Architected review**: deploy a CloudFormation workload, review it pillar by pillar, fix it with a change set, review again | ~7 | 2.2 | 1.2, 1.1 | ✅ / ⚠️ |
+| ✅ C-4 | **Well-Architected review** (shipped 2026-10-25 as `cloudformation/well-architected-review`, 7 steps, CLF 1.2 with 1.1 and 3.1, SAA 2.2 and 2.1; the stacks, change set and SQS redrive are real, and the lab scores the pillars itself because the Well-Architected Tool is not emulated): deploy a CloudFormation workload, review it pillar by pillar, fix it with a change set, a failure drill, review again, and a disposable full copy matched to the design principles and cloud benefits | 7 | 2.2 | 1.2, 1.1 | ✅ |
 | C-5 | **Cloud economics**: on-premises TCO vs pay as you go, elasticity, rightsizing from metrics, Pricing Calculator, Lightsail bundles, Service Quotas | ~7 | 4.2 | 1.4, 1.1 | ⚠️ Synthetic prices |
 
 ### Small extensions to existing labs (quick wins)
