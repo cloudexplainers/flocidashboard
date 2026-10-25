@@ -1440,6 +1440,29 @@ Checked live on a throwaway Floci 2.3.0:
 
 `check_labs --service ec2 --lab shared-responsibility` passed on 2.3.0.
 
+## Migration toolkit lab (2026-10-25)
+
+`dms/migration-toolkit` (CLF 1.3, 3.4, 3.6; SAA 4.3, 3.5), 7 steps, in `dashboard/labs/dms_labs.py` (a new lab service,
+Level 8, Wave C item C-3). It creates buckets `lab-mig-portfolio` and `lab-mig-file-landing`, the DataSync agent
+`lab-mig-datacenter-agent` with an NFS and an S3 location and the task `lab-mig-nas-to-s3`, the DMS subnet group
+`lab-mig-dms-subnets`, replication instance `lab-mig-dms-instance`, endpoints `lab-mig-onprem-mysql` and
+`lab-mig-aurora-mysql` and task `lab-mig-orders-full-load-cdc`, and the Beanstalk application `lab-mig-shop-web` with
+environment `lab-mig-shop-web-prod`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| DataSync | Agents (any activation key), NFS and S3 locations and tasks are stored; `StartTaskExecution` is unsupported. | Works out network time against a Snowball |
+| DMS instance | Subnet groups and replication instances are stored; instances are available at once. | Checks class, subnet group and privacy |
+| DMS endpoints | Any engine name is accepted; `TestConnection` and `DescribeConnections` are unsupported. | Checks the engines are a homogeneous pair |
+| DMS task | Tasks start (`running`) and stop (`stopped`), and `resume-processing` works; table statistics and assessments are unsupported and no rows move. | Applies the table mappings itself |
+| Endpoint in use | `DeleteEndpoint` is refused while a task uses the endpoint (`InvalidResourceStateFault`), as on AWS. | Shows the refusal at cutover |
+| Elastic Beanstalk | Applications and environments are stored and go Ready and Green at once; no instances run. A terminated environment's name is never freed. | Adds a number to the name after a reset |
+| Other | Storage Gateway and Application Migration Service are absent; DMS Schema Conversion projects are unsupported. | Concept card |
+
+`check_labs --service dms --lab migration-toolkit` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

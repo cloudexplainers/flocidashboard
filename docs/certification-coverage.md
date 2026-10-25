@@ -163,7 +163,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 |---|---|---|---|---|
 | 1.1 | Benefits of the AWS Cloud | 📖 | — | Concept |
 | 1.2 | Well-Architected pillars | 📖 | — | Concept. Could tag each lab with its primary pillar. |
-| 1.3 | Migration and the CAF | 📖 | — | Concept. DMS can be labbed lightly (see SAA 4.3). |
+| 1.3 | Migration and the CAF | ● | dms/migration-toolkit (7 Rs portfolio, CAF perspectives, DataSync vs Snowball, DMS full load and CDC, cutover, Beanstalk replatform), migration-caf card | Application Migration Service, Storage Gateway, schema conversion (not in Floci) |
 | 1.4 | Cloud economics | 📖 / ◐ | #66 (automation) | Rightsizing and BYOL are concepts. |
 | 2.1 | Shared responsibility | ● | ec2/shared-responsibility (guest OS on EC2, RDS maintenance window, Lambda runtime, S3 data protection, responsibility matrix, shared controls), shared-responsibility card | Patch Manager scans (unsupported in Floci) |
 | 2.2 | Security, governance, compliance | ● | #20, #21, #24, #54, #55, cloudtrail/governance-tour (CloudTrail trail and data events, Config recorder and managed rule, GuardDuty, Security Hub) | Inspector, Shield, Artifact (concept) |
@@ -337,7 +337,7 @@ Started 2026-10-25. Before Wave C, labs covered 13 of the 19 CLF task statements
 |---|---|---|---|---|---|
 | ✅ C-1 | **Practice quizzes** (shipped 2026-10-25 in `dashboard/labs/quizzes.py`): 76 exam-style questions, 3 to 6 for every CLF task statement, with explanations, a best score per task in the browser, and a "quizzes passed" count in the track header | — | — | all 19 | — |
 | ✅ C-2 | **Shared responsibility tour** (shipped 2026-10-25 as `ec2/shared-responsibility`, 7 steps, CLF 2.1 with 3.3, 3.4 and 3.6, SAA 1.1, the first lab of Level 8; the guest OS, Lambda runtime, RDS settings and Block Public Access are real, while patch baselines can't be created and AWS-RunPatchBaseline never runs, so the lab reads the guest OS itself): the same app on EC2, RDS, Lambda and S3, with who patches, encrypts and controls access on each, a responsibility matrix built from what was deployed, and twelve tasks sorted into AWS, customer and shared | 7 | 1.1 | 2.1 | ⚠️ Patching control plane only |
-| C-3 | **Migration toolkit**: 7 Rs portfolio, DataSync NFS to S3, DMS full load and CDC with cutover, Beanstalk replatform | ~7 | 4.3 | 1.3, 3.4 | ⚠️ Control plane |
+| ✅ C-3 | **Migration toolkit** (shipped 2026-10-25 as `dms/migration-toolkit`, 7 steps, CLF 1.3 with 3.4 and 3.6, SAA 4.3 and 3.5, a new lab service; DMS, DataSync and Beanstalk are control planes and no data moves, so the lab applies the table mappings and compares DataSync with Snowball itself): 7 Rs portfolio with the CAF perspectives, DataSync NFS to S3, DMS full load and CDC with cutover, Beanstalk replatform | 7 | 4.3 | 1.3, 3.4 | ⚠️ Control plane |
 | C-4 | **Well-Architected review**: deploy a CloudFormation workload, review it pillar by pillar, fix it with a change set, review again | ~7 | 2.2 | 1.2, 1.1 | ✅ / ⚠️ |
 | C-5 | **Cloud economics**: on-premises TCO vs pay as you go, elasticity, rightsizing from metrics, Pricing Calculator, Lightsail bundles, Service Quotas | ~7 | 4.2 | 1.4, 1.1 | ⚠️ Synthetic prices |
 

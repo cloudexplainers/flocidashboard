@@ -110,10 +110,10 @@ class SpotCheckTests(SimpleTestCase):
 
 
 class RegistrationTests(SimpleTestCase):
-    def test_lab_is_listed_tagged_and_the_last_batch(self):
+    def test_lab_is_listed_tagged_and_batched(self):
         self.assertEqual([item['key'] for item in labs_for_service('costexplorer')], ['cost-visibility'])
         self.assertIn(('costexplorer', 'cost-visibility'), LAB_EXAM_TAGS)
-        self.assertEqual(LAB_BATCH_ORDER[-1]['service'], 'costexplorer')
+        self.assertIn('costexplorer', [batch['service'] for batch in LAB_BATCH_ORDER])
 
     def test_every_step_says_how_floci_emulates_it(self):
         self.assertEqual(len(lab.STEP_KEYS), 7)
