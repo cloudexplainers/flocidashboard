@@ -297,6 +297,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('costexplorer', 'cost-visibility'): _tags(clf='4.2 4.1', saa='4.2 4.1'),
     ('ec2', 'shared-responsibility'): _tags(clf='2.1 3.3 3.4 3.6', saa='1.1'),
     ('dms', 'migration-toolkit'): _tags(clf='1.3 3.4 3.6', saa='4.3 3.5'),
+    ('cloudformation', 'well-architected-review'): _tags(clf='1.2 1.1 3.1', saa='2.2 2.1'),
 }
 
 
@@ -315,7 +316,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Increase speed and agility: new resources are minutes away, not weeks.',
             'Go global in minutes by deploying to Regions close to users.',
         ],
-        'related_labs': [],
+        'related_labs': [('cloudformation', 'well-architected-review')],
         'planned': None,
     },
     {
@@ -330,7 +331,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Cost optimization: avoid unneeded cost (rightsizing, purchasing options, lifecycle tiering).',
             'Sustainability: minimize the environmental impact of running workloads.',
         ],
-        'related_labs': [('cloudformation', 's3-sqs-stack'), ('s3', 'lifecycle-retention'), ('s3', 'data-protection-tiers')],
+        'related_labs': [('cloudformation', 'well-architected-review'), ('cloudformation', 's3-sqs-stack'), ('s3', 'lifecycle-retention'), ('s3', 'data-protection-tiers')],
         'planned': None,
     },
     {

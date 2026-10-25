@@ -122,7 +122,7 @@ class LabsRegistryAuditTests(SimpleTestCase):
 class LabsPageTests(SimpleTestCase):
     def test_labs_package_facades_preserve_public_api(self):
         self.assertIs(facade_run_lab_step, run_lab_step)
-        self.assertEqual(len(all_labs()), 93)
+        self.assertEqual(len(all_labs()), 94)
         self.assertTrue(labs_for_service('iam'))
         self.assertTrue(issubclass(Lab, dict))
         self.assertTrue(issubclass(LabStep, dict))
@@ -135,7 +135,7 @@ class LabsPageTests(SimpleTestCase):
         response = self.client.get(reverse('dashboard:labs-catalog'))
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["total_labs"], 93)
+        self.assertEqual(data["total_labs"], 94)
         self.assertIn('services', data)
         self.assertIn('labs', data)
         self.assertGreaterEqual(len(data['services']), 20)
@@ -592,7 +592,7 @@ class LabsRunnerTests(SimpleTestCase):
     def test_cloudformation_lab_registry_includes_s3_sqs_stack_workflow(self):
         labs = labs_for_service('cloudformation')
 
-        self.assertEqual([lab['key'] for lab in labs], ['s3-sqs-stack', 'sam-environments'])
+        self.assertEqual([lab['key'] for lab in labs], ['s3-sqs-stack', 'sam-environments', 'well-architected-review'])
         self.assertEqual(labs[0]['key'], 's3-sqs-stack')
         self.assertEqual(
             [step['key'] for step in labs[0]['steps']],

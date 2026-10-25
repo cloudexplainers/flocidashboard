@@ -1424,7 +1424,7 @@ Checked live on a throwaway Floci 2.3.0 (a full run, two more runs without reset
 ## Shared responsibility lab (2026-10-25)
 
 `ec2/shared-responsibility` (CLF 2.1, 3.3, 3.4, 3.6; SAA 1.1), 7 steps, in `dashboard/labs/ec2_shared_responsibility_labs.py`
-(dispatched from `ec2_labs.py`, the first lab of Level 8: Cloud Practitioner Essentials, and Wave C item C-2). It creates the
+(dispatched from `ec2_labs.py`, Level 8: Cloud Practitioner Essentials, Wave C item C-2). It creates the
 security group `lab-srm-web-sg` (HTTPS only) in the default VPC, the instance `lab-srm-web`, the RDS PostgreSQL instance
 `lab-srm-orders-db`, the function `lab-srm-receipts` with role `lab-srm-receipts-role`, and the bucket `lab-srm-customer-data`.
 
@@ -1462,6 +1462,26 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 | Other | Storage Gateway and Application Migration Service are absent; DMS Schema Conversion projects are unsupported. | Concept card |
 
 `check_labs --service dms --lab migration-toolkit` passed on 2.3.0.
+
+## Well-Architected review lab (2026-10-25)
+
+`cloudformation/well-architected-review` (CLF 1.2, 1.1, 3.1; SAA 2.2, 2.1), 7 steps, in
+`dashboard/labs/cloudformation_well_architected_labs.py` (dispatched from `cloudformation_labs.py`, the first lab of
+Level 8, Wave C item C-4). It creates the stack `lab-wa-orders` (bucket `lab-wa-orders-prod-uploads`, queues
+`lab-wa-orders-prod-jobs` and `-jobs-dlq`, topic `lab-wa-orders-prod-alerts`, alarm `lab-wa-orders-prod-jobs-age`),
+the change set `lab-wa-improvements`, and a short-lived copy `lab-wa-orders-test`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Stacks | Create, update and delete finish at once; every resource is real. | Times the disposable copy ("under a second") |
+| Defaults | New buckets report SSE-S3 encryption and Block Public Access, and new queues report SQS-managed encryption, as on AWS today. | The first review passes security |
+| Change sets | Planned with Modify (Replacement False) and Add, executed in place; template settings reach the bucket, queue and alarm. | Checks nothing is replaced |
+| Redrive | A message received 3 times with a zero visibility timeout moves to the dead-letter queue. | Real failure drill |
+| Well-Architected Tool | Not emulated. | Scores the six pillars from the deployed settings |
+
+`check_labs --service cloudformation --lab well-architected-review` passed on 2.3.0.
 
 ## Recommended next work
 
