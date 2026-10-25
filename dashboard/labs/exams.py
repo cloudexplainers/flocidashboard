@@ -292,6 +292,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('iam', 'account-hardening'): _tags(clf='2.3 2.2', saa='1.1', dva='2.1'),
     ('iam', 'multi-account-guardrails'): _tags(clf='4.2 2.2', saa='1.1'),
     ('cloudtrail', 'governance-tour'): _tags(clf='2.2 2.4', saa='1.3 1.2'),
+    ('ec2', 'network-scale-out'): _tags(clf='3.5', saa='3.4 4.4'),
 }
 
 

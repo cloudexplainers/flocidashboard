@@ -11,6 +11,7 @@ from django.core.cache import cache
 
 from dashboard.aws import _clean_response
 from . import ec2_nat_labs as nat_three_tier
+from . import ec2_network_labs as network_scale_out
 from . import ec2_storage_labs as block_file_storage
 from .ec2_guided import GUIDED_EC2_LABS
 from .monolith import (
@@ -2682,6 +2683,7 @@ LABS = [
     EC2_SQS_INTERFACE_ENDPOINT_LAB,
     nat_three_tier.LAB,
     block_file_storage.LAB,
+    network_scale_out.LAB,
     *GUIDED_EC2_LABS,
 ]
 
@@ -2694,6 +2696,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
     if service_key == 'ec2' and lab_key == 'block-file-storage':
         from .ec2_storage_labs import run_step as storage_run_step
         return storage_run_step(step_key)
+
+    if service_key == 'ec2' and lab_key == 'network-scale-out':
+        from .ec2_network_labs import run_step as network_run_step
+        return network_run_step(step_key)
 
     if service_key == 'ec2' and lab_key.startswith('guided-'):
         from .ec2_guided import run_guided_step
@@ -2783,6 +2789,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'ec2' and lab_key == 'block-file-storage':
         from .ec2_storage_labs import status as storage_status
         return storage_status()
+
+    if service_key == 'ec2' and lab_key == 'network-scale-out':
+        from .ec2_network_labs import status as network_status
+        return network_status()
 
     if service_key == 'ec2' and lab_key.startswith('guided-'):
         from .ec2_guided import guided_status
@@ -3131,6 +3141,10 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'ec2' and lab_key == 'block-file-storage':
         from .ec2_storage_labs import reset as storage_reset
         return storage_reset()
+
+    if service_key == 'ec2' and lab_key == 'network-scale-out':
+        from .ec2_network_labs import reset as network_reset
+        return network_reset()
 
     if service_key == 'ec2' and lab_key.startswith('guided-'):
         from .ec2_guided import reset_guided_lab

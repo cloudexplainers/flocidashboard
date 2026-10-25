@@ -1356,6 +1356,28 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service cloudtrail --lab governance-tour` passed on 2.3.0.
 
+## Network scale-out lab (2026-10-25)
+
+`ec2/network-scale-out` (SAA 3.4, 4.4; CLF 3.5), 8 steps, in `dashboard/labs/ec2_network_labs.py` (dispatched from
+`ec2_labs.py`, Level 7, Wave 3 item W3-4). It creates VPCs `lab-scale-shared` (10.40.0.0/16), `lab-scale-app`
+(10.41.0.0/16) and `lab-scale-data` (10.42.0.0/16), each with a subnet and route table, a DNS-enabled peering between
+shared and app, the Transit Gateway `lab-scale-tgw` (default association and propagation off) with three VPC
+attachments and the route tables `lab-scale-shared-rt` and `lab-scale-spokes-rt`, and flow logs from the app VPC to
+`s3://lab-scale-flow-logs/flow/` (ALL, custom format) and `/lab/network-scale-out/flow-rejects` (REJECT, role
+`lab-scale-flow-logs-role`).
+
+Checked live on a throwaway Floci 2.3.0 (a full run, two more runs without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Peering | Request, accept and DNS options work; `RejectVpcPeeringConnection` is unsupported. Overlapping CIDRs are accepted (left pending). | The step detects the overlap and deletes the request |
+| Transitive routes | A route to a third VPC through a peering is accepted. | The step evaluates reachability itself and removes the route |
+| Transit Gateway | Gateway and attachments are available at once; route tables, associations, static and blackhole routes work. Propagated routes never appear. | Static routes, and the step evaluates reachability |
+| VPC routes to a TGW | Stored, but `DescribeRouteTables` drops `TransitGatewayId`, and `ReplaceRoute` refuses a TGW target. | The check accepts the summary route with no target; reruns delete and recreate it |
+| Flow logs | Stored as ACTIVE; a CloudWatch Logs flow log reads back without its log group; no records are written. | The step analyzes six sample records itself |
+
+`check_labs --service ec2 --lab network-scale-out` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
