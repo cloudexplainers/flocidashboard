@@ -625,7 +625,7 @@ export const LabsConsole: React.FC = () => {
         header={
           <Header
             variant="h1"
-            description={`Learn AWS hands-on, from foundations to private networking and platform engineering, across ${LAB_COUNT} lessons in ${LAB_CURRICULUM.length} progressive levels.`}
+            description={`Learn AWS hands-on, from foundations to private networking, developer workflows, governance, and cost, across ${LAB_COUNT} lessons in ${LAB_CURRICULUM.length} progressive levels.`}
             actions={
               <SpaceBetween direction="horizontal" size="xs">
                 <Button

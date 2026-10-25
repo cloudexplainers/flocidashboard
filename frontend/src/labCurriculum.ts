@@ -168,6 +168,17 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'cloudwatch', key: 'serverless-observability', title: 'Instrument a serverless app with structured logs, metric filters, custom metrics, alarms, and dashboards', stepCount: 8 },
     ],
   },
+  {
+    id: 'level-7-governance',
+    title: 'Level 7: Governance, Multi-Account & Cost',
+    subtitle: 'Account hardening, multi-account guardrails, audit and compliance, network scale-out, edge security, and cost visibility',
+    badge: 'Architect',
+    color: 'grey',
+    description: 'Run AWS the way a platform team does: harden an account with a password policy, MFA that is required before anything else works, a permissions boundary on a delegated developer, an external-access review, a credential report audit, and a root user check.',
+    labs: [
+      { service: 'iam', key: 'account-hardening', title: 'Harden an AWS account with a password policy, MFA, permissions boundaries, and access reviews', stepCount: 7 },
+    ],
+  },
 ];
 
 let nextLabId = 1;

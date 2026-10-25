@@ -1282,6 +1282,32 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service cloudwatch` passed for this lab on 2.3.0.
 
+## Account hardening lab (2026-10-25)
+
+`iam/account-hardening` (SAA 1.1; CLF 2.3, 2.2; DVA 2.1), 7 steps, in `dashboard/labs/iam_account_hardening_labs.py`
+(dispatched from `iam_labs.py`, the first lab of Level 7: Governance, Multi-Account & Cost, and Wave 3 item W3-1). It
+sets the account password policy (14 characters, all four character types, 90-day age, 24 remembered), creates
+`lab-hardening-admin` with a console password and the virtual MFA device `lab-hardening-admin-mfa`, puts it in
+`lab-hardening-admins` with the inline policy `lab-hardening-force-mfa`, creates `lab-hardening-dev` with the boundary
+`lab-hardening-dev-boundary` and AdministratorAccess, creates the account analyzer `lab-hardening-account-analyzer`,
+the bucket `lab-hardening-shared-reports` (public read policy) and the role `lab-hardening-partner-role` (trusts
+111122223333), and the user `lab-hardening-legacy` (password and access key, no MFA).
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Password policy | Enforced on CreateLoginProfile (`PasswordPolicyViolation` names what is missing). | The weak password is refused, then a compliant one is set |
+| Virtual MFA | `EnableMFADevice` checks both TOTP codes against the seed (made-up codes get `InvalidAuthenticationCode`). | The step computes RFC 6238 codes from the seed |
+| Deny without MFA | A `BoolIfExists aws:MultiFactorAuthPresent=false` deny is enforced for long-term keys; NotAction exceptions work. | Reported as enforced |
+| MFA sessions | `GetSessionToken` with a serial number never marks the session as MFA-authenticated and accepts any token code, so the MFA session is denied too. | The step records it and explains what AWS does |
+| Permissions boundary | Enforced: AdministratorAccess plus an S3-only boundary allows S3 and denies `iam:CreateUser`. | Reported as enforced |
+| Access Analyzer | Create, get, list and delete analyzers work; `ListFindings`, `ValidatePolicy` and archive rules are misrouted (`AuthorizationHeaderMalformed`). | The step reviews the bucket policy and trust policy itself |
+| Credential report | Real CSV, cached for four hours like AWS (a regenerate returns the old report). | Rows missing from a stale report are built from the IAM APIs |
+| Root user | The account summary reports `AccountAccessKeysPresent` and `AccountMFAEnabled` (0); root MFA can't be enabled. | Checks root has no keys and lists root-only tasks |
+
+`check_labs --service iam --lab account-hardening` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
