@@ -1378,6 +1378,27 @@ Checked live on a throwaway Floci 2.3.0 (a full run, two more runs without reset
 
 `check_labs --service ec2 --lab network-scale-out` passed on 2.3.0.
 
+## Edge security and throttling lab (2026-10-25)
+
+`wafv2/edge-throttling` (SAA 1.2, 4.4, 2.2; CLF 2.4; DVA 2.1), 7 steps, in `dashboard/labs/wafv2_labs.py` (a new lab
+service, Level 7, Wave 3 item W3-5). It creates the REST API `lab-edge-api` (GET /quotes, MOCK, API key required,
+stage `prod` throttled at 50/100), usage plans `lab-edge-bronze` and `lab-edge-gold` with keys, the unplanned key
+`lab-edge-unplanned-key`, the IP set `lab-edge-blocked-ips`, the web ACL `lab-edge-acl` (IP set, geo, rate-based with
+a 429 response, AWSManagedRulesCommonRuleSet and AWSManagedRulesKnownBadInputsRuleSet) logging to
+`aws-waf-logs-lab-edge`, and the association with the prod stage.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, two more runs without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| API keys | Enforced: 403 with no key and with a key that is in no usage plan, 200 with a planned key. | Reported as enforced |
+| Stage throttling | Method settings are stored and read back; not enforced. | Says so |
+| Usage plans | Throttle, quota and API stages are dropped (the plan reads back with its name). | The step keeps what it sent; a token bucket shows the effect |
+| Web ACL | IP sets, ACLs, logging and association are stored; duplicate priorities are accepted; managed rule groups can't be listed. | The step checks the rules itself |
+| WAF enforcement | None: a call from a blocked address gets 200; sampled requests are unsupported. | The step evaluates six sample requests against the ACL |
+
+`check_labs --service wafv2 --lab edge-throttling` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

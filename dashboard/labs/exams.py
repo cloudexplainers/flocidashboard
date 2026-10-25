@@ -293,6 +293,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('iam', 'multi-account-guardrails'): _tags(clf='4.2 2.2', saa='1.1'),
     ('cloudtrail', 'governance-tour'): _tags(clf='2.2 2.4', saa='1.3 1.2'),
     ('ec2', 'network-scale-out'): _tags(clf='3.5', saa='3.4 4.4'),
+    ('wafv2', 'edge-throttling'): _tags(clf='2.4', saa='1.2 4.4 2.2', dva='2.1'),
 }
 
 
@@ -389,8 +390,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Trusted Advisor checks for security and cost best practices. Third-party security products are available in AWS Marketplace.',
             'Security information lives in the AWS Security Center, Security Blog, and Knowledge Center.',
         ],
-        'related_labs': [('cloudtrail', 'governance-tour')],
-        'planned': 'W3-5 Edge security and throttling',
+        'related_labs': [('cloudtrail', 'governance-tour'), ('wafv2', 'edge-throttling')],
+        'planned': None,
     },
     {
         'key': 'global-infrastructure',

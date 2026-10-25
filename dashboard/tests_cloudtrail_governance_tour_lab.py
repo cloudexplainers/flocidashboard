@@ -169,6 +169,6 @@ class RegistrationTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             lab.run_step('cloudtrail', 'governance-tour', 'nope')
 
-    def test_lab_is_the_last_batch(self):
+    def test_lab_has_a_batch(self):
         from .labs.registry import LAB_BATCH_ORDER
-        self.assertEqual(LAB_BATCH_ORDER[-1]['service'], 'cloudtrail')
+        self.assertIn('cloudtrail', [batch['service'] for batch in LAB_BATCH_ORDER])
