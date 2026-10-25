@@ -184,6 +184,17 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'costexplorer', key: 'cost-visibility', title: 'Track and control AWS costs with tags, Budgets, Cost Explorer, and purchasing options', stepCount: 7 },
     ],
   },
+  {
+    id: 'level-8-cloud-practitioner',
+    title: 'Level 8: Cloud Practitioner Essentials',
+    subtitle: 'The shared responsibility model and the cloud concepts behind the Cloud Practitioner exam',
+    badge: 'Foundations',
+    color: 'green',
+    description: 'Turn the concept-heavy parts of the Cloud Practitioner exam into hands-on work: run the pieces of one app on EC2, RDS, Lambda, and S3 and see where AWS\'s job ends and yours begins on each, then build the responsibility matrix from what you deployed and sort common tasks into AWS, customer, and shared.',
+    labs: [
+      { service: 'ec2', key: 'shared-responsibility', title: 'See the shared responsibility model on EC2, RDS, Lambda, and S3', stepCount: 7 },
+    ],
+  },
 ];
 
 let nextLabId = 1;

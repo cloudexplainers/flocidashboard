@@ -1421,6 +1421,25 @@ Checked live on a throwaway Floci 2.3.0 (a full run, two more runs without reset
 
 `check_labs --service costexplorer --lab cost-visibility` passed on 2.3.0.
 
+## Shared responsibility lab (2026-10-25)
+
+`ec2/shared-responsibility` (CLF 2.1, 3.3, 3.4, 3.6; SAA 1.1), 7 steps, in `dashboard/labs/ec2_shared_responsibility_labs.py`
+(dispatched from `ec2_labs.py`, the first lab of Level 8: Cloud Practitioner Essentials, and Wave C item C-2). It creates the
+security group `lab-srm-web-sg` (HTTPS only) in the default VPC, the instance `lab-srm-web`, the RDS PostgreSQL instance
+`lab-srm-orders-db`, the function `lab-srm-receipts` with role `lab-srm-receipts-role`, and the bucket `lab-srm-customer-data`.
+
+Checked live on a throwaway Floci 2.3.0:
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Guest OS | The instance is a real Ubuntu 22.04 container; SSM Run Command reads the OS and package count. | Reports the OS the customer must patch |
+| Patching | `CreatePatchBaseline` and `CreateMaintenanceWindow` are unsupported; `AWS-RunPatchBaseline` is accepted but stays Pending; compliance items are unsupported. | Reports the scan as not run |
+| RDS | A real PostgreSQL container is available at once; maintenance and backup windows, auto minor upgrades, retention, encryption, public access and Multi-AZ are stored and can be modified. No standby runs, and `DescribePendingMaintenanceActions` is unsupported. | Checks the stored choices |
+| Lambda | Runs in the AWS-provided python3.12 image (`AWS_EXECUTION_ENV=AWS_Lambda_python3.12`). | Shows the runtime AWS manages |
+| S3 | Block Public Access, default encryption and a TLS-only bucket policy are stored; Block Public Access is enforced. | Checks all three |
+
+`check_labs --service ec2 --lab shared-responsibility` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

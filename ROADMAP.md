@@ -370,7 +370,7 @@ Why it matters:
 
 ### 7. Workflow Lab Framework
 
-Continue the local AWS workflow lab system beyond the completed foundations: 91 labs across IAM, S3, KMS, SSM, Secrets Manager, Cognito, SQS, SNS, Scheduler, DynamoDB, Kinesis, Lambda, API Gateway, EventBridge, Step Functions, CloudWatch, EC2, RDS, ElastiCache, Elastic Load Balancing with Auto Scaling, Route 53, ECS, EKS, CloudFormation, AWS Backup, CloudFront with Global Accelerator, CI/CD with CodeBuild, CodePipeline, and CodeDeploy, governance with CloudTrail, Config, GuardDuty, and Security Hub, edge security with AWS WAF, and cost visibility with Budgets, Cost Explorer, and Spot.
+Continue the local AWS workflow lab system beyond the completed foundations: 92 labs across IAM, S3, KMS, SSM, Secrets Manager, Cognito, SQS, SNS, Scheduler, DynamoDB, Kinesis, Lambda, API Gateway, EventBridge, Step Functions, CloudWatch, EC2, RDS, ElastiCache, Elastic Load Balancing with Auto Scaling, Route 53, ECS, EKS, CloudFormation, AWS Backup, CloudFront with Global Accelerator, CI/CD with CodeBuild, CodePipeline, and CodeDeploy, governance with CloudTrail, Config, GuardDuty, and Security Hub, edge security with AWS WAF, cost visibility with Budgets, Cost Explorer, and Spot, and the shared responsibility model across EC2, RDS, Lambda, and S3.
 
 Certification study path: [`docs/certification-coverage.md`](./docs/certification-coverage.md) maps every lab to the AWS Cloud Practitioner (CLF-C02), Solutions Architect – Associate (SAA-C03), and Developer – Associate (DVA-C02) exam domains. It also covers gaps, what Floci can emulate, a prioritized plan for new labs, and how exam tags and study tracks could work in the curriculum UI and extend to other certifications.
 
