@@ -10,7 +10,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 
 ## TL;DR
 
-- **The current 85 labs (540 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
+- **The current 86 labs (547 steps) are strong where SAA is strongest:** IAM and identity (SAA 1.1), VPC security and endpoints (SAA 1.2), and decoupled, event-driven design with SQS, SNS, EventBridge, Lambda, Step Functions, and API Gateway (SAA 2.1).
 - **There are big holes in high-weight SAA topics:** load balancing and Auto Scaling, Multi-AZ and read replicas, caching, Route 53 and DR, storage classes and tiering, the data and streaming domain (SAA 3.5), and nearly all of cost optimization (SAA domain 4, 20%).
 - **For CLF, coverage is lopsided.** The labs serve the hands-on parts of domains 2 and 3. Domain 1 (cloud concepts, 24%) and domain 4 (billing and support, 12%) are almost entirely conceptual, so labs can't cover them. Those need "exam lens" concept cards, not labs.
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
@@ -167,7 +167,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 1.4 | Cloud economics | 📖 / ◐ | #66 (automation) | Rightsizing and BYOL are concepts. |
 | 2.1 | Shared responsibility | 📖 / ◐ | EC2 vs RDS vs Lambda labs exist | No lab makes the comparison explicit. Ideal as an exam-lens card on #15, #31, and #34. |
 | 2.2 | Security, governance, compliance | ◐ | #20, #21, #24, #54, #55 | **CloudTrail, Config, GuardDuty, Inspector, Security Hub, Shield, Artifact** |
-| 2.3 | Access management | ● | 11 IAM labs, #27, #28, #29, #37 | Root-user protection, **MFA, password policy, IAM Identity Center**, federation |
+| 2.3 | Access management | ● | 11 IAM labs, #27, #28, #29, #37, iam/account-hardening (password policy, virtual MFA, deny without MFA, permissions boundary, credential report, root user check) | **IAM Identity Center**, federation |
 | 2.4 | Security components and resources | ○ | — | WAF, Shield, Firewall Manager, Trusted Advisor, Marketplace |
 | 3.1 | Deploying and operating | ● | #9, #35, #57, #66 | Console vs CLI vs IaC is already implicit. Make it explicit. |
 | 3.2 | Global infrastructure | ◐ | Subnets pin AZs in #32 and #33, route53/routing-failover (failover and latency routing across Regions), cloudfront/edge-delivery (edge locations, price classes, Global Accelerator across two Regions) | Multi-AZ HA |
@@ -187,7 +187,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 
 | Task | Topic | Coverage | Covered by | Gap |
 |---|---|---|---|---|
-| 1.1 | Secure access | ● | 11 IAM labs, #21, #37 | **Multi-account: Organizations, SCPs, Control Tower**; MFA; IAM Identity Center; directory federation |
+| 1.1 | Secure access | ● | 11 IAM labs, #21, #37, iam/account-hardening (MFA, permissions boundary, Access Analyzer external access) | **Multi-account: Organizations, SCPs, Control Tower**; IAM Identity Center; directory federation |
 | 1.2 | Secure workloads | ● | #27, #28, #29, #32, #33, #38, #62, #63, #64, ec2/nat-three-tier (NAT gateways) | WAF and Shield, GuardDuty and Macie, VPN and Direct Connect |
 | 1.3 | Data security controls | ◐ | #19, #20, #21, #22, #24, #26, s3/data-protection-tiers (Object Lock, CRR config), kms/key-management (key policies, rotation, grants, envelope encryption, SSE-KMS), backup/backup-dr-plan (KMS-encrypted vault, vault lock) | **ACM/TLS**, secret rotation |
 | 2.1 | Scalable, loosely coupled | ● | ~20 labs (SQS, SNS, EventBridge, Lambda, Step Functions, API Gateway, ECS), elasticache/cache-aside (caching) | **Load balancing (ALB), horizontal scaling, CDN, read replicas**, storage types (block vs file) |
@@ -319,7 +319,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 
 | # | Proposed lab | Steps | SAA | CLF | Floci |
 |---|---|---|---|---|---|
-| W3-1 | **Account hardening**: password policy, virtual MFA device, credential report, Access Analyzer, permission boundary (enforced) | ~7 | 1.1 | 2.3 | ✅ / ⚠️ |
+| ✅ W3-1 | **Account hardening** (shipped 2026-10-25 as `iam/account-hardening`, 7 steps, SAA 1.1 and CLF 2.3; the password policy, MFA codes, the deny without MFA and the boundary are enforced, while MFA sessions and analyzer findings are not, so the lab says so and reviews the policies itself): password policy, virtual MFA device, credential report, Access Analyzer, permission boundary (enforced) | ~7 | 1.1 | 2.3 | ✅ / ⚠️ |
 | W3-2 | **Multi-account guardrails**: Organizations, OUs, member account, SCP; exam lens on SCP evaluation, consolidated billing, and Control Tower | ~7 | 1.1 | 4.2 | ⚠️ SCPs not enforced |
 | W3-3 | **Governance services tour**: CloudTrail trail to S3, Config recorder and managed rule, GuardDuty, Security Hub; "which service answers which question" | ~8 | 1.2, 1.3 | 2.2, 2.4 | ⚠️ Control plane |
 | W3-4 | **Network scale-out**: VPC peering vs Transit Gateway, plus VPC flow logs | ~8 | 3.4, 4.4 | 3.5 | ⚠️ Control plane |

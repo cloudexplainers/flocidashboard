@@ -288,6 +288,8 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('cloudformation', 'sam-environments'): _tags(clf='3.1', saa='2.2', dva='3.3 3.1 3.2 1.2'),
     ('lambda', 'async-error-handling'): _tags(clf='3.3', saa='2.1', dva='1.2 2.3 4.1'),
     ('cloudwatch', 'serverless-observability'): _tags(clf='2.2', saa='2.2', dva='4.2 4.1'),
+    # Level 7
+    ('iam', 'account-hardening'): _tags(clf='2.3 2.2', saa='1.1', dva='2.1'),
 }
 
 

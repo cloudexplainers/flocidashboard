@@ -211,6 +211,7 @@ def iam_inventory() -> dict[str, Any]:
             for profile in instance_profiles
         ],
         'notes': [
+            'Password policies, MFA device codes, permissions boundaries, and aws:MultiFactorAuthPresent denies on long-term keys are enforced. Sessions from GetSessionToken never carry MFA, so MFA-only permissions deny them too. The credential report is cached for four hours.',
         ],
     }
 
