@@ -105,3 +105,40 @@ class ExamTracksApiTests(SimpleTestCase):
         catalog = self.client.get(reverse('dashboard:labs-catalog')).json()
         lab = next(item for item in catalog['labs'] if item['service'] == 's3' and item['key'] == 'lifecycle-retention')
         self.assertIn({'exam': 'SAA-C03', 'task': '4.1', 'primary': True}, lab['exams'])
+
+
+class PracticeQuizTests(SimpleTestCase):
+    def test_quiz_questions_are_well_formed(self):
+        from .labs.quizzes import QUIZZES
+
+        for (exam, task), questions in QUIZZES.items():
+            self.assertIn(task, _task_ids(exam))
+            self.assertGreaterEqual(len(questions), 3, f'{exam} {task} needs at least 3 questions')
+            texts = [question['question'] for question in questions]
+            self.assertEqual(len(texts), len(set(texts)))
+            for question in questions:
+                with self.subTest(exam=exam, task=task, question=question['question'][:40]):
+                    options = question['options']
+                    self.assertGreaterEqual(len(options), 4)
+                    self.assertEqual(len(options), len(set(options)))
+                    self.assertTrue(question['answers'])
+                    self.assertEqual(len(question['answers']), len(set(question['answers'])))
+                    for answer in question['answers']:
+                        self.assertIn(answer, range(len(options)))
+                    self.assertTrue(question['explanation'])
+                    if len(question['answers']) > 1:
+                        self.assertIn('(Choose', question['question'])
+
+    def test_every_cloud_practitioner_task_has_a_quiz(self):
+        from .labs.quizzes import QUIZZES
+
+        for task in sorted(_task_ids('CLF-C02')):
+            with self.subTest(task=task):
+                self.assertIn(('CLF-C02', task), QUIZZES)
+
+    def test_exam_tracks_attach_quizzes(self):
+        tracks = exam_tracks(all_labs())
+        clf = next(exam for exam in tracks['exams'] if exam['code'] == 'CLF-C02')
+        tasks = {task['id']: task for domain in clf['domains'] for task in domain['tasks']}
+        self.assertGreaterEqual(len(tasks['4.3']['quiz']), 3)
+        self.assertIn('answers', tasks['4.3']['quiz'][0])

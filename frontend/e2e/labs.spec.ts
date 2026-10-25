@@ -137,6 +137,34 @@ test('study track choice switches views and unknown tracks fall back to levels',
   await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();
 });
 
+test('Cloud Practitioner practice quiz scores answers and remembers the best score', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/labs/?track=CLF-C02');
+  await expect(page.getByTestId('quiz-progress-CLF-C02')).toContainText('0 of 19');
+  await page.getByText('Domain 4: Billing, Pricing, and Support').click();
+  const support = page.getByTestId('exam-task-CLF-C02-4.3');
+  await support.getByText(/^Practice quiz: \d+ questions/).click();
+  const quiz = page.getByTestId('quiz-CLF-C02:4.3');
+  const check = quiz.getByRole('button', { name: 'Check answers' });
+  await expect(check).toBeDisabled();
+  const exams = await (await page.request.get('/api/labs/exams/')).json();
+  const clf = exams.exams.find((exam: any) => exam.code === 'CLF-C02');
+  const questions = clf.domains.flatMap((domain: any) => domain.tasks).find((task: any) => task.id === '4.3').quiz;
+  for (const [index, question] of questions.entries()) {
+    const block = quiz.getByTestId(`quiz-question-${index + 1}`);
+    for (const answer of question.answers) await block.getByText(question.options[answer], { exact: true }).click();
+  }
+  await check.click();
+  await expect(quiz.getByText(`${questions.length} of ${questions.length} correct`)).toBeVisible();
+  await expect(page.getByTestId('quiz-progress-CLF-C02')).toContainText('1 of 19');
+  await quiz.getByRole('button', { name: 'Try again' }).click();
+  await expect(check).toBeDisabled();
+  await page.reload();
+  await expect(page.getByTestId('quiz-progress-CLF-C02')).toContainText('1 of 19');
+  expect(errors).toEqual([]);
+});
+
 test('Run all stops on execution errors and permits retry', async ({ page }) => {
   let calls = 0;
   await page.route('**/api/labs/iam/create-admin-user/steps/*/run/', route => {
