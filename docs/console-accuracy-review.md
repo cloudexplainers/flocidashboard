@@ -1308,6 +1308,31 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service iam --lab account-hardening` passed on 2.3.0.
 
+## Multi-account guardrails lab (2026-10-25)
+
+`iam/multi-account-guardrails` (SAA 1.1; CLF 4.2, 2.2), 7 steps, in `dashboard/labs/iam_organizations_labs.py`
+(dispatched from `iam_labs.py`, Level 7, Wave 3 item W3-2). It creates an organization with all features (or reuses
+one; a lab-created organization has its root tagged `Lab=multi-account-guardrails` so reset can delete it), OUs
+`lab-security` and `lab-workloads` with `lab-prod` and `lab-dev` below, accounts `lab-security-tooling`,
+`lab-app-prod` and `lab-app-dev`, SCPs `lab-protect-baseline` and `lab-region-allowlist` (on `lab-workloads`) and
+`lab-dev-instance-types` (on `lab-dev`), the tag policy `lab-cost-center-tags` on the root, trusted access for
+CloudTrail, Config, GuardDuty and Security Hub, and `lab-security-tooling` as delegated administrator for GuardDuty
+and Security Hub.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset; also with an existing
+organization):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Organization, OUs, accounts | Real control plane: accounts are created at once (`SUCCEEDED` immediately), duplicate emails fail with `EMAIL_ALREADY_EXISTS`, `MoveAccount`, nested OUs, and non-empty OU deletes are refused. | Says AWS takes minutes to create an account |
+| SCP content | Not validated: truncated JSON is accepted. FullAWSAccess is attached everywhere and the last SCP can't be detached. | The step tries a truncated SCP and validates each document itself |
+| SCP enforcement | None possible: there are no identities in member accounts (`AssumeRole` into `OrganizationAccountAccessRole` is denied). | The step evaluates eight requests through the OU tree and records the denied AssumeRole |
+| Tag policies | Policy type, attachment and `DescribeEffectivePolicy` work; noncompliant tags aren't blocked. | Says so |
+| Delegated admin | Trusted access and delegation are stored; the management account can't be delegated. | Reported as stored |
+| Closing accounts | `CloseAccount` leaves the account `PENDING_CLOSURE` in its OU with its email taken; `RemoveAccountFromOrganization` removes it. | Reset removes lab accounts; the accounts step removes closed lab accounts first |
+
+`check_labs --service iam --lab multi-account-guardrails` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
