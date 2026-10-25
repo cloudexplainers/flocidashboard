@@ -295,6 +295,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ec2', 'network-scale-out'): _tags(clf='3.5', saa='3.4 4.4'),
     ('wafv2', 'edge-throttling'): _tags(clf='2.4', saa='1.2 4.4 2.2', dva='2.1'),
     ('costexplorer', 'cost-visibility'): _tags(clf='4.2 4.1', saa='4.2 4.1'),
+    ('ec2', 'shared-responsibility'): _tags(clf='2.1 3.3 3.4 3.6', saa='1.1'),
 }
 
 
@@ -366,7 +367,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Customers are responsible for security in the cloud: their data, IAM, network rules, and encryption choices.',
             'The line moves with the service. On EC2 you patch the guest OS; on RDS AWS patches the OS and database engine; on Lambda AWS runs the runtime and you own the code and permissions.',
         ],
-        'related_labs': [('lambda', 'create-invoke-logs'), ('rds', 'db-instance-lifecycle'), ('ec2', 'guided-imds')],
+        'related_labs': [('ec2', 'shared-responsibility'), ('lambda', 'create-invoke-logs'), ('rds', 'db-instance-lifecycle'), ('ec2', 'guided-imds')],
         'planned': None,
     },
     {

@@ -165,7 +165,7 @@ Lab numbers follow the curriculum order in `frontend/src/labCurriculum.ts`. They
 | 1.2 | Well-Architected pillars | 📖 | — | Concept. Could tag each lab with its primary pillar. |
 | 1.3 | Migration and the CAF | 📖 | — | Concept. DMS can be labbed lightly (see SAA 4.3). |
 | 1.4 | Cloud economics | 📖 / ◐ | #66 (automation) | Rightsizing and BYOL are concepts. |
-| 2.1 | Shared responsibility | 📖 / ◐ | EC2 vs RDS vs Lambda labs exist | No lab makes the comparison explicit. Ideal as an exam-lens card on #15, #31, and #34. |
+| 2.1 | Shared responsibility | ● | ec2/shared-responsibility (guest OS on EC2, RDS maintenance window, Lambda runtime, S3 data protection, responsibility matrix, shared controls), shared-responsibility card | Patch Manager scans (unsupported in Floci) |
 | 2.2 | Security, governance, compliance | ● | #20, #21, #24, #54, #55, cloudtrail/governance-tour (CloudTrail trail and data events, Config recorder and managed rule, GuardDuty, Security Hub) | Inspector, Shield, Artifact (concept) |
 | 2.3 | Access management | ● | 11 IAM labs, #27, #28, #29, #37, iam/account-hardening (password policy, virtual MFA, deny without MFA, permissions boundary, credential report, root user check) | **IAM Identity Center**, federation |
 | 2.4 | Security components and resources | ● | cloudtrail/governance-tour (GuardDuty, Security Hub, which service answers which question), wafv2/edge-throttling (WAF web ACL, managed rules, Shield Standard vs Advanced, which layer does what) | Firewall Manager, Trusted Advisor, Marketplace (concept) |
@@ -336,7 +336,7 @@ Started 2026-10-25. Before Wave C, labs covered 13 of the 19 CLF task statements
 | # | Item | Steps | SAA | CLF | Floci |
 |---|---|---|---|---|---|
 | ✅ C-1 | **Practice quizzes** (shipped 2026-10-25 in `dashboard/labs/quizzes.py`): 76 exam-style questions, 3 to 6 for every CLF task statement, with explanations, a best score per task in the browser, and a "quizzes passed" count in the track header | — | — | all 19 | — |
-| C-2 | **Shared responsibility tour**: the same app on EC2, RDS, Lambda and S3, with who patches, encrypts and controls access on each | ~7 | 1.1 | 2.1 | ⚠️ Patching control plane only |
+| ✅ C-2 | **Shared responsibility tour** (shipped 2026-10-25 as `ec2/shared-responsibility`, 7 steps, CLF 2.1 with 3.3, 3.4 and 3.6, SAA 1.1, the first lab of Level 8; the guest OS, Lambda runtime, RDS settings and Block Public Access are real, while patch baselines can't be created and AWS-RunPatchBaseline never runs, so the lab reads the guest OS itself): the same app on EC2, RDS, Lambda and S3, with who patches, encrypts and controls access on each, a responsibility matrix built from what was deployed, and twelve tasks sorted into AWS, customer and shared | 7 | 1.1 | 2.1 | ⚠️ Patching control plane only |
 | C-3 | **Migration toolkit**: 7 Rs portfolio, DataSync NFS to S3, DMS full load and CDC with cutover, Beanstalk replatform | ~7 | 4.3 | 1.3, 3.4 | ⚠️ Control plane |
 | C-4 | **Well-Architected review**: deploy a CloudFormation workload, review it pillar by pillar, fix it with a change set, review again | ~7 | 2.2 | 1.2, 1.1 | ✅ / ⚠️ |
 | C-5 | **Cloud economics**: on-premises TCO vs pay as you go, elasticity, rightsizing from metrics, Pricing Calculator, Lightsail bundles, Service Quotas | ~7 | 4.2 | 1.4, 1.1 | ⚠️ Synthetic prices |
@@ -355,7 +355,7 @@ The six rows marked ✅ shipped on 2026-10-22 and pass `check_labs` on Floci 2.3
 | ✅ #66 cloudformation/s3-sqs-stack | Add a change set (drift detection still open) | SAA 2.2; CLF 3.1 |
 | #52 apigateway/lambda-request | Exam lens on HTTP API vs REST API (usage plans, caching, WAF) | SAA 2.1 |
 | #4 iam/access-key-alice | Add key rotation (create a second key, deactivate the first) | CLF 2.3 |
-| #15, #31, #34 | Shared-responsibility exam-lens card (who patches what) | CLF 2.1 |
+| ✅ #15, #31, #34 | Shared-responsibility exam-lens card (who patches what); shipped as the card plus the `ec2/shared-responsibility` lab (C-2) | CLF 2.1 |
 
 ### Concept-only content (cards and videos, not labs)
 
