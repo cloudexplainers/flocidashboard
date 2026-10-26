@@ -198,6 +198,17 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'pricing', key: 'cloud-economics', title: 'Work out cloud economics: TCO, elasticity, rightsizing, licensing, and fixed-price bundles', stepCount: 7 },
     ],
   },
+  {
+    id: 'level-9-ai-practitioner',
+    title: 'Level 9: AI Practitioner',
+    subtitle: 'AWS AI services, the ML lifecycle on SageMaker AI, retrieval augmented generation, prompt engineering, and guardrails',
+    badge: 'AI',
+    color: 'blue',
+    description: 'Learn the AI and machine learning side of AWS for the AI Practitioner exam. Match business problems to the ready-made AI services (and spot the ones that need no AI at all), then send reviews, a product photo, a receipt and a support call to Comprehend, Translate, Rekognition, Textract and Transcribe, compare a managed service with a keyword rule, and send low-confidence predictions to a person.',
+    labs: [
+      { service: 'comprehend', key: 'ai-services-tour', title: 'Tour the AWS AI services: match use cases to Comprehend, Translate, Rekognition, Textract, and Transcribe', stepCount: 8 },
+    ],
+  },
 ];
 
 let nextLabId = 1;

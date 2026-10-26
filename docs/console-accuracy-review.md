@@ -1518,6 +1518,25 @@ against Floci 2.3.0:
 | Bedrock guardrails | Stored and versioned; never applied, and `ApplyGuardrail` is unsupported. | "Stored, not applied" |
 | Comprehend, Rekognition, Translate | Fixed answers (NEUTRAL, one `Floci` label, echo); inputs and language codes are validated. `DetectEntities` is unsupported. | Stub answers, labeled |
 
+## AI services tour lab (2026-10-26)
+
+`comprehend/ai-services-tour` (AIF 1.2, 1.1; CLF 3.7), 8 steps, in `dashboard/labs/comprehend_labs.py` (a new lab
+service registered in `monolith.py`, the first lab of Level 9, Wave AI item AI-1). It creates the bucket
+`lab-ai-tour-inputs` and the transcription job `lab-ai-tour-support-call`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Comprehend | Every text is English and NEUTRAL (0.7), one stub key phrase, no PII; `DetectEntities` is unsupported. | Compares with a keyword rule and says what AWS would return |
+| Translate | Echoes the text; `auto` always detects `en`; an unknown code is `UnsupportedLanguagePairException`. | Shows the echo and the real validation |
+| Rekognition | One `Floci` label at 99.9%, no moderation labels; a missing S3 object is `InvalidS3ObjectException`. | Real input checks, stub labels |
+| Textract | One `Floci` word; `AnalyzeExpense` is unsupported. | Says AWS would add form and table blocks |
+| Transcribe | Jobs are `COMPLETED` at once; `OutputBucketName` is ignored and no transcript is written. | Says what the transcript would hold |
+| Polly, Lex, Personalize, Kendra | Unsupported. | Listed as not emulated |
+
+`check_labs --service comprehend --lab ai-services-tour` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

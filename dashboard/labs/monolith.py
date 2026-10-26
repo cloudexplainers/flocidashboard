@@ -118,6 +118,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'pricing':
         from .pricing_labs import LABS
         return LABS
+    if service_key == 'comprehend':
+        from .comprehend_labs import LABS
+        return LABS
     return []
 
 
@@ -281,6 +284,11 @@ LAB_BATCH_ORDER = [
         'service': 'pricing',
         'title': 'Cloud economics lab',
         'summary': 'Work out cloud economics: Price List lookups, a Pricing Calculator estimate, a three-year TCO against an on-premises rack, Auto Scaling for elastic capacity, rightsizing from CloudWatch metrics, BYOL on a Dedicated Host, and Lightsail versus EC2.',
+    },
+    {
+        'service': 'comprehend',
+        'title': 'AI services tour lab',
+        'summary': 'Start the AI Practitioner level: match business problems to AWS AI services (or to no AI), then send sample reviews, a photo, a receipt and a call to Comprehend, Translate, Rekognition, Textract and Transcribe, and route low-confidence predictions to a person.',
     },
 ]
 
@@ -589,6 +597,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'pricing':
         from .pricing_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'comprehend':
+        from .comprehend_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -705,6 +716,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'pricing':
         from .pricing_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'comprehend':
+        from .comprehend_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -827,6 +841,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'pricing':
         from .pricing_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'comprehend':
+        from .comprehend_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
