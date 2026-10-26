@@ -10,6 +10,7 @@ import itertools
 import json
 import os
 import random
+import threading
 import types
 import zipfile
 from unittest.mock import patch
@@ -148,10 +149,15 @@ class FakeAws:
             roll -= weight
         return version, self.versions[version]
 
+    # The lab invokes from a thread pool, and patch.dict(os.environ) is
+    # process-wide, so one call restoring the environment could remove
+    # PRICING_RULE while another call reads it. Run the handlers one at a time.
+    _run_lock = threading.Lock()
+
     def _run(self, config, version, event):
         namespace = {}
         env = {**config['Environment']['Variables'], 'AWS_LAMBDA_FUNCTION_VERSION': version}
-        with patch.dict(os.environ, env):
+        with self._run_lock, patch.dict(os.environ, env):
             exec(compile(config['source'], 'quote.py', 'exec'), namespace)
             with patch.object(namespace['time'], 'sleep'):
                 return namespace['handler'](event, types.SimpleNamespace(memory_limit_in_mb=str(config['MemorySize'])))

@@ -130,6 +130,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'bedrockruntime':
         from .bedrockruntime_labs import LABS
         return LABS
+    if service_key == 'bedrock':
+        from .bedrock_labs import LABS
+        return LABS
     return []
 
 
@@ -313,6 +316,11 @@ LAB_BATCH_ORDER = [
         'service': 'bedrockruntime',
         'title': 'Prompt engineering lab',
         'summary': 'Engineer and measure prompts: a zero-shot request, a system prompt with a role and an output format, few-shot examples, inference settings, a prompt injection and its defense, then ROUGE and BLEU scores, business objectives, and the cheapest model that passes.',
+    },
+    {
+        'service': 'bedrock',
+        'title': 'Responsible AI lab',
+        'summary': 'Finish the AI Practitioner level: a Bedrock guardrail with content filters, a denied topic, blocked words, PII rules and grounding, a released version beside a changing draft, an evaluation of sample prompts, PII masked in the client, a KMS key and a private prompt log, a least-privilege policy simulated against two models, and a CloudTrail trail with a responsible AI checklist.',
     },
 ]
 
@@ -633,6 +641,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'bedrockruntime':
         from .bedrockruntime_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'bedrock':
+        from .bedrock_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -761,6 +772,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'bedrockruntime':
         from .bedrockruntime_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'bedrock':
+        from .bedrock_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -895,6 +909,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'bedrockruntime':
         from .bedrockruntime_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'bedrock':
+        from .bedrock_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
