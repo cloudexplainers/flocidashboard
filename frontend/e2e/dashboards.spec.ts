@@ -9,7 +9,7 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBe(true);
 }
 
-const serviceKeys = 'acm,apigateway,appconfig,appsync,amazonmq,athena,autoscaling,backup,batch,bcmdataexports,bedrockruntime,cloudfront,cloudmap,cloudcontrol,cloudtrail,cloudformation,cloudwatch,codebuild,codepipeline,codedeploy,config,cognito,costexplorer,cur,dynamodb,docdb,memorydb,ec2,ecr,ecs,emr,eks,elasticache,elasticbeanstalk,elasticloadbalancing,eventbridge,firehose,glue,iam,iot,kafka,kinesis,kms,lambda,neptune,opensearch,pipes,pricing,rds,rdsdata,resourcegroupstagging,route53,s3,s3vectors,scheduler,secretsmanager,ses,sns,sqs,ssm,stepfunctions,textract,transcribe,transfer,wafv2'.split(',');
+const serviceKeys = 'acm,apigateway,appconfig,appsync,amazonmq,athena,autoscaling,backup,batch,bcmdataexports,bedrock,bedrockruntime,comprehend,cloudfront,cloudmap,cloudcontrol,cloudtrail,cloudformation,cloudwatch,codebuild,codepipeline,codedeploy,config,cognito,costexplorer,cur,dynamodb,docdb,memorydb,ec2,ecr,ecs,emr,eks,elasticache,elasticbeanstalk,elasticloadbalancing,eventbridge,firehose,glue,iam,iot,kafka,kinesis,kms,lambda,neptune,opensearch,pipes,pricing,rds,rdsdata,rekognition,resourcegroupstagging,route53,s3,s3vectors,sagemaker,scheduler,secretsmanager,ses,sns,sqs,ssm,stepfunctions,textract,transcribe,transfer,translate,wafv2'.split(',');
 async function inventory(page: Page, key: string, data: unknown) {
   await page.route(`**/api/${key}/`, route => route.fulfill({ json: data }));
 }

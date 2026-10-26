@@ -575,6 +575,8 @@ Probed 2026-10-26 with real SDK calls. Every service below is in the 2.3.0 tag; 
 
 Comprehend, Rekognition, Textract, and Translate can return chosen answers from an `AI_MOCK_CONFIG` JSON file that Floci re-reads when it changes (keyed by the exact input text, or by bucket and key for Textract). The dashboard doesn't mount one, so labs judge results from sample data, the way other labs check rules Floci stores but doesn't enforce.
 
+Consoles (2026-10-26): the dashboard has pages for SageMaker AI, Bedrock guardrails, Comprehend, Rekognition, and Translate, next to the existing Bedrock Runtime, S3 Vectors, Textract, and Transcribe pages, so learners can inspect and change what the labs create.
+
 ### Wave AI: AI Practitioner labs
 
 Each lab follows the existing pattern and says in each step what Floci only stores versus does.

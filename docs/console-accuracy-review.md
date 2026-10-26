@@ -1505,6 +1505,19 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service pricing --lab cloud-economics` passed on 2.3.0.
 
+## AI consoles (2026-10-26)
+
+New pages for the AI Practitioner track: `sagemaker` (training jobs, models, endpoint configurations, endpoints, and
+an Invoke endpoint form), `bedrock` (guardrails), `comprehend`, `rekognition`, and `translate`. Checked by hand
+against Floci 2.3.0:
+
+| Behavior | Floci 2.3.0 | Console says |
+| --- | --- | --- |
+| SageMaker training | Real container; `HyperParameters` are passed to the job but not returned by `DescribeTrainingJob`. | Real training, hyperparameters shown from the request |
+| SageMaker endpoints | Real container serving `/ping` and `/invocations`; during an update the status reads `Creating`, not `Updating`. `UpdateEndpoint` and `DeleteEndpoint` block for about 5 s while the old container stops. | Real hosting; calls use a 60 s timeout and no retries, since a retried update started the endpoint twice |
+| Bedrock guardrails | Stored and versioned; never applied, and `ApplyGuardrail` is unsupported. | "Stored, not applied" |
+| Comprehend, Rekognition, Translate | Fixed answers (NEUTRAL, one `Floci` label, echo); inputs and language codes are validated. `DetectEntities` is unsupported. | Stub answers, labeled |
+
 ## Recommended next work
 
 | Item | Why not here |

@@ -116,7 +116,7 @@ def bedrockruntime_inventory() -> dict[str, Any]:
             'Real model inference; responses are fixed stubs.',
             'Streaming responses.',
             'Bedrock management plane operations such as ListFoundationModels and GetFoundationModel.',
-            'Bedrock Agents, Knowledge Bases, Guardrails, provisioned throughput, and customization.',
+            'Bedrock Agents, Knowledge Bases, provisioned throughput, and customization. Guardrails are stored (see the Bedrock page) but never applied to model calls.',
             'Tool-use round-tripping in Converse.',
         ],
         'notes': [
