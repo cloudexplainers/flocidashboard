@@ -709,6 +709,8 @@ def list_resources(service_keys: set[str] | None = None) -> list[ResourceResult]
         ('scheduler-resources', 'EventBridge Scheduler resources', scheduler.list_scheduler_resources),
         ('stepfunctions-resources', 'Step Functions resources', stepfunctions.list_stepfunctions_resources),
         ('textract-resources', 'Textract resources', textract.list_textract_resources),
+        ('sagemaker-resources', 'SageMaker AI resources', sagemaker.list_sagemaker_resources),
+        ('bedrock-resources', 'Bedrock guardrails', bedrock.list_bedrock_resources),
         ('transcribe-resources', 'Transcribe resources', transcribe.list_transcribe_resources),
         ('transfer-resources', 'Transfer Family resources', transfer.list_transfer_resources),
         ('wafv2-resources', 'WAF v2 resources', wafv2.list_wafv2_resources),
@@ -750,6 +752,8 @@ from . import (  # noqa: E402, F401
     backup,
     batch,
     bcmdataexports,
+    ai_services,
+    bedrock,
     bedrockruntime,
     cloudcontrol,
     cloudformation,
@@ -794,6 +798,7 @@ from . import (  # noqa: E402, F401
     route53,
     s3,
     s3vectors,
+    sagemaker,
     scheduler,
     secretsmanager,
     ses,
@@ -871,6 +876,9 @@ from .textract import textract_inventory  # noqa: E402, F401
 from .transcribe import transcribe_inventory  # noqa: E402, F401
 from .transfer import transfer_inventory  # noqa: E402, F401
 from .wafv2 import wafv2_inventory  # noqa: E402, F401
+from .sagemaker import sagemaker_inventory  # noqa: E402, F401
+from .bedrock import bedrock_inventory  # noqa: E402, F401
+from .ai_services import comprehend_inventory, rekognition_inventory, translate_inventory  # noqa: E402, F401
 
 
 def public_endpoint_url() -> str:

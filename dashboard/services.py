@@ -659,6 +659,151 @@ TRANSCRIBE_ACTIONS = (
 )
 
 
+SAGEMAKER_ACTIONS = (
+    action(
+        'create_training_job', 'Create training job', 'POST', '/api/sagemaker/training-jobs/', 'create',
+        fields=(
+            action_field('name', 'Training job name', required=True),
+            action_field('role_arn', 'Role ARN', required=True, default='arn:aws:iam::000000000000:role/sagemaker-execution'),
+            action_field('image', 'Training image', required=True, default='python:3.12-alpine',
+                         help_text='Floci pulls and runs this image with Docker. AWS needs an image in Amazon ECR.'),
+            action_field('entrypoint', 'Container entrypoint JSON', field_type='array',
+                         help_text='For example ["python", "-c", "..."]. Without one, the image runs "train".'),
+            action_field('input_s3_uri', 'Training data S3 URI', required=True, help_text='Copied to /opt/ml/input/data/train.'),
+            action_field('output_s3_path', 'Output S3 path', required=True, help_text='model.tar.gz is written under this path.'),
+            action_field('hyperparameters', 'Hyperparameters JSON', field_type='object'),
+            action_field('instance_type', 'Instance type', default='ml.m5.large'),
+            action_field('max_runtime_seconds', 'Max runtime (seconds)', field_type='number', default=600),
+        ),
+        success_message='Training job started',
+    ),
+    action('describe_training_job', 'Describe training job', 'POST', '/api/sagemaker/training-jobs/describe/', 'read', safety='safe',
+           fields=(action_field('name', 'Training job name', required=True),)),
+    action('stop_training_job', 'Stop training job', 'POST', '/api/sagemaker/training-jobs/{job}/stop/', 'update',
+           confirm='Stop this training job?', success_message='Training job stopping'),
+    action(
+        'create_model', 'Create model', 'POST', '/api/sagemaker/models/', 'create',
+        fields=(
+            action_field('name', 'Model name', required=True),
+            action_field('role_arn', 'Role ARN', required=True, default='arn:aws:iam::000000000000:role/sagemaker-execution'),
+            action_field('image', 'Inference image', required=True, help_text='Started with the command "serve"; it must answer GET /ping and POST /invocations on port 8080.'),
+            action_field('model_data_url', 'Model data URL', help_text='An S3 model.tar.gz, unpacked into /opt/ml/model.'),
+            action_field('environment', 'Environment JSON', field_type='object'),
+        ),
+        success_message='Model created',
+    ),
+    action('delete_model', 'Delete model', 'DELETE', '/api/sagemaker/models/{model}/', 'delete', safety='destructive',
+           confirm='Delete this model?', success_message='Model deleted'),
+    action(
+        'create_endpoint_config', 'Create endpoint config', 'POST', '/api/sagemaker/endpoint-configs/', 'create',
+        fields=(
+            action_field('name', 'Endpoint config name', required=True),
+            action_field('model_name', 'Model name', required=True),
+            action_field('instance_type', 'Instance type', default='ml.t2.medium'),
+            action_field('variant_name', 'Variant name', default='AllTraffic'),
+        ),
+        success_message='Endpoint config created',
+    ),
+    action('delete_endpoint_config', 'Delete endpoint config', 'DELETE', '/api/sagemaker/endpoint-configs/{endpoint_config}/', 'delete',
+           safety='destructive', confirm='Delete this endpoint config?', success_message='Endpoint config deleted'),
+    action(
+        'create_endpoint', 'Create endpoint', 'POST', '/api/sagemaker/endpoints/', 'create',
+        fields=(action_field('name', 'Endpoint name', required=True), action_field('endpoint_config_name', 'Endpoint config name', required=True)),
+        success_message='Endpoint creating',
+    ),
+    action('update_endpoint', 'Update endpoint', 'PATCH', '/api/sagemaker/endpoints/{endpoint}/', 'update',
+           fields=(action_field('endpoint_config_name', 'New endpoint config name', required=True),), success_message='Endpoint updating'),
+    action('delete_endpoint', 'Delete endpoint', 'DELETE', '/api/sagemaker/endpoints/{endpoint}/', 'delete', safety='destructive',
+           confirm='Delete this endpoint and stop its container?', success_message='Endpoint deleted'),
+    action(
+        'invoke_endpoint', 'Invoke endpoint', 'POST', '/api/sagemaker/endpoints/{endpoint}/invoke/', 'execute',
+        fields=(action_field('body', 'Request body', required=True, field_type='textarea'), action_field('content_type', 'Content type', default='text/csv')),
+        success_message='Prediction returned',
+    ),
+)
+
+
+BEDROCK_ACTIONS = (
+    action(
+        'create_guardrail', 'Create guardrail', 'POST', '/api/bedrock/guardrails/', 'create',
+        fields=(
+            action_field('name', 'Guardrail name', required=True),
+            action_field('description', 'Description'),
+            action_field('blocked_input_message', 'Blocked input message', required=True, default='Sorry, I can’t help with that request.'),
+            action_field('blocked_output_message', 'Blocked output message', required=True, default='Sorry, I can’t share that answer.'),
+            action_field('content_filters', 'Content filters JSON', field_type='array',
+                         help_text='For example [{"type": "HATE", "inputStrength": "HIGH", "outputStrength": "HIGH"}].'),
+            action_field('denied_topics', 'Denied topics JSON', field_type='array',
+                         help_text='For example [{"name": "Investment advice", "definition": "Recommendations about stocks or funds."}].'),
+            action_field('blocked_words', 'Blocked words JSON', field_type='array'),
+            action_field('pii_entities', 'PII entities JSON', field_type='array',
+                         help_text='For example [{"type": "EMAIL", "action": "ANONYMIZE"}].'),
+            action_field('kms_key_id', 'KMS key ID'),
+        ),
+        success_message='Guardrail created',
+    ),
+    action('get_guardrail', 'Get guardrail', 'POST', '/api/bedrock/guardrails/get/', 'read', safety='safe',
+           fields=(action_field('guardrail_id', 'Guardrail ID', required=True), action_field('version', 'Version', help_text='DRAFT when empty.'))),
+    action('create_guardrail_version', 'Create guardrail version', 'POST', '/api/bedrock/guardrails/{guardrail_id}/versions/', 'create',
+           fields=(action_field('description', 'Description'),), success_message='Guardrail version created'),
+    action('delete_guardrail', 'Delete guardrail', 'DELETE', '/api/bedrock/guardrails/{guardrail_id}/', 'delete', safety='destructive',
+           confirm='Delete this guardrail and all its versions?', success_message='Guardrail deleted'),
+)
+
+
+def _comprehend_action(name: str, label: str, with_language: bool = True):
+    fields = [action_field('text', 'Text', required=True, field_type='textarea')]
+    if with_language:
+        fields.append(action_field('language_code', 'Language code', default='en'))
+    return action(name, label, 'POST', f"/api/comprehend/{name.replace('_', '-')}/", 'execute', safety='safe', fields=tuple(fields))
+
+
+COMPREHEND_ACTIONS = (
+    _comprehend_action('detect_sentiment', 'Detect sentiment'),
+    _comprehend_action('detect_key_phrases', 'Detect key phrases'),
+    _comprehend_action('detect_dominant_language', 'Detect dominant language', with_language=False),
+    _comprehend_action('detect_pii_entities', 'Detect PII entities'),
+    _comprehend_action('contains_pii_entities', 'Check for PII'),
+)
+
+
+_IMAGE_FIELDS = (
+    action_field('bucket', 'S3 bucket'),
+    action_field('key', 'S3 object key'),
+    action_field('image_base64', 'Image bytes (base64)', field_type='textarea', help_text='Used instead of the S3 object when set. JPEG or PNG.'),
+)
+
+
+REKOGNITION_ACTIONS = (
+    action('detect_labels', 'Detect labels', 'POST', '/api/rekognition/detect-labels/', 'execute', safety='safe', fields=_IMAGE_FIELDS),
+    action('detect_moderation_labels', 'Detect moderation labels', 'POST', '/api/rekognition/detect-moderation-labels/', 'execute', safety='safe', fields=_IMAGE_FIELDS),
+    action('detect_text', 'Detect text', 'POST', '/api/rekognition/detect-text/', 'execute', safety='safe', fields=_IMAGE_FIELDS),
+    action('detect_faces', 'Detect faces', 'POST', '/api/rekognition/detect-faces/', 'execute', safety='safe', fields=_IMAGE_FIELDS),
+    action(
+        'compare_faces', 'Compare faces', 'POST', '/api/rekognition/compare-faces/', 'execute', safety='safe',
+        fields=(
+            action_field('source_bucket', 'Source bucket', required=True),
+            action_field('source_key', 'Source object key', required=True),
+            action_field('target_bucket', 'Target bucket', required=True),
+            action_field('target_key', 'Target object key', required=True),
+            action_field('similarity_threshold', 'Similarity threshold', field_type='number', default=80),
+        ),
+    ),
+)
+
+
+TRANSLATE_ACTIONS = (
+    action(
+        'translate_text', 'Translate text', 'POST', '/api/translate/text/', 'execute', safety='safe',
+        fields=(
+            action_field('text', 'Text', required=True, field_type='textarea'),
+            action_field('source_language', 'Source language', default='auto'),
+            action_field('target_language', 'Target language', required=True, default='es'),
+        ),
+    ),
+)
+
+
 BEDROCKRUNTIME_ACTIONS = (
     action(
         'converse',
@@ -5203,6 +5348,15 @@ SERVICES: tuple[ServiceDefinition, ...] = (
     ),
     service('bcmdataexports', 'BCM Data Exports', 'Billing and cost management exports', 'Management'),
     service(
+        'bedrock',
+        'Bedrock',
+        'Guardrails for generative AI applications',
+        'AI',
+        maturity='interactive_workbench',
+        tags=('layered-workbench', 'guardrail-workbench'),
+        actions=BEDROCK_ACTIONS,
+    ),
+    service(
         'bedrockruntime',
         'Bedrock Runtime',
         'Model runtime stub',
@@ -5649,6 +5803,42 @@ SERVICES: tuple[ServiceDefinition, ...] = (
         maturity='interactive_workbench',
         tags=('layered-workbench', 'workflow-workbench'),
         actions=STEPFUNCTIONS_ACTIONS,
+    ),
+    service(
+        'comprehend',
+        'Comprehend',
+        'Sentiment, key phrases, language, and PII in text',
+        'AI',
+        maturity='interactive_workbench',
+        tags=('layered-workbench', 'text-ai-workbench'),
+        actions=COMPREHEND_ACTIONS,
+    ),
+    service(
+        'rekognition',
+        'Rekognition',
+        'Labels, text, faces, and moderation in images',
+        'AI',
+        maturity='interactive_workbench',
+        tags=('layered-workbench', 'image-ai-workbench'),
+        actions=REKOGNITION_ACTIONS,
+    ),
+    service(
+        'sagemaker',
+        'SageMaker AI',
+        'Training jobs, models, and real-time endpoints',
+        'AI',
+        maturity='interactive_workbench',
+        tags=('layered-workbench', 'ml-workbench'),
+        actions=SAGEMAKER_ACTIONS,
+    ),
+    service(
+        'translate',
+        'Translate',
+        'Text translation',
+        'AI',
+        maturity='interactive_workbench',
+        tags=('layered-workbench', 'text-ai-workbench'),
+        actions=TRANSLATE_ACTIONS,
     ),
     service(
         'textract',

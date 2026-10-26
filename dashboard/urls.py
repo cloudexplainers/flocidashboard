@@ -3,6 +3,7 @@ import re
 from django.urls import path, re_path
 from .services import SERVICE_REGISTRY
 
+from . import ai_services_views, bedrock_views, sagemaker_views
 from . import acm_views, apigateway_views, appconfig_views, appsync_views, athena_views, autoscaling_views, backup_views, bedrockruntime_views, cloudformation_views, cloudfront_views, cloudmap_views, cloudtrail_views, cloudwatch_console_views, cloudwatch_logs_views, codebuild_views, codedeploy_views, codepipeline_views, cognito_views, config_views, console_views, dynamodb_views, ec2_views, ecr_views, ecs_views, eks_views, elasticache_views, elasticbeanstalk_views, elasticloadbalancing_views, eventbridge_views, firehose_views, glue_views, iam_views, identity_views, inspector_views, iot_views, kafka_views, kinesis_views, kms_views, lambda_views, neptune_views, opensearch_views, pipes_views, rds_views, rdsdata_views, resource_graph_views, resourcegroupstagging_views, route53_views, s3_views, scheduler_views, secretsmanager_views, ses_views, settings_views, sns_views, sqs_views, ssm_views, stepfunctions_views, textract_views, transcribe_views, transfer_views, views
 
 app_name = 'dashboard'
@@ -134,6 +135,29 @@ urlpatterns = [
     path('api/backup/jobs/<str:job_id>/stop/', backup_views.backup_job_stop, name='backup-job-stop'),
     path('api/backup/tags/', backup_views.backup_resource_tags, name='backup-tags'),
     path('api/bcmdataexports/', views.bcmdataexports, name='bcmdataexports'),
+    path('api/bedrock/', views.bedrock, name='bedrock'),
+    path('api/bedrock/guardrails/', bedrock_views.guardrails, name='bedrock-guardrails'),
+    path('api/bedrock/guardrails/get/', bedrock_views.guardrail_get, name='bedrock-guardrail-get'),
+    path('api/bedrock/guardrails/<str:guardrail_id>/versions/', bedrock_views.guardrail_versions, name='bedrock-guardrail-versions'),
+    path('api/bedrock/guardrails/<str:guardrail_id>/', bedrock_views.guardrail_detail, name='bedrock-guardrail-detail'),
+    path('api/sagemaker/', views.sagemaker, name='sagemaker'),
+    path('api/sagemaker/training-jobs/', sagemaker_views.training_jobs, name='sagemaker-training-jobs'),
+    path('api/sagemaker/training-jobs/describe/', sagemaker_views.training_job_describe, name='sagemaker-training-job-describe'),
+    path('api/sagemaker/training-jobs/<str:job_name>/stop/', sagemaker_views.training_job_stop, name='sagemaker-training-job-stop'),
+    path('api/sagemaker/models/', sagemaker_views.models, name='sagemaker-models'),
+    path('api/sagemaker/models/<str:model_name>/', sagemaker_views.model_detail, name='sagemaker-model-detail'),
+    path('api/sagemaker/endpoint-configs/', sagemaker_views.endpoint_configs, name='sagemaker-endpoint-configs'),
+    path('api/sagemaker/endpoint-configs/<str:config_name>/', sagemaker_views.endpoint_config_detail, name='sagemaker-endpoint-config-detail'),
+    path('api/sagemaker/endpoints/', sagemaker_views.endpoints, name='sagemaker-endpoints'),
+    path('api/sagemaker/endpoints/<str:endpoint_name>/', sagemaker_views.endpoint_detail, name='sagemaker-endpoint-detail'),
+    path('api/sagemaker/endpoints/<str:endpoint_name>/invoke/', sagemaker_views.endpoint_invoke, name='sagemaker-endpoint-invoke'),
+    path('api/comprehend/', views.comprehend, name='comprehend'),
+    path('api/comprehend/<str:operation>/', ai_services_views.comprehend_detect, name='comprehend-detect'),
+    path('api/rekognition/', views.rekognition, name='rekognition'),
+    path('api/rekognition/compare-faces/', ai_services_views.rekognition_compare_faces, name='rekognition-compare-faces'),
+    path('api/rekognition/<str:operation>/', ai_services_views.rekognition_detect, name='rekognition-detect'),
+    path('api/translate/', views.translate, name='translate'),
+    path('api/translate/text/', ai_services_views.translate_text, name='translate-text'),
     path('api/bedrockruntime/', views.bedrockruntime, name='bedrockruntime'),
     path('api/bedrockruntime/converse/', bedrockruntime_views.bedrockruntime_converse, name='bedrockruntime-converse'),
     path('api/bedrockruntime/invoke/', bedrockruntime_views.bedrockruntime_invoke_model, name='bedrockruntime-invoke'),
