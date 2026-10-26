@@ -364,6 +364,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('comprehend', 'ai-services-tour'): _tags(clf='3.7', aif='1.2 1.1'),
     ('sagemaker', 'train-to-endpoint'): _tags(clf='3.7', aif='1.3 1.1'),
     ('s3vectors', 'rag-knowledge-base'): _tags(aif='3.1 2.3 2.1'),
+    ('bedrockruntime', 'prompt-patterns'): _tags(aif='3.2 3.4 2.2'),
 }
 
 
@@ -710,7 +711,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Choose a model by modality, quality, latency, context length, language support, customization options, compliance needs, and price.',
             'Measure business value with metrics such as task efficiency, conversion rate, average revenue per user, customer lifetime value, and cost per interaction.',
         ],
-        'related_labs': [],
+        'related_labs': [('bedrockruntime', 'prompt-patterns')],
         'planned': None,
     },
     {
@@ -749,8 +750,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Risks: prompt injection (input that overrides instructions), jailbreaking (bypassing safety rules), hijacking, poisoning (tainted training or retrieved data), and exposure of sensitive data in prompts or answers.',
             'Floci returns a fixed Bedrock answer unless its proxy backend sends prompts to a local model, so the planned lab checks the prompt you build and shows real answers only in proxy mode.',
         ],
-        'related_labs': [],
-        'planned': 'AI-4 Prompt patterns with the Converse API',
+        'related_labs': [('bedrockruntime', 'prompt-patterns')],
+        'planned': None,
     },
     {
         'key': 'fm-training',
@@ -774,8 +775,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'ROUGE compares generated summaries with reference summaries (recall of overlapping words). BLEU scores machine translation (precision of overlapping words). BERTScore compares meaning with embeddings rather than exact words.',
             'Check that a model meets business objectives: productivity, user engagement, task completion, and cost, not only a benchmark score.',
         ],
-        'related_labs': [],
-        'planned': 'AI-4 Prompt patterns with the Converse API',
+        'related_labs': [('bedrockruntime', 'prompt-patterns')],
+        'planned': None,
     },
     {
         'key': 'responsible-ai',

@@ -1575,6 +1575,24 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service s3vectors --lab rag-knowledge-base` passed on 2.3.0.
 
+## Prompt patterns lab (2026-10-26)
+
+`bedrockruntime/prompt-patterns` (AIF 3.2, 3.4, 2.2), 8 steps, in `dashboard/labs/bedrockruntime_labs.py` (a new lab
+service registered in `monolith.py`, the fourth lab of Level 9, Wave AI item AI-4). It creates nothing in Floci: every
+step is a Converse request, so reset only clears the lab's own progress.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Converse | Accepts a system prompt, alternating user and assistant turns, and `temperature`, `topP`, `maxTokens` and `stopSequences`, then answers `Floci stub response for model=<id>` with 10 input and 12 output tokens. | Checks the prompt it built and says the answer is a stub |
+| Inference settings | Ignored: temperature 0 and 1 give the same answer. | Shown side by side, with what each setting does on AWS |
+| Model id | Any model id answers the same way, including the small one. | Prices both; says the quality comparison needs real answers |
+| `proxy` backend | `FLOCI_SERVICES_BEDROCK_RUNTIME_BACKEND=proxy` forwards Converse to an OpenAI-compatible server. | Each step reports whether it saw stub or proxied answers |
+| Model evaluation jobs | Unsupported. | The lab computes ROUGE-1/2/L and BLEU itself |
+
+`check_labs --service bedrockruntime --lab prompt-patterns` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
