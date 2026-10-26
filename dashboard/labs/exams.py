@@ -363,6 +363,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     # Level 9
     ('comprehend', 'ai-services-tour'): _tags(clf='3.7', aif='1.2 1.1'),
     ('sagemaker', 'train-to-endpoint'): _tags(clf='3.7', aif='1.3 1.1'),
+    ('s3vectors', 'rag-knowledge-base'): _tags(aif='3.1 2.3 2.1'),
 }
 
 
@@ -696,7 +697,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Multimodal models handle more than one kind of input or output (text, images, audio). Diffusion models generate images by removing noise step by step.',
             'Use cases include summarization, chatbots, code generation, translation, image generation, search, and recommendation. The FM lifecycle runs from data selection and model selection through pre-training, fine-tuning, evaluation, deployment, and feedback.',
         ],
-        'related_labs': [],
+        'related_labs': [('s3vectors', 'rag-knowledge-base')],
         'planned': None,
     },
     {
@@ -722,8 +723,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Managed services bring accessibility, a lower barrier to entry, speed to market, and pay-as-you-go cost. AWS also handles security and compliance of the infrastructure.',
             'Cost tradeoffs: on-demand Bedrock pricing is per input and output token; Provisioned Throughput buys guaranteed capacity for a term; custom models need Provisioned Throughput. Bigger models are slower and cost more.',
         ],
-        'related_labs': [],
-        'planned': 'AI-3 RAG with S3 Vectors and Bedrock',
+        'related_labs': [('s3vectors', 'rag-knowledge-base')],
+        'planned': None,
     },
     {
         'key': 'fm-app-design',
@@ -735,8 +736,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Vector stores on AWS: Amazon OpenSearch Service, Aurora and RDS for PostgreSQL with pgvector, Neptune, DocumentDB, MemoryDB, and Amazon S3 Vectors.',
             'Customization cost, from lowest to highest: prompt engineering, RAG, fine-tuning, continued pre-training, training from scratch. Agents (Bedrock Agents, AgentCore) let a model call tools and APIs to complete multi-step tasks.',
         ],
-        'related_labs': [],
-        'planned': 'AI-3 RAG with S3 Vectors and Bedrock',
+        'related_labs': [('s3vectors', 'rag-knowledge-base')],
+        'planned': None,
     },
     {
         'key': 'prompt-engineering',
