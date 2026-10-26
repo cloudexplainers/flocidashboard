@@ -47,9 +47,9 @@ class OtherRegion:
 
 
 class FakeAws:
-    def __init__(self, ttl_deletes=True, run_stream=True):
+    def __init__(self, ttl_deletes=True, run_stream=True, restores=False):
         self.ids = itertools.count(1)
-        self.ttl_deletes, self.run_stream = ttl_deletes, run_stream
+        self.ttl_deletes, self.run_stream, self.restores = ttl_deletes, run_stream, restores
         self.tables, self.items, self.ttl = {}, {}, {}
         self.targets, self.policies, self.alarms = {}, {}, set()
         self.roles, self.role_policies, self.functions, self.mappings = {}, {}, {}, {}
@@ -161,8 +161,14 @@ class FakeAws:
         return {'ContinuousBackupsDescription': {'ContinuousBackupsStatus': 'ENABLED',
                                                  'PointInTimeRecoveryDescription': description}}
 
-    def restore_table_to_point_in_time(self, **kwargs):
-        raise client_error('UnknownOperationException', 'Unknown operation')
+    def restore_table_to_point_in_time(self, SourceTableName, TargetTableName, UseLatestRestorableTime):
+        if not self.restores:
+            raise client_error('UnknownOperationException', 'Unknown operation')
+        if TargetTableName in self.tables:
+            raise client_error('TableAlreadyExistsException', f'Table already exists: {TargetTableName}')
+        self.calls.append(('restore_table_to_point_in_time', TargetTableName))
+        self.tables[TargetTableName] = {**copy.deepcopy(self.tables[SourceTableName]), 'TableName': TargetTableName}
+        self.items[TargetTableName] = copy.deepcopy(self.items[SourceTableName])
 
     # Application Auto Scaling and CloudWatch
     def register_scalable_target(self, ServiceNamespace, ResourceId, ScalableDimension, MinCapacity, MaxCapacity):
@@ -390,6 +396,20 @@ class DynamoDbCapacityAtScaleLabTests(SimpleTestCase):
         self.assertEqual([call for call in self.fake.calls if call[0] != 'create_table'],
                          [('create_function', lab.FUNCTION), ('create_event_source_mapping', lab.FUNCTION)])
         self.assertEqual(len(self.fake.tables[lab.ORDERS]['Replicas']), 1)
+
+    def test_a_restore_newer_floci_runs_is_reported_and_reset(self):
+        self.fake.restores = True
+        results = self.run_all()
+        self.assertEqual(self.failed(), [])
+        message = results['point-in-time-recovery']['verification']['message']
+        self.assertIn(f'{lab.RESTORED} is being restored', message)
+        self.assertNotIn('cannot restore', message)
+        rerun = run_lab_step(SERVICE, LAB, 'point-in-time-recovery')
+        self.assertIn(f'{lab.RESTORED} already exists', rerun['verification']['message'])
+        self.assertEqual([call for call in self.fake.calls if call[0] == 'restore_table_to_point_in_time'],
+                         [('restore_table_to_point_in_time', lab.RESTORED)])
+        self.assertEqual(reset_lab(SERVICE, LAB)['errors'], [])
+        self.assertFalse(self.fake.tables)
 
     def test_reset_removes_everything_and_clears_progress(self):
         self.run_all()

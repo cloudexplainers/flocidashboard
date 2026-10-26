@@ -1,7 +1,7 @@
 """Serverless observability lab: an order function with JSON logs, metric filters, traffic, metrics, Logs Insights, an
 alarm, a dashboard, and active tracing. The fake runs the real handler (with a fake boto3 for PutMetricData), applies the
 lab's two JSON metric filters to its output, and behaves like Floci 2.3.0: no EMF extraction, no stats queries, alarms
-that reach ALARM without running their actions, and no X-Ray."""
+that reach ALARM without running their actions (newer Floci publishes them: notifies=True), and no X-Ray."""
 
 import copy
 import importlib
@@ -41,8 +41,12 @@ class Payload:
 
 
 class FakeAws:
-    def __init__(self, emf=False, stats=False, alarm_fires=True, filters_publish=True):
+    def __init__(self, emf=False, stats=False, alarm_fires=True, filters_publish=True, notifies=False):
         self.emf, self.stats, self.alarm_fires, self.filters_publish = emf, stats, alarm_fires, filters_publish
+        self.notifies = notifies
+        self.queues: dict[str, list[dict]] = {}
+        self.queue_attributes: dict[str, dict] = {}
+        self.subscriptions: list[dict] = []
         self.groups: dict[str, dict] = {}
         self.events: list[dict] = []
         self.filters: dict[str, dict] = {}
@@ -209,8 +213,20 @@ class FakeAws:
     def _evaluate_alarms(self):
         for alarm in self.alarms.values():
             recent = len([1 for _, metric, _, _ in self.datapoints if metric == lab.ERRORS_METRIC]) - self.burst_start
-            if self.alarm_fires and recent >= alarm['Threshold']:
+            if self.alarm_fires and recent >= alarm['Threshold'] and alarm['StateValue'] != 'ALARM':
                 alarm['StateValue'] = 'ALARM'
+                if self.notifies:
+                    self._notify(alarm)
+
+    def _notify(self, alarm):
+        message = json.dumps({'AlarmName': alarm['AlarmName'], 'NewStateValue': 'ALARM',
+                              'NewStateReason': 'Threshold Crossed'})
+        for subscription in self.subscriptions:
+            if subscription['TopicArn'] in alarm.get('AlarmActions', []):
+                name = subscription['Endpoint'].rsplit(':', 1)[-1]
+                body = json.dumps({'Type': 'Notification', 'Subject': f'ALARM: "{alarm["AlarmName"]}"',
+                                   'Message': message})
+                self.queues.setdefault(name, []).append({'Body': body, 'ReceiptHandle': uuid.uuid4().hex})
 
     def describe_alarms(self, AlarmNames):
         return {'MetricAlarms': [copy.deepcopy(self.alarms[name]) for name in AlarmNames if name in self.alarms]}
@@ -242,6 +258,38 @@ class FakeAws:
 
     def delete_topic(self, TopicArn):
         self.topics.discard(TopicArn.rsplit(':', 1)[-1])
+        self.subscriptions = [item for item in self.subscriptions if item['TopicArn'] != TopicArn]
+
+    def subscribe(self, TopicArn, Protocol, Endpoint):
+        self.subscriptions.append({'TopicArn': TopicArn, 'Protocol': Protocol, 'Endpoint': Endpoint})
+        return {'SubscriptionArn': f'{TopicArn}:{uuid.uuid4()}'}
+
+    def list_subscriptions_by_topic(self, TopicArn):
+        return {'Subscriptions': [item for item in self.subscriptions if item['TopicArn'] == TopicArn]}
+
+    # SQS
+    def create_queue(self, QueueName, Attributes):
+        self.queues.setdefault(QueueName, [])
+        self.queue_attributes[QueueName] = Attributes
+        return {'QueueUrl': f'http://floci:4566/000000000000/{QueueName}'}
+
+    def get_queue_url(self, QueueName):
+        if QueueName not in self.queues:
+            raise client_error('AWS.SimpleQueueService.NonExistentQueue')
+        return {'QueueUrl': f'http://floci:4566/000000000000/{QueueName}'}
+
+    def receive_message(self, QueueUrl, MaxNumberOfMessages, WaitTimeSeconds):
+        messages = self.queues.get(QueueUrl.rsplit('/', 1)[-1], [])
+        return {'Messages': list(messages[:MaxNumberOfMessages])} if messages else {}
+
+    def delete_message(self, QueueUrl, ReceiptHandle):
+        name = QueueUrl.rsplit('/', 1)[-1]
+        self.queues[name] = [item for item in self.queues.get(name, []) if item['ReceiptHandle'] != ReceiptHandle]
+
+    def delete_queue(self, QueueUrl):
+        name = QueueUrl.rsplit('/', 1)[-1]
+        self.queues.pop(name, None)
+        self.queue_attributes.pop(name, None)
 
     # X-Ray
     def get_trace_summaries(self, StartTime, EndTime):
@@ -299,6 +347,24 @@ class ServerlessObservabilityLabTests(SimpleTestCase):
         self.assertIn('did not run the stats query', results['logs-insights']['verification']['message'])
         self.assertIn('does not run alarm actions', results['error-alarm']['verification']['message'])
         self.assertIn('no X-Ray service', results['active-tracing']['verification']['message'])
+
+    def test_published_alarm_notification_is_reported(self):
+        self.use(FakeAws(notifies=True))
+        results = self.run_all()
+        self.assertEqual(self.failures(results), {})
+        message = results['error-alarm']['verification']['message']
+        self.assertIn(f'notification reached {lab.INBOX}', message)
+        self.assertNotIn('does not run alarm actions', message)
+        self.assertEqual(results['error-alarm']['json']['Notification']['NewStateValue'], 'ALARM')
+
+    def test_rerun_recreates_the_alarm_and_subscribes_once(self):
+        self.use(FakeAws(notifies=True))
+        self.run_all()
+        result = run_lab_step(SERVICE, LAB, 'error-alarm')
+        self.assertIn(f'notification reached {lab.INBOX}', result['verification']['message'])
+        self.assertEqual(len(self.fake.subscriptions), 1)
+        policy = json.loads(self.fake.queue_attributes[lab.INBOX]['Policy'])
+        self.assertEqual(policy['Statement'][0]['Condition']['ArnEquals']['aws:SourceArn'], lab.TOPIC_ARN)
 
     def test_aws_style_emf_and_stats_are_reported(self):
         self.use(FakeAws(emf=True, stats=True))
@@ -358,7 +424,7 @@ class ServerlessObservabilityLabTests(SimpleTestCase):
         self.assertEqual(result['errors'], [])
         self.assertIsNone(self.fake.function)
         for store in (self.fake.groups, self.fake.filters, self.fake.roles, self.fake.role_policies,
-                      self.fake.alarms, self.fake.topics, self.fake.dashboards):
+                      self.fake.alarms, self.fake.topics, self.fake.dashboards, self.fake.queues):
             self.assertFalse(store)
         self.assertEqual(lab_status(SERVICE, LAB)['passed_steps'], 0)
 

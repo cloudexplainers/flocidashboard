@@ -5,8 +5,9 @@ and active tracing.
 Floci 2.3.0 delivers the function's output to its log group, turns JSON metric filters into real metrics (counts and
 values with units), accepts PutMetricData from the function, evaluates alarms (a breached alarm reaches ALARM in about
 15 seconds), and stores dashboards. It does not extract embedded metric format lines, its Logs Insights supports
-fields, filter, sort and limit but not stats, alarm actions never notify SNS, Lambda's JSON log format and tracing
-settings are stored without effect, and X-Ray is not available. Each step says which of these it meets.
+fields, filter, sort and limit but not stats, alarm actions never notify SNS (newer Floci releases publish them, so
+the alarm step subscribes a queue to the topic and reports whether the notification arrived), Lambda's JSON log format
+and tracing settings are stored without effect, and X-Ray is not available. Each step says which of these it meets.
 """
 
 from __future__ import annotations
@@ -56,6 +57,17 @@ BAD_EVERY = 4           # every fourth order is invalid: 3 of 12
 ALARM_BURST = 3
 TOPIC = 'lab-obs-alerts'
 TOPIC_ARN = f'arn:aws:sns:{REGION}:{ACCOUNT}:{TOPIC}'
+INBOX = 'lab-obs-alerts-inbox'
+INBOX_ARN = f'arn:aws:sqs:{REGION}:{ACCOUNT}:{INBOX}'
+NOTIFICATION_WAIT_SECONDS = 10
+INBOX_POLICY = {
+    'Version': '2012-10-17',
+    'Statement': [{
+        'Sid': 'AlarmTopic', 'Effect': 'Allow', 'Principal': {'Service': 'sns.amazonaws.com'},
+        'Action': 'sqs:SendMessage', 'Resource': INBOX_ARN,
+        'Condition': {'ArnEquals': {'aws:SourceArn': TOPIC_ARN}},
+    }],
+}
 ALARM = 'lab-obs-order-errors'
 ALARM_THRESHOLD = 3
 ALARM_WAIT_SECONDS = 120
@@ -181,12 +193,15 @@ INSIGHTS_COMMAND = (
 )
 ALARM_COMMAND = (
     f'aws sns create-topic --name {TOPIC}\n'
+    f'aws sqs create-queue --queue-name {INBOX} --attributes file://inbox-policy.json\n'
+    f'aws sns subscribe --topic-arn {TOPIC_ARN} --protocol sqs --notification-endpoint {INBOX_ARN}\n'
     f'aws cloudwatch put-metric-alarm --alarm-name {ALARM} --namespace {NAMESPACE} --metric-name {ERRORS_METRIC} '
     f'--statistic Sum --period 60 --evaluation-periods 1 --threshold {ALARM_THRESHOLD} '
     '--comparison-operator GreaterThanOrEqualToThreshold --treat-missing-data notBreaching '
     f'--alarm-actions {TOPIC_ARN} --ok-actions {TOPIC_ARN}\n'
     f'# send {ALARM_BURST} rejected orders, then:\n'
-    f'aws cloudwatch describe-alarms --alarm-names {ALARM} --query "MetricAlarms[0].StateValue"'
+    f'aws cloudwatch describe-alarms --alarm-names {ALARM} --query "MetricAlarms[0].StateValue"\n'
+    f'aws sqs receive-message --queue-url <{INBOX} URL> --wait-time-seconds {NOTIFICATION_WAIT_SECONDS}'
 )
 DASHBOARD_COMMAND = (
     f'aws cloudwatch put-dashboard --dashboard-name {DASHBOARD} --dashboard-body file://dashboard.json\n'
@@ -282,11 +297,15 @@ LAB = {
             'explanation': (
                 f'The alarm evaluates the {ERRORS_METRIC} sum every minute. TreatMissingData notBreaching keeps it '
                 'OK when no logs arrive. AlarmActions and OKActions notify the SNS topic, which can email the team '
-                f'or trigger automation. The step sends {ALARM_BURST} rejected orders so the current minute breaches. '
-                'How Floci emulates this: the alarm is evaluated for real and moves to ALARM within about 15 '
-                'seconds. Floci does not run alarm actions, so no notification reaches the topic; the step checks '
-                'the state and the configured actions.'
+                f'or trigger automation; here a queue subscribed to the topic stands in for the team\'s inbox, and '
+                'its policy lets only this topic send to it. The step sends '
+                f'{ALARM_BURST} rejected orders so the current minute breaches. How Floci emulates this: the alarm '
+                'is evaluated for real and moves to ALARM within about 15 seconds. Older Floci releases do not run alarm '
+                'actions, so nothing reaches the queue; newer releases publish the notification. The step '
+                'checks the state and the configured actions, and reports whether the ALARM message arrived.'
             ),
+            'artifact_label': 'inbox-policy.json',
+            'artifact': json.dumps(INBOX_POLICY, indent=2),
         },
         {
             'key': 'dashboard',
@@ -446,6 +465,37 @@ def _alarm() -> dict[str, Any] | None:
 def _topic_exists() -> bool:
     topics = _client('sns').list_topics().get('Topics', [])
     return any(item.get('TopicArn') == TOPIC_ARN for item in topics)
+
+
+def _inbox_url() -> str | None:
+    try:
+        return _client('sqs').get_queue_url(QueueName=INBOX)['QueueUrl']
+    except ClientError as exc:
+        if _not_found(exc) or 'NonExistentQueue' in _code(exc):
+            return None
+        raise
+
+
+def _alarm_notification(sqs, queue_url: str) -> dict[str, Any] | None:
+    """The ALARM notification the topic delivered to the inbox queue, or None if none arrived in time."""
+    found: dict[str, Any] = {}
+
+    def arrived() -> bool:
+        response = sqs.receive_message(QueueUrl=queue_url, MaxNumberOfMessages=10, WaitTimeSeconds=1)
+        for item in response.get('Messages', []):
+            sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=item['ReceiptHandle'])
+            try:
+                envelope = json.loads(item.get('Body') or '{}')
+                body = json.loads(envelope.get('Message') or '{}')
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if isinstance(body, dict) and body.get('AlarmName') == ALARM and body.get('NewStateValue') == 'ALARM':
+                found.update(Subject=envelope.get('Subject'), NewStateValue=body['NewStateValue'],
+                             NewStateReason=body.get('NewStateReason'))
+        return bool(found)
+
+    _wait(arrived, timeout=NOTIFICATION_WAIT_SECONDS, delay=0)
+    return found or None
 
 
 def _dashboard() -> dict[str, Any] | None:
@@ -780,8 +830,15 @@ def step_error_alarm() -> dict[str, Any]:
     started = time.perf_counter()
     if not _function() or not _filters():
         return _missing('error-alarm', ALARM_COMMAND, 'Create the function and metric filters first.', started)
-    sns, cloudwatch = _client('sns'), _client('cloudwatch')
+    sns, cloudwatch, sqs = _client('sns'), _client('cloudwatch'), _client('sqs')
     sns.create_topic(Name=TOPIC)
+    inbox_url = sqs.create_queue(QueueName=INBOX, Attributes={'Policy': json.dumps(INBOX_POLICY)})['QueueUrl']
+    if not any(item.get('Endpoint') == INBOX_ARN
+               for item in sns.list_subscriptions_by_topic(TopicArn=TOPIC_ARN).get('Subscriptions', [])):
+        sns.subscribe(TopicArn=TOPIC_ARN, Protocol='sqs', Endpoint=INBOX_ARN)
+    if _alarm():
+        # A rerun starts from a fresh alarm, so it transitions into ALARM (and notifies) again.
+        cloudwatch.delete_alarms(AlarmNames=[ALARM])
     cloudwatch.put_metric_alarm(
         AlarmName=ALARM, AlarmDescription='Three or more rejected orders in a minute',
         Namespace=NAMESPACE, MetricName=ERRORS_METRIC, Statistic='Sum', Period=60, EvaluationPeriods=1,
@@ -792,17 +849,20 @@ def step_error_alarm() -> dict[str, Any]:
         _invoke(_order(run_id, index, True))
     reached = _wait(lambda: (_alarm() or {}).get('StateValue') == 'ALARM', timeout=ALARM_WAIT_SECONDS, delay=3)
     alarm = _alarm() or {}
+    notification = _alarm_notification(sqs, inbox_url) if reached else None
     _marker('error-alarm', {'state': alarm.get('StateValue')})
     verified, message = _check_alarm()
-    if verified:
-        message += (' Floci does not run alarm actions, so no notification reached the topic; on AWS, subscribers '
-                    'would get the ALARM message now.')
+    if verified and notification:
+        message += f' The ALARM notification reached {INBOX} through the topic, as it would on AWS.'
+    elif verified:
+        message += (f' No notification reached {INBOX}: this Floci version does not run alarm actions. On AWS, '
+                    'subscribers would get the ALARM message now.')
     elif not reached:
         message = (f'{ALARM} stayed {alarm.get("StateValue")} for {ALARM_WAIT_SECONDS} seconds after '
                    f'{ALARM_BURST} rejected orders.')
     response = {'Alarm': {key: alarm.get(key) for key in (
         'AlarmName', 'StateValue', 'StateReason', 'MetricName', 'Threshold', 'TreatMissingData', 'AlarmActions',
-        'OKActions')}}
+        'OKActions')}, 'Notification': notification}
     return _result('error-alarm', ALARM_COMMAND, response, verified, message, started)
 
 
@@ -919,7 +979,7 @@ def status() -> dict[str, Any]:
 
 
 def reset() -> dict[str, Any]:
-    """Delete the dashboard, alarm, topic, function, role, and log group (with its metric filters)."""
+    """Delete the dashboard, alarm, topic, inbox queue, function, role, and log group (with its metric filters)."""
     started = time.perf_counter()
     deleted: list[str] = []
     errors: list[str] = []
@@ -935,15 +995,16 @@ def reset() -> dict[str, Any]:
         except BotoCoreError as exc:
             errors.append(f'{label}: {exc}')
 
-    cloudwatch, sns, lam, iam, logs = (_client(name) for name in ('cloudwatch', 'sns', 'lambda', 'iam', 'logs'))
+    cloudwatch, sns, sqs, lam, iam, logs = (_client(name) for name in ('cloudwatch', 'sns', 'sqs', 'lambda', 'iam', 'logs'))
     try:
         dashboard = _dashboard()
         alarm = _alarm()
         topic = _topic_exists()
+        inbox_url = _inbox_url()
         function = _function()
         group = _log_group()
     except (ClientError, BotoCoreError) as exc:
-        dashboard = alarm = function = group = None
+        dashboard = alarm = function = group = inbox_url = None
         topic = False
         errors.append(f'lookup: {exc}')
     if dashboard is not None:
@@ -952,6 +1013,8 @@ def reset() -> dict[str, Any]:
         attempt(f'alarm:{ALARM}', lambda: cloudwatch.delete_alarms(AlarmNames=[ALARM]))
     if topic:
         attempt(f'topic:{TOPIC}', lambda: sns.delete_topic(TopicArn=TOPIC_ARN))
+    if inbox_url:
+        attempt(f'queue:{INBOX}', lambda: sqs.delete_queue(QueueUrl=inbox_url))
     if function:
         attempt(f'function:{FUNCTION}', lambda: lam.delete_function(FunctionName=FUNCTION))
     attempt(f'role-policy:{ROLE_POLICY}', lambda: iam.delete_role_policy(RoleName=ROLE_NAME, PolicyName=ROLE_POLICY))
@@ -967,7 +1030,8 @@ def reset() -> dict[str, Any]:
         'command': (
             f'aws cloudwatch delete-dashboards --dashboard-names {DASHBOARD}\n'
             f'aws cloudwatch delete-alarms --alarm-names {ALARM}\n'
-            f'aws sns delete-topic --topic-arn {TOPIC_ARN}\n'
+            f'aws sns delete-topic --topic-arn {TOPIC_ARN}   # also removes its subscriptions\n'
+            f'aws sqs delete-queue --queue-url <{INBOX} URL>\n'
             f'aws lambda delete-function --function-name {FUNCTION}\n'
             f'aws iam delete-role-policy --role-name {ROLE_NAME} --policy-name {ROLE_POLICY}\n'
             f'aws iam delete-role --role-name {ROLE_NAME}\n'

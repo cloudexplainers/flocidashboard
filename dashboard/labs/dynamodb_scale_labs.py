@@ -4,8 +4,9 @@ TTL expiry, a filtered stream processor in Lambda, point-in-time recovery, and a
 Floci 2.3.0 stores capacity settings but never throttles, so capacity is a calculation the lab checks. It stores
 scaling targets and policies and creates their CloudWatch alarms, but nothing ever changes the capacity. TTL really
 deletes expired items, and streams really feed Lambda through a filtered event source mapping. PITR is a flag (restore
-is unsupported, as are on-demand backups), and a replica is listed as ACTIVE without a table in the other Region, so
-those steps check the settings and say what Floci skips.
+is unsupported, as are on-demand backups; newer Floci releases restore, so the step reports which happened), and a
+replica is listed as ACTIVE without a table in the other Region, so those steps check the settings and say what Floci
+skips.
 """
 
 from __future__ import annotations
@@ -31,6 +32,8 @@ ACCOUNT = '000000000000'
 
 ORDERS = 'lab-orders-at-scale'
 SESSIONS = 'lab-sessions'
+RESTORED = f'{ORDERS}-restored'
+UNSUPPORTED_CODES = {'UnknownOperationException', 'UnsupportedOperation', 'InvalidAction'}
 AUDIT = 'lab-order-audit'
 ORDERS_ARN = f'arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/{ORDERS}'
 AUDIT_ARN = f'arn:aws:dynamodb:{REGION}:{ACCOUNT}:table/{AUDIT}'
@@ -150,7 +153,7 @@ PITR_COMMAND = (
     f'aws dynamodb update-continuous-backups --table-name {ORDERS} --point-in-time-recovery-specification '
     f'PointInTimeRecoveryEnabled=true,RecoveryPeriodInDays={PITR_DAYS}\n'
     f'aws dynamodb describe-continuous-backups --table-name {ORDERS}\n'
-    f'aws dynamodb restore-table-to-point-in-time --source-table-name {ORDERS} --target-table-name {ORDERS}-restored '
+    f'aws dynamodb restore-table-to-point-in-time --source-table-name {ORDERS} --target-table-name {RESTORED} '
     '--use-latest-restorable-time'
 )
 REPLICA_COMMAND = (
@@ -263,8 +266,8 @@ LAB = {
                 'second in that window as a new table; on-demand backups (CreateBackup or AWS Backup) are kept until '
                 'deleted. Neither affects table performance. For disaster recovery across Regions, restore elsewhere '
                 'from AWS Backup copies or use a global table. How Floci emulates this: the PITR setting is stored and '
-                'reported, but RestoreTableToPointInTime and CreateBackup are unsupported, so the step checks the '
-                'setting and records the restore attempt.'
+                'reported. Older Floci releases refuse RestoreTableToPointInTime and CreateBackup; newer ones restore. '
+                'The step checks the setting and reports what the restore attempt did.'
             ),
         },
         {
@@ -800,16 +803,25 @@ def step_point_in_time_recovery() -> dict[str, Any]:
     dynamodb.update_continuous_backups(TableName=ORDERS, PointInTimeRecoverySpecification={
         'PointInTimeRecoveryEnabled': True, 'RecoveryPeriodInDays': PITR_DAYS})
     restore: dict[str, Any]
-    try:
-        dynamodb.restore_table_to_point_in_time(SourceTableName=ORDERS, TargetTableName=f'{ORDERS}-restored',
-                                                UseLatestRestorableTime=True)
-        restore = {'Status': 'started', 'TargetTableName': f'{ORDERS}-restored'}
-    except ClientError as exc:
-        restore = {'Status': 'refused', 'Code': _code(exc), 'Message': exc.response.get('Error', {}).get('Message')}
+    if _table(RESTORED):
+        restore = {'Status': 'exists', 'TargetTableName': RESTORED}
+    else:
+        try:
+            dynamodb.restore_table_to_point_in_time(SourceTableName=ORDERS, TargetTableName=RESTORED,
+                                                    UseLatestRestorableTime=True)
+            restore = {'Status': 'started', 'TargetTableName': RESTORED}
+        except ClientError as exc:
+            restore = {'Status': 'refused', 'Code': _code(exc),
+                       'Message': exc.response.get('Error', {}).get('Message')}
     response = {'ContinuousBackups': _continuous_backups(), 'RestoreAttempt': restore}
     verified, message = _check_pitr()
-    if verified and restore['Status'] == 'refused':
-        message += f' The restore was refused ({restore["Code"]}): Floci stores PITR but cannot restore.'
+    if verified and restore['Status'] == 'refused' and restore['Code'] in UNSUPPORTED_CODES:
+        message += f' The restore was refused ({restore["Code"]}): this Floci version stores PITR but cannot restore.'
+    elif verified and restore['Status'] == 'refused':
+        message += f' The restore was refused ({restore["Code"]}: {restore["Message"]}).'
+    elif verified:
+        state = 'already exists' if restore['Status'] == 'exists' else 'is being restored from it'
+        message += f' {RESTORED} {state}; resetting the lab deletes it.'
     return _result('point-in-time-recovery', PITR_COMMAND, response, verified, message, started)
 
 
@@ -896,7 +908,7 @@ def status() -> dict[str, Any]:
 
 
 def reset() -> dict[str, Any]:
-    """Delete the mapping, function and role, the scaling policies and targets, and the three tables."""
+    """Delete the mapping, function and role, the scaling policies and targets, and the lab's tables."""
     started = time.perf_counter()
     deleted: list[str] = []
     errors: list[str] = []
@@ -935,7 +947,7 @@ def reset() -> dict[str, Any]:
             ServiceNamespace='dynamodb', ResourceId=f'table/{ORDERS}', ScalableDimension=dimension))
     for alarm in sorted(_safe_alarms(errors)):
         attempt(f'alarm:{alarm}', lambda alarm=alarm: _client('cloudwatch').delete_alarms(AlarmNames=[alarm]))
-    for table in (ORDERS, SESSIONS, AUDIT):
+    for table in (ORDERS, SESSIONS, AUDIT, RESTORED):
         attempt(f'table:{table}', lambda table=table: dynamodb.delete_table(TableName=table))
 
     cache.delete_many([CACHE_PREFIX + step for step in STEP_KEYS])
@@ -952,7 +964,8 @@ def reset() -> dict[str, Any]:
             f'--resource-id table/{ORDERS} --scalable-dimension dynamodb:table:WriteCapacityUnits   # and reads\n'
             f'aws dynamodb delete-table --table-name {ORDERS}\n'
             f'aws dynamodb delete-table --table-name {SESSIONS}\n'
-            f'aws dynamodb delete-table --table-name {AUDIT}'
+            f'aws dynamodb delete-table --table-name {AUDIT}\n'
+            f'aws dynamodb delete-table --table-name {RESTORED}'
         ),
         'exit_code': 0,
         'stdout': json.dumps(payload, indent=2),
