@@ -204,9 +204,10 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'AWS AI services, the ML lifecycle on SageMaker AI, retrieval augmented generation, prompt engineering, and guardrails',
     badge: 'AI',
     color: 'blue',
-    description: 'Learn the AI and machine learning side of AWS for the AI Practitioner exam. Match business problems to the ready-made AI services (and spot the ones that need no AI at all), then send reviews, a product photo, a receipt and a support call to Comprehend, Translate, Rekognition, Textract and Transcribe, compare a managed service with a keyword rule, and send low-confidence predictions to a person.',
+    description: 'Learn the AI and machine learning side of AWS for the AI Practitioner exam. Match business problems to the ready-made AI services (and spot the ones that need no AI at all), then send reviews, a product photo, a receipt and a support call to Comprehend, Translate, Rekognition, Textract and Transcribe, compare a managed service with a keyword rule, and send low-confidence predictions to a person. Then walk the whole machine learning lifecycle on SageMaker AI: split a dataset in S3, train a model in a real training container, score it on held-out data, host it on a real-time endpoint, get predictions, retrain with better hyperparameters and swap the endpoint with no downtime, then choose an inference option and check for drift.',
     labs: [
       { service: 'comprehend', key: 'ai-services-tour', title: 'Tour the AWS AI services: match use cases to Comprehend, Translate, Rekognition, Textract, and Transcribe', stepCount: 8 },
+      { service: 'sagemaker', key: 'train-to-endpoint', title: 'Train a model and deploy it to an endpoint with SageMaker AI', stepCount: 8 },
     ],
   },
 ];

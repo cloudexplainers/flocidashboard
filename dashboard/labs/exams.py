@@ -362,6 +362,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('pricing', 'cloud-economics'): _tags(clf='1.4 1.1 4.1', saa='4.2'),
     # Level 9
     ('comprehend', 'ai-services-tour'): _tags(clf='3.7', aif='1.2 1.1'),
+    ('sagemaker', 'train-to-endpoint'): _tags(clf='3.7', aif='1.3 1.1'),
 }
 
 
@@ -656,7 +657,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Training builds a model from data; inference uses the trained model to predict. Real-time inference answers one request at a time with low latency; batch inference scores a large dataset at once and is cheaper when nobody waits.',
             'Data can be labeled or unlabeled, structured (tables) or unstructured (text, images, audio), and tabular or time-series. Overfitting means a model memorizes training data and fails on new data; underfitting means it is too simple to learn the pattern.',
         ],
-        'related_labs': [('comprehend', 'ai-services-tour')],
+        'related_labs': [('comprehend', 'ai-services-tour'), ('sagemaker', 'train-to-endpoint')],
         'planned': None,
     },
     {
@@ -682,8 +683,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Sources of models: pre-trained models (for example, SageMaker JumpStart) to use as they are or fine-tune, or custom models trained on your own data. Managed APIs trade control for speed.',
             'Model metrics include accuracy, precision, recall, F1 score and AUC; business metrics include cost per user, development cost, customer feedback and return on investment.',
         ],
-        'related_labs': [('kinesis', 'streaming-data-lake')],
-        'planned': 'AI-2 SageMaker training to endpoint',
+        'related_labs': [('sagemaker', 'train-to-endpoint'), ('kinesis', 'streaming-data-lake')],
+        'planned': None,
     },
     {
         'key': 'genai-concepts',

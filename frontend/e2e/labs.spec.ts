@@ -243,7 +243,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
   await page.goto('/labs/?service=iam&lab=create-user-alice');
   await page.getByRole('button', { name: /Next: #3\./ }).click();
   release();
-  await expect(page.getByText('Lesson #3 of 96', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #3 of 97', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
   await expect(page.getByRole('button', { name: '▶ Run all remaining steps', exact: true })).toBeEnabled();
 });
@@ -262,7 +262,7 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('button', { name: /Next: #2\./ }).click();
   release();
-  await expect(page.getByText('Lesson #2 of 96', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #2 of 97', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);
