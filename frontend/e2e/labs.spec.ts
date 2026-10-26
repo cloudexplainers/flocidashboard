@@ -137,7 +137,8 @@ test('AI Practitioner study track has concept cards and quizzes for every task',
   const design = page.getByTestId('exam-task-AIF-C01-3.1');
   await design.getByText('Concept: Designing applications on foundation models').click();
   await expect(design.getByText(/Bedrock Knowledge Bases manage RAG for you/)).toBeVisible();
-  await expect(design.getByText('Planned lab: AI-3 RAG with S3 Vectors and Bedrock')).toBeVisible();
+  await expect(design.getByRole('button', { name: /^#\d+ Build a RAG knowledge base with S3 Vectors/ })).toBeVisible();
+  await expect(design.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
