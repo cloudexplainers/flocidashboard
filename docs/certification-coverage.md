@@ -533,12 +533,12 @@ Built after Wave 2 and before Wave 3. Each lab follows the existing pattern and 
 
 50 scored and 15 unscored questions; passing score 700. In-scope machine learning services: Amazon A2I, Bedrock, Comprehend, Fraud Detector, Kendra, Lex, Personalize, Polly, Q, Rekognition, SageMaker, Textract, Transcribe, and Translate, plus analytics, governance, and security services the other tracks already cover.
 
-### Coverage by task statement (existing 95 labs)
+### Coverage by task statement
 
 | Task | Coverage | Covered by | Gap |
 |---|---|---|---|
-| 1.1 | ○ | Concept card and quiz | Theory only |
-| 1.2 | ○ | Concept card and quiz | AI-1 |
+| 1.1 | ◐ | comprehend/ai-services-tour (confidence scores, inference against managed models), concept card and quiz | Mostly theory |
+| 1.2 | ● | comprehend/ai-services-tour (13 problems matched to a service or to no AI, Comprehend, Translate, Rekognition, Textract and Transcribe calls, a keyword-rule baseline, human review under 90% confidence) | Floci's answers are fixed, so the lab says what AWS would return; Polly, Lex, Personalize and Kendra are not emulated |
 | 1.3 | ◐ | kinesis/streaming-data-lake (collect, catalog, and prepare data with Glue and Athena) | Training, hosting, and monitoring: AI-2 |
 | 2.1 | ○ | Concept card and quiz | Theory only |
 | 2.2 | ○ | Concept card and quiz | Theory only |
@@ -583,7 +583,7 @@ Each lab follows the existing pattern and says in each step what Floci only stor
 
 | # | Proposed lab | AIF | Floci |
 |---|---|---|---|
-| AI-1 | **AI services tour**: sentiment and PII with Comprehend, labels and moderation with Rekognition, a form with Textract, Translate, a Transcribe job, then match business problems to services | 1.2 | ⚠️ Stub answers; the lab scores sample results itself |
+| ✅ AI-1 | **AI services tour** (shipped 2026-10-26 as `comprehend/ai-services-tour`, 8 steps, AIF 1.2 with 1.1, CLF 3.7, the first lab of Level 9 and a new lab service): match business problems to services or to no AI, then Comprehend, Translate, Rekognition, Textract and Transcribe on sample inputs, a keyword-rule baseline, and human review under a confidence threshold | 1.2 | ⚠️ Stub answers; the lab says what AWS would return |
 | AI-2 | **SageMaker from training to endpoint**: training data in S3, a training job with hyperparameters, model artifacts, a model, an endpoint config and endpoint, real predictions, and a blue/green `UpdateEndpoint` | 1.3 | ✅ Real containers |
 | AI-3 | **RAG with S3 Vectors and Bedrock**: chunk and embed policy documents, store them in a vector index, retrieve with metadata filters, ground a Converse prompt, and price it by tokens | 3.1, 2.3 | ✅ Retrieval is real; ⚠️ the answer is a stub |
 | AI-4 | **Prompt patterns with the Converse API**: system prompt, zero-shot vs few-shot, temperature and max tokens, a prompt injection attempt, and ROUGE and BLEU scores for sample outputs | 3.2, 3.4 | ⚠️ Stub answers unless the proxy backend is on |

@@ -360,6 +360,8 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('dms', 'migration-toolkit'): _tags(clf='1.3 3.4 3.6', saa='4.3 3.5'),
     ('cloudformation', 'well-architected-review'): _tags(clf='1.2 1.1 3.1', saa='2.2 2.1'),
     ('pricing', 'cloud-economics'): _tags(clf='1.4 1.1 4.1', saa='4.2'),
+    # Level 9
+    ('comprehend', 'ai-services-tour'): _tags(clf='3.7', aif='1.2 1.1'),
 }
 
 
@@ -654,7 +656,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Training builds a model from data; inference uses the trained model to predict. Real-time inference answers one request at a time with low latency; batch inference scores a large dataset at once and is cheaper when nobody waits.',
             'Data can be labeled or unlabeled, structured (tables) or unstructured (text, images, audio), and tabular or time-series. Overfitting means a model memorizes training data and fails on new data; underfitting means it is too simple to learn the pattern.',
         ],
-        'related_labs': [],
+        'related_labs': [('comprehend', 'ai-services-tour')],
         'planned': None,
     },
     {
@@ -665,10 +667,10 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'AI helps when a task needs predictions, scale, or pattern-finding that rules cannot capture. It is a poor fit when an exact, explainable answer is required, when there is no good data, or when the cost outweighs the benefit.',
             'Comprehend analyzes text (sentiment, key phrases, entities, PII). Rekognition analyzes images and video. Textract extracts text, forms and tables from documents. Translate translates text. Transcribe turns speech into text and Polly turns text into speech. Lex builds chatbots.',
             'Personalize gives recommendations, Fraud Detector scores fraud risk, Kendra searches enterprise documents, and Amazon Augmented AI (A2I) adds human review of low-confidence predictions. SageMaker AI builds custom models when no ready-made service fits.',
-            'In Floci, Comprehend, Rekognition, Textract, Translate and Transcribe accept real requests but return fixed answers, so the planned lab judges each use case from sample results.',
+            'In Floci, Comprehend, Rekognition, Textract, Translate and Transcribe accept real requests but return fixed answers, so the AI services tour lab judges each use case from sample results.',
         ],
-        'related_labs': [],
-        'planned': 'AI-1 AI services tour',
+        'related_labs': [('comprehend', 'ai-services-tour')],
+        'planned': None,
     },
     {
         'key': 'ml-lifecycle',
