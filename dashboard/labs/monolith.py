@@ -127,6 +127,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 's3vectors':
         from .s3vectors_labs import LABS
         return LABS
+    if service_key == 'bedrockruntime':
+        from .bedrockruntime_labs import LABS
+        return LABS
     return []
 
 
@@ -305,6 +308,11 @@ LAB_BATCH_ORDER = [
         'service': 's3vectors',
         'title': 'RAG knowledge base lab',
         'summary': 'Ground a foundation model in your own documents: chunk and embed policy documents, store them in an S3 Vectors index with metadata, retrieve the nearest chunks with and without a filter, build a grounded Converse prompt, check the answer for citations, refuse what the documents do not answer, and price it by tokens.',
+    },
+    {
+        'service': 'bedrockruntime',
+        'title': 'Prompt engineering lab',
+        'summary': 'Engineer and measure prompts: a zero-shot request, a system prompt with a role and an output format, few-shot examples, inference settings, a prompt injection and its defense, then ROUGE and BLEU scores, business objectives, and the cheapest model that passes.',
     },
 ]
 
@@ -622,6 +630,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 's3vectors':
         from .s3vectors_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 'bedrockruntime':
+        from .bedrockruntime_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -747,6 +758,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 's3vectors':
         from .s3vectors_labs import status
+        return status(service_key, lab_key)
+    if service_key == 'bedrockruntime':
+        from .bedrockruntime_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -878,6 +892,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 's3vectors':
         from .s3vectors_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 'bedrockruntime':
+        from .bedrockruntime_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
