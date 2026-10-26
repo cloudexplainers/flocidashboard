@@ -12,6 +12,7 @@ DuckDB equivalent of the CTAS it teaches.
 from __future__ import annotations
 
 import json
+import secrets
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -772,7 +773,8 @@ def step_produce_events() -> dict[str, Any]:
     started = time.perf_counter()
     if not _check_stream()[0]:
         return _result('produce-events', PRODUCE_COMMAND, {}, False, 'Create the data stream first.', started)
-    batch_id = f'b{time.time_ns() // 1_000_000:x}'
+    # The random suffix keeps two batches sent in the same millisecond apart.
+    batch_id = f'b{time.time_ns() // 1_000_000:x}{secrets.token_hex(2)}'
     events = _events(batch_id)
     kinesis = _client('kinesis')
     pending = [{'Data': (json.dumps(event) + '\n').encode(), 'PartitionKey': event['user_id']} for event in events]
