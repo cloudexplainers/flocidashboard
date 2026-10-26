@@ -126,6 +126,20 @@ test('Developer study track lists DVA-C02 domains with labs and concept cards', 
   await expect(cicd.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
+test('AI Practitioner study track has concept cards and quizzes for every task', async ({ page }) => {
+  await page.goto('/labs/?track=AIF-C01');
+  await expect(page.getByText('AIF-C01 · AWS Certified AI Practitioner')).toBeVisible();
+  await expect(page.getByTestId('quiz-progress-AIF-C01')).toContainText('0 of 14');
+  await page.getByText('Domain 5: Security, Compliance, and Governance for AI Solutions', { exact: true }).click();
+  const governance = page.getByTestId('exam-task-AIF-C01-5.2');
+  await expect(governance.getByRole('button', { name: /Audit and secure an account with CloudTrail/ })).toBeVisible();
+  await page.getByText('Domain 3: Applications of Foundation Models', { exact: true }).click();
+  const design = page.getByTestId('exam-task-AIF-C01-3.1');
+  await design.getByText('Concept: Designing applications on foundation models').click();
+  await expect(design.getByText(/Bedrock Knowledge Bases manage RAG for you/)).toBeVisible();
+  await expect(design.getByText('Planned lab: AI-3 RAG with S3 Vectors and Bedrock')).toBeVisible();
+});
+
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
   await page.goto('/labs/?track=NOT-AN-EXAM');
   await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();

@@ -17,6 +17,7 @@ from typing import Any
 CLF = 'CLF-C02'
 SAA = 'SAA-C03'
 DVA = 'DVA-C02'
+AIF = 'AIF-C01'
 
 EXAM_GUIDES: dict[str, dict[str, Any]] = {
     CLF: {
@@ -182,13 +183,73 @@ EXAM_GUIDES: dict[str, dict[str, Any]] = {
             },
         ],
     },
+    AIF: {
+        'code': AIF,
+        'title': 'AWS Certified AI Practitioner',
+        'short_title': 'AI Practitioner',
+        'level': 'foundational',
+        'guide_url': 'https://docs.aws.amazon.com/aws-certification/latest/ai-practitioner-01/ai-practitioner-01.html',
+        'checked': '2026-10-26',
+        'passing_score': 700,
+        'domains': [
+            {
+                'id': '1',
+                'title': 'Fundamentals of AI and ML',
+                'weight': 20,
+                'tasks': [
+                    {'id': '1.1', 'title': 'Explain basic AI concepts and terminologies.'},
+                    {'id': '1.2', 'title': 'Identify practical use cases for AI.'},
+                    {'id': '1.3', 'title': 'Describe the ML development lifecycle.'},
+                ],
+            },
+            {
+                'id': '2',
+                'title': 'Fundamentals of Generative AI',
+                'weight': 24,
+                'tasks': [
+                    {'id': '2.1', 'title': 'Explain the basic concepts of generative AI.'},
+                    {'id': '2.2', 'title': 'Understand the capabilities and limitations of generative AI for solving business problems.'},
+                    {'id': '2.3', 'title': 'Describe AWS infrastructure and technologies for building generative AI applications.'},
+                ],
+            },
+            {
+                'id': '3',
+                'title': 'Applications of Foundation Models',
+                'weight': 28,
+                'tasks': [
+                    {'id': '3.1', 'title': 'Describe design considerations for applications that use foundation models.'},
+                    {'id': '3.2', 'title': 'Choose effective prompt engineering techniques.'},
+                    {'id': '3.3', 'title': 'Describe the training and fine-tuning process for foundation models.'},
+                    {'id': '3.4', 'title': 'Describe methods to evaluate foundation model performance.'},
+                ],
+            },
+            {
+                'id': '4',
+                'title': 'Guidelines for Responsible AI',
+                'weight': 14,
+                'tasks': [
+                    {'id': '4.1', 'title': 'Explain the development of AI systems that are responsible.'},
+                    {'id': '4.2', 'title': 'Recognize the importance of transparent and explainable models.'},
+                ],
+            },
+            {
+                'id': '5',
+                'title': 'Security, Compliance, and Governance for AI Solutions',
+                'weight': 14,
+                'tasks': [
+                    {'id': '5.1', 'title': 'Explain methods to secure AI systems.'},
+                    {'id': '5.2', 'title': 'Recognize governance and compliance regulations for AI systems.'},
+                ],
+            },
+        ],
+    },
 }
 
 
-def _tags(clf: str = '', saa: str = '', dva: str = '') -> list[dict[str, Any]]:
+def _tags(clf: str = '', saa: str = '', dva: str = '', aif: str = '') -> list[dict[str, Any]]:
     """Build tags from space-separated task IDs; the first ID per exam is primary."""
     tags = []
-    for exam, tasks in ((CLF, clf), (SAA, saa), (DVA, dva)):
+    for exam, tasks in ((CLF, clf), (SAA, saa), (DVA, dva), (AIF, aif)):
         for index, task in enumerate(tasks.split()):
             tags.append({'exam': exam, 'task': task, 'primary': index == 0})
     return tags
@@ -219,14 +280,14 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('iam', 'ec2-instance-profile'): _tags(clf='2.3', saa='1.1 1.2', dva='2.1'),
     ('s3', 'version-recovery'): _tags(clf='3.6', saa='1.3 2.2', dva='1.3'),
     ('s3', 'default-encryption'): _tags(clf='2.2', saa='1.3', dva='2.2'),
-    ('s3', 'bucket-security'): _tags(clf='2.2 2.3', saa='1.1 1.3', dva='2.1'),
+    ('s3', 'bucket-security'): _tags(clf='2.2 2.3', saa='1.1 1.3', dva='2.1', aif='5.1'),
     ('s3', 'lifecycle-retention'): _tags(clf='3.6', saa='4.1 1.3', dva='1.3'),
     ('s3', 'bucket-cors'): _tags(saa='1.2', dva='1.1'),
     ('s3', 'presigned-url'): _tags(clf='2.2', saa='1.3', dva='2.1'),
     ('s3', 'multipart-upload'): _tags(clf='3.6', saa='3.1 4.1', dva='1.1'),
     ('kms', 'key-alias-encrypt-decrypt'): _tags(clf='2.2', saa='1.3', dva='2.2'),
     ('ssm', 'parameter-store-config'): _tags(clf='2.3', saa='1.2', dva='2.3 3.1'),
-    ('secretsmanager', 'secret-lifecycle'): _tags(clf='2.3', saa='1.2 1.3', dva='2.3'),
+    ('secretsmanager', 'secret-lifecycle'): _tags(clf='2.3', saa='1.2 1.3', dva='2.3', aif='5.1'),
     ('cognito', 'user-pool-signup-auth'): _tags(clf='2.3', saa='1.2', dva='2.1'),
     ('cognito', 'user-groups-custom-attributes'): _tags(saa='1.2', dva='2.1'),
     ('rds', 'db-instance-lifecycle'): _tags(clf='3.4', saa='3.3 1.3', dva='1.3'),
@@ -263,11 +324,11 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ecs', 'fargate-microservice'): _tags(clf='3.3', saa='2.1 3.2 4.2', dva='3.1'),
     ('rds', 'aurora-resilience'): _tags(clf='3.4', saa='2.2 3.3'),
     ('elasticloadbalancing', 'ha-web-tier'): _tags(clf='3.3 3.2', saa='2.2 2.1 3.2 3.4', dva='4.2'),
-    ('s3', 'data-protection-tiers'): _tags(clf='3.6 4.1', saa='1.3 4.1 2.2', dva='1.3'),
-    ('kms', 'key-management'): _tags(clf='2.2', saa='1.3', dva='2.2'),
+    ('s3', 'data-protection-tiers'): _tags(clf='3.6 4.1', saa='1.3 4.1 2.2', dva='1.3', aif='5.2'),
+    ('kms', 'key-management'): _tags(clf='2.2', saa='1.3', dva='2.2', aif='5.1'),
     ('route53', 'routing-failover'): _tags(clf='3.5 3.2', saa='2.2 3.4'),
     ('elasticache', 'cache-aside'): _tags(clf='3.4', saa='3.3 2.1', dva='1.3 4.3'),
-    ('kinesis', 'streaming-data-lake'): _tags(clf='3.7 3.6', saa='3.5 4.1', dva='1.1'),
+    ('kinesis', 'streaming-data-lake'): _tags(clf='3.7 3.6', saa='3.5 4.1', dva='1.1', aif='1.3'),
     ('dynamodb', 'capacity-at-scale'): _tags(clf='3.4', saa='4.3 3.3 2.2', dva='1.3 1.2'),
     ('lambda', 'performance-cost'): _tags(clf='3.3', saa='3.2 4.2', dva='4.3 1.2 3.3 3.4'),
     ('ec2', 'block-file-storage'): _tags(clf='3.6', saa='3.1 4.1'),
@@ -276,7 +337,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     # Level 5
     ('ec2', 'nat-three-tier'): _tags(clf='3.5', saa='1.2 4.4 3.4 2.2'),
     ('ec2', 'guided-broken-route'): _tags(clf='3.5', saa='2.2 3.4', dva='4.1'),
-    ('ec2', 's3-gateway-endpoint'): _tags(clf='3.5', saa='1.2 3.4 4.4'),
+    ('ec2', 's3-gateway-endpoint'): _tags(clf='3.5', saa='1.2 3.4 4.4', aif='5.1'),
     ('ec2', 'guided-private-s3'): _tags(clf='3.5', saa='1.2 4.4'),
     ('ec2', 'sqs-interface-endpoint'): _tags(clf='3.5', saa='1.2 3.4'),
     ('eks', 'control-plane-nodegroup'): _tags(clf='3.3', saa='2.1 3.2'),
@@ -289,13 +350,13 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('lambda', 'async-error-handling'): _tags(clf='3.3', saa='2.1', dva='1.2 2.3 4.1'),
     ('cloudwatch', 'serverless-observability'): _tags(clf='2.2', saa='2.2', dva='4.2 4.1'),
     # Level 7
-    ('iam', 'account-hardening'): _tags(clf='2.3 2.2', saa='1.1', dva='2.1'),
-    ('iam', 'multi-account-guardrails'): _tags(clf='4.2 2.2', saa='1.1'),
-    ('cloudtrail', 'governance-tour'): _tags(clf='2.2 2.4', saa='1.3 1.2'),
+    ('iam', 'account-hardening'): _tags(clf='2.3 2.2', saa='1.1', dva='2.1', aif='5.1'),
+    ('iam', 'multi-account-guardrails'): _tags(clf='4.2 2.2', saa='1.1', aif='5.2'),
+    ('cloudtrail', 'governance-tour'): _tags(clf='2.2 2.4', saa='1.3 1.2', aif='5.2 5.1'),
     ('ec2', 'network-scale-out'): _tags(clf='3.5', saa='3.4 4.4'),
     ('wafv2', 'edge-throttling'): _tags(clf='2.4', saa='1.2 4.4 2.2', dva='2.1'),
     ('costexplorer', 'cost-visibility'): _tags(clf='4.2 4.1', saa='4.2 4.1'),
-    ('ec2', 'shared-responsibility'): _tags(clf='2.1 3.3 3.4 3.6', saa='1.1'),
+    ('ec2', 'shared-responsibility'): _tags(clf='2.1 3.3 3.4 3.6', saa='1.1', aif='5.1'),
     ('dms', 'migration-toolkit'): _tags(clf='1.3 3.4 3.6', saa='4.3 3.5'),
     ('cloudformation', 'well-architected-review'): _tags(clf='1.2 1.1 3.1', saa='2.2 2.1'),
     ('pricing', 'cloud-economics'): _tags(clf='1.4 1.1 4.1', saa='4.2'),
@@ -581,6 +642,188 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Amazon Q Developer suggests code, explains code, and generates unit tests in the IDE and console.',
         ],
         'related_labs': [('cloudformation', 'sam-environments'), ('lambda', 'create-invoke-logs'), ('cloudformation', 's3-sqs-stack')],
+        'planned': None,
+    },
+    {
+        'key': 'ai-ml-basics',
+        'title': 'AI, ML, and deep learning terms',
+        'exams': [(AIF, '1.1')],
+        'points': [
+            'AI is the broad goal of machines doing tasks that need human-like intelligence. Machine learning (ML) learns patterns from data instead of following hand-written rules. Deep learning uses neural networks with many layers. Generative AI is deep learning that creates new content.',
+            'Supervised learning trains on labeled examples (classification, regression). Unsupervised learning finds structure in unlabeled data (clustering, anomaly detection). Reinforcement learning learns from rewards by trial and error.',
+            'Training builds a model from data; inference uses the trained model to predict. Real-time inference answers one request at a time with low latency; batch inference scores a large dataset at once and is cheaper when nobody waits.',
+            'Data can be labeled or unlabeled, structured (tables) or unstructured (text, images, audio), and tabular or time-series. Overfitting means a model memorizes training data and fails on new data; underfitting means it is too simple to learn the pattern.',
+        ],
+        'related_labs': [],
+        'planned': None,
+    },
+    {
+        'key': 'ai-use-cases',
+        'title': 'When to use AI, and which AWS AI service fits',
+        'exams': [(AIF, '1.2')],
+        'points': [
+            'AI helps when a task needs predictions, scale, or pattern-finding that rules cannot capture. It is a poor fit when an exact, explainable answer is required, when there is no good data, or when the cost outweighs the benefit.',
+            'Comprehend analyzes text (sentiment, key phrases, entities, PII). Rekognition analyzes images and video. Textract extracts text, forms and tables from documents. Translate translates text. Transcribe turns speech into text and Polly turns text into speech. Lex builds chatbots.',
+            'Personalize gives recommendations, Fraud Detector scores fraud risk, Kendra searches enterprise documents, and Amazon Augmented AI (A2I) adds human review of low-confidence predictions. SageMaker AI builds custom models when no ready-made service fits.',
+            'In Floci, Comprehend, Rekognition, Textract, Translate and Transcribe accept real requests but return fixed answers, so the planned lab judges each use case from sample results.',
+        ],
+        'related_labs': [],
+        'planned': 'AI-1 AI services tour',
+    },
+    {
+        'key': 'ml-lifecycle',
+        'title': 'The ML development lifecycle and MLOps',
+        'exams': [(AIF, '1.3')],
+        'points': [
+            'An ML pipeline: define the business goal, collect data, analyze and prepare it (feature engineering), train, tune hyperparameters, evaluate, deploy, and monitor. Retrain when data or behavior drifts.',
+            'SageMaker AI features by stage: Data Wrangler prepares data, Feature Store stores features, training jobs and automatic model tuning build models, Model Registry versions them, endpoints serve them, Model Monitor watches for drift, and Pipelines automate the whole flow (MLOps).',
+            'Sources of models: pre-trained models (for example, SageMaker JumpStart) to use as they are or fine-tune, or custom models trained on your own data. Managed APIs trade control for speed.',
+            'Model metrics include accuracy, precision, recall, F1 score and AUC; business metrics include cost per user, development cost, customer feedback and return on investment.',
+        ],
+        'related_labs': [('kinesis', 'streaming-data-lake')],
+        'planned': 'AI-2 SageMaker training to endpoint',
+    },
+    {
+        'key': 'genai-concepts',
+        'title': 'Generative AI building blocks',
+        'exams': [(AIF, '2.1')],
+        'points': [
+            'A foundation model (FM) is a large model pre-trained on broad data that can be adapted to many tasks. Large language models (LLMs) are FMs for text, built on the transformer architecture.',
+            'Tokens are the pieces of text a model reads and writes, and models are priced and limited by tokens. Chunking splits long documents into pieces. Embeddings turn text into vectors so that similar meanings sit close together.',
+            'Multimodal models handle more than one kind of input or output (text, images, audio). Diffusion models generate images by removing noise step by step.',
+            'Use cases include summarization, chatbots, code generation, translation, image generation, search, and recommendation. The FM lifecycle runs from data selection and model selection through pre-training, fine-tuning, evaluation, deployment, and feedback.',
+        ],
+        'related_labs': [],
+        'planned': None,
+    },
+    {
+        'key': 'genai-tradeoffs',
+        'title': 'Capabilities and limits of generative AI',
+        'exams': [(AIF, '2.2')],
+        'points': [
+            'Strengths: adaptability, responsiveness, simplicity of a natural-language interface, and fast content creation at scale.',
+            'Limits: hallucinations (confident but wrong answers), nondeterminism (the same prompt can give different answers), limited interpretability, and inaccuracy on facts the model never saw.',
+            'Choose a model by modality, quality, latency, context length, language support, customization options, compliance needs, and price.',
+            'Measure business value with metrics such as task efficiency, conversion rate, average revenue per user, customer lifetime value, and cost per interaction.',
+        ],
+        'related_labs': [],
+        'planned': None,
+    },
+    {
+        'key': 'genai-on-aws',
+        'title': 'AWS services for building generative AI applications',
+        'exams': [(AIF, '2.3')],
+        'points': [
+            'Amazon Bedrock gives API access to FMs from several providers, plus Knowledge Bases (RAG), Agents, Guardrails, model evaluation and customization. PartyRock is a no-code Bedrock playground.',
+            'SageMaker JumpStart deploys and fine-tunes pre-trained models on your own SageMaker endpoints. Amazon Q is a generative AI assistant for business (Q Business) and for developers (Q Developer).',
+            'Managed services bring accessibility, a lower barrier to entry, speed to market, and pay-as-you-go cost. AWS also handles security and compliance of the infrastructure.',
+            'Cost tradeoffs: on-demand Bedrock pricing is per input and output token; Provisioned Throughput buys guaranteed capacity for a term; custom models need Provisioned Throughput. Bigger models are slower and cost more.',
+        ],
+        'related_labs': [],
+        'planned': 'AI-3 RAG with S3 Vectors and Bedrock',
+    },
+    {
+        'key': 'fm-app-design',
+        'title': 'Designing applications on foundation models',
+        'exams': [(AIF, '3.1')],
+        'points': [
+            'Inference parameters change answers: temperature and top-p control randomness, maximum tokens caps response length (and cost), and stop sequences end output early.',
+            'Retrieval Augmented Generation (RAG) looks up relevant chunks from your data and adds them to the prompt, so the model answers from current, private facts without retraining. Bedrock Knowledge Bases manage RAG for you.',
+            'Vector stores on AWS: Amazon OpenSearch Service, Aurora and RDS for PostgreSQL with pgvector, Neptune, DocumentDB, MemoryDB, and Amazon S3 Vectors.',
+            'Customization cost, from lowest to highest: prompt engineering, RAG, fine-tuning, continued pre-training, training from scratch. Agents (Bedrock Agents, AgentCore) let a model call tools and APIs to complete multi-step tasks.',
+        ],
+        'related_labs': [],
+        'planned': 'AI-3 RAG with S3 Vectors and Bedrock',
+    },
+    {
+        'key': 'prompt-engineering',
+        'title': 'Prompt engineering techniques and risks',
+        'exams': [(AIF, '3.2')],
+        'points': [
+            'A good prompt gives context, a clear instruction, the input data, and the output format; a system prompt sets the role and rules. Negative prompts say what to avoid.',
+            'Zero-shot gives no examples, one-shot (single-shot) gives one, and few-shot gives several. Chain-of-thought asks the model to reason step by step. Prompt templates keep prompts consistent.',
+            'Risks: prompt injection (input that overrides instructions), jailbreaking (bypassing safety rules), hijacking, poisoning (tainted training or retrieved data), and exposure of sensitive data in prompts or answers.',
+            'Floci returns a fixed Bedrock answer unless its proxy backend sends prompts to a local model, so the planned lab checks the prompt you build and shows real answers only in proxy mode.',
+        ],
+        'related_labs': [],
+        'planned': 'AI-4 Prompt patterns with the Converse API',
+    },
+    {
+        'key': 'fm-training',
+        'title': 'Training and fine-tuning foundation models',
+        'exams': [(AIF, '3.3')],
+        'points': [
+            'Pre-training builds a model from huge unlabeled datasets. Fine-tuning adapts it with a smaller labeled dataset for a task. Continued pre-training adds unlabeled domain data (for example, legal text) so the model learns the domain.',
+            'Instruction tuning teaches a model to follow instructions; domain adaptation specializes it; transfer learning reuses what a model learned for a new task. Reinforcement learning from human feedback (RLHF) tunes answers to human preferences.',
+            'Data preparation for fine-tuning: curate and clean data, check governance and consent, make it large and representative enough, and label it carefully.',
+            'Bedrock customization and SageMaker fine-tuning are not emulated by Floci, so this topic stays conceptual.',
+        ],
+        'related_labs': [],
+        'planned': None,
+    },
+    {
+        'key': 'fm-evaluation',
+        'title': 'Evaluating foundation model performance',
+        'exams': [(AIF, '3.4')],
+        'points': [
+            'Evaluation approaches: human evaluation, benchmark datasets, and automatic metrics. Bedrock model evaluation runs automatic or human-based jobs.',
+            'ROUGE compares generated summaries with reference summaries (recall of overlapping words). BLEU scores machine translation (precision of overlapping words). BERTScore compares meaning with embeddings rather than exact words.',
+            'Check that a model meets business objectives: productivity, user engagement, task completion, and cost, not only a benchmark score.',
+        ],
+        'related_labs': [],
+        'planned': 'AI-4 Prompt patterns with the Converse API',
+    },
+    {
+        'key': 'responsible-ai',
+        'title': 'Building responsible AI systems',
+        'exams': [(AIF, '4.1')],
+        'points': [
+            'Responsible AI dimensions: fairness, bias avoidance, inclusivity, robustness, safety, veracity, privacy, transparency, and governance.',
+            'Guardrails for Amazon Bedrock filter harmful content, block denied topics and words, mask PII, and check grounding. SageMaker Clarify detects bias in data and models; Model Monitor watches for drift; A2I sends uncertain results to human reviewers.',
+            'Datasets should be inclusive, diverse, curated, and balanced. Bias makes a model systematically wrong for some groups; variance makes it overfit. Choose models with sustainability and environmental impact in mind too.',
+            'Legal risks of generative AI include intellectual property claims, biased output, loss of customer trust, end-user risk, and hallucinations.',
+        ],
+        'related_labs': [],
+        'planned': 'AI-5 Bedrock guardrails and least privilege',
+    },
+    {
+        'key': 'explainable-ai',
+        'title': 'Transparent and explainable models',
+        'exams': [(AIF, '4.2')],
+        'points': [
+            'A transparent model shows how it reaches an answer (for example, a decision tree); an explainable model can justify a single prediction, even if it is complex inside.',
+            "Tools: SageMaker Model Cards document a model's purpose, data, and limits; SageMaker Clarify explains which features drove a prediction; AWS AI Service Cards describe the intended uses and limits of AWS AI services. Open-source models and documented data lineage help too.",
+            'Tradeoffs: more interpretable models can be less accurate, and more transparency can expose security details. Human-centered design keeps people informed and in control.',
+            'Floci does not emulate SageMaker Clarify or Model Cards.',
+        ],
+        'related_labs': [],
+        'planned': None,
+    },
+    {
+        'key': 'securing-ai',
+        'title': 'Securing AI systems',
+        'exams': [(AIF, '5.1')],
+        'points': [
+            'Use IAM roles and least-privilege policies (for example, allow bedrock:InvokeModel on only the models an app needs), encrypt data at rest with KMS and in transit with TLS, and keep traffic private with VPC endpoints (AWS PrivateLink).',
+            'Amazon Macie finds sensitive data in S3 training data. Secrets Manager stores API keys. The shared responsibility model applies: AWS secures the AI service; you secure your data, prompts, access, and application.',
+            'Track source citation and data lineage (where training and retrieved data came from); check data quality; use privacy-enhancing techniques such as masking and anonymization.',
+            'Defend against prompt injection and data poisoning with input validation, guardrails, and monitoring.',
+        ],
+        'related_labs': [('iam', 'account-hardening'), ('kms', 'key-management'), ('ec2', 's3-gateway-endpoint'), ('s3', 'bucket-security'),
+                         ('secretsmanager', 'secret-lifecycle'), ('ec2', 'shared-responsibility')],
+        'planned': 'AI-5 Bedrock guardrails and least privilege',
+    },
+    {
+        'key': 'ai-governance',
+        'title': 'Governance and compliance for AI',
+        'exams': [(AIF, '5.2')],
+        'points': [
+            'Compliance standards include ISO, SOC, and algorithmic accountability laws. AWS Artifact provides AWS compliance reports; AWS Audit Manager collects evidence for audits.',
+            'AWS Config records and evaluates resource configuration, CloudTrail logs API calls (including model invocations), Amazon Inspector scans for vulnerabilities, and Trusted Advisor checks best practices.',
+            'Data governance: manage the data lifecycle, logging, residency, monitoring, observation, and retention.',
+            'Governance protocols: written policies, review cadence, the Generative AI Security Scoping Matrix, transparency standards, and team training.',
+        ],
+        'related_labs': [('cloudtrail', 'governance-tour'), ('iam', 'multi-account-guardrails'), ('s3', 'data-protection-tiers')],
         'planned': None,
     },
 ]

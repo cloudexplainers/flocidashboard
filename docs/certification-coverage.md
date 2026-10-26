@@ -1,6 +1,6 @@
-# Certification Coverage: CLF-C02, SAA-C03, and DVA-C02
+# Certification Coverage: CLF-C02, SAA-C03, DVA-C02, and AIF-C01
 
-This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
+This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)) and, since 2026-10-26, **AWS Certified AI Practitioner (AIF-C01)** ([§8](#8-ai-practitioner-aif-c01)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
 
 It is a planning document. No labs are built here; pick from [the plan](#5-prioritized-lab-plan).
 
@@ -16,6 +16,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 - **Floci 2.3.0 can support most of the missing SAA hands-on topics.** Verified working: ALB data plane, Auto Scaling groups launching instances, RDS/Aurora/ElastiCache as real containers, Postgres read replicas and snapshots, CloudWatch alarms evaluating real metrics, and S3 Object Lock enforcement. Many other services accept the API but don't simulate the behavior (S3 replication, storage-class retrieval, NAT, CloudFront, SCPs, KMS key policies). Labs on those must be honest about it.
 - **Recommended Wave 1 (six labs):** HA web tier (ALB + ASG), RDS/Aurora resilience, S3 data protection and storage tiers, a NAT/three-tier VPC extension, KMS key management, and Route 53 routing and failover.
 - **Developer – Associate (DVA-C02) is the third track (2026-10-24).** **Wave D** (six labs, [§7](#7-developer--associate-dva-c02)) is complete: CI/CD with CodeBuild, CodePipeline and CodeDeploy, API Gateway stages and authorizers, DynamoDB application patterns, SAM with AppConfig, Lambda async error handling, and serverless observability. All 13 DVA task statements now have hands-on labs; X-Ray and Private CA stay concept cards because Floci lacks them. **Wave 3** (governance, multi-account, network scale-out, edge security, and cost; seven items, [§5](#wave-3-governance-multi-account-cost-and-clf-oriented-labs)) is complete as of 2026-10-25.
+- **AI Practitioner (AIF-C01) is the fourth track (2026-10-26).** Every task statement has a concept card and a four-question quiz, and ten existing labs are tagged, nine of them for the security and governance domain. Floci 2.3.0 runs real SageMaker training jobs and endpoints and real S3 Vectors similarity search, while Bedrock, Comprehend, Rekognition, Textract, Translate, and Transcribe return stub answers. **Wave AI** (five labs, [§8](#8-ai-practitioner-aif-c01)) adds hands-on practice for nine of the 14 task statements.
 - **UI direction:** add exam and task tags to each lab in one Python registry, then add a "Study track" switcher (Levels · CLF-C02 · SAA-C03) with domain-weighted progress and concept cards for objectives that can't be labbed. The same structure extends to every other certification.
 
 ---
@@ -257,7 +258,7 @@ A lab can teach configuration and inspection with these, but it must not claim t
 | Data protection | DLM | No lifecycle policies (AWS Backup is now in `backup/backup-dr-plan`) |
 | Migration and transfer | DMS replication instance, DataSync location, Transfer Family server | No data moved |
 | Cost | Budgets, Cost Explorer (synthetic, near-zero amounts), CUR definitions, Pricing `get-products` | No real spend |
-| Other | API Gateway REST usage plans and API keys, Glue database and crawler, Lake Formation settings, Batch, Elastic Beanstalk, ECR, Lightsail, IoT things, SES identity, CodeBuild, CodePipeline, CodeDeploy, Comprehend (stub), Translate (echo) | Varies |
+| Other | API Gateway REST usage plans and API keys, Glue database and crawler, Lake Formation settings, Batch, Elastic Beanstalk, ECR, Lightsail, IoT things, SES identity, CodeBuild, CodePipeline, CodeDeploy, Bedrock guardrails, Comprehend, Rekognition, Textract and Transcribe (stubs), Translate (echo) | Varies; AI services in [§8](#8-ai-practitioner-aif-c01) |
 
 ### Unsupported in Floci 2.3.0
 
@@ -267,8 +268,8 @@ A lab can teach configuration and inspection with these, but it must not claim t
 - **Purchasing and cost:** Reserved Instance offerings, Savings Plans, Compute Optimizer, Pricing Calculator API, Cost Explorer cost-allocation-tag APIs.
 - **Ops:** CloudWatch alarm actions (an alarm in ALARM sent nothing to its SNS topic), `describe-alarm-history`, CloudWatch composite alarms, SSM Session Manager, Automation, and Patch Manager, X-Ray, AWS Health, Trusted Advisor and Support, Resilience Hub.
 - **Security and compliance:** Shield, AWS Artifact.
-- **AI and end-user:** QuickSight, Rekognition, Polly, Lex, Amplify, WorkSpaces, App Runner, Outposts.
-- **Inconclusive** (`AuthorizationHeaderMalformed` with signature validation on): Inspector2, Detective, Bedrock control plane, GuardDuty and Access Analyzer `ListFindings`, Lambda provisioned concurrency. Retest these with `FLOCI_AUTH_VALIDATE_SIGNATURES=false` before ruling them out.
+- **AI and end-user:** QuickSight, Polly, Lex, Kendra, Personalize, Amplify, WorkSpaces, App Runner, Outposts. (Rekognition is a stub, not unsupported; see [§8](#8-ai-practitioner-aif-c01).)
+- **Inconclusive** (`AuthorizationHeaderMalformed` with signature validation on): Inspector2, Detective, GuardDuty and Access Analyzer `ListFindings`, Lambda provisioned concurrency. Retest these with `FLOCI_AUTH_VALIDATE_SIGNATURES=false` before ruling them out. The Bedrock control plane was on this list; rechecked 2026-10-26, guardrails work and `ListFoundationModels` is the operation Floci lacks (it answers unsupported operations with this error).
 
 ### Gap verdicts
 
@@ -516,7 +517,81 @@ Built after Wave 2 and before Wave 3. Each lab follows the existing pattern and 
 
 ---
 
-## 8. Extending to other certification tracks
+## 8. AI Practitioner (AIF-C01)
+
+**Added 2026-10-26.** Checked against the AIF-C01 exam guide (version 1.4) and a disposable Floci **2.3.0** emulator (`compose.labs.yml`, port 14566, IAM enforcement and signature validation on). The tags live in `dashboard/labs/exams.py` like the other tracks, so the labs page has an **AIF-C01 AI Practitioner** study track with a concept card and a practice quiz for every task statement.
+
+### Exam guide
+
+| Domain (weight) | Task statements |
+|---|---|
+| 1 Fundamentals of AI and ML (20%) | 1.1 Explain basic AI concepts and terminologies · 1.2 Identify practical use cases for AI · 1.3 Describe the ML development lifecycle |
+| 2 Fundamentals of Generative AI (24%) | 2.1 Explain the basic concepts of generative AI · 2.2 Understand the capabilities and limitations of generative AI for solving business problems · 2.3 Describe AWS infrastructure and technologies for building generative AI applications |
+| 3 Applications of Foundation Models (28%) | 3.1 Describe design considerations for applications that use foundation models · 3.2 Choose effective prompt engineering techniques · 3.3 Describe the training and fine-tuning process for foundation models · 3.4 Describe methods to evaluate foundation model performance |
+| 4 Guidelines for Responsible AI (14%) | 4.1 Explain the development of AI systems that are responsible · 4.2 Recognize the importance of transparent and explainable models |
+| 5 Security, Compliance, and Governance for AI Solutions (14%) | 5.1 Explain methods to secure AI systems · 5.2 Recognize governance and compliance regulations for AI systems |
+
+50 scored and 15 unscored questions; passing score 700. In-scope machine learning services: Amazon A2I, Bedrock, Comprehend, Fraud Detector, Kendra, Lex, Personalize, Polly, Q, Rekognition, SageMaker, Textract, Transcribe, and Translate, plus analytics, governance, and security services the other tracks already cover.
+
+### Coverage by task statement (existing 95 labs)
+
+| Task | Coverage | Covered by | Gap |
+|---|---|---|---|
+| 1.1 | ○ | Concept card and quiz | Theory only |
+| 1.2 | ○ | Concept card and quiz | AI-1 |
+| 1.3 | ◐ | kinesis/streaming-data-lake (collect, catalog, and prepare data with Glue and Athena) | Training, hosting, and monitoring: AI-2 |
+| 2.1 | ○ | Concept card and quiz | Theory only |
+| 2.2 | ○ | Concept card and quiz | Theory only |
+| 2.3 | ○ | Concept card and quiz | AI-3 |
+| 3.1 | ○ | Concept card and quiz | AI-3 |
+| 3.2 | ○ | Concept card and quiz | AI-4 |
+| 3.3 | ○ | Concept card and quiz | Floci has no Bedrock customization or SageMaker fine-tuning recipes, so this stays conceptual |
+| 3.4 | ○ | Concept card and quiz | AI-4 scores answers with ROUGE and BLEU computed by the lab |
+| 4.1 | ○ | Concept card and quiz | AI-5 |
+| 4.2 | ○ | Concept card and quiz | SageMaker Clarify and Model Cards are not emulated |
+| 5.1 | ● | iam/account-hardening, kms/key-management, s3/bucket-security, ec2/s3-gateway-endpoint, secretsmanager/secret-lifecycle, ec2/shared-responsibility, cloudtrail/governance-tour | Bedrock-specific least privilege: AI-5 |
+| 5.2 | ● | cloudtrail/governance-tour (CloudTrail, Config rules), iam/multi-account-guardrails, s3/data-protection-tiers (retention) | Audit Manager and Artifact are concept-only |
+
+Fourteen concept cards and 56 quiz questions (four per task) cover what labs can't.
+
+### What Floci 2.3.0 does for AI services
+
+Probed 2026-10-26 with real SDK calls. Every service below is in the 2.3.0 tag; Floci's main branch only fixed edge cases since.
+
+| Service | Result |
+|---|---|
+| **SageMaker AI training** | **Behaves.** `CreateTrainingJob` runs the training image in a real container under the `/opt/ml` contract: S3 channels are copied to `/opt/ml/input/data/<channel>`, hyperparameters to `/opt/ml/input/config/hyperparameters.json`, and whatever the container writes to `/opt/ml/model` is uploaded as `model.tar.gz`. `ContainerEntrypoint` works, so a stock `python` image can train a script. The container must create `/opt/ml/model` itself (it is missing on 2.3.0). A failing script sets `Failed` with the traceback as `FailureReason`. |
+| **SageMaker AI hosting** | **Behaves.** `CreateEndpoint` starts the model image with the command `serve`, copies `ModelDataUrl` into `/opt/ml/model`, waits for `GET /ping`, and `InvokeEndpoint` proxies to `POST /invocations`. A stock `node` image works when the model's `Environment` sets `NODE_OPTIONS=--require /opt/ml/model/inference.js` (SageMaker on AWS also runs `serve` with the model's environment, so the trick should carry over; not tried on AWS). Endpoints are CPU-only. |
+| **S3 Vectors** | **Behaves.** Vector buckets and indexes, `PutVectors`, and `QueryVectors` with real cosine or Euclidean ranking, `returnDistance`, and metadata filters (`$eq`, `$in`, `$and`, ...) applied before top-k. |
+| **Bedrock Runtime** | **Stub.** `Converse` and `InvokeModel` return `Floci stub response for model=<id>` with synthetic token counts (`inputTokens` 10, `outputTokens` 12) whatever the prompt; system prompts and inference settings are accepted and ignored. The optional `proxy` backend (`FLOCI_SERVICES_BEDROCK_RUNTIME_BACKEND=proxy`) forwards `Converse` to an OpenAI-compatible server such as Ollama for real answers. `InvokeModelWithResponseStream` and `ApplyGuardrail` are unsupported. |
+| **Bedrock guardrails** | **Control plane only.** Create, update, version, and tag guardrails with content filters, denied topics, word lists, and PII actions. Nothing applies them: a Converse call with `guardrailConfig` returns the normal stub answer with no trace, and `ApplyGuardrail` is missing. `ListFoundationModels`, customization, model evaluation, Knowledge Bases, and classic Agents are unsupported. |
+| **Bedrock AgentCore** | Control plane only: runtimes, endpoints, gateways, memories, and credential providers are stored; nothing runs. |
+| **Comprehend** | **Stub.** `DetectSentiment` is always `NEUTRAL`, `DetectDominantLanguage` always `en`, `DetectKeyPhrases` returns one stub phrase, and PII detection finds nothing. Language codes are validated. `DetectEntities`, `DetectSyntax`, and custom models are unsupported. |
+| **Rekognition** | **Stub.** `DetectLabels` and `DetectText` return one `Floci` entry; faces, face comparison, and moderation find nothing. Images are validated as AWS validates them (a GIF is `InvalidImageFormatException`). Collections and video are unsupported. |
+| **Textract** | **Stub.** Every document returns one `Floci` line; async jobs succeed at once. |
+| **Translate** | **Echo.** `TranslateText` returns the input unchanged; unknown language codes are `UnsupportedLanguagePairException`, and text over 10,000 bytes is refused. |
+| **Transcribe** | **Stub.** Jobs are `COMPLETED` at once with a synthetic transcript URI and no transcript. |
+| **Lex, Polly, Kendra, Personalize, Q, Fraud Detector, A2I** | Unsupported. |
+
+Comprehend, Rekognition, Textract, and Translate can return chosen answers from an `AI_MOCK_CONFIG` JSON file that Floci re-reads when it changes (keyed by the exact input text, or by bucket and key for Textract). The dashboard doesn't mount one, so labs judge results from sample data, the way other labs check rules Floci stores but doesn't enforce.
+
+### Wave AI: AI Practitioner labs
+
+Each lab follows the existing pattern and says in each step what Floci only stores versus does.
+
+| # | Proposed lab | AIF | Floci |
+|---|---|---|---|
+| AI-1 | **AI services tour**: sentiment and PII with Comprehend, labels and moderation with Rekognition, a form with Textract, Translate, a Transcribe job, then match business problems to services | 1.2 | ⚠️ Stub answers; the lab scores sample results itself |
+| AI-2 | **SageMaker from training to endpoint**: training data in S3, a training job with hyperparameters, model artifacts, a model, an endpoint config and endpoint, real predictions, and a blue/green `UpdateEndpoint` | 1.3 | ✅ Real containers |
+| AI-3 | **RAG with S3 Vectors and Bedrock**: chunk and embed policy documents, store them in a vector index, retrieve with metadata filters, ground a Converse prompt, and price it by tokens | 3.1, 2.3 | ✅ Retrieval is real; ⚠️ the answer is a stub |
+| AI-4 | **Prompt patterns with the Converse API**: system prompt, zero-shot vs few-shot, temperature and max tokens, a prompt injection attempt, and ROUGE and BLEU scores for sample outputs | 3.2, 3.4 | ⚠️ Stub answers unless the proxy backend is on |
+| AI-5 | **Bedrock guardrails and least privilege**: a guardrail with content filters, a denied topic, and PII masking, versions, a KMS key, an IAM policy that allows one model, and the lab's own check of sample prompts | 4.1, 5.1 | ⚠️ Guardrails are stored, not applied |
+
+**Projected AIF coverage:** after Wave AI, 1.2, 1.3, 2.3, 3.1, 3.2, 3.4, 4.1, 5.1, and 5.2 have labs (9 of 14). 1.1, 2.1, 2.2, 3.3, and 4.2 stay concept cards and quizzes, which suits a foundational exam that tests understanding more than hands-on skill.
+
+---
+
+## 9. Extending to other certification tracks
 
 The structure above is exam-agnostic. A new track needs three things:
 
@@ -535,13 +610,14 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 | **Security – Specialty** | IAM, KMS, S3 security, VPC controls. | KMS and key policies, Secrets rotation, GuardDuty, Security Hub, Macie, Config rules, CloudTrail analysis, WAF | **Key-policy and SCP enforcement gaps** limit "prove the deny" labs; detection services are control plane only |
 | **Advanced Networking – Specialty** (AWS lists retirement on 2026-12-31) | VPC labs. | Low priority given the retirement | VPN and Direct Connect unsupported |
 | **Data Engineer – Associate** | Low today. | Kinesis, Firehose, Glue, Athena, Lake Formation, Redshift, EMR, Step Functions pipelines | Verify Glue and Athena execution depth first |
-| **Machine Learning Engineer – Associate**, **AI Practitioner** | Very low. | SageMaker endpoints, Bedrock runtime calls, Comprehend and Textract | Bedrock control plane inconclusive; many AI services stubbed or unsupported. Mostly concept cards. |
+| **AI Practitioner (AIF-C01)** | **Track live since 2026-10-26; see [§8](#8-ai-practitioner-aif-c01).** | Wave AI (AI-1 to AI-5) | Bedrock answers and the AI services are stubs |
+| **Machine Learning Engineer – Associate** | Low. Builds on Wave AI's SageMaker lab. | Training jobs with tuning, endpoint variants, batch transform, Feature Store, Pipelines | Only training jobs and endpoints are emulated; no tuning, Pipelines, Model Monitor, or Feature Store |
 
 **Suggested order after CLF and SAA:** Developer (cheapest, since most labs exist), then CloudOps, then Security, then Data Engineer, then the Professional exams.
 
 ---
 
-## 9. Keeping this current
+## 10. Keeping this current
 
 - **When AWS revises a guide,** update `EXAM_GUIDES`. The "no orphan objective" test then flags labs tagged with removed task IDs.
 - **When Floci upgrades,** rerun the probe for anything marked control plane, unsupported, or inconclusive in §4. Several topics, especially SCP and KMS key-policy enforcement, S3 replication, and NAT egress, would move labs from "configuration only" to "prove it works."
