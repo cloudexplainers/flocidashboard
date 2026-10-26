@@ -540,10 +540,10 @@ Built after Wave 2 and before Wave 3. Each lab follows the existing pattern and 
 | 1.1 | ◐ | comprehend/ai-services-tour (confidence scores, inference against managed models), sagemaker/train-to-endpoint (training data, labels, features, inference, overfitting and underfitting from the metrics), concept card and quiz | Mostly theory |
 | 1.2 | ● | comprehend/ai-services-tour (13 problems matched to a service or to no AI, Comprehend, Translate, Rekognition, Textract and Transcribe calls, a keyword-rule baseline, human review under 90% confidence) | Floci's answers are fixed, so the lab says what AWS would return; Polly, Lex, Personalize and Kendra are not emulated |
 | 1.3 | ● | sagemaker/train-to-endpoint (data split, a real training job with hyperparameters, evaluation on held-out data, a model, a real-time endpoint, predictions, retraining and a blue/green endpoint update, inference options and a drift check), kinesis/streaming-data-lake (collect, catalog, and prepare data with Glue and Athena) | Model Monitor, the model registry, tuning jobs and Pipelines are not emulated, so the lab checks drift itself |
-| 2.1 | ○ | Concept card and quiz | Theory only |
+| 2.1 | ◐ | s3vectors/rag-knowledge-base (tokens, embeddings, a vector store, prompt context and token-based pricing), concept card and quiz | Mostly theory; Floci's answers are stubs |
 | 2.2 | ○ | Concept card and quiz | Theory only |
-| 2.3 | ○ | Concept card and quiz | AI-3 |
-| 3.1 | ○ | Concept card and quiz | AI-3 |
+| 2.3 | ● | s3vectors/rag-knowledge-base (S3 Vectors as the vector store, the Converse API, retrieval instead of fine-tuning, token pricing) | Bedrock Knowledge Bases, customization and the model catalog are not emulated |
+| 3.1 | ● | s3vectors/rag-knowledge-base (chunking, embeddings, a vector index with metadata filters, top-K retrieval, grounded prompts, a grounding check, refusing what the documents do not answer, cost per 1,000 tokens) | Guardrails contextual grounding and Knowledge Bases are not emulated |
 | 3.2 | ○ | Concept card and quiz | AI-4 |
 | 3.3 | ○ | Concept card and quiz | Floci has no Bedrock customization or SageMaker fine-tuning recipes, so this stays conceptual |
 | 3.4 | ○ | Concept card and quiz | AI-4 scores answers with ROUGE and BLEU computed by the lab |
@@ -585,7 +585,7 @@ Each lab follows the existing pattern and says in each step what Floci only stor
 |---|---|---|---|
 | ✅ AI-1 | **AI services tour** (shipped 2026-10-26 as `comprehend/ai-services-tour`, 8 steps, AIF 1.2 with 1.1, CLF 3.7, the first lab of Level 9 and a new lab service): match business problems to services or to no AI, then Comprehend, Translate, Rekognition, Textract and Transcribe on sample inputs, a keyword-rule baseline, and human review under a confidence threshold | 1.2 | ⚠️ Stub answers; the lab says what AWS would return |
 | ✅ AI-2 | **SageMaker from training to endpoint** (shipped 2026-10-26 as `sagemaker/train-to-endpoint`, 8 steps, AIF 1.3 with 1.1, CLF 3.7, a new lab service): a train and validation split in S3, a real training job, evaluation (R squared 0.61 at 5 epochs), a model, an endpoint, predictions checked against the model's math, retraining to R squared 0.98 and a blue/green `UpdateEndpoint`, then inference options and a drift check | 1.3 | ✅ Real containers |
-| AI-3 | **RAG with S3 Vectors and Bedrock**: chunk and embed policy documents, store them in a vector index, retrieve with metadata filters, ground a Converse prompt, and price it by tokens | 3.1, 2.3 | ✅ Retrieval is real; ⚠️ the answer is a stub |
+| ✅ AI-3 | **RAG with S3 Vectors and Bedrock** (shipped 2026-10-26 as `s3vectors/rag-knowledge-base`, 8 steps, AIF 3.1 with 2.3 and 2.1, a new lab service): chunk and embed policy documents, a 64-dimension cosine index with metadata, top-K retrieval and a metadata filter, a grounded Converse prompt, a citation and grounding check, a distance threshold that refuses unanswerable questions, and token pricing | 3.1, 2.3 | ✅ Retrieval is real; ⚠️ the answer is a stub |
 | AI-4 | **Prompt patterns with the Converse API**: system prompt, zero-shot vs few-shot, temperature and max tokens, a prompt injection attempt, and ROUGE and BLEU scores for sample outputs | 3.2, 3.4 | ⚠️ Stub answers unless the proxy backend is on |
 | AI-5 | **Bedrock guardrails and least privilege**: a guardrail with content filters, a denied topic, and PII masking, versions, a KMS key, an IAM policy that allows one model, and the lab's own check of sample prompts | 4.1, 5.1 | ⚠️ Guardrails are stored, not applied |
 

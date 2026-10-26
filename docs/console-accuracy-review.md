@@ -1558,6 +1558,23 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service sagemaker --lab train-to-endpoint` passed on 2.3.0.
 
+## RAG knowledge base lab (2026-10-26)
+
+`s3vectors/rag-knowledge-base` (AIF 3.1, 2.3, 2.1), 8 steps, in `dashboard/labs/s3vectors_labs.py` (a new lab service
+registered in `monolith.py`, the third lab of Level 9, Wave AI item AI-3). It creates the bucket
+`lab-ai-rag-documents`, the vector bucket `lab-ai-rag-vectors` and the index `policies`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| S3 Vectors | Real: `PutVectors`, cosine `QueryVectors` with `returnDistance` and `returnMetadata`, `$eq` and `$and` filters applied before top-k, and a dimension check (`Vector dimension 2 does not match index dimension 64`). | Retrieval is real |
+| Embeddings | `InvokeModel` on `amazon.titan-embed-text-v2:0` returns `{"outputs":[{"text":"Floci stub response"}]}`, not a vector. | The lab embeds chunks itself and says so |
+| Converse | Accepts the system prompt, context and `temperature`/`maxTokens`, and answers `Floci stub response for model=<id>` with 10 input and 12 output tokens whatever the prompt. | Shows the prompt AWS would answer; counts tokens itself |
+| Bedrock Knowledge Bases | Unsupported. | The lab builds chunking, embedding and retrieval by hand |
+
+`check_labs --service s3vectors --lab rag-knowledge-base` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |

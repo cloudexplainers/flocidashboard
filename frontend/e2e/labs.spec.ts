@@ -137,7 +137,8 @@ test('AI Practitioner study track has concept cards and quizzes for every task',
   const design = page.getByTestId('exam-task-AIF-C01-3.1');
   await design.getByText('Concept: Designing applications on foundation models').click();
   await expect(design.getByText(/Bedrock Knowledge Bases manage RAG for you/)).toBeVisible();
-  await expect(design.getByText('Planned lab: AI-3 RAG with S3 Vectors and Bedrock')).toBeVisible();
+  await expect(design.getByRole('button', { name: /^#\d+ Build a RAG knowledge base with S3 Vectors/ })).toBeVisible();
+  await expect(design.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
@@ -243,7 +244,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
   await page.goto('/labs/?service=iam&lab=create-user-alice');
   await page.getByRole('button', { name: /Next: #3\./ }).click();
   release();
-  await expect(page.getByText('Lesson #3 of 97', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #3 of 98', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
   await expect(page.getByRole('button', { name: '▶ Run all remaining steps', exact: true })).toBeEnabled();
 });
@@ -262,7 +263,7 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('button', { name: /Next: #2\./ }).click();
   release();
-  await expect(page.getByText('Lesson #2 of 97', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #2 of 98', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);

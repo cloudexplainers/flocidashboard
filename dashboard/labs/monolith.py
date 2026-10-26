@@ -124,6 +124,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'sagemaker':
         from .sagemaker_labs import LABS
         return LABS
+    if service_key == 's3vectors':
+        from .s3vectors_labs import LABS
+        return LABS
     return []
 
 
@@ -297,6 +300,11 @@ LAB_BATCH_ORDER = [
         'service': 'sagemaker',
         'title': 'SageMaker AI lab',
         'summary': 'Walk the ML lifecycle on SageMaker AI: split data in S3, train in a real container, evaluate on held-out data, host a real-time endpoint, retrain and swap the endpoint without downtime, and pick an inference option and a drift check.',
+    },
+    {
+        'service': 's3vectors',
+        'title': 'RAG knowledge base lab',
+        'summary': 'Ground a foundation model in your own documents: chunk and embed policy documents, store them in an S3 Vectors index with metadata, retrieve the nearest chunks with and without a filter, build a grounded Converse prompt, check the answer for citations, refuse what the documents do not answer, and price it by tokens.',
     },
 ]
 
@@ -611,6 +619,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'sagemaker':
         from .sagemaker_labs import run_step
         return run_step(service_key, lab_key, step_key)
+    if service_key == 's3vectors':
+        from .s3vectors_labs import run_step
+        return run_step(service_key, lab_key, step_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
         raise ValueError('Lab not found')
@@ -733,6 +744,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status(service_key, lab_key)
     if service_key == 'sagemaker':
         from .sagemaker_labs import status
+        return status(service_key, lab_key)
+    if service_key == 's3vectors':
+        from .s3vectors_labs import status
         return status(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
@@ -861,6 +875,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset(service_key, lab_key)
     if service_key == 'sagemaker':
         from .sagemaker_labs import reset
+        return reset(service_key, lab_key)
+    if service_key == 's3vectors':
+        from .s3vectors_labs import reset
         return reset(service_key, lab_key)
     lab = get_lab(service_key, lab_key)
     if not lab:
