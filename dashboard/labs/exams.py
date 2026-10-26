@@ -365,6 +365,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('sagemaker', 'train-to-endpoint'): _tags(clf='3.7', aif='1.3 1.1'),
     ('s3vectors', 'rag-knowledge-base'): _tags(aif='3.1 2.3 2.1'),
     ('bedrockruntime', 'prompt-patterns'): _tags(aif='3.2 3.4 2.2'),
+    ('bedrock', 'guardrails-least-privilege'): _tags(aif='4.1 5.1 5.2'),
 }
 
 
@@ -788,8 +789,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Datasets should be inclusive, diverse, curated, and balanced. Bias makes a model systematically wrong for some groups; variance makes it overfit. Choose models with sustainability and environmental impact in mind too.',
             'Legal risks of generative AI include intellectual property claims, biased output, loss of customer trust, end-user risk, and hallucinations.',
         ],
-        'related_labs': [],
-        'planned': 'AI-5 Bedrock guardrails and least privilege',
+        'related_labs': [('bedrock', 'guardrails-least-privilege')],
+        'planned': None,
     },
     {
         'key': 'explainable-ai',
@@ -814,9 +815,10 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Track source citation and data lineage (where training and retrieved data came from); check data quality; use privacy-enhancing techniques such as masking and anonymization.',
             'Defend against prompt injection and data poisoning with input validation, guardrails, and monitoring.',
         ],
-        'related_labs': [('iam', 'account-hardening'), ('kms', 'key-management'), ('ec2', 's3-gateway-endpoint'), ('s3', 'bucket-security'),
-                         ('secretsmanager', 'secret-lifecycle'), ('ec2', 'shared-responsibility')],
-        'planned': 'AI-5 Bedrock guardrails and least privilege',
+        'related_labs': [('bedrock', 'guardrails-least-privilege'), ('iam', 'account-hardening'), ('kms', 'key-management'),
+                         ('ec2', 's3-gateway-endpoint'), ('s3', 'bucket-security'), ('secretsmanager', 'secret-lifecycle'),
+                         ('ec2', 'shared-responsibility')],
+        'planned': None,
     },
     {
         'key': 'ai-governance',
@@ -828,7 +830,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Data governance: manage the data lifecycle, logging, residency, monitoring, observation, and retention.',
             'Governance protocols: written policies, review cadence, the Generative AI Security Scoping Matrix, transparency standards, and team training.',
         ],
-        'related_labs': [('cloudtrail', 'governance-tour'), ('iam', 'multi-account-guardrails'), ('s3', 'data-protection-tiers')],
+        'related_labs': [('bedrock', 'guardrails-least-privilege'), ('cloudtrail', 'governance-tour'),
+                         ('iam', 'multi-account-guardrails'), ('s3', 'data-protection-tiers')],
         'planned': None,
     },
 ]

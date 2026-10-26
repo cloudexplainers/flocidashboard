@@ -1593,6 +1593,28 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service bedrockruntime --lab prompt-patterns` passed on 2.3.0.
 
+## Responsible AI lab (2026-10-26)
+
+`bedrock/guardrails-least-privilege` (AIF 4.1, 5.1, 5.2), 8 steps, in `dashboard/labs/bedrock_labs.py` (a new lab
+service registered in `monolith.py`, the fifth lab of Level 9, Wave AI item AI-5). It creates the guardrail
+`lab-ai-support-guardrail`, the KMS key alias `alias/lab-ai-bedrock`, the buckets `lab-ai-prompt-log` and
+`lab-ai-bedrock-trail-logs`, the trail `lab-ai-bedrock-trail`, and the role and policy `lab-ai-support-assistant` and
+`lab-ai-invoke-one-model`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Guardrail policies | Stored and returned in full: content filters, denied topics, word and managed lists, PII entities and regexes, contextual grounding, tags. | Every policy lands |
+| Guardrail versions | Real and immutable: version 1 keeps its topics when the draft gains one. | Pin an app to a version |
+| Guardrail with a KMS key | Accepted with a customer managed key ARN; `alias/aws/bedrock` does not exist, so a key must be created first. | Encrypted with your own key |
+| Applying a guardrail | `guardrailConfig` is accepted, the answer is the usual stub with `stopReason end_turn` and no trace, and `ApplyGuardrail` fails with HTTP 400 (`AuthorizationHeaderMalformed`, Floci's shape for an unsupported operation). | Stored, not applied; the lab evaluates the prompts |
+| IAM policy simulation | Real, including context keys: without `bedrock:GuardrailIdentifier` the decision is `implicitDeny`. | Proves least privilege |
+| KMS, S3 encryption, Block Public Access, CloudTrail | Real. | Real |
+| Bedrock model invocation logging | Unsupported. | Named as not emulated |
+
+`check_labs --service bedrock --lab guardrails-least-privilege` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
