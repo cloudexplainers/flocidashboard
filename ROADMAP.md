@@ -372,11 +372,11 @@ Why it matters:
 
 Continue the local AWS workflow lab system beyond the completed foundations: 95 labs across IAM, S3, KMS, SSM, Secrets Manager, Cognito, SQS, SNS, Scheduler, DynamoDB, Kinesis, Lambda, API Gateway, EventBridge, Step Functions, CloudWatch, EC2, RDS, ElastiCache, Elastic Load Balancing with Auto Scaling, Route 53, ECS, EKS, CloudFormation, AWS Backup, CloudFront with Global Accelerator, CI/CD with CodeBuild, CodePipeline, and CodeDeploy, governance with CloudTrail, Config, GuardDuty, and Security Hub, edge security with AWS WAF, cost visibility with Budgets, Cost Explorer, and Spot, the shared responsibility model across EC2, RDS, Lambda, and S3, migration with DataSync, AWS DMS, and Elastic Beanstalk, Well-Architected reviews with CloudFormation, and cloud economics with the Price List, Auto Scaling, Dedicated Hosts, and Lightsail.
 
-Certification study path: [`docs/certification-coverage.md`](./docs/certification-coverage.md) maps every lab to the AWS Cloud Practitioner (CLF-C02), Solutions Architect – Associate (SAA-C03), and Developer – Associate (DVA-C02) exam domains. It also covers gaps, what Floci can emulate, a prioritized plan for new labs, and how exam tags and study tracks could work in the curriculum UI and extend to other certifications.
+Certification study path: [`docs/certification-coverage.md`](./docs/certification-coverage.md) maps every lab to the AWS Cloud Practitioner (CLF-C02), Solutions Architect – Associate (SAA-C03), Developer – Associate (DVA-C02), and AI Practitioner (AIF-C01) exam domains. It also covers gaps, what Floci can emulate, a prioritized plan for new labs, and how exam tags and study tracks could work in the curriculum UI and extend to other certifications.
 
 Feasible follow-ups:
 
-- Build the certification lab waves from `docs/certification-coverage.md`. Waves 1 and 2 have shipped. Next is Wave D for Developer – Associate (CI/CD pipeline, API Gateway stages and authorizers, DynamoDB transactions, SAM and AppConfig, Lambda destinations, observability), then Wave 3.
+- Build the certification lab waves from `docs/certification-coverage.md`. Waves 1, 2, 3, C, and D have shipped. Next is Wave AI for AI Practitioner: an AI services tour, SageMaker training to endpoint, RAG with S3 Vectors and Bedrock, prompt patterns, and Bedrock guardrails.
 - Add exam and task tags to labs, plus a study-track view (Levels · CLF-C02 · SAA-C03) with domain-weighted progress.
 
 - Continue the new serverless application spine with S3 object-created notifications to Lambda, EventBridge rules to Lambda or SQS, and EventBridge Pipes source-to-target flows where local support is reliable.

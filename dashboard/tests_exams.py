@@ -97,9 +97,24 @@ class ExamTracksApiTests(SimpleTestCase):
         self.assertIn('deployment-strategies', tasks['3.4']['concepts'])
         self.assertIn('tracing-xray', tasks['4.2']['concepts'])
 
+    def test_ai_practitioner_track_has_cards_for_every_task(self):
+        tracks = exam_tracks(all_labs())
+        aif = next(exam for exam in tracks['exams'] if exam['code'] == 'AIF-C01')
+        tasks = {task['id']: task for domain in aif['domains'] for task in domain['tasks']}
+        self.assertEqual(len(tasks), 14)
+        self.assertEqual([domain['weight'] for domain in aif['domains']], [20, 24, 28, 14, 14])
+        for task_id, task in tasks.items():
+            with self.subTest(task=task_id):
+                self.assertTrue(task['concepts'], f'AIF {task_id} has no concept card')
+        governance = {(lab['service'], lab['key']) for lab in tasks['5.2']['labs']}
+        self.assertIn(('cloudtrail', 'governance-tour'), governance)
+        secure = {(lab['service'], lab['key']) for lab in tasks['5.1']['labs']}
+        self.assertIn(('kms', 'key-management'), secure)
+        self.assertIn(('kinesis', 'streaming-data-lake'), {(lab['service'], lab['key']) for lab in tasks['1.3']['labs']})
+
     def test_exams_endpoint_and_catalog_include_tags(self):
         exams = self.client.get(reverse('dashboard:labs-exams')).json()
-        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02'])
+        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02', 'AIF-C01'])
         self.assertEqual(len(exams['concepts']), len(CONCEPT_CARDS))
 
         catalog = self.client.get(reverse('dashboard:labs-catalog')).json()
@@ -135,6 +150,13 @@ class PracticeQuizTests(SimpleTestCase):
         for task in sorted(_task_ids('CLF-C02')):
             with self.subTest(task=task):
                 self.assertIn(('CLF-C02', task), QUIZZES)
+
+    def test_every_ai_practitioner_task_has_a_quiz(self):
+        from .labs.quizzes import QUIZZES
+
+        for task in sorted(_task_ids('AIF-C01')):
+            with self.subTest(task=task):
+                self.assertGreaterEqual(len(QUIZZES.get(('AIF-C01', task), [])), 4)
 
     def test_exam_tracks_attach_quizzes(self):
         tracks = exam_tracks(all_labs())
