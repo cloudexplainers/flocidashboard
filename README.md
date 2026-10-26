@@ -2,7 +2,7 @@
 
 A local console for inspecting, testing, and learning AWS workflows with [Floci](https://floci.io/). Built with Django, React, TypeScript, Vite, and AWS’s Cloudscape design system.
 
-The dashboard catalogs **70 AWS services** and includes **96 workflow labs across 33 services, with 620 steps**. Compatibility checks target Floci 2.3.0; Floci supports additional services beyond this dashboard’s catalog. This is a local development and learning tool, not the AWS Management Console.
+The dashboard catalogs **70 AWS services** and includes **97 workflow labs across 34 services, with 628 steps**. Compatibility checks target Floci 2.3.0; Floci supports additional services beyond this dashboard’s catalog. This is a local development and learning tool, not the AWS Management Console.
 
 ![Floci Dashboard console](./flocidashboard.png)
 

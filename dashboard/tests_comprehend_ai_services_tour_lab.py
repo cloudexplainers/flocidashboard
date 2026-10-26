@@ -86,7 +86,7 @@ class RegistrationTests(SimpleTestCase):
         self.assertEqual([item['key'] for item in labs_for_service('comprehend')], ['ai-services-tour'])
         self.assertIn({'exam': 'AIF-C01', 'task': '1.2', 'primary': True}, LAB_EXAM_TAGS[('comprehend', 'ai-services-tour')])
         self.assertIn({'exam': 'CLF-C02', 'task': '3.7', 'primary': True}, LAB_EXAM_TAGS[('comprehend', 'ai-services-tour')])
-        self.assertEqual(LAB_BATCH_ORDER[-1]['service'], 'comprehend')
+        self.assertIn('comprehend', [batch['service'] for batch in LAB_BATCH_ORDER])
         card = next(card for card in CONCEPT_CARDS if card['key'] == 'ai-use-cases')
         self.assertIn(('comprehend', 'ai-services-tour'), card['related_labs'])
         self.assertFalse(card.get('planned'))

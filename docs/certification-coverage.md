@@ -537,9 +537,9 @@ Built after Wave 2 and before Wave 3. Each lab follows the existing pattern and 
 
 | Task | Coverage | Covered by | Gap |
 |---|---|---|---|
-| 1.1 | ◐ | comprehend/ai-services-tour (confidence scores, inference against managed models), concept card and quiz | Mostly theory |
+| 1.1 | ◐ | comprehend/ai-services-tour (confidence scores, inference against managed models), sagemaker/train-to-endpoint (training data, labels, features, inference, overfitting and underfitting from the metrics), concept card and quiz | Mostly theory |
 | 1.2 | ● | comprehend/ai-services-tour (13 problems matched to a service or to no AI, Comprehend, Translate, Rekognition, Textract and Transcribe calls, a keyword-rule baseline, human review under 90% confidence) | Floci's answers are fixed, so the lab says what AWS would return; Polly, Lex, Personalize and Kendra are not emulated |
-| 1.3 | ◐ | kinesis/streaming-data-lake (collect, catalog, and prepare data with Glue and Athena) | Training, hosting, and monitoring: AI-2 |
+| 1.3 | ● | sagemaker/train-to-endpoint (data split, a real training job with hyperparameters, evaluation on held-out data, a model, a real-time endpoint, predictions, retraining and a blue/green endpoint update, inference options and a drift check), kinesis/streaming-data-lake (collect, catalog, and prepare data with Glue and Athena) | Model Monitor, the model registry, tuning jobs and Pipelines are not emulated, so the lab checks drift itself |
 | 2.1 | ○ | Concept card and quiz | Theory only |
 | 2.2 | ○ | Concept card and quiz | Theory only |
 | 2.3 | ○ | Concept card and quiz | AI-3 |
@@ -584,7 +584,7 @@ Each lab follows the existing pattern and says in each step what Floci only stor
 | # | Proposed lab | AIF | Floci |
 |---|---|---|---|
 | ✅ AI-1 | **AI services tour** (shipped 2026-10-26 as `comprehend/ai-services-tour`, 8 steps, AIF 1.2 with 1.1, CLF 3.7, the first lab of Level 9 and a new lab service): match business problems to services or to no AI, then Comprehend, Translate, Rekognition, Textract and Transcribe on sample inputs, a keyword-rule baseline, and human review under a confidence threshold | 1.2 | ⚠️ Stub answers; the lab says what AWS would return |
-| AI-2 | **SageMaker from training to endpoint**: training data in S3, a training job with hyperparameters, model artifacts, a model, an endpoint config and endpoint, real predictions, and a blue/green `UpdateEndpoint` | 1.3 | ✅ Real containers |
+| ✅ AI-2 | **SageMaker from training to endpoint** (shipped 2026-10-26 as `sagemaker/train-to-endpoint`, 8 steps, AIF 1.3 with 1.1, CLF 3.7, a new lab service): a train and validation split in S3, a real training job, evaluation (R squared 0.61 at 5 epochs), a model, an endpoint, predictions checked against the model's math, retraining to R squared 0.98 and a blue/green `UpdateEndpoint`, then inference options and a drift check | 1.3 | ✅ Real containers |
 | AI-3 | **RAG with S3 Vectors and Bedrock**: chunk and embed policy documents, store them in a vector index, retrieve with metadata filters, ground a Converse prompt, and price it by tokens | 3.1, 2.3 | ✅ Retrieval is real; ⚠️ the answer is a stub |
 | AI-4 | **Prompt patterns with the Converse API**: system prompt, zero-shot vs few-shot, temperature and max tokens, a prompt injection attempt, and ROUGE and BLEU scores for sample outputs | 3.2, 3.4 | ⚠️ Stub answers unless the proxy backend is on |
 | AI-5 | **Bedrock guardrails and least privilege**: a guardrail with content filters, a denied topic, and PII masking, versions, a KMS key, an IAM policy that allows one model, and the lab's own check of sample prompts | 4.1, 5.1 | ⚠️ Guardrails are stored, not applied |

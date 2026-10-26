@@ -1537,6 +1537,27 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service comprehend --lab ai-services-tour` passed on 2.3.0.
 
+## SageMaker AI lab (2026-10-26)
+
+`sagemaker/train-to-endpoint` (AIF 1.3, 1.1; CLF 3.7), 8 steps, in `dashboard/labs/sagemaker_labs.py` (a new lab
+service registered in `monolith.py`, the second lab of Level 9, Wave AI item AI-2). It creates the bucket
+`lab-ai-sagemaker-data`, training jobs named `lab-ai-price-train-v{1,2}-<timestamp>`, the models
+`lab-ai-price-model-v{1,2}`, the endpoint configurations `lab-ai-price-config-v{1,2}` and `lab-ai-price-serverless`,
+and the endpoint `lab-ai-price-endpoint`.
+
+Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset, then reset):
+
+| Behavior | Floci 2.3.0 | Lab says |
+| --- | --- | --- |
+| Training jobs | Real container under the `/opt/ml` contract; channels, hyperparameters and `model.tar.gz` all work (about 3 s a job once the image is pulled). The container must create `/opt/ml/model` itself, and `DescribeTrainingJob` does not return `HyperParameters`. | Real training; the script makes the directory and the step shows the hyperparameters it sent |
+| Hosting | Real container started with `serve`, `ModelDataUrl` unpacked into `/opt/ml/model` (mode 0644), `/ping` then `/invocations` (about 2 s to InService). | Real endpoint; the step checks the answer against the model's math |
+| UpdateEndpoint | Works blue/green, but the status reads `Creating`, not `Updating`, and the call blocks about 5 s while the old container stops. | Swapped with no downtime |
+| Serverless configs | Stored with `ServerlessConfig`. | Stored, nothing scales |
+| Batch transform, Model Monitor, registry, tuning, Pipelines | `Action ... is not supported`. | Not emulated; the lab checks drift itself |
+| DeleteTrainingJob | Not supported (AWS has no such API either). | Jobs stay listed; each run uses a new name |
+
+`check_labs --service sagemaker --lab train-to-endpoint` passed on 2.3.0.
+
 ## Recommended next work
 
 | Item | Why not here |
