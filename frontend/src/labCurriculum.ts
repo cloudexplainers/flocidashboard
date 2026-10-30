@@ -232,10 +232,18 @@ export function getLevelForLab(service: string, key: string): CurriculumLevel | 
   return LAB_CURRICULUM.find((lvl) => lvl.labs.some((l) => l.service === service && l.key === key));
 }
 
-/** Fragment on lab links so the browser lands at the top of the opened lab. */
+/** Id on the lab header; the page lands here while the lab's progress loads. */
 export const LAB_TOP_ANCHOR = 'lab-top';
+
+/** Fragment on lab links: land on the first step not yet completed. */
+export const LAB_NEXT_STEP_ANCHOR = 'next-step';
+
+/** Id of one step's card, also used as its fragment (#step-<key>). */
+export function labStepAnchor(stepKey: string): string {
+  return `step-${stepKey}`;
+}
 
 /** Relative console view for a lab, used by the side navigation. */
 export function labView(service: string, key: string): string {
-  return `labs?service=${encodeURIComponent(service)}&lab=${encodeURIComponent(key)}#${LAB_TOP_ANCHOR}`;
+  return `labs?service=${encodeURIComponent(service)}&lab=${encodeURIComponent(key)}#${LAB_NEXT_STEP_ANCHOR}`;
 }

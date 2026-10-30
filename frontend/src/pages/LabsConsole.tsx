@@ -18,7 +18,7 @@ import { fetchLabExams, fetchLabsCatalog, fetchLabsProgress, fetchLabStatus, run
 import { ConceptCard, ExamTracksResponse, LabDefinition, LabExamTag, LabStep } from '../types';
 import { ExamTrackView, examTagLabel } from '../components/ExamTrackView';
 import { CodeSnippet } from '../components/CodeSnippet';
-import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab, LAB_TOP_ANCHOR } from '../labCurriculum';
+import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab, LAB_TOP_ANCHOR, LAB_NEXT_STEP_ANCHOR, labStepAnchor } from '../labCurriculum';
 import { LabCompletionMap, readLabCompletion, writeLabCompletion } from '../labCompletion';
 
 const TRACK_STORAGE_KEY = 'floci_labs_study_track';
@@ -108,6 +108,7 @@ export const LabsConsole: React.FC = () => {
   const cancelRunAllRef = useRef(false);
   const labRequestId = useRef(0);
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null);
 
   const loadCatalog = async () => {
     setLoading(true);
@@ -198,7 +199,7 @@ export const LabsConsole: React.FC = () => {
       const url = new URL(window.location.href);
       url.searchParams.set('lab', lab.key);
       url.searchParams.set('service', lab.service);
-      url.hash = LAB_TOP_ANCHOR;
+      url.hash = LAB_NEXT_STEP_ANCHOR;
       window.history.pushState(null, '', url.pathname + url.search + url.hash);
       window.dispatchEvent(new Event('floci_url_changed'));
     }
@@ -222,6 +223,13 @@ export const LabsConsole: React.FC = () => {
       setStepCompleted(completedMap);
       setStepOutputs(outputMap);
 
+      // A #next-step link lands on the first step not yet completed.
+      if (window.location.hash === `#${LAB_NEXT_STEP_ANCHOR}`) {
+        const steps = lab.steps || [];
+        const firstOpen = steps.findIndex((step) => !(completedMap[step.key] || step.status?.verified));
+        setScrollTarget(firstOpen > 0 ? labStepAnchor(steps[firstOpen].key) : LAB_TOP_ANCHOR);
+      }
+
       saveCompletedLabState(lab.service, lab.key, Boolean(statusData.complete));
     } catch (err: any) {
       if (requestId === labRequestId.current) setLabError(err.message || 'Failed to load lab status');
@@ -230,14 +238,27 @@ export const LabsConsole: React.FC = () => {
     }
   };
 
-  // Land at the top of each lab as soon as it renders, before its status loads.
+  // Land at the top of each lab as soon as it renders (or on a #step-<key> link's step).
   const activeLabId = activeLab ? `${activeLab.service}:${activeLab.key}` : '';
   useLayoutEffect(() => {
     if (!activeLabId) return;
-    const top = document.getElementById(LAB_TOP_ANCHOR);
-    if (top) top.scrollIntoView({ block: 'start' });
+    const stepHash = window.location.hash.startsWith('#step-') ? document.getElementById(window.location.hash.slice(1)) : null;
+    const target = stepHash || document.getElementById(LAB_TOP_ANCHOR);
+    if (target) target.scrollIntoView({ block: 'start' });
     else window.scrollTo({ top: 0 });
   }, [activeLabId]);
+
+  // Once progress loads, move to the first open step and name it in the address bar.
+  useLayoutEffect(() => {
+    if (!scrollTarget) return;
+    setScrollTarget(null);
+    if (window.location.hash !== `#${LAB_NEXT_STEP_ANCHOR}`) return;
+    const target = document.getElementById(scrollTarget);
+    if (target) target.scrollIntoView({ block: 'start' });
+    if (scrollTarget !== LAB_TOP_ANCHOR) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}#${scrollTarget}`);
+    }
+  }, [scrollTarget]);
 
   const closeLab = (updateUrl = true) => {
     ++labRequestId.current;
@@ -429,7 +450,7 @@ export const LabsConsole: React.FC = () => {
   const nextCurriculumItem = currentCurriculumIndex > 0 && currentCurriculumIndex < FLAT_CURRICULUM_LABS.length ? FLAT_CURRICULUM_LABS[currentCurriculumIndex] : undefined;
 
   const curriculumItemHref = (item: typeof FLAT_CURRICULUM_LABS[0]) =>
-    `/labs?service=${encodeURIComponent(item.service)}&lab=${encodeURIComponent(item.key)}#${LAB_TOP_ANCHOR}`;
+    `/labs?service=${encodeURIComponent(item.service)}&lab=${encodeURIComponent(item.key)}#${LAB_NEXT_STEP_ANCHOR}`;
 
   // Real links (open in a new tab works); a plain click opens the lab in place.
   const followCurriculumItem = (item: typeof FLAT_CURRICULUM_LABS[0]) => (event: CustomEvent) => {
@@ -515,9 +536,11 @@ export const LabsConsole: React.FC = () => {
             return (
               <div
                 key={step.key}
+                id={labStepAnchor(step.key)}
                 ref={(el) => { stepRefs.current[step.key] = el; }}
                 className={isDone ? 'lab-step-completed' : 'lab-step-pending'}
                 style={{
+                  scrollMarginTop: '16px',
                   borderRadius: '16px',
                   transition: 'all 0.2s ease',
                 }}
