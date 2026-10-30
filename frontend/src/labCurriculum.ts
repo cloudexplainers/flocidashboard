@@ -231,3 +231,11 @@ export function getCurriculumItem(service: string, key: string): CurriculumLabIt
 export function getLevelForLab(service: string, key: string): CurriculumLevel | undefined {
   return LAB_CURRICULUM.find((lvl) => lvl.labs.some((l) => l.service === service && l.key === key));
 }
+
+/** Fragment on lab links so the browser lands at the top of the opened lab. */
+export const LAB_TOP_ANCHOR = 'lab-top';
+
+/** Relative console view for a lab, used by the side navigation. */
+export function labView(service: string, key: string): string {
+  return `labs?service=${encodeURIComponent(service)}&lab=${encodeURIComponent(key)}#${LAB_TOP_ANCHOR}`;
+}

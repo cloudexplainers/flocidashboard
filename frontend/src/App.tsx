@@ -10,7 +10,7 @@ import Icon from '@cloudscape-design/components/icon';
 import { AwsServiceIcon } from './components/AwsServiceIcons';
 import { FavoritesBar } from './components/FavoritesBar';
 import { fetchServices } from './api/client';
-import { LAB_COUNT, LAB_CURRICULUM } from './labCurriculum';
+import { LAB_COUNT, LAB_CURRICULUM, labView } from './labCurriculum';
 import { ServiceDefinition } from './types';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
@@ -57,6 +57,15 @@ const CliConsole = lazy(() => import('./pages/CliConsole').then((module) => ({ d
 const ResourceGraphConsole = lazy(() => import('./pages/ResourceGraphConsole').then((module) => ({ default: module.ResourceGraphConsole })));
 const GenericServiceWorkbench = lazy(() => import('./pages/GenericServiceWorkbench').then((module) => ({ default: module.GenericServiceWorkbench })));
 
+// Lab links in the side navigation carry the #lab-top fragment, so match them with it.
+function sideNavActiveHref(currentView: string, activeSubView: string): string {
+  if (currentView !== 'labs') return activeSubView;
+  const query = new URLSearchParams(activeSubView.split('?')[1] || '');
+  const service = query.get('service');
+  const lab = query.get('lab');
+  return service && lab ? labView(service, lab) : activeSubView;
+}
+
 function parseUrlPath(): { mainView: string; subTab?: string; fullView: string } {
   const path = window.location.pathname.replace(/^\/app(?:\/|$)/, '').replace(/^\//, '').replace(/\/$/, '');
   const search = window.location.search;
@@ -93,8 +102,14 @@ export const App: React.FC = () => {
       }
       window.dispatchEvent(new CustomEvent('floci_navigate', { detail: { view: parsed.fullView, mainView: parsed.mainView, subTab: parsed.subTab } }));
     };
+    // A page changed the address itself (e.g. Next lab): keep the side navigation highlight in step.
+    const handleUrlChanged = () => setActiveSubView(parseUrlPath().fullView);
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('floci_url_changed', handleUrlChanged);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('floci_url_changed', handleUrlChanged);
+    };
   }, []);
 
   useEffect(() => {
@@ -116,6 +131,10 @@ export const App: React.FC = () => {
       return;
     }
 
+    // A fragment (e.g. #lab-top) stays in the address bar but not in the view state.
+    const hashIndex = view.indexOf('#');
+    const hashPart = hashIndex >= 0 ? view.slice(hashIndex) : '';
+    if (hashIndex >= 0) view = view.slice(0, hashIndex);
     const pathPart = view.split('?')[0];
     const queryPart = view.includes('?') ? view.split('?')[1] : '';
     const parts = pathPart.split('/');
@@ -136,10 +155,12 @@ export const App: React.FC = () => {
 
     const targetPath = queryPart ? `/${pathPart}?${queryPart}` : `/${pathPart}`;
     if (window.location.pathname + window.location.search !== targetPath) {
-      window.history.pushState(null, '', targetPath);
+      window.history.pushState(null, '', targetPath + hashPart);
+    } else if (hashPart && window.location.hash !== hashPart) {
+      window.history.replaceState(null, '', targetPath + hashPart);
     }
     window.dispatchEvent(new CustomEvent('floci_navigate', { detail: { view, mainView: main, subTab: sub, query: queryPart } }));
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!hashPart) window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const getBreadcrumbs = () => {
@@ -720,7 +741,7 @@ export const App: React.FC = () => {
             items: level.labs.map((lab) => ({
               type: 'link' as const,
               text: `#${lab.id}. [${lab.service.toUpperCase()}] ${lab.title}`,
-              href: `labs?service=${lab.service}&lab=${lab.key}`,
+              href: labView(lab.service, lab.key),
               info: labCompletion[`${lab.service}:${lab.key}`] ? (
                 <span title="Completed" aria-label="Completed">
                   <Icon name="status-positive" variant="success" />
@@ -1066,7 +1087,7 @@ export const App: React.FC = () => {
         breadcrumbs={getBreadcrumbs()}
         sideNavHeader={getSideNavHeader()}
         sideNavItems={getSideNavItems()}
-        activeSideNavHref={activeSubView}
+        activeSideNavHref={sideNavActiveHref(currentView, activeSubView)}
         onSideNavFollow={(href) => navigateTo(href)}
         inventoryService={inventoryService}
       >

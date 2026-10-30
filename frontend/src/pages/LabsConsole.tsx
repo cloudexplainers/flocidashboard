@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Button from '@cloudscape-design/components/button';
@@ -18,7 +18,7 @@ import { fetchLabExams, fetchLabsCatalog, fetchLabsProgress, fetchLabStatus, run
 import { ConceptCard, ExamTracksResponse, LabDefinition, LabExamTag, LabStep } from '../types';
 import { ExamTrackView, examTagLabel } from '../components/ExamTrackView';
 import { CodeSnippet } from '../components/CodeSnippet';
-import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab } from '../labCurriculum';
+import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab, LAB_TOP_ANCHOR } from '../labCurriculum';
 import { LabCompletionMap, readLabCompletion, writeLabCompletion } from '../labCompletion';
 
 const TRACK_STORAGE_KEY = 'floci_labs_study_track';
@@ -198,7 +198,9 @@ export const LabsConsole: React.FC = () => {
       const url = new URL(window.location.href);
       url.searchParams.set('lab', lab.key);
       url.searchParams.set('service', lab.service);
-      window.history.pushState(null, '', url.pathname + url.search);
+      url.hash = LAB_TOP_ANCHOR;
+      window.history.pushState(null, '', url.pathname + url.search + url.hash);
+      window.dispatchEvent(new Event('floci_url_changed'));
     }
 
     try {
@@ -226,9 +228,16 @@ export const LabsConsole: React.FC = () => {
     } finally {
       if (requestId === labRequestId.current) setStatusLoading(false);
     }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Land at the top of each lab as soon as it renders, before its status loads.
+  const activeLabId = activeLab ? `${activeLab.service}:${activeLab.key}` : '';
+  useLayoutEffect(() => {
+    if (!activeLabId) return;
+    const top = document.getElementById(LAB_TOP_ANCHOR);
+    if (top) top.scrollIntoView({ block: 'start' });
+    else window.scrollTo({ top: 0 });
+  }, [activeLabId]);
 
   const closeLab = (updateUrl = true) => {
     ++labRequestId.current;
@@ -242,7 +251,9 @@ export const LabsConsole: React.FC = () => {
       const url = new URL(window.location.href);
       url.searchParams.delete('lab');
       url.searchParams.delete('service');
+      url.hash = '';
       window.history.pushState(null, '', url.pathname + url.search);
+      window.dispatchEvent(new Event('floci_url_changed'));
     }
   };
 
@@ -417,9 +428,14 @@ export const LabsConsole: React.FC = () => {
   const prevCurriculumItem = currentCurriculumIndex > 1 ? FLAT_CURRICULUM_LABS[currentCurriculumIndex - 2] : undefined;
   const nextCurriculumItem = currentCurriculumIndex > 0 && currentCurriculumIndex < FLAT_CURRICULUM_LABS.length ? FLAT_CURRICULUM_LABS[currentCurriculumIndex] : undefined;
 
-  const navigateToCurriculumItem = (item: typeof FLAT_CURRICULUM_LABS[0]) => {
+  const curriculumItemHref = (item: typeof FLAT_CURRICULUM_LABS[0]) =>
+    `/labs?service=${encodeURIComponent(item.service)}&lab=${encodeURIComponent(item.key)}#${LAB_TOP_ANCHOR}`;
+
+  // Real links (open in a new tab works); a plain click opens the lab in place.
+  const followCurriculumItem = (item: typeof FLAT_CURRICULUM_LABS[0]) => (event: CustomEvent) => {
     const found = allLabsList.find((l) => l.service === item.service && l.key === item.key);
     if (found) {
+      event.preventDefault();
       openLab(found);
     }
   };
@@ -432,6 +448,7 @@ export const LabsConsole: React.FC = () => {
   // If a lab is open, show the active Lab Studio
   if (activeLab) {
     return (
+      <div id={LAB_TOP_ANCHOR} style={{ scrollMarginTop: '16px' }}>
       <SpaceBetween size="l">
         {labError && <Alert type="error">{labError}</Alert>}
         <Container
@@ -591,20 +608,21 @@ export const LabsConsole: React.FC = () => {
         <Container>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             {prevCurriculumItem ? (
-              <Button onClick={() => navigateToCurriculumItem(prevCurriculumItem)}>
+              <Button href={curriculumItemHref(prevCurriculumItem)} onFollow={followCurriculumItem(prevCurriculumItem)}>
                 ← Previous: #{prevCurriculumItem.id}. [{prevCurriculumItem.service.toUpperCase()}] {prevCurriculumItem.title}
               </Button>
             ) : (
               <div />
             )}
             {nextCurriculumItem && (
-              <Button variant="primary" onClick={() => navigateToCurriculumItem(nextCurriculumItem)}>
+              <Button variant="primary" href={curriculumItemHref(nextCurriculumItem)} onFollow={followCurriculumItem(nextCurriculumItem)}>
                 Next: #{nextCurriculumItem.id}. [{nextCurriculumItem.service.toUpperCase()}] {nextCurriculumItem.title} →
               </Button>
             )}
           </div>
         </Container>
       </SpaceBetween>
+      </div>
     );
   }
 
