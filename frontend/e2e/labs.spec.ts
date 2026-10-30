@@ -218,6 +218,18 @@ test('verified step completes and reset clears progress', async ({ page }) => {
   await expect(page.getByText('Execution Result: Verified')).toHaveCount(0);
 });
 
+test('running a step opens its explanation and the learner can close it', async ({ page }) => {
+  await page.route('**/api/labs/iam/create-user-alice/steps/create-user/run/', route => route.fulfill({ json: { verified: true, stdout: 'Alice created' } }));
+  await page.goto('/labs/?service=iam&lab=create-user-alice');
+  const explain = page.getByRole('button', { name: 'Explain command & concept' });
+  await expect(explain).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('button', { name: 'Run step', exact: true }).click();
+  await expect(page.getByText('Execution Result: Verified')).toBeVisible();
+  await expect(explain).toHaveAttribute('aria-expanded', 'true');
+  await explain.click();
+  await expect(explain).toHaveAttribute('aria-expanded', 'false');
+});
+
 test('reset errors and status errors are visible', async ({ page }) => {
   await page.route('**/api/labs/iam/create-user-alice/status/', route => route.fulfill({ json: { complete: false, steps: {}, error: 'Status unavailable' } }));
   await page.route('**/api/labs/iam/create-user-alice/reset/', route => route.fulfill({ status: 400, json: { error: 'Reset unavailable' } }));

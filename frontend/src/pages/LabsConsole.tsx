@@ -104,6 +104,8 @@ export const LabsConsole: React.FC = () => {
 
   const [stepOutputs, setStepOutputs] = useState<Record<string, { status: string; body: string }>>({});
   const [stepCompleted, setStepCompleted] = useState<Record<string, boolean>>({});
+  // Explanations open when their step runs; the learner can still close them.
+  const [expandedExplanations, setExpandedExplanations] = useState<Record<string, boolean>>({});
 
   const cancelRunAllRef = useRef(false);
   const labRequestId = useRef(0);
@@ -193,6 +195,7 @@ export const LabsConsole: React.FC = () => {
     setActiveLab(lab);
     setStepOutputs({});
     setStepCompleted({});
+    setExpandedExplanations({});
     setStatusLoading(true);
 
     if (updateUrl) {
@@ -267,6 +270,7 @@ export const LabsConsole: React.FC = () => {
     setActiveLab(null);
     setStepOutputs({});
     setStepCompleted({});
+    setExpandedExplanations({});
 
     if (updateUrl) {
       const url = new URL(window.location.href);
@@ -292,6 +296,7 @@ export const LabsConsole: React.FC = () => {
     const requestId = labRequestId.current;
     setLabError(null);
     setRunningStepKey(step.key);
+    setExpandedExplanations((prev) => ({ ...prev, [step.key]: true }));
 
     try {
       const data = await runLabStep(activeLab.service, activeLab.key, step.key);
@@ -603,7 +608,13 @@ export const LabsConsole: React.FC = () => {
                       ]}
                     />
 
-                    <ExpandableSection headerText="Explain command & concept">
+                    <ExpandableSection
+                      headerText="Explain command & concept"
+                      expanded={Boolean(expandedExplanations[step.key])}
+                      onChange={({ detail }) =>
+                        setExpandedExplanations((prev) => ({ ...prev, [step.key]: detail.expanded }))
+                      }
+                    >
                       <p style={{ lineHeight: '1.6', margin: 0 }}>{step.explanation}</p>
                     </ExpandableSection>
 
