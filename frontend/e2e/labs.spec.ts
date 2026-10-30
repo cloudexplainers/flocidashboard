@@ -242,7 +242,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
     await route.fulfill({ json: { complete: true, steps: { 'create-user': { verified: true } } } });
   });
   await page.goto('/labs/?service=iam&lab=create-user-alice');
-  await page.getByRole('button', { name: /Next: #3\./ }).click();
+  await page.getByRole('link', { name: /Next: #3\./ }).click();
   release();
   await expect(page.getByText('Lesson #3 of 100', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
@@ -261,10 +261,78 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await page.goto('/labs/?service=iam&lab=create-admin-user');
   await page.getByRole('button', { name: '▶ Run all remaining steps', exact: true }).click();
   await expect.poll(() => calls).toBe(1);
-  await page.getByRole('button', { name: /Next: #2\./ }).click();
+  await page.getByRole('link', { name: /Next: #2\./ }).click();
   release();
   await expect(page.getByText('Lesson #2 of 100', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);
+});
+
+async function expectLabTopInView(page: Page) {
+  await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('lab-top')!.getBoundingClientRect().top))).toBeGreaterThanOrEqual(0);
+  await expect.poll(() => page.evaluate(() => Math.round(document.getElementById('lab-top')!.getBoundingClientRect().top))).toBeLessThan(40);
+}
+
+test('Next and Previous are anchor links that land at the top of a fresh lab', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/labs?service=iam&lab=access-key-alice');
+  const current = FLAT_CURRICULUM_LABS.find(item => item.service === 'iam' && item.key === 'access-key-alice')!;
+  const next = FLAT_CURRICULUM_LABS[current.id];
+  const previous = FLAT_CURRICULUM_LABS[current.id - 2];
+  const nextLink = page.getByRole('link', { name: new RegExp(`^Next: #${next.id}\\.`) });
+  const previousLink = page.getByRole('link', { name: new RegExp(`^← Previous: #${previous.id}\\.`) });
+  await expect(nextLink).toHaveAttribute('href', `/labs?service=${next.service}&lab=${next.key}#next-step`);
+  await expect(previousLink).toHaveAttribute('href', `/labs?service=${previous.service}&lab=${previous.key}#next-step`);
+
+  await nextLink.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(200);
+  await nextLink.click();
+  await expect(page.getByText(`Lesson #${next.id} of ${FLAT_CURRICULUM_LABS.length}`, { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`lab=${next.key}#next-step$`));
+  await expectLabTopInView(page);
+  const navigation = page.getByRole('navigation').filter({ has: page.getByRole('link', { name: /All Labs Overview/ }) });
+  await expect(navigation.getByRole('link', { name: new RegExp(`^#${next.id}\\. `) })).toHaveAttribute('aria-current', 'page');
+
+  await page.getByRole('link', { name: new RegExp(`^← Previous: #${current.id}\\.`) }).scrollIntoViewIfNeeded();
+  await page.getByRole('link', { name: new RegExp(`^← Previous: #${current.id}\\.`) }).click();
+  await expect(page.getByText(`Lesson #${current.id} of ${FLAT_CURRICULUM_LABS.length}`, { exact: true })).toBeVisible();
+  await expectLabTopInView(page);
+});
+
+test('side navigation lab links carry the next-step anchor', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/labs?service=iam&lab=access-key-alice');
+  const current = FLAT_CURRICULUM_LABS.find(item => item.service === 'iam' && item.key === 'access-key-alice')!;
+  const next = FLAT_CURRICULUM_LABS[current.id];
+  await expect(page.getByText(`Lesson #${current.id} of ${FLAT_CURRICULUM_LABS.length}`, { exact: true })).toBeVisible();
+  const navigation = page.getByRole('navigation').filter({ has: page.getByRole('link', { name: /All Labs Overview/ }) });
+  const sideLink = navigation.getByRole('link', { name: new RegExp(`^#${next.id}\\. `) });
+  await expect(sideLink).toHaveAttribute('href', `labs?service=${next.service}&lab=${next.key}#next-step`);
+  await page.getByRole('link', { name: new RegExp(`^Next: #${next.id}\\.`) }).scrollIntoViewIfNeeded();
+  await sideLink.click();
+  await expect(page.getByText(`Lesson #${next.id} of ${FLAT_CURRICULUM_LABS.length}`, { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/labs\\?service=${next.service}&lab=${next.key}#next-step$`));
+  await expectLabTopInView(page);
+});
+
+test('lab links land on the first step not yet completed', async ({ page, request }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const catalog = await (await request.get('/api/labs/catalog/')).json();
+  const lab = catalog.labs.find((item: any) => item.service === 'iam' && item.key === 'attach-policy-alice');
+  const [first, second, third] = lab.steps.map((step: any) => step.key);
+  await page.route('**/api/labs/iam/attach-policy-alice/status/', route => route.fulfill({
+    json: { complete: false, steps: { [first]: { verified: true }, [second]: { verified: true } } },
+  }));
+  const current = FLAT_CURRICULUM_LABS.find(item => item.service === 'iam' && item.key === 'attach-policy-alice')!;
+  await page.goto('/labs?service=iam&lab=create-user-alice');
+  const navigation = page.getByRole('navigation').filter({ has: page.getByRole('link', { name: /All Labs Overview/ }) });
+  await navigation.getByRole('link', { name: new RegExp(`^#${current.id}\\. `) }).click();
+  await expect(page).toHaveURL(new RegExp(`lab=attach-policy-alice#step-${third}$`));
+  await expect.poll(() => page.evaluate(id => Math.round(document.getElementById(id)!.getBoundingClientRect().top), `step-${third}`)).toBeLessThan(40);
+  await expect.poll(() => page.evaluate(id => Math.round(document.getElementById(id)!.getBoundingClientRect().top), `step-${third}`)).toBeGreaterThanOrEqual(0);
+
+  // A #step-<key> link opens straight on that step.
+  await page.goto(`/labs?service=iam&lab=attach-policy-alice#step-${second}`);
+  await expect.poll(() => page.evaluate(id => Math.round(document.getElementById(id)!.getBoundingClientRect().top), `step-${second}`)).toBeLessThan(40);
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import Container from '@cloudscape-design/components/container';
 import Header from '@cloudscape-design/components/header';
 import Button from '@cloudscape-design/components/button';
@@ -18,7 +18,7 @@ import { fetchLabExams, fetchLabsCatalog, fetchLabsProgress, fetchLabStatus, run
 import { ConceptCard, ExamTracksResponse, LabDefinition, LabExamTag, LabStep } from '../types';
 import { ExamTrackView, examTagLabel } from '../components/ExamTrackView';
 import { CodeSnippet } from '../components/CodeSnippet';
-import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab } from '../labCurriculum';
+import { LAB_CURRICULUM, FLAT_CURRICULUM_LABS, LAB_COUNT, getCurriculumItem, getLevelForLab, LAB_TOP_ANCHOR, LAB_NEXT_STEP_ANCHOR, labStepAnchor } from '../labCurriculum';
 import { LabCompletionMap, readLabCompletion, writeLabCompletion } from '../labCompletion';
 
 const TRACK_STORAGE_KEY = 'floci_labs_study_track';
@@ -108,6 +108,7 @@ export const LabsConsole: React.FC = () => {
   const cancelRunAllRef = useRef(false);
   const labRequestId = useRef(0);
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [scrollTarget, setScrollTarget] = useState<string | null>(null);
 
   const loadCatalog = async () => {
     setLoading(true);
@@ -198,7 +199,9 @@ export const LabsConsole: React.FC = () => {
       const url = new URL(window.location.href);
       url.searchParams.set('lab', lab.key);
       url.searchParams.set('service', lab.service);
-      window.history.pushState(null, '', url.pathname + url.search);
+      url.hash = LAB_NEXT_STEP_ANCHOR;
+      window.history.pushState(null, '', url.pathname + url.search + url.hash);
+      window.dispatchEvent(new Event('floci_url_changed'));
     }
 
     try {
@@ -220,15 +223,42 @@ export const LabsConsole: React.FC = () => {
       setStepCompleted(completedMap);
       setStepOutputs(outputMap);
 
+      // A #next-step link lands on the first step not yet completed.
+      if (window.location.hash === `#${LAB_NEXT_STEP_ANCHOR}`) {
+        const steps = lab.steps || [];
+        const firstOpen = steps.findIndex((step) => !(completedMap[step.key] || step.status?.verified));
+        setScrollTarget(firstOpen > 0 ? labStepAnchor(steps[firstOpen].key) : LAB_TOP_ANCHOR);
+      }
+
       saveCompletedLabState(lab.service, lab.key, Boolean(statusData.complete));
     } catch (err: any) {
       if (requestId === labRequestId.current) setLabError(err.message || 'Failed to load lab status');
     } finally {
       if (requestId === labRequestId.current) setStatusLoading(false);
     }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Land at the top of each lab as soon as it renders (or on a #step-<key> link's step).
+  const activeLabId = activeLab ? `${activeLab.service}:${activeLab.key}` : '';
+  useLayoutEffect(() => {
+    if (!activeLabId) return;
+    const stepHash = window.location.hash.startsWith('#step-') ? document.getElementById(window.location.hash.slice(1)) : null;
+    const target = stepHash || document.getElementById(LAB_TOP_ANCHOR);
+    if (target) target.scrollIntoView({ block: 'start' });
+    else window.scrollTo({ top: 0 });
+  }, [activeLabId]);
+
+  // Once progress loads, move to the first open step and name it in the address bar.
+  useLayoutEffect(() => {
+    if (!scrollTarget) return;
+    setScrollTarget(null);
+    if (window.location.hash !== `#${LAB_NEXT_STEP_ANCHOR}`) return;
+    const target = document.getElementById(scrollTarget);
+    if (target) target.scrollIntoView({ block: 'start' });
+    if (scrollTarget !== LAB_TOP_ANCHOR) {
+      window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}#${scrollTarget}`);
+    }
+  }, [scrollTarget]);
 
   const closeLab = (updateUrl = true) => {
     ++labRequestId.current;
@@ -242,7 +272,9 @@ export const LabsConsole: React.FC = () => {
       const url = new URL(window.location.href);
       url.searchParams.delete('lab');
       url.searchParams.delete('service');
+      url.hash = '';
       window.history.pushState(null, '', url.pathname + url.search);
+      window.dispatchEvent(new Event('floci_url_changed'));
     }
   };
 
@@ -417,9 +449,14 @@ export const LabsConsole: React.FC = () => {
   const prevCurriculumItem = currentCurriculumIndex > 1 ? FLAT_CURRICULUM_LABS[currentCurriculumIndex - 2] : undefined;
   const nextCurriculumItem = currentCurriculumIndex > 0 && currentCurriculumIndex < FLAT_CURRICULUM_LABS.length ? FLAT_CURRICULUM_LABS[currentCurriculumIndex] : undefined;
 
-  const navigateToCurriculumItem = (item: typeof FLAT_CURRICULUM_LABS[0]) => {
+  const curriculumItemHref = (item: typeof FLAT_CURRICULUM_LABS[0]) =>
+    `/labs?service=${encodeURIComponent(item.service)}&lab=${encodeURIComponent(item.key)}#${LAB_NEXT_STEP_ANCHOR}`;
+
+  // Real links (open in a new tab works); a plain click opens the lab in place.
+  const followCurriculumItem = (item: typeof FLAT_CURRICULUM_LABS[0]) => (event: CustomEvent) => {
     const found = allLabsList.find((l) => l.service === item.service && l.key === item.key);
     if (found) {
+      event.preventDefault();
       openLab(found);
     }
   };
@@ -432,6 +469,7 @@ export const LabsConsole: React.FC = () => {
   // If a lab is open, show the active Lab Studio
   if (activeLab) {
     return (
+      <div id={LAB_TOP_ANCHOR} style={{ scrollMarginTop: '16px' }}>
       <SpaceBetween size="l">
         {labError && <Alert type="error">{labError}</Alert>}
         <Container
@@ -498,9 +536,11 @@ export const LabsConsole: React.FC = () => {
             return (
               <div
                 key={step.key}
+                id={labStepAnchor(step.key)}
                 ref={(el) => { stepRefs.current[step.key] = el; }}
                 className={isDone ? 'lab-step-completed' : 'lab-step-pending'}
                 style={{
+                  scrollMarginTop: '16px',
                   borderRadius: '16px',
                   transition: 'all 0.2s ease',
                 }}
@@ -591,20 +631,21 @@ export const LabsConsole: React.FC = () => {
         <Container>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             {prevCurriculumItem ? (
-              <Button onClick={() => navigateToCurriculumItem(prevCurriculumItem)}>
+              <Button href={curriculumItemHref(prevCurriculumItem)} onFollow={followCurriculumItem(prevCurriculumItem)}>
                 ← Previous: #{prevCurriculumItem.id}. [{prevCurriculumItem.service.toUpperCase()}] {prevCurriculumItem.title}
               </Button>
             ) : (
               <div />
             )}
             {nextCurriculumItem && (
-              <Button variant="primary" onClick={() => navigateToCurriculumItem(nextCurriculumItem)}>
+              <Button variant="primary" href={curriculumItemHref(nextCurriculumItem)} onFollow={followCurriculumItem(nextCurriculumItem)}>
                 Next: #{nextCurriculumItem.id}. [{nextCurriculumItem.service.toUpperCase()}] {nextCurriculumItem.title} →
               </Button>
             )}
           </div>
         </Container>
       </SpaceBetween>
+      </div>
     );
   }
 
