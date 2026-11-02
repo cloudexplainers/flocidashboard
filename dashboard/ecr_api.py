@@ -366,7 +366,7 @@ def put_mock_image(
     if image_digest:
         kwargs['imageDigest'] = image_digest.strip()
 
-    # Errors propagate: Floci 2.3.0 has no PutImage, and a failed write must not look published.
+    # Errors propagate: Floci refuses a manifest whose layers aren't in the repository, and a failed write must not look published.
     response = _client().put_image(**kwargs)
     image_data = _clean_response(response.get('image', {}))
 

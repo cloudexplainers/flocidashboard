@@ -43,8 +43,8 @@ export interface ElasticIpAssociation {
 }
 
 /**
- * What an Elastic IP is attached to. DescribeAddresses reports instance associations, but Floci 2.3.0 leaves
- * NAT gateway associations out of it (AWS includes them), so those come from DescribeNatGateways.
+ * What an Elastic IP is attached to. DescribeAddresses reports instance and NAT gateway associations
+ * (Floci 2.3.0 left NAT gateways out of it), so NAT gateway matches also come from DescribeNatGateways.
  */
 export function elasticIpAssociation(address: any, natGateways: any[]): ElasticIpAssociation | null {
   if (address.InstanceId) {
@@ -182,7 +182,7 @@ export function ElasticIpsPanel({ addresses, natGateways, instances, loading, on
     }
   };
 
-  // AWS rejects re-associating an associated address unless AllowReassociation is set; Floci 2.3.0 moves it anyway.
+  // AWS rejects re-associating an associated address unless AllowReassociation is set; Floci moves it anyway.
   const reassociationBlocked = Boolean(activeAssociation) && !allowReassociation;
 
   return (
@@ -223,10 +223,11 @@ export function ElasticIpsPanel({ addresses, natGateways, instances, loading, on
         }
       >
         <SpaceBetween size="m">
-          <Alert type="info" header="How Floci 2.3.0 handles Elastic IPs">
-            Allocation, association and tags are stored and returned. Floci doesn&apos;t enforce some AWS rules: it releases an
-            address that is still associated, re-associates one without AllowReassociation, and leaves an instance&apos;s
-            earlier Elastic IP associated when you add another. This console asks you to disassociate before releasing. While
+          <Alert type="info" header="How Floci handles Elastic IPs">
+            Allocation, association and tags are stored and returned. As on AWS, a new Elastic IP replaces the one an instance
+            already has, and an address in use outside the default VPC can&apos;t be released. Floci still re-associates an
+            address without AllowReassociation, so this console checks that flag itself, and it asks you to disassociate before
+            releasing. While
             an address is associated with a running instance, Floci reports the instance&apos;s container IP as its public IP;
             the allocated address comes back after you disassociate it.
           </Alert>
@@ -506,7 +507,7 @@ export function NatGatewaysPanel({ natGateways, addresses, subnets, routeTables,
         }
       >
         <SpaceBetween size="m">
-          <Alert type="warning" header="Floci 2.3.0 stores NAT gateways but routes no traffic through them">
+          <Alert type="warning" header="Floci stores NAT gateways but routes no traffic through them">
             A NAT gateway is reported Available as soon as it is created, and route tables can point at it, but packets
             never pass through it: instances (Docker containers) reach the network through Docker networking whatever the
             route table says. Floci also accepts a public NAT gateway with no Elastic IP, and one Elastic IP shared by several

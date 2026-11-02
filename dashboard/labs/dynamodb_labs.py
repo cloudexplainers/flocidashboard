@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from botocore.exceptions import ClientError
@@ -314,6 +315,14 @@ def _verify_dynamodb_order_created() -> dict[str, Any]:
     }
 
 
+def _same_number(value: Any, expected: str) -> bool:
+    """DynamoDB returns numbers in canonical form (84.00 comes back as 84), so compare values, not strings."""
+    try:
+        return Decimal(str(value)) == Decimal(expected)
+    except (InvalidOperation, TypeError):
+        return False
+
+
 def _verify_dynamodb_order_updated() -> dict[str, Any]:
     try:
         item = _get_dynamodb_order_item()
@@ -322,7 +331,7 @@ def _verify_dynamodb_order_updated() -> dict[str, Any]:
     if (
         item
         and item.get('Status', {}).get('S') == 'PAID'
-        and item.get('Total', {}).get('N') == DYNAMODB_UPDATED_TOTAL
+        and _same_number(item.get('Total', {}).get('N'), DYNAMODB_UPDATED_TOTAL)
     ):
         return {
             'status': 'passed',

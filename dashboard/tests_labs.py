@@ -6296,6 +6296,15 @@ class LabsRunnerTests(SimpleTestCase):
         self.assertTrue(cache.get('floci-lab:dynamodb:crud-query:update-item'))
         cache.clear()
 
+    @patch('dashboard.labs.dynamodb_labs._get_dynamodb_order_item')
+    def test_dynamodb_lab_update_check_accepts_the_canonical_number(self, item_mock):
+        from dashboard.labs.dynamodb_labs import _verify_dynamodb_order_updated
+
+        for total, status in (('84', 'passed'), ('84.00', 'passed'), ('84.5', 'failed')):
+            with self.subTest(total=total):
+                item_mock.return_value = {'Status': {'S': 'PAID'}, 'Total': {'N': total}}
+                self.assertEqual(_verify_dynamodb_order_updated()['status'], status)
+
     @patch('dashboard.labs.dynamodb_labs._verify_dynamodb_customer_query')
     @patch('dashboard.labs.FlociClientFactory')
     def test_dynamodb_lab_queries_customer_index_and_records_marker(

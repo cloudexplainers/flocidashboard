@@ -60,7 +60,7 @@ export function CloudTrailLogFiles({ trailId }: { trailId: string }) {
   const shownRecords = (records || []).filter(record => !filter || JSON.stringify(record).toLowerCase().includes(filter.toLowerCase()));
   const location = listing ? `s3://${listing.bucket}/${listing.log_prefix}` : '';
   return <SpaceBetween size="m">
-    <FlociNote>Floci delivers only S3 data events: object calls (PutObject, GetObject, HeadObject, DeleteObject, ListObjects, GetObjectAcl) on buckets and keys that match this trail’s event selectors, recorded while the trail is logging. It records no management events. Buffered records are written to the trail bucket as one gzipped JSON file about every 60 seconds by default; AWS delivers about every 5 minutes.</FlociNote>
+    <FlociNote>Floci delivers S3 data events: object calls (PutObject, GetObject, HeadObject, DeleteObject, ListObjects, GetObjectAcl) on buckets and keys that match this trail’s event selectors, recorded while the trail is logging. The only management events it records are Secrets Manager PutSecretValue and UpdateSecret calls (Floci 2.4.0 and later). Buffered records are written to the trail bucket as one gzipped JSON file about every 60 seconds by default; AWS delivers about every 5 minutes.</FlociNote>
     <Container header={<Header variant="h2" counter={listing ? `(${files.length}${listing.next_cursor ? '+' : ''})` : undefined} description={location ? `Newest first, from ${location}` : 'Log files the trail delivered to its S3 bucket, newest first.'} actions={<Button iconName="refresh" loading={loading} onClick={() => load()}>Refresh</Button>}>Log files</Header>}>
       <SpaceBetween size="m">
         {error && <Alert type="error" header="Log files could not be listed">{error}</Alert>}

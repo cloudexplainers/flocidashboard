@@ -20,6 +20,8 @@ from dashboard.ec2_api import (
 LAB_PREFIX = 'floci-lab:ec2:guided'
 DEFAULT_IMAGE = 'ami-ubuntu2204'
 DEFAULT_TYPE = 't2.micro'
+TERMINATION_TIMEOUT_SECONDS = 90
+TERMINATION_POLL_SECONDS = 2
 
 GUIDED_EC2_LABS = [
     {
@@ -677,6 +679,24 @@ def guided_status(lab_key: str) -> dict[str, Any]:
     }
 
 
+def _wait_for_termination(ec2, instance_id: str, timeout: float = TERMINATION_TIMEOUT_SECONDS) -> None:
+    """Wait until the instance is terminated: until then its network interface keeps the subnet from being deleted."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            reservations = ec2.describe_instances(InstanceIds=[instance_id]).get('Reservations') or []
+        except Exception:
+            return
+        states = [
+            ((instance.get('State') or {}).get('Name'))
+            for reservation in reservations
+            for instance in reservation.get('Instances') or []
+        ]
+        if not states or all(state == 'terminated' for state in states) or time.monotonic() >= deadline:
+            return
+        time.sleep(TERMINATION_POLL_SECONDS)
+
+
 def reset_guided_lab(lab_key: str) -> dict[str, Any]:
     ec2 = _ec2()
     instance_id = _get_cached(lab_key, 'instance-id')
@@ -686,6 +706,7 @@ def reset_guided_lab(lab_key: str) -> dict[str, Any]:
             terminate_instance(instance_id)
         except Exception:
             pass
+        _wait_for_termination(ec2, instance_id)
     if endpoint_id:
         try:
             ec2.delete_vpc_endpoints(VpcEndpointIds=[endpoint_id])

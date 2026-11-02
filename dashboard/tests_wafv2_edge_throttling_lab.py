@@ -98,6 +98,13 @@ class UsageTierCheckTests(SimpleTestCase):
                         'quota': spec['quota']} for name, spec in lab.PLANS.items()}
         self.assertFalse(self.check(plans)[0])
 
+    def test_quota_read_back_with_offset_zero_matches(self):
+        plans = {name: {'id': name, 'name': name, 'throttle': spec['throttle'], 'quota': {**spec['quota'], 'offset': 0}}
+                 for name, spec in lab.PLANS.items()}
+        self.assertTrue(self.check(plans)[0])
+        plans['lab-edge-bronze']['quota']['offset'] = 2
+        self.assertFalse(self.check(plans)[0])
+
     def test_key_must_be_in_the_plan(self):
         plans = {name: {'id': name, 'name': name, **{k: spec[k] for k in ('throttle', 'quota')}}
                  for name, spec in lab.PLANS.items()}

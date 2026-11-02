@@ -720,10 +720,10 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                         )}
                       </Box>
                       <FlociNote>
-                        Floci records whether PITR is on and reports it, but Floci 2.3.0
-                        can&apos;t restore a table: RestoreTableToPointInTime and on-demand
-                        backups (CreateBackup) are not implemented there. Newer Floci
-                        releases add them.
+                        Floci keeps the table&apos;s change history while PITR is on, and
+                        RestoreTableToPointInTime restores it into a new table, as on AWS.
+                        Floci also takes on-demand backups (CreateBackup); Floci 2.3.0 and
+                        older did neither.
                       </FlociNote>
                       </SpaceBetween>
                     </Container>

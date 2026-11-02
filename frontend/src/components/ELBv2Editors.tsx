@@ -40,7 +40,7 @@ export function matcherText(matcher: any): string {
   return matcher.HttpCode || matcher.GrpcCode || '';
 }
 
-export const STICKINESS_NOTE = 'Floci stores stickiness and the deregistration delay and reports them back, but Floci 2.3.0 doesn’t apply them: the load balancer sends requests to healthy targets in turn without setting a stickiness cookie, and a deregistered target stops receiving requests at once, with no draining period. Newer Floci builds apply duration-based (load balancer cookie) stickiness.';
+export const STICKINESS_NOTE = 'Floci applies load balancer cookie (lb_cookie) stickiness: it sets the AWSALB cookie and sends a client that returns it to the same target for the duration. It stores application cookie stickiness and the deregistration delay and reports them back, but doesn’t apply them: those requests go to healthy targets in turn, and a deregistered target stops receiving requests at once, with no draining period.';
 
 export const HEALTH_CHECK_NOTE = 'Floci runs these health checks against each target and applies a new path, timeout, thresholds and success codes at once. A changed interval is reported, but Floci keeps probing at the interval the target group was created with. When every target is unhealthy, the load balancer sends requests to all of them, as AWS does.';
 
@@ -140,7 +140,7 @@ export function TargetGroupAttributes({ group, onSaved, notify }: { group: any; 
         stickiness_enabled: sticky,
         ...(sticky ? { stickiness_type: stickyType, stickiness_duration_seconds: toNumber(duration), app_cookie_name: stickyType === 'app_cookie' ? cookieName.trim() : undefined } : {}),
       });
-      notify('success', `Attributes for "${group.TargetGroupName}" saved. Floci stores stickiness and the deregistration delay but doesn't apply them.`);
+      notify('success', `Attributes for "${group.TargetGroupName}" saved.`);
       setOpen(false);
       await onSaved();
     } catch (err: any) {

@@ -316,7 +316,8 @@ test('EKS live cluster and node group pages preserve details, navigation and cle
     await expect(page.getByRole('heading', { name: 'Node group: workers', exact: true })).toBeVisible();
     page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'Delete node group', exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/eks/clusters/${name}\\?tab=nodegroups$`));
+    // Floci restarts the cluster's k3s container when a node group goes, which can take several seconds.
+    await expect(page).toHaveURL(new RegExp(`/eks/clusters/${name}\\?tab=nodegroups$`), { timeout: 30_000 });
     nodegroupCreated = false;
     await page.getByRole('button', { name: 'Delete cluster', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Confirm Delete', exact: true }).click();

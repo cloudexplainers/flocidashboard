@@ -2,10 +2,11 @@
 with IP, geo, rate-based and AWS managed rules, the ACL on the API stage with logging, an evaluation of sample
 requests through the ACL, bronze and gold usage plans, and a token-bucket simulation of what each plan lets through.
 
-Floci 2.3.0 enforces the API key (403 without one, or with a key that is in no usage plan) and stores the stage
-throttling, IP set, web ACL, association and logging configuration. WAF never blocks a request, duplicate rule
-priorities are accepted, managed rule groups can't be listed, and usage plans drop their throttle and quota, so the
-lab evaluates the ACL and the throttling itself.
+Floci 2.4.0 enforces the API key (403 without one, or with a key that is in no usage plan) and stores the stage
+throttling, usage plan throttles and quotas, IP set, web ACL, association and logging configuration. WAF never blocks
+a request, duplicate rule priorities are accepted, managed rule groups can't be listed, and no throttle or quota is
+enforced, so the lab evaluates the ACL and the throttling itself (Floci 2.3.0 also dropped the plans' throttle and
+quota, so the usage plan step keeps what it sent).
 """
 
 from __future__ import annotations
@@ -184,7 +185,8 @@ LAB = {
                 'Usage plans meter API keys: bronze allows 5 requests per second (burst 10) and 1,000 a month, gold '
                 '50 per second (burst 100) and 100,000 a month. A key that is in no plan for the stage is refused. '
                 'How Floci emulates this: keys are enforced (200 with a planned key, 403 with no key or an unplanned '
-                'one), but plans read back with only their name, so the step keeps what it sent.'
+                'one), and plans read back with their throttle and quota, though neither is enforced. Floci 2.3.0 read '
+                'plans back with only their name, so the step also keeps what it sent.'
             ),
         },
         {
@@ -545,6 +547,13 @@ def _sent_plans() -> dict[str, Any]:
     return (_marked('usage-tiers') or {}).get('SentPlans') or {}
 
 
+def _without_zero_offset(quota: Any) -> Any:
+    """API Gateway reads a quota back with offset 0 when none was set; the lab's plans set none."""
+    if isinstance(quota, dict) and quota.get('offset') == 0:
+        return {key: value for key, value in quota.items() if key != 'offset'}
+    return quota
+
+
 def _check_tiers() -> tuple[bool, str]:
     plans, keys = _plans(), _keys()
     sent = _sent_plans()
@@ -556,7 +565,7 @@ def _check_tiers() -> tuple[bool, str]:
             return False, f'{spec["key"]} must belong to {name}.'
         throttle = plan.get('throttle') or (sent.get(name) or {}).get('throttle')
         quota = plan.get('quota') or (sent.get(name) or {}).get('quota')
-        if throttle != spec['throttle'] or quota != spec['quota']:
+        if throttle != spec['throttle'] or _without_zero_offset(quota) != spec['quota']:
             return False, f'{name} must throttle at {spec["throttle"]} with quota {spec["quota"]}.'
     if UNPLANNED_KEY not in keys:
         return False, f'Create {UNPLANNED_KEY} (in no plan) to compare.'

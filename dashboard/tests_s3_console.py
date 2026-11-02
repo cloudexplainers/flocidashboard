@@ -354,21 +354,22 @@ class S3ManagementSettingsTests(SimpleTestCase):
         client_mock.return_value.put_bucket_lifecycle_configuration.assert_not_called()
 
     @patch('dashboard.s3_api._s3_client')
-    def test_object_lock_needs_versioning_as_in_aws(self, client_mock):
+    def test_object_lock_passes_floci_refusal_through(self, client_mock):
         from botocore.exceptions import ClientError
 
         s3 = client_mock.return_value
-        s3.get_object_lock_configuration.side_effect = ClientError({'Error': {'Code': 'ObjectLockConfigurationNotFoundError'}}, 'GetObjectLockConfiguration')
-        s3.get_bucket_versioning.return_value = {}
+        s3.put_object_lock_configuration.side_effect = ClientError(
+            {'Error': {'Code': 'InvalidBucketState', 'Message': "Versioning must be 'Enabled' on the bucket to apply a Object Lock configuration"}, 'ResponseMetadata': {'HTTPStatusCode': 409}},
+            'PutObjectLockConfiguration',
+        )
 
         response = self._put('/api/s3/buckets/plain/object-lock/', {'default_retention': None})
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()['code'], 'InvalidBucketState')
-        self.assertIn('Floci 2.3.0 accepts it', response.json()['error'])
-        s3.put_object_lock_configuration.assert_not_called()
+        self.assertNotIn('dashboard checks', response.json()['error'])
 
-        s3.get_bucket_versioning.return_value = {'Status': 'Enabled'}
+        s3.put_object_lock_configuration.reset_mock(side_effect=True)
         response = self._put('/api/s3/buckets/plain/object-lock/', {'default_retention': {'Mode': 'COMPLIANCE', 'Years': 1}})
 
         self.assertEqual(response.status_code, 200)
@@ -382,14 +383,15 @@ class S3ManagementSettingsTests(SimpleTestCase):
         from botocore.exceptions import ClientError
 
         s3 = client_mock.return_value
-        s3.get_object_lock_configuration.side_effect = ClientError({'Error': {'Code': 'ObjectLockConfigurationNotFoundError'}}, 'GetObjectLockConfiguration')
+        s3.put_object_legal_hold.side_effect = ClientError(
+            {'Error': {'Code': 'InvalidRequest', 'Message': 'Bucket is missing Object Lock Configuration'}, 'ResponseMetadata': {'HTTPStatusCode': 400}},
+            'PutObjectLegalHold',
+        )
         response = self._put('/api/s3/buckets/plain/objects/legal-hold/', {'key': 'a.txt', 'status': 'ON'})
         self.assertEqual(response.status_code, 400)
         self.assertIn('missing Object Lock Configuration', response.json()['error'])
-        s3.put_object_legal_hold.assert_not_called()
+        s3.put_object_legal_hold.reset_mock(side_effect=True)
 
-        s3.get_object_lock_configuration.side_effect = None
-        s3.get_object_lock_configuration.return_value = {'ObjectLockConfiguration': {'ObjectLockEnabled': 'Enabled'}}
         response = self._put('/api/s3/buckets/vault/objects/retention/', {
             'key': 'a.txt', 'version_id': 'v1', 'mode': None, 'bypass_governance_retention': True,
         })

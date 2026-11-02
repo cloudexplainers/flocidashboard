@@ -777,18 +777,21 @@ def s3_inventory_summary() -> dict[str, Any]:
         'notes': [
             'Floci supports S3 bucket website hosting configuration and local website-style object serving.',
             'Object Lock is enforced: retention and legal holds block deletes and retention changes as in AWS.',
-            'Lifecycle rules, replication and Intelligent-Tiering archive configurations are stored and returned, '
-            'but nothing runs them: objects never transition, expire, replicate or move between access tiers.',
+            'Lifecycle expiration rules run in a background sweep (about once a minute): expired objects and '
+            'noncurrent versions are deleted and incomplete multipart uploads aborted. Transitions, replication and '
+            'Intelligent-Tiering archive configurations are stored and returned, but objects never change storage '
+            'class, replicate or move between access tiers.',
         ],
     }
 
 
-# Management and data protection settings. Floci 2.3.0 enforces Object Lock (retention and legal
-# holds block deletes), but only stores lifecycle, replication and Intelligent-Tiering settings, and
-# skips several checks AWS makes when they are saved. The checks below are the ones AWS makes, so
-# the console refuses what AWS would refuse.
+# Management and data protection settings. Floci enforces Object Lock (retention and legal holds
+# block deletes, and it refuses Object Lock settings on a bucket that can't have them), but only
+# stores lifecycle, replication and Intelligent-Tiering settings, and skips several checks AWS makes
+# when they are saved. The checks below are the ones AWS makes, so the console refuses what AWS
+# would refuse.
 
-DASHBOARD_CHECK = ' (AWS refuses this; Floci 2.3.0 accepts it, so the dashboard checks.)'
+DASHBOARD_CHECK = ' (AWS refuses this; Floci accepts it, so the dashboard checks.)'
 LIFECYCLE_IA_CLASSES = {'STANDARD_IA', 'ONEZONE_IA'}
 LIFECYCLE_STORAGE_CLASSES = {'STANDARD_IA', 'ONEZONE_IA', 'INTELLIGENT_TIERING', 'GLACIER_IR', 'GLACIER', 'DEEP_ARCHIVE'}
 OBJECT_LOCK_MODES = {'GOVERNANCE', 'COMPLIANCE'}
@@ -803,16 +806,6 @@ def _aws_rule_error(code: str, message: str, status: int, operation: str) -> Cli
 
 def _versioning_status(s3, bucket: str) -> str:
     return s3.get_bucket_versioning(Bucket=bucket).get('Status') or 'Disabled'
-
-
-def _object_lock_enabled(s3, bucket: str) -> bool:
-    try:
-        configuration = s3.get_object_lock_configuration(Bucket=bucket).get('ObjectLockConfiguration') or {}
-    except ClientError as exc:
-        if _error_code(exc) == 'ObjectLockConfigurationNotFoundError':
-            return False
-        raise
-    return configuration.get('ObjectLockEnabled') == 'Enabled'
 
 
 def validate_lifecycle_rules(rules: list[dict[str, Any]]) -> None:
@@ -897,14 +890,6 @@ def get_s3_object_lock(bucket: str) -> dict[str, Any] | None:
 
 def put_s3_object_lock(bucket: str, default_retention: dict[str, Any] | None) -> dict[str, Any]:
     """Turn Object Lock on (it can't be turned off) and set or clear the default retention."""
-    s3 = _s3_client()
-    if not _object_lock_enabled(s3, bucket) and _versioning_status(s3, bucket) != 'Enabled':
-        raise _aws_rule_error(
-            'InvalidBucketState',
-            "Versioning must be 'Enabled' on the bucket to apply a Object Lock configuration.",
-            409,
-            'PutObjectLockConfiguration',
-        )
     configuration: dict[str, Any] = {'ObjectLockEnabled': 'Enabled'}
     if default_retention:
         mode = default_retention.get('Mode')
@@ -919,13 +904,8 @@ def put_s3_object_lock(bucket: str, default_retention: dict[str, Any] | None) ->
         if not 1 <= value <= limit:
             raise ValueError(f'Default retention {unit.lower()} must be between 1 and {limit}.')
         configuration['Rule'] = {'DefaultRetention': {'Mode': mode, unit: value}}
-    s3.put_object_lock_configuration(Bucket=bucket, ObjectLockConfiguration=configuration)
+    _s3_client().put_object_lock_configuration(Bucket=bucket, ObjectLockConfiguration=configuration)
     return configuration
-
-
-def _require_object_lock(s3, bucket: str, operation: str) -> None:
-    if not _object_lock_enabled(s3, bucket):
-        raise _aws_rule_error('InvalidRequest', 'Bucket is missing Object Lock Configuration.', 400, operation)
 
 
 def _version_params(bucket: str, key: str, version_id: str | None) -> dict[str, Any]:
@@ -943,8 +923,6 @@ def put_s3_object_retention(
     retain_until: str | None,
     bypass_governance: bool = False,
 ) -> dict[str, Any]:
-    s3 = _s3_client()
-    _require_object_lock(s3, bucket, 'PutObjectRetention')
     retention: dict[str, Any] = {}
     if mode:
         if mode not in OBJECT_LOCK_MODES:
@@ -953,16 +931,14 @@ def put_s3_object_retention(
             raise ValueError('A retain until date is required.')
         retention = {'Mode': mode, 'RetainUntilDate': retain_until}
     params = _version_params(bucket, key, version_id)
-    s3.put_object_retention(**params, Retention=retention, BypassGovernanceRetention=bool(bypass_governance))
+    _s3_client().put_object_retention(**params, Retention=retention, BypassGovernanceRetention=bool(bypass_governance))
     return {'mode': mode or None, 'retain_until_date': retain_until if mode else None}
 
 
 def put_s3_object_legal_hold(bucket: str, key: str, version_id: str | None, status: str) -> dict[str, Any]:
     if status not in {'ON', 'OFF'}:
         raise ValueError('Legal hold status must be ON or OFF.')
-    s3 = _s3_client()
-    _require_object_lock(s3, bucket, 'PutObjectLegalHold')
-    s3.put_object_legal_hold(**_version_params(bucket, key, version_id), LegalHold={'Status': status})
+    _s3_client().put_object_legal_hold(**_version_params(bucket, key, version_id), LegalHold={'Status': status})
     return {'status': status}
 
 

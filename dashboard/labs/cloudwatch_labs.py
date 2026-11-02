@@ -110,7 +110,7 @@ METRIC_ALARMS_LAB = {
                 'Polls the alarm until CloudWatch evaluates the breaching datapoint and records ALARM with a '
                 '"Threshold Crossed" reason. Evaluation runs on a schedule, so this can take up to a minute. In AWS an alarm action '
                 '(for example an SNS topic) would fire here; this alarm has none. Floci runs Application Auto Scaling '
-                'policy actions, and newer Floci releases also publish SNS notifications.'
+                'policy actions and, from Floci 2.4.0, SNS notifications.'
             ),
         },
     ],

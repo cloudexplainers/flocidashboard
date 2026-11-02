@@ -558,7 +558,7 @@ def _check_buckets() -> tuple[bool, str]:
                for rule in rules):
         return False, f'{RESULTS_BUCKET} needs a rule that expires results after {RESULTS_EXPIRY_DAYS} days.'
     return True, (f'{LAKE_BUCKET} blocks public access and encrypts by default; {RESULTS_BUCKET} expires results after '
-                  f'{RESULTS_EXPIRY_DAYS} days (Floci stores lifecycle rules but never runs them).')
+                  f'{RESULTS_EXPIRY_DAYS} days.')
 
 
 def _check_stream() -> tuple[bool, str]:

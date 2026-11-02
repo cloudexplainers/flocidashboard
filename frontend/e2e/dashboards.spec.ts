@@ -710,7 +710,7 @@ test('EC2 Elastic IPs table shows instance and NAT associations and guards relea
 
   await page.goto('/ec2/elastic_ips');
   await expect(page.getByRole('heading', { name: /^Elastic IP addresses/ })).toBeVisible();
-  await expect(page.getByText('How Floci 2.3.0 handles Elastic IPs')).toBeVisible();
+  await expect(page.getByText('How Floci handles Elastic IPs')).toBeVisible();
   const table = page.getByRole('table', { name: 'Elastic IP addresses' });
   await expect(table.getByRole('row', { name: /54\.0\.0\.2/ })).toContainText('Instance i-web');
   await expect(table.getByRole('row', { name: /54\.0\.0\.3/ })).toContainText('NAT gateway nat-review');
@@ -783,7 +783,7 @@ test('EC2 NAT gateways table creates public and private gateways, shows routes, 
   });
 
   await page.goto('/ec2/nat_gateways');
-  await expect(page.getByText('Floci 2.3.0 stores NAT gateways but routes no traffic through them')).toBeVisible();
+  await expect(page.getByText('Floci stores NAT gateways but routes no traffic through them')).toBeVisible();
   const row = page.getByRole('table', { name: 'NAT gateways' }).getByRole('row', { name: /nat-review/ });
   await expect(row).toContainText('egress-a');
   await expect(row).toContainText('Available');
@@ -1154,7 +1154,7 @@ test('S3 lifecycle rules check the AWS rules Floci skips and save the whole conf
     return route.fulfill({ json: { rules: saved?.rules || [{ ID: 'old', Status: 'Enabled', Filter: {}, Expiration: { Date: '2030-01-01T00:00:00Z' } }] } });
   });
   await page.goto('/s3/management?bucket=logs');
-  await expect(page.getByText('Floci stores lifecycle rules and returns them, but never runs them', { exact: false })).toBeVisible();
+  await expect(page.getByText('Floci runs the expiration actions of lifecycle rules', { exact: false })).toBeVisible();
   await page.getByRole('row').filter({ hasText: 'old' }).getByRole('radio').check();
   await expect(page.getByRole('button', { name: 'Edit', exact: true }).first()).toBeDisabled();
   await page.getByRole('button', { name: 'Create lifecycle rule', exact: true }).click();
@@ -4049,7 +4049,7 @@ test('CloudTrail log files list newest first, page older days and show records w
   });
   await page.goto('/cloudtrail/trails?trail=learning-audit&tab=log-files');
   await expect(page.getByRole('tab', { name: 'Log files', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('floci-note').filter({ hasText: 'Floci delivers only S3 data events' })).toContainText('about every 60 seconds');
+  await expect(page.getByTestId('floci-note').filter({ hasText: 'Floci delivers S3 data events' })).toContainText('about every 60 seconds');
   await expect(page.getByText('Newest first, from s3://audit-logs/AWSLogs/')).toBeVisible();
   await page.getByRole('button', { name: 'Load older log files', exact: true }).click();
   await expect(page.getByRole('button', { name: olderLog.name, exact: true })).toBeVisible();
@@ -4340,18 +4340,18 @@ test('resource policy editors say Floci stores the policy without evaluating it'
 test('consoles label alarm actions, PITR, routing policies and CloudTrail events Floci does not run', async ({ page }) => {
   await inventory(page, 'cloudwatch', { alarms: [polishedAlarm] });
   await page.goto(`/cloudwatch/alarms?alarm=${encodeURIComponent(polishedAlarm.AlarmName)}`);
-  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'of the actions it runs only Application Auto Scaling scaling policies' })).toBeVisible();
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'it runs SNS notifications (Floci 2.4.0 and later) and Application' })).toBeVisible();
   await inventory(page, 'dynamodb', { tables: [{ ...dynamoReviewTable, PointInTimeRecovery: true }] });
   await page.goto('/dynamodb/items?table=Orders');
   await page.getByRole('tab', { name: 'Capacity and backups', exact: true }).click();
-  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: /can.t restore a table/ })).toBeVisible();
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'restores it into a new table' })).toBeVisible();
   await expect(page.getByText(/^Point-in-time recovery \(PITR\) provides continuous backups/)).toHaveCount(0);
   await inventory(page, 'route53', { hosted_zones: dnsReviewInventory.hosted_zones });
   await page.goto('/route53?zone=ZPUBLIC&tab=records');
   await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'GetHealthCheckStatus always reports success' })).toBeVisible();
   await page.route('**/api/cloudtrail/events/?*', route => route.fulfill({ json: { events: [] } }));
   await page.goto('/cloudtrail/events');
-  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'Floci records no management events' })).toBeVisible();
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'LookupEvents returns no events in Floci' })).toBeVisible();
 });
 
 test('Settings reports auth flags the dashboard cannot see as not known', async ({ page }) => {
@@ -4378,7 +4378,7 @@ const haInventory = {
   target_health: [],
 };
 
-test('target group attributes say Floci stores stickiness without applying it and save what was entered', async ({ page }) => {
+test('target group attributes say which stickiness Floci applies and save what was entered', async ({ page }) => {
   await inventory(page, 'elasticloadbalancing', haInventory);
   let payload: any = null;
   await page.route('**/api/elasticloadbalancing/target-groups/**/attributes/', route => { payload = { url: decodeURIComponent(route.request().url()), method: route.request().method(), body: route.request().postDataJSON() }; return route.fulfill({ json: { attributes: {} } }); });
@@ -4397,7 +4397,7 @@ test('target group attributes say Floci stores stickiness without applying it an
   await expect.poll(() => payload?.method).toBe('PUT');
   expect(payload.url).toContain('/target-groups/arn:tg:web/attributes/');
   expect(payload.body).toEqual({ deregistration_delay_seconds: 30, stickiness_enabled: true, stickiness_type: 'lb_cookie', stickiness_duration_seconds: 120 });
-  await expect(page.getByText(/Attributes for "web" saved\. Floci stores stickiness/)).toBeVisible();
+  await expect(page.getByText('Attributes for "web" saved.', { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
 });

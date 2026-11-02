@@ -3,10 +3,11 @@
 import json
 from unittest.mock import MagicMock, patch
 
+from botocore.exceptions import ClientError, ConnectionClosedError, EndpointConnectionError
 from django.test import SimpleTestCase
 from django.urls import reverse
 
-from .ec2_api import allocate_elastic_ip, create_nat_gateway, set_elastic_ip_association
+from .ec2_api import allocate_elastic_ip, create_nat_gateway, delete_vpc, set_elastic_ip_association
 
 
 class ElasticIpHelperTests(SimpleTestCase):
@@ -62,7 +63,7 @@ class NatGatewayHelperTests(SimpleTestCase):
         self.client_factory.return_value = self.ec2
 
     def test_public_gateway_needs_an_elastic_ip(self):
-        # Floci 2.3.0 accepts this; AWS rejects it, so the helper does.
+        # Floci accepts this; AWS rejects it, so the helper does.
         with self.assertRaisesMessage(ValueError, 'needs an Elastic IP'):
             create_nat_gateway('subnet-1', None, connectivity_type='public')
         self.ec2.create_nat_gateway.assert_not_called()
@@ -91,3 +92,35 @@ class NatGatewayHelperTests(SimpleTestCase):
         response = self.client.post(reverse('dashboard:ec2-nat-gateways-create'), data=json.dumps({'subnet_id': 'subnet-1', 'connectivity_type': 'public'}), content_type='application/json')
         self.assertEqual(response.status_code, 400)
         self.assertIn('Elastic IP', json.dumps(response.json()))
+
+
+class DeleteVpcTests(SimpleTestCase):
+    def setUp(self):
+        patcher = patch('dashboard.ec2_api._ec2_client')
+        self.ec2 = patcher.start().return_value
+        self.addCleanup(patcher.stop)
+        self.ec2.delete_vpc.side_effect = ConnectionClosedError(endpoint_url='http://floci:4566/')
+
+    def test_dropped_connection_after_the_vpc_is_gone_counts_as_deleted(self):
+        self.ec2.describe_vpcs.side_effect = ClientError({'Error': {'Code': 'InvalidVpcID.NotFound'}}, 'DescribeVpcs')
+        self.assertEqual(delete_vpc('vpc-1'), {'vpc_id': 'vpc-1', 'deleted': True})
+
+    @patch('dashboard.ec2_api.time.sleep')
+    def test_waits_for_floci_to_answer_again(self, sleep_mock):
+        self.ec2.describe_vpcs.side_effect = [
+            EndpointConnectionError(endpoint_url='http://floci:4566/'),
+            ClientError({'Error': {'Code': 'InvalidVpcID.NotFound'}}, 'DescribeVpcs'),
+        ]
+        self.assertTrue(delete_vpc('vpc-1')['deleted'])
+        sleep_mock.assert_called_once()
+
+    @patch('dashboard.ec2_api.time.sleep')
+    def test_floci_that_never_answers_again_is_an_error(self, sleep_mock):
+        self.ec2.describe_vpcs.side_effect = EndpointConnectionError(endpoint_url='http://floci:4566/')
+        with self.assertRaises(ConnectionClosedError):
+            delete_vpc('vpc-1')
+
+    def test_dropped_connection_with_the_vpc_still_listed_is_an_error(self):
+        self.ec2.describe_vpcs.return_value = {'Vpcs': [{'VpcId': 'vpc-1'}]}
+        with self.assertRaises(ConnectionClosedError):
+            delete_vpc('vpc-1')

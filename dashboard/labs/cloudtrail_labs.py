@@ -2,11 +2,12 @@
 bucket, an AWS Config recorder and a managed rule, a GuardDuty detector with an EventBridge rule for high-severity
 findings, Security Hub with its default standards, and a "which service answers which question" chooser.
 
-Floci 2.3.0 stores all of this but simulates little: trails report IsLogging but deliver no log files and
-LookupEvents returns nothing; the Config recorder records nothing and rules stay INSUFFICIENT_DATA; GuardDuty creates
-detectors but its findings API is misrouted; Security Hub enables but its standards API is misrouted; and EventBridge
-does not support numeric matching. The lab checks the bucket policy, evaluates the Config rule against the lab
-buckets, and matches sample findings against the rule's pattern itself.
+Floci 2.4.0 stores all of this but simulates little: trails deliver S3 data events (and a few Secrets Manager
+management events) as log files, but LookupEvents returns nothing; the Config recorder records nothing and rules stay
+INSUFFICIENT_DATA; GuardDuty creates detectors but its findings API is misrouted; Security Hub enables its default
+standards but its findings API is misrouted; and EventBridge does not support numeric matching. The lab checks the
+bucket policy, evaluates the Config rule against the lab buckets, and matches sample findings against the rule's
+pattern itself.
 """
 
 from __future__ import annotations
@@ -171,7 +172,8 @@ LAB = {
                 'Event history keeps 90 days of management events for free; a trail keeps them in S3 for as long as '
                 'you like, from every Region, including global services such as IAM. Log file validation adds signed '
                 'digest files that prove no log was changed or deleted. How Floci emulates this: the trail is stored '
-                'and reports IsLogging, but Floci delivers no log files and LookupEvents returns no events; the step '
+                'and reports IsLogging, and it delivers log files for the S3 data events its selectors match (the next '
+                'step adds them), but it records almost no management events and LookupEvents returns none; the step '
                 'checks the trail settings and records that.'
             ),
         },
@@ -228,8 +230,9 @@ LAB = {
                 'partner tools in one format, and runs standards such as AWS Foundational Security Best Practices '
                 'and CIS AWS Foundations. An EventBridge rule on "Security Hub Findings - Imported" pages the team for '
                 'new CRITICAL and HIGH findings from every product at once. How Floci emulates this: the hub is '
-                'enabled and described and the rule is stored, but the standards and findings APIs are misrouted, '
-                'so the step matches four sample findings against the rule itself.'
+                'enabled with its default standards (Floci 2.4.0 reports them; 2.3.0 misrouted the standards API) and '
+                'the rule is stored, but the findings API is misrouted, so the step matches four sample findings '
+                'against the rule itself.'
             ),
         },
         {
@@ -683,7 +686,8 @@ def step_cloudtrail_trail() -> dict[str, Any]:
                 'LogFilesDelivered': delivered}
     verified, message = _check_trail()
     if verified and not events and not delivered:
-        message += ' Floci delivers no log files and LookupEvents returned no events, so nothing can be audited here.'
+        message += (' No log file has arrived and LookupEvents returned no events: Floci records almost no management '
+                    'events, so the trail delivers files once the next step selects S3 data events.')
     return _result('cloudtrail-trail', TRAIL_COMMAND, response, verified, message, started)
 
 
