@@ -1672,6 +1672,26 @@ Checked live on a throwaway Floci 2.4.0 (three full runs with a reset before eac
 | Alarm and auto rollback settings | Stored only. | Says so |
 | `DeleteCluster` right after the service | `ClusterContainsTasksException` while the last task stops. | Reset retries |
 
+## Fleet release lab (2026-11-02)
+
+`ssm/fleet-release-troubleshooting` (DOP 5.3, 1.4, 3.2), 8 steps, in `dashboard/labs/ssm_fleet_labs.py` (dispatched
+from `ssm_labs.py`, the third lab of Level 10: DevOps Professional, Wave P item P-3). It creates the launch template and
+Auto Scaling group `lab-fleet-web` (Ubuntu instances, the App tag propagated), the CodeDeploy application
+`lab-fleet-web` with the deployment group `lab-fleet-web-inplace`, and the stack `lab-fleet-config` with the parameter
+`/lab-fleet/config-version` and the queue `lab-fleet-deploy-events`. Reset removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 (a full run after reset, a check_labs run, then reset):
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Launch template user data | Runs in the container about 20 seconds after the instance reports InService. | Waits for the install before releasing |
+| Run Command | Runs `AWS-RunShellScript` in the container without an SSM agent; status, exit code, stdout and stderr are real. `DescribeInstanceInformation` lists nothing. | Real; one instance at a time, sent by the lab |
+| MaxConcurrency, MaxErrors | Accepted, not applied. | The lab stops the rollout on the first failure |
+| Scale-out | A new instance launches from the launch template and runs its user data. | Real (shows the drift) |
+| CodeDeploy Server deployment | EC2 tag filters always give `NoInstancesReachable`; scripted hooks on on-premises instances wait for an agent and end `ScriptFailed`. | Diagnoses the failure with a checklist |
+| Instance refresh | Replaces every instance from the new launch template version; replaces them all at once, ignoring `MinHealthyPercentage`. | Real, with the batch difference |
+| Stack update rollback | A queue with a 30-second retention fails, the update rolls back to `UPDATE_ROLLBACK_COMPLETE`, and events name the resource and reason. | Real |
+
 ## Recommended next work
 
 | Item | Why not here |

@@ -9,6 +9,8 @@ from typing import Any
 from botocore.exceptions import ClientError
 
 from dashboard.aws import _clean_response
+
+from . import ssm_fleet_labs as fleet_release
 from .monolith import (
     _config_lab_step_result,
     _error_code,
@@ -201,10 +203,13 @@ def _reset_ssm_parameter_store_config() -> dict[str, Any]:
     }
 
 
-LABS = [SSM_PARAMETER_STORE_LAB]
+LABS = [SSM_PARAMETER_STORE_LAB, fleet_release.LAB]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'ssm' and lab_key == 'fleet-release-troubleshooting':
+        from .ssm_fleet_labs import run_step as fleet_run_step
+        return fleet_run_step(step_key)
     if service_key == 'ssm' and lab_key == 'parameter-store-config':
         runners = {
             'put-parameter': _run_ssm_put_parameter,
@@ -218,6 +223,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'ssm' and lab_key == 'fleet-release-troubleshooting':
+        from .ssm_fleet_labs import status as fleet_status
+        return fleet_status()
     if service_key == 'ssm' and lab_key == 'parameter-store-config':
         parameter_verification = _verify_ssm_parameter()
         path_verification = _verify_ssm_parameter_path()
@@ -243,6 +251,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'ssm' and lab_key == 'fleet-release-troubleshooting':
+        from .ssm_fleet_labs import reset as fleet_reset
+        return fleet_reset()
     if service_key == 'ssm' and lab_key == 'parameter-store-config':
         return _reset_ssm_parameter_store_config()
 
