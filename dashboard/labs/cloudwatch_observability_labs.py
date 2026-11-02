@@ -2,11 +2,11 @@
 Insights query, a custom metric from code and an embedded metric format line, an alarm that targets SNS, a dashboard,
 and active tracing.
 
-Floci 2.3.0 delivers the function's output to its log group, turns JSON metric filters into real metrics (counts and
+Floci 2.4.0 delivers the function's output to its log group, turns JSON metric filters into real metrics (counts and
 values with units), accepts PutMetricData from the function, evaluates alarms (a breached alarm reaches ALARM in about
 15 seconds), and stores dashboards. It does not extract embedded metric format lines, its Logs Insights supports
-fields, filter, sort and limit but not stats, alarm actions never notify SNS (newer Floci releases publish them, so
-the alarm step subscribes a queue to the topic and reports whether the notification arrived), Lambda's JSON log format
+fields, filter, sort and limit but not stats, alarm actions publish to SNS (Floci 2.3.0 never
+notified, so the alarm step subscribes a queue to the topic and reports whether the notification arrived), Lambda's JSON log format
 and tracing settings are stored without effect, and X-Ray is not available. Each step says which of these it meets.
 """
 
@@ -300,8 +300,8 @@ LAB = {
                 f'or trigger automation; here a queue subscribed to the topic stands in for the team\'s inbox, and '
                 'its policy lets only this topic send to it. The step sends '
                 f'{ALARM_BURST} rejected orders so the current minute breaches. How Floci emulates this: the alarm '
-                'is evaluated for real and moves to ALARM within about 15 seconds. Older Floci releases do not run alarm '
-                'actions, so nothing reaches the queue; newer releases publish the notification. The step '
+                'is evaluated for real and moves to ALARM within about 15 seconds. Floci 2.4.0 publishes the '
+                'notification to the topic (Floci 2.3.0 ran no alarm actions, so nothing reached the queue). The step '
                 'checks the state and the configured actions, and reports whether the ALARM message arrived.'
             ),
             'artifact_label': 'inbox-policy.json',

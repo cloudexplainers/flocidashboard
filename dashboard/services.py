@@ -4631,7 +4631,7 @@ ECR_ACTIONS = (
         'POST',
         '/api/ecr/mock-image/',
         'create',
-        description='Calls PutImage with a placeholder manifest. Floci 2.3.0 does not implement PutImage, so it returns an error there; push a real image with the push commands instead.',
+        description='Calls PutImage with a placeholder manifest. Floci checks, as AWS does, that the manifest\'s layers are in the repository, so it refuses the placeholder (LayersNotFoundException); push a real image with the push commands instead.',
         fields=(
             action_field('repository_name', 'Repository name', required=True),
             action_field('image_tag', 'Image tag (e.g. latest, v1.0.0)', required=True),
@@ -4960,7 +4960,7 @@ ELASTICLOADBALANCING_ACTIONS = (
         'PUT',
         '/api/elasticloadbalancing/target-groups/{target_group}/attributes/',
         'update',
-        description='Floci 2.3.0 stores stickiness and deregistration delay but does not apply them: requests go round robin with no cookie, and deregistered targets are removed at once.',
+        description='Floci applies load balancer cookie (lb_cookie) stickiness with the AWSALB cookie. It stores app_cookie stickiness and the deregistration delay but does not apply them: those requests go round robin, and deregistered targets are removed at once.',
         fields=(
             action_field('stickiness_enabled', 'Stickiness', field_type='boolean'),
             action_field('stickiness_type', 'Stickiness type', options=('lb_cookie', 'app_cookie'), default='lb_cookie'),

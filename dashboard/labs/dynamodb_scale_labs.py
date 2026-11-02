@@ -1,10 +1,10 @@
 """DynamoDB at scale lab: provisioned capacity sized from a workload, Application Auto Scaling, an on-demand table,
 TTL expiry, a filtered stream processor in Lambda, point-in-time recovery, and a global table replica.
 
-Floci 2.3.0 stores capacity settings but never throttles, so capacity is a calculation the lab checks. It stores
+Floci 2.4.0 stores capacity settings but never throttles, so capacity is a calculation the lab checks. It stores
 scaling targets and policies and creates their CloudWatch alarms, but nothing ever changes the capacity. TTL really
-deletes expired items, and streams really feed Lambda through a filtered event source mapping. PITR is a flag (restore
-is unsupported, as are on-demand backups; newer Floci releases restore, so the step reports which happened), and a
+deletes expired items, and streams really feed Lambda through a filtered event source mapping. PITR restores a table (Floci 2.3.0
+refused restores and on-demand backups, so the step reports which happened), and a
 replica is listed as ACTIVE without a table in the other Region, so those steps check the settings and say what Floci
 skips.
 """
@@ -266,7 +266,7 @@ LAB = {
                 'second in that window as a new table; on-demand backups (CreateBackup or AWS Backup) are kept until '
                 'deleted. Neither affects table performance. For disaster recovery across Regions, restore elsewhere '
                 'from AWS Backup copies or use a global table. How Floci emulates this: the PITR setting is stored and '
-                'reported. Older Floci releases refuse RestoreTableToPointInTime and CreateBackup; newer ones restore. '
+                'reported, and Floci 2.4.0 restores the table (Floci 2.3.0 refused RestoreTableToPointInTime and CreateBackup). '
                 'The step checks the setting and reports what the restore attempt did.'
             ),
         },

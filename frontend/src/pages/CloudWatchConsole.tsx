@@ -651,11 +651,10 @@ const CloudWatchWorkspace: React.FC<CloudWatchConsoleProps> = ({
             <Container header={<Header variant="h2">Action targets</Header>}>
               <SpaceBetween size="m">
               <FlociNote>
-                Floci evaluates the alarm and changes its state, but of the actions
-                it runs only Application Auto Scaling scaling policies. SNS
-                notifications, EC2 actions and EC2 Auto Scaling policies listed here
-                don&apos;t run in Floci 2.3.0; newer Floci releases add SNS
-                notifications.
+                Floci evaluates the alarm and changes its state, and of the actions
+                it runs SNS notifications (Floci 2.4.0 and later) and Application
+                Auto Scaling scaling policies. EC2 actions and EC2 Auto Scaling
+                policies listed here don&apos;t run.
               </FlociNote>
               <ColumnLayout columns={3} variant="text-grid">
                 {[

@@ -1,9 +1,9 @@
 """S3 data protection and storage tiers lab: Object Lock, legal holds, storage classes,
 Intelligent-Tiering, version lifecycle rules, cross-Region replication, and Requester Pays.
 
-Floci 2.3.0 enforces Object Lock (GOVERNANCE, COMPLIANCE, legal holds) for real. It stores
-storage classes, lifecycle rules, Intelligent-Tiering, replication, and Requester Pays
-without acting on them, and each step says so.
+Floci 2.4.0 enforces Object Lock (GOVERNANCE, COMPLIANCE, legal holds) for real and runs lifecycle
+expiration. It stores storage classes, lifecycle transitions, Intelligent-Tiering, replication, and
+Requester Pays without acting on them, and each step says so.
 """
 
 from __future__ import annotations
@@ -271,7 +271,9 @@ LAB = {
                 '30 days after they become noncurrent, deletes them after 365 days while keeping the 3 newest, removes '
                 'delete markers that no longer hide anything, and aborts multipart uploads left incomplete for 7 days '
                 '(their parts are billed but invisible in listings). Lifecycle rules are the main S3 cost tool on the '
-                'exam. How Floci emulates this: Floci stores the rule but does not move or delete anything.'
+                'exam. How Floci emulates this: Floci never moves an object to another storage class, but it runs the '
+                'expiration actions about once a minute, so after 365 days it would delete the old versions, keeping the 3 '
+                'newest, and remove expired delete markers.'
             ),
             'artifact_label': 'lifecycle.json',
             'artifact': json.dumps(LIFECYCLE_CONFIGURATION, indent=2),

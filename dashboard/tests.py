@@ -3278,6 +3278,29 @@ class GuidedEC2LabTests(TestCase):
         ec2_client.assert_called_once_with()
 
 
+    @patch('dashboard.labs.ec2_guided.time.sleep')
+    @patch('dashboard.labs.ec2_guided.terminate_instance')
+    @patch('dashboard.labs.ec2_guided._ec2')
+    def test_reset_waits_for_termination_before_deleting_the_subnet(self, ec2_client, terminate_mock, sleep_mock):
+        from django.core.cache import cache
+        from dashboard.labs.ec2_guided import reset_guided_lab
+
+        ec2 = ec2_client.return_value
+        calls = []
+        states = iter(['shutting-down', 'terminated'])
+        ec2.describe_instances.side_effect = lambda **_: calls.append('describe') or {
+            'Reservations': [{'Instances': [{'State': {'Name': next(states)}}]}],
+        }
+        ec2.delete_subnet.side_effect = lambda **_: calls.append('delete_subnet')
+        cache.set('floci-lab:ec2:guided:guided-imds:instance-id', 'i-1')
+        cache.set('floci-lab:ec2:guided:guided-imds:subnet-id', 'subnet-1')
+
+        reset_guided_lab('guided-imds')
+
+        terminate_mock.assert_called_once_with('i-1')
+        self.assertEqual(calls, ['describe', 'describe', 'delete_subnet'])
+        sleep_mock.assert_called_once()
+
     def test_imds_command_bounds_network_wait_and_bypasses_proxy(self):
         from dashboard.labs.ec2_guided import _imds_get_command
 

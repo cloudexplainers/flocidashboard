@@ -1,11 +1,11 @@
 """Lambda performance and cost lab: memory sizing with a cost per million requests, versions, an alias with a weighted
 canary, reserved concurrency that throttles, an IAM-authenticated function URL, and promoting the canary.
 
-Floci 2.3.0 runs every invocation in a real container. It reports the configured memory to the function but does not
+Floci 2.4.0 runs every invocation in a real container. It reports the configured memory to the function but does not
 scale CPU with it, so the sizing sweep shows flat durations; the lab says so and still teaches the math. Versions,
 weighted alias routing, reserved concurrency throttling, and function URLs are real. A function URL with AWS_IAM auth
-also answers unsigned requests, and provisioned concurrency requests are routed to the S3 handler, so the lab checks
-the auth type itself and explains provisioned concurrency without configuring it.
+also answers unsigned requests, so the lab checks the auth type itself. Provisioned concurrency is explained without
+configuring it, since AWS bills it for as long as it is configured.
 """
 
 from __future__ import annotations
@@ -259,8 +259,8 @@ LAB = {
                 'TooManyRequestsException, asynchronous events are retried). Provisioned concurrency is different: '
                 'it keeps initialized environments warm on an alias to remove cold starts, and it is billed while '
                 'configured. How Floci emulates this: reserved concurrency is enforced, and the step fires '
-                f'{BURST_INVOCATIONS} calls at once to show the throttles. Floci routes provisioned concurrency '
-                'requests to its S3 handler, so the lab explains it without configuring it.'
+                f'{BURST_INVOCATIONS} calls at once to show the throttles. The lab explains provisioned '
+                'concurrency without configuring it, since AWS bills it for as long as it is configured.'
             ),
         },
         {

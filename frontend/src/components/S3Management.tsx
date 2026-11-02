@@ -29,7 +29,7 @@ import {
 
 type Notify = (type: 'success' | 'error', text: string) => void;
 
-export const LIFECYCLE_NOTE = 'Floci stores lifecycle rules and returns them, but never runs them: no object moves to another storage class or expires, and incomplete multipart uploads aren’t aborted. Floci also accepts rules AWS rejects, such as a transition to Standard-IA before 30 days; this console checks those rules itself.';
+export const LIFECYCLE_NOTE = 'Floci runs the expiration actions of lifecycle rules in a background sweep about once a minute: it expires current versions, deletes noncurrent versions and expired delete markers, and aborts incomplete multipart uploads, as S3 does. It stores transitions but never runs them: no object moves to another storage class. Floci also accepts rules AWS rejects, such as a transition to Standard-IA before 30 days; this console checks those rules itself.';
 export const REPLICATION_NOTE = 'Floci stores the replication configuration and returns it, but replicates nothing: new objects never reach the destination bucket and get no replication status. Floci also accepts a configuration when either bucket has no versioning; AWS requires versioning on both, and so does this console.';
 export const INTELLIGENT_TIERING_NOTE = 'Floci stores these configurations and checks the day limits, but never moves objects between access tiers: an object uploaded with the Intelligent-Tiering storage class stays readable at once, however long it goes unread.';
 
