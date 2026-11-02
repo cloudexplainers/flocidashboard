@@ -24,6 +24,8 @@ from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
 
+from . import codepipeline_gates_labs as quality_gates
+
 SERVICE = 'codepipeline'
 LAB_KEY = 'lambda-cicd'
 CACHE_PREFIX = f'floci-lab:{SERVICE}:{LAB_KEY}:'
@@ -337,8 +339,8 @@ LAB = {
     ],
 }
 
-LABS = [LAB]
 STEP_KEYS = [step['key'] for step in LAB['steps']]
+LABS = [LAB, quality_gates.LAB]
 
 
 # ── Clients, markers, results ────────────────────────────────────────────────
@@ -1224,23 +1226,24 @@ def step_rollback() -> dict[str, Any]:
     return _result('rollback', ROLLBACK_COMMAND, response, verified, message if verified else check, started)
 
 
-RUNNERS = {
-    'source-bucket': step_source_bucket,
-    'build-project': step_build_project,
-    'first-build': step_first_build,
-    'deploy-v1': step_deploy_v1,
-    'failing-build': step_failing_build,
-    'pipeline': step_pipeline,
-    'approve-release': step_approve_release,
-    'canary-deploy': step_canary_deploy,
-    'rollback': step_rollback,
-}
-
-
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
-    if service_key != SERVICE or lab_key != LAB_KEY:
+    if service_key == 'codepipeline' and lab_key == 'pipeline-quality-gates':
+        from .codepipeline_gates_labs import run_step as gates_run_step
+        return gates_run_step(step_key)
+    if not (service_key == 'codepipeline' and lab_key == 'lambda-cicd'):
         raise ValueError('Lab not found')
-    runner = RUNNERS.get(step_key)
+    runners = {
+        'source-bucket': step_source_bucket,
+        'build-project': step_build_project,
+        'first-build': step_first_build,
+        'deploy-v1': step_deploy_v1,
+        'failing-build': step_failing_build,
+        'pipeline': step_pipeline,
+        'approve-release': step_approve_release,
+        'canary-deploy': step_canary_deploy,
+        'rollback': step_rollback,
+    }
+    runner = runners.get(step_key)
     if not runner:
         raise ValueError(f'Unknown step {step_key} for lab {LAB_KEY}')
     return runner()
@@ -1256,6 +1259,9 @@ def _safe(check) -> bool:
 
 
 def status(service_key: str = SERVICE, lab_key: str = LAB_KEY) -> dict[str, Any]:
+    if service_key == 'codepipeline' and lab_key == 'pipeline-quality-gates':
+        from .codepipeline_gates_labs import status as gates_status
+        return gates_status()
     checks = {
         'source-bucket': lambda: _check_bucket()[0],
         'build-project': lambda: _check_project()[0],
@@ -1289,6 +1295,9 @@ def status(service_key: str = SERVICE, lab_key: str = LAB_KEY) -> dict[str, Any]
 
 def reset(service_key: str = SERVICE, lab_key: str = LAB_KEY) -> dict[str, Any]:
     """Remove the deployment group and application, pipeline, project, function, alarm, roles, and bucket."""
+    if service_key == 'codepipeline' and lab_key == 'pipeline-quality-gates':
+        from .codepipeline_gates_labs import reset as gates_reset
+        return gates_reset()
     started = time.perf_counter()
     deleted: list[str] = []
     errors: list[str] = []

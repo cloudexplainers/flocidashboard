@@ -1692,6 +1692,31 @@ Checked live on a throwaway Floci 2.4.0 (a full run after reset, a check_labs ru
 | Instance refresh | Replaces every instance from the new launch template version; replaces them all at once, ignoring `MinHealthyPercentage`. | Real, with the batch difference |
 | Stack update rollback | A queue with a 30-second retention fails, the update rolls back to `UPDATE_ROLLBACK_COMPLETE`, and events name the resource and reason. | Real |
 
+## Pipeline quality gates lab (2026-11-02)
+
+`codepipeline/pipeline-quality-gates` (DOP 1.2, 1.1, 5.1, 5.3), 8 steps, in `dashboard/labs/codepipeline_gates_labs.py`
+(dispatched from `codepipeline_labs.py`, the fourth lab of Level 10: DevOps Professional, Wave P item P-4). It creates
+the parameters `/lab-gates/orders-table` and `/lab-gates/coverage-minimum`, the secret `lab-gates/payments-api-key`,
+the buckets `lab-gates-source` (versioned) and `lab-gates-artifacts`, the build projects `lab-gates-unit` and
+`lab-gates-integration` with the role `lab-gates-codebuild-role`, the report group `lab-gates-unit-tests`, the table
+`lab-gates-orders`, the pipeline `lab-gates-pipeline` with the role `lab-gates-pipeline-role`, the rule
+`lab-gates-failed-stages`, and the queue `lab-gates-pipeline-failures`. Reset removes all of it. The builds run in
+`python:3.12-slim`, which has no boto3 and no network beyond Floci, so the generated service measures coverage with the
+standard library and signs its DynamoDB calls with SigV4 itself.
+
+Checked live on a throwaway Floci 2.4.0 (a full run after reset, a check_labs run, then reset):
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| `env/parameter-store`, `env/secrets-manager` | Resolved into the build's environment when the build starts. | Real |
+| SDK endpoint in builds | `AWS_ENDPOINT_URL` (`http://floci:4566` in Docker), `AWS_REGION` and test keys are set. | Real; the integration test reaches DynamoDB |
+| Failed build | The phase fails on a non-zero exit; its context is `Exit code N:` plus the output's tail. Artifacts still upload. | Reads the gate's message from the phase |
+| Artifacts with `packaging: NONE` | Files land at the bucket root; `path` and `name` are ignored. | Reads either place |
+| Build logs | The stream is named but stays empty (only the container's main process is streamed, not the phases). | Uses the phase context and the artifacts |
+| Report groups | Stored; the buildspec's `reports` section creates no reports, and `ListReports` is unsupported. | Parses the JUnit file itself |
+| Pipeline CodeBuild action | Starts the project with its own source; the input artifact is ignored. | Projects read the same S3 object as the source stage |
+| Stage state-change events | Published to the default bus; a rule on `FAILED` stages delivers them to SQS. | Real |
+
 ## Recommended next work
 
 | Item | Why not here |

@@ -443,6 +443,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('cloudformation', 'stacksets-baseline'): _tags(dop='2.1 2.2 6.2'),
     ('ecs', 'container-blue-green'): _tags(dop='1.4 1.3 3.2'),
     ('ssm', 'fleet-release-troubleshooting'): _tags(dop='5.3 1.4 3.2'),
+    ('codepipeline', 'pipeline-quality-gates'): _tags(dop='1.2 1.1 5.1 5.3'),
 }
 
 
@@ -921,9 +922,10 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'CodeBuild report groups collect JUnit test results and code coverage, so a pipeline can fail when coverage drops below a threshold.',
             'Keep build secrets out of the buildspec: env/parameter-store and env/secrets-manager inject values at build time, and the CodeBuild service role needs read access to them.',
             'CodePipeline sends execution, stage, and action state changes to EventBridge, so a failed stage can notify a team or open a ticket.',
+            'Floci runs the builds, resolves their Parameter Store and Secrets Manager references, and publishes failed stage events, but creates no test reports, so the quality gates lab reads the JUnit file itself.',
         ],
-        'related_labs': [('codepipeline', 'lambda-cicd'), ('ssm', 'parameter-store-config'), ('secretsmanager', 'secret-lifecycle')],
-        'planned': 'P-4 Pipeline quality gates',
+        'related_labs': [('codepipeline', 'pipeline-quality-gates'), ('codepipeline', 'lambda-cicd'), ('ssm', 'parameter-store-config'), ('secretsmanager', 'secret-lifecycle')],
+        'planned': None,
     },
     {
         'key': 'artifact-management',
