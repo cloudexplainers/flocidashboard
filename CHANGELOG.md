@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- DynamoDB console, Capacity and backups tab: a Backups table creates, restores and deletes on-demand backups, and Restore to point in time restores a table with PITR on into a new table at the latest restorable time or a time you enter. Floci 2.4.0 runs both. It reports its latest restorable time as the moment PITR was turned on, so for the latest time the console sends the current time instead.
 - Matched to Floci 2.4.0 (released 2026-10-31), which the compatibility checks now target. Notes that were out of date are corrected: DynamoDB restores point-in-time backups and takes on-demand backups, CloudWatch alarms publish SNS notifications, S3 runs lifecycle expiration (not transitions), load balancer cookie stickiness is applied (app cookie stickiness and the deregistration delay still aren't), Lambda supports provisioned concurrency, GetAccountSettings and code signing configs, ECR's PutImage checks that a manifest's layers exist, and an Elastic IP replaces the one an instance already has and can't be released while in use outside the default VPC.
 - S3 Object Lock settings on a bucket without versioning or Object Lock are now refused by Floci itself, so the console passes Floci's error through instead of checking first and calling it a dashboard check.
 - DynamoDB basics lab: the update step passes on Floci 2.4.0, which returns 84.00 as 84 the way DynamoDB does; the check now compares numbers, not strings.

@@ -1203,6 +1203,10 @@ DYNAMODB_ACTIONS = (
             action_field('limit', 'Limit', field_type='number'),
         ),
     ),
+    action('create_backup', 'Create backup', 'POST', '/api/dynamodb/tables/{table}/backups/', 'execute', description='On-demand backup of the whole table.', fields=(action_field('backup_name', 'Backup name', required=True),), success_message='Backup created'),
+    action('restore_table_from_backup', 'Restore backup', 'POST', '/api/dynamodb/backups/', 'execute', description='Restores a backup into a new table.', fields=(action_field('backup_arn', 'Backup ARN', required=True), action_field('target_table_name', 'New table name', required=True)), success_message='Restore started'),
+    action('restore_table_to_point_in_time', 'Restore to point in time', 'POST', '/api/dynamodb/tables/{table}/restore/', 'execute', description='Restores the table into a new table. Needs point-in-time recovery on. Leave the time blank for the latest restorable time.', fields=(action_field('target_table_name', 'New table name', required=True), action_field('restore_time', 'Restore time (ISO 8601)')), success_message='Restore started'),
+    action('delete_backup', 'Delete backup', 'DELETE', '/api/dynamodb/backups/', 'destructive', fields=(action_field('backup_arn', 'Backup ARN', required=True),), success_message='Backup deleted'),
     action('export_table_to_point_in_time', 'Export to S3', 'POST', '/api/dynamodb/tables/{table}/exports/', 'execute', description='Full export in DynamoDB JSON. Needs point-in-time recovery on.', fields=(action_field('s3_bucket', 'S3 bucket', required=True), action_field('s3_prefix', 'S3 prefix')), success_message='Export started'),
 )
 
