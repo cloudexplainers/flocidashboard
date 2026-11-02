@@ -439,6 +439,8 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('s3vectors', 'rag-knowledge-base'): _tags(aif='3.1 2.3 2.1'),
     ('bedrockruntime', 'prompt-patterns'): _tags(aif='3.2 3.4 2.2'),
     ('bedrock', 'guardrails-least-privilege'): _tags(aif='4.1 5.1 5.2'),
+    # Level 10
+    ('cloudformation', 'stacksets-baseline'): _tags(dop='2.1 2.2 6.2'),
 }
 
 
@@ -957,10 +959,11 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Reuse patterns with nested stacks, modules, macros, and Lambda-backed custom resources; protect stacks with termination protection, stack policies, and DeletionPolicy Retain; detect manual changes with drift detection.',
             'AWS Service Catalog publishes approved products in portfolios; a launch constraint lets users provision a product with a role they could not use directly.',
             'AWS Control Tower sets up a landing zone with Account Factory, preventive controls (SCPs), detective controls (Config rules), and proactive controls (CloudFormation hooks). The CDK synthesizes CloudFormation from code.',
-            'Floci deploys StackSet instances into other Regions and runs custom resources, but does not detect drift, does not enforce stack policies, and records Service Catalog provisioning without creating a stack.',
+            'Floci deploys StackSet instances into other Regions and runs custom resources, but does not detect drift, does not enforce stack policies, and records Service Catalog provisioning without creating a stack; the StackSets lab checks those itself.',
         ],
-        'related_labs': [('cloudformation', 's3-sqs-stack'), ('iam', 'multi-account-guardrails'), ('cloudformation', 'sam-environments')],
-        'planned': 'P-1 Multi-Region baseline with StackSets',
+        'related_labs': [('cloudformation', 'stacksets-baseline'), ('cloudformation', 's3-sqs-stack'),
+                         ('iam', 'multi-account-guardrails')],
+        'planned': None,
     },
     {
         'key': 'fleet-configuration',

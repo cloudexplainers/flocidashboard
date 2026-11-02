@@ -613,7 +613,7 @@ Each lab follows the existing pattern and says in each step what Floci only stor
 
 ### Coverage by task statement (existing 100 labs)
 
-52 existing labs are tagged for DOP tasks. Legend as in §1; ○ here means a concept card but no lab.
+52 existing labs are tagged for DOP tasks, and the Wave P labs add to the table as they ship. Legend as in §1; ○ here means a concept card but no lab.
 
 | Task | Coverage | Covered by | Gap |
 |---|---|---|---|
@@ -621,8 +621,8 @@ Each lab follows the existing pattern and says in each step what Floci only stor
 | 1.2 | ◐ | codepipeline/lambda-cicd (unit tests, a failing build read from its phase) | Coverage gates, a test stage that calls AWS services, load tests (1.2.2, 1.2.4, 1.2.5) |
 | 1.3 | ◐ | codepipeline/lambda-cicd (zip artifacts in S3), cloudformation/sam-environments (layers), ecs/fargate-microservice (container image) | ECR repository policies, tag immutability and lifecycle, CodeArtifact, Image Builder (card) |
 | 1.4 | ◐ | lambda-cicd (Lambda canary), lambda/performance-cost (weighted alias), elasticloadbalancing/ha-web-tier (instance refresh) | ECS blue/green, EC2 in-place deployments with the CodeDeploy agent (1.4.2, 1.4.4) |
-| 2.1 | ◐ | cloudformation/s3-sqs-stack (change sets), sam-environments (SAM, AppConfig), well-architected-review | StackSets, custom resources, stack protection, Service Catalog (2.1.2, 2.1.4) |
-| 2.2 | ◐ | iam/multi-account-guardrails (Organizations, OUs, SCPs, delegated admin), iam/role-trust-policy, cloudtrail/governance-tour | Automated account baselines across accounts and Regions |
+| 2.1 | ● | **cloudformation/stacksets-baseline** (StackSets in two Regions, a custom resource, stack protection, drift, Service Catalog), cloudformation/s3-sqs-stack (change sets), sam-environments (SAM, AppConfig), well-architected-review | CDK and modules (card) |
+| 2.2 | ● | **cloudformation/stacksets-baseline** (a baseline in two Regions, a service-managed rollout to an OU), iam/multi-account-guardrails (Organizations, OUs, SCPs, delegated admin), iam/role-trust-policy, cloudtrail/governance-tour | Control Tower and Account Factory (card) |
 | 2.3 | ◐ | ec2/guided-ssm-command (Run Command), ec2/guided-userdata, both Step Functions labs | State Manager, Patch Manager, Inventory and Automation are unsupported (card) |
 | 3.1 | ● | elasticloadbalancing/ha-web-tier, rds/aurora-resilience, route53/routing-failover, dynamodb/capacity-at-scale, cloudfront/edge-delivery, ec2/nat-three-tier, well-architected-review | — |
 | 3.2 | ● | ha-web-tier (Auto Scaling), ecs/fargate-microservice, eks/control-plane-nodegroup, lambda/performance-cost, elasticache/cache-aside, apigateway/rest-api-developer, capacity-at-scale | — |
@@ -673,7 +673,7 @@ A new curriculum level, **Level 10: DevOps Professional**, holds these labs. Eac
 
 | # | Proposed lab | Steps | DOP | Floci |
 |---|---|---|---|---|
-| P-1 | **Multi-Region baseline with StackSets**: a baseline StackSet deployed to two Regions with per-Region parameter overrides, a Lambda-backed custom resource, exports and termination protection, a stack policy the lab checks itself, a drift check by comparing live settings to the template, and a Service Catalog product with a launch constraint | ~8 | 2.1, 2.2 | ✅ StackSets and custom resources real; ⚠️ no drift, stack policy and Service Catalog provisioning not applied |
+| ✅ P-1 | **Multi-Region baseline with StackSets** (shipped 2026-11-02 as `cloudformation/stacksets-baseline`, 8 steps, DOP 2.1, 2.2 and 6.2, the first lab of Level 10; it adds a service-managed rollout to an OU because Floci deploys those for real, and drops per-Region overrides because Floci ignores them): a baseline StackSet deployed to two Regions with per-Region parameter overrides, a Lambda-backed custom resource, exports and termination protection, a stack policy the lab checks itself, a drift check by comparing live settings to the template, and a Service Catalog product with a launch constraint | ~8 | 2.1, 2.2 | ✅ StackSets and custom resources real; ⚠️ no drift, stack policy and Service Catalog provisioning not applied |
 | P-2 | **Container blue/green with CodeDeploy**: an ECR repository with immutable tags, scan on push and a lifecycle policy, an image pushed to it, an ECS service behind an ALB with blue and green target groups, a CodeDeploy ECS deployment with a test hook, and a failed hook that stops the rollout | ~8 | 1.4, 1.3, 3.2 | ✅ task sets and listener swap (to confirm); ⚠️ ECR lifecycle and scans stored only |
 | P-3 | **In-place deployments and troubleshooting**: an Auto Scaling group with SSM-managed instances, a CodeDeploy Server deployment whose hooks run on each instance, a failing `ValidateService` traced through lifecycle events, a fix and redeploy, an instance refresh, and a CloudFormation rollback read from its events | ~8 | 1.4, 5.3, 3.2 | ✅ hooks run over SSM; ⚠️ lifecycle hooks and unhealthy replacement not simulated |
 | P-4 | **Pipeline quality gates**: CodeBuild with secrets from Parameter Store and Secrets Manager, unit tests with a coverage threshold, an integration test stage that calls DynamoDB through Floci, a report group, and pipeline state change events routed to SQS for failed stages | ~8 | 1.2, 1.1, 5.1, 5.3 | ✅ (builds, secrets, events from source; to confirm) |

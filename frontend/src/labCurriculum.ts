@@ -213,6 +213,17 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'bedrock', key: 'guardrails-least-privilege', title: 'Guard and secure a generative AI assistant with Bedrock guardrails, KMS, least privilege, and CloudTrail', stepCount: 8 },
     ],
   },
+  {
+    id: 'level-10-devops-professional',
+    title: 'Level 10: DevOps Professional',
+    subtitle: 'Multi-account and multi-Region infrastructure as code, deployments at scale, pipeline gates, remediation, and operations',
+    badge: 'Professional',
+    color: 'red',
+    description: 'Work like a platform team for the DevOps Engineer – Professional exam. Roll one baseline template out to two Regions with a CloudFormation StackSet, push an update to every stack instance, and deploy a guardrail to every account in an organizational unit with service-managed permissions. Build a network stack around a Lambda-backed custom resource that hands out CIDR blocks, protect it with termination protection and a stack policy, find drift in one Region and put it right, and publish an approved product in Service Catalog that developers can launch with a role they could not use themselves.',
+    labs: [
+      { service: 'cloudformation', key: 'stacksets-baseline', title: 'Roll out a multi-Region baseline with StackSets, custom resources, and Service Catalog', stepCount: 8 },
+    ],
+  },
 ];
 
 let nextLabId = 1;
