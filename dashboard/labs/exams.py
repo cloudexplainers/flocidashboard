@@ -444,6 +444,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ecs', 'container-blue-green'): _tags(dop='1.4 1.3 3.2'),
     ('ssm', 'fleet-release-troubleshooting'): _tags(dop='5.3 1.4 3.2'),
     ('codepipeline', 'pipeline-quality-gates'): _tags(dop='1.2 1.1 5.1 5.3'),
+    ('eventbridge', 'drift-remediation'): _tags(dop='5.2 4.3 5.1 6.2'),
 }
 
 
@@ -1021,8 +1022,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Make remediation idempotent, log what it changed, and alert humans when it fails or keeps repeating.',
             'Floci emits Parameter Store, Secrets Manager, CodePipeline, ECS, and S3 events to EventBridge, but does not run Config remediation, Automation runbooks, or alarm actions on EC2, so labs remediate with Lambda.',
         ],
-        'related_labs': [('eventbridge', 'application-spine'), ('cloudtrail', 'governance-tour'), ('cloudwatch', 'metric-alarms')],
-        'planned': 'P-5 Event-driven remediation',
+        'related_labs': [('eventbridge', 'drift-remediation'), ('eventbridge', 'application-spine'), ('cloudtrail', 'governance-tour'), ('cloudwatch', 'metric-alarms')],
+        'planned': None,
     },
     {
         'key': 'failure-troubleshooting',
