@@ -6,6 +6,7 @@ import base64
 import gzip
 from typing import Any
 from botocore.config import Config
+from botocore.exceptions import ClientError, ConnectionClosedError
 
 from .aws import FlociClientFactory
 
@@ -282,8 +283,24 @@ def create_vpc(cidr_block: str, *, name: str | None = None) -> dict[str, Any]:
 
 def delete_vpc(vpc_id: str) -> dict[str, Any]:
     vpc = _required(vpc_id, 'VPC ID')
-    _ec2_client().delete_vpc(VpcId=vpc)
+    ec2 = _ec2_client()
+    try:
+        ec2.delete_vpc(VpcId=vpc)
+    except ConnectionClosedError:
+        # Floci removes the VPC's Docker network while answering, and on a Linux Docker host that can drop the
+        # connection after the VPC is gone. Report the delete only when Floci no longer lists the VPC.
+        if _vpc_exists(ec2, vpc):
+            raise
     return {'vpc_id': vpc, 'deleted': True}
+
+
+def _vpc_exists(ec2, vpc_id: str) -> bool:
+    try:
+        return bool(ec2.describe_vpcs(VpcIds=[vpc_id]).get('Vpcs'))
+    except ClientError as exc:
+        if exc.response.get('Error', {}).get('Code') == 'InvalidVpcID.NotFound':
+            return False
+        raise
 
 
 def create_subnet(vpc_id: str, cidr_block: str, *, availability_zone: str | None = None, name: str | None = None) -> dict[str, Any]:
