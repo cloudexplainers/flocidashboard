@@ -441,6 +441,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('bedrock', 'guardrails-least-privilege'): _tags(aif='4.1 5.1 5.2'),
     # Level 10
     ('cloudformation', 'stacksets-baseline'): _tags(dop='2.1 2.2 6.2'),
+    ('ecs', 'container-blue-green'): _tags(dop='1.4 1.3 3.2'),
 }
 
 
@@ -932,10 +933,10 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Amazon ECR stores container images. Tag immutability stops a tag from being overwritten, scan on push finds vulnerabilities, lifecycle policies expire old or untagged images, and replication copies images to other Regions or accounts.',
             'EC2 Image Builder pipelines build, test, and distribute AMIs and container images from recipes and components on a schedule, so patched images are ready before deployment.',
             'Version artifacts once and promote the same artifact through environments instead of rebuilding it per stage.',
-            'Floci stores ECR lifecycle policies and replication rules without running them, returns no scan findings, keeps CodeArtifact to its control plane, and does not emulate Image Builder.',
+            'Floci stores ECR lifecycle policies and replication rules without running them, returns no scan findings, keeps CodeArtifact to its control plane, and does not emulate Image Builder; the container blue/green lab previews the lifecycle policy itself.',
         ],
-        'related_labs': [('codepipeline', 'lambda-cicd'), ('ecs', 'fargate-microservice'), ('cloudformation', 'sam-environments')],
-        'planned': 'P-2 Container blue/green with CodeDeploy',
+        'related_labs': [('ecs', 'container-blue-green'), ('codepipeline', 'lambda-cicd'), ('ecs', 'fargate-microservice'), ('cloudformation', 'sam-environments')],
+        'planned': None,
     },
     {
         'key': 'deployment-at-scale',
@@ -947,7 +948,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'For Lambda, CodeDeploy shifts an alias between versions; for Auto Scaling groups, instance refresh replaces instances in batches with a minimum healthy percentage.',
             'Automatic rollback triggers on a failed deployment or a CloudWatch alarm; the service role and the instance profile need access to the artifact bucket or repository.',
         ],
-        'related_labs': [('codepipeline', 'lambda-cicd'), ('lambda', 'performance-cost'), ('elasticloadbalancing', 'ha-web-tier')],
+        'related_labs': [('ecs', 'container-blue-green'), ('codepipeline', 'lambda-cicd'), ('lambda', 'performance-cost'), ('elasticloadbalancing', 'ha-web-tier')],
         'planned': 'P-3 In-place deployments and troubleshooting',
     },
     {

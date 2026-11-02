@@ -96,7 +96,7 @@ class NewServiceLabsLifecycleTests(TestCase):
         mock_ecs.deregister_task_definition.return_value = {}
 
         labs = labs_for_service('ecs')
-        self.assertEqual(len(labs), 1)
+        self.assertEqual([item['key'] for item in labs], ['fargate-microservice', 'container-blue-green'])
         lab = labs[0]
         self.assertEqual(lab['key'], 'fargate-microservice')
 

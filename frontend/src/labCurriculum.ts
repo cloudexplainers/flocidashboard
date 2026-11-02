@@ -219,9 +219,10 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'Multi-account and multi-Region infrastructure as code, deployments at scale, pipeline gates, remediation, and operations',
     badge: 'Professional',
     color: 'red',
-    description: 'Work like a platform team for the DevOps Engineer – Professional exam. Roll one baseline template out to two Regions with a CloudFormation StackSet, push an update to every stack instance, and deploy a guardrail to every account in an organizational unit with service-managed permissions. Build a network stack around a Lambda-backed custom resource that hands out CIDR blocks, protect it with termination protection and a stack policy, find drift in one Region and put it right, and publish an approved product in Service Catalog that developers can launch with a role they could not use themselves.',
+    description: 'Work like a platform team for the DevOps Engineer – Professional exam. Roll one baseline template out to two Regions with a CloudFormation StackSet, push an update to every stack instance, and deploy a guardrail to every account in an organizational unit with service-managed permissions. Build a network stack around a Lambda-backed custom resource that hands out CIDR blocks, protect it with termination protection and a stack policy, find drift in one Region and put it right, and publish an approved product in Service Catalog that developers can launch with a role they could not use themselves. Then ship a containerized storefront: push releases to an ECR repository with immutable tags, put an ECS service behind blue and green target groups, move production traffic to release 2 with a CodeDeploy canary and a smoke-test hook, and watch the hook stop a bad release before it takes traffic.',
     labs: [
       { service: 'cloudformation', key: 'stacksets-baseline', title: 'Roll out a multi-Region baseline with StackSets, custom resources, and Service Catalog', stepCount: 8 },
+      { service: 'ecs', key: 'container-blue-green', title: 'Ship a container with an ECS blue/green deployment through CodeDeploy', stepCount: 8 },
     ],
   },
 ];
