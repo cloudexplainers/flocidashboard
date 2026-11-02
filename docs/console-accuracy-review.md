@@ -1616,6 +1616,34 @@ Checked live on a throwaway Floci 2.3.0 (a full run, a second run without reset,
 
 `check_labs --service bedrock --lab guardrails-least-privilege` passed on 2.3.0.
 
+## Multi-Region baseline lab (2026-11-02)
+
+`cloudformation/stacksets-baseline` (DOP 2.1, 2.2, 6.2), 8 steps, in `dashboard/labs/cloudformation_stacksets_labs.py`
+(dispatched from `cloudformation_labs.py`, the first lab of Level 10: DevOps Professional, Wave P item P-1). It creates the
+StackSets `lab-baseline` (self-managed, us-east-1 and us-west-2) and `lab-baseline-org` (service-managed, OU
+`lab-baseline-workloads` with the account `lab-baseline-member`), the roles `AWSCloudFormationStackSetAdministrationRole`
+and `AWSCloudFormationStackSetExecutionRole` (removed on reset only if the lab tagged them), the function
+`lab-baseline-cidr-allocator`, the stack `lab-baseline-network`, the bucket `lab-baseline-catalog`, and the Service Catalog
+portfolio `lab-baseline-portfolio` with the product `lab-baseline-team-queue`. If the account is not in an organization,
+the lab creates one, tags its root, and deletes it on reset when nothing else is left in it.
+
+Checked live on a throwaway Floci 2.4.0 (a full run, two more runs after reset, then reset):
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Self-managed StackSet | Instances deploy real stacks in both Regions; `UpdateStackSet` adds the new topic in both. | Real |
+| Parameter overrides | `ParameterOverrides` on `CreateStackInstances` are ignored; `UpdateStackInstances` is unsupported. | Explains overrides, uses one set of values |
+| Service-managed StackSet | Refused until `ActivateOrganizationsAccess`; instances deploy for every account in the OU. Accounts that join later get nothing. | Real, with the auto-deployment gap |
+| Custom resource | The Lambda function gets a `ResponseURL`; its `Data` reaches `Fn::GetAtt` and the export. | Real |
+| Termination protection | `DeleteStack` is refused. | Real |
+| Stack policy | Stored but not enforced; `GetStackPolicy` answers without a result (boto3 `KeyError`). | Evaluates the policy against the change set, deletes the change set |
+| Change set | A parameter rename shows `Modify` with `Replacement: True`. | Real |
+| Drift detection | `DetectStackDrift` is unsupported. | Compares live settings with the template per Region |
+| Service Catalog | Portfolio, product, launch constraint and principal are stored; `ProvisionProduct` returns `SUCCEEDED` but creates no stack. A repeated `ProvisionProduct` with the same name returns the first record, even after termination. | Judges the record, says what AWS would create |
+| `DeleteStackSet` | Deletes, but answers without a result element (boto3 `KeyError`). | Reset treats it as deleted |
+
+`check_labs --service cloudformation --lab stacksets-baseline` passed on 2.4.0.
+
 ## Recommended next work
 
 | Item | Why not here |
