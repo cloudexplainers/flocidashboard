@@ -1,6 +1,6 @@
-# Certification Coverage: CLF-C02, SAA-C03, DVA-C02, and AIF-C01
+# Certification Coverage: CLF-C02, SAA-C03, DVA-C02, AIF-C01, and DOP-C02
 
-This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)) and, since 2026-10-26, **AWS Certified AI Practitioner (AIF-C01)** ([§8](#8-ai-practitioner-aif-c01)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
+This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)), since 2026-10-26, **AWS Certified AI Practitioner (AIF-C01)** ([§8](#8-ai-practitioner-aif-c01)), and, since 2026-11-02, **AWS Certified DevOps Engineer – Professional (DOP-C02)** ([§9](#9-devops-engineer--professional-dop-c02)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
 
 It is a planning document. No labs are built here; pick from [the plan](#5-prioritized-lab-plan).
 
@@ -17,6 +17,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 - **Recommended Wave 1 (six labs):** HA web tier (ALB + ASG), RDS/Aurora resilience, S3 data protection and storage tiers, a NAT/three-tier VPC extension, KMS key management, and Route 53 routing and failover.
 - **Developer – Associate (DVA-C02) is the third track (2026-10-24).** **Wave D** (six labs, [§7](#7-developer--associate-dva-c02)) is complete: CI/CD with CodeBuild, CodePipeline and CodeDeploy, API Gateway stages and authorizers, DynamoDB application patterns, SAM with AppConfig, Lambda async error handling, and serverless observability. All 13 DVA task statements now have hands-on labs; X-Ray and Private CA stay concept cards because Floci lacks them. **Wave 3** (governance, multi-account, network scale-out, edge security, and cost; seven items, [§5](#wave-3-governance-multi-account-cost-and-clf-oriented-labs)) is complete as of 2026-10-25.
 - **AI Practitioner (AIF-C01) is the fourth track (2026-10-26).** Every task statement has a concept card and a four-question quiz, and ten existing labs are tagged, nine of them for the security and governance domain. Floci 2.3.0 runs real SageMaker training jobs and endpoints and real S3 Vectors similarity search, while Bedrock, Comprehend, Rekognition, Textract, Translate, and Transcribe return stub answers. **Wave AI is complete** (five labs shipped 2026-10-26, [§8](#8-ai-practitioner-aif-c01)): the AI services tour, SageMaker from training to endpoint, RAG with S3 Vectors, prompt patterns with evaluation, and responsible AI with guardrails, which together give hands-on practice for nine of the 14 task statements.
+- **DevOps Engineer – Professional (DOP-C02) is the fifth track (2026-11-02).** 52 existing labs are tagged, and 12 of its 19 task statements are already hands-on (resilience, monitoring, and security come from the SAA and DVA work). **Wave P** (seven labs, [§9](#9-devops-engineer--professional-dop-c02)) fills the professional-level gaps: StackSets across Regions, container and in-place deployments, pipeline test gates, event-driven remediation, centralized logging, and machine identity. Floci 2.4.0 runs StackSets, custom resources, CodeDeploy hooks over SSM, composite alarms, log subscriptions, and secret rotation, but not drift detection, SSM Automation, Patch Manager, Config remediation, or ABAC.
 - **UI direction:** add exam and task tags to each lab in one Python registry, then add a "Study track" switcher (Levels · CLF-C02 · SAA-C03) with domain-weighted progress and concept cards for objectives that can't be labbed. The same structure extends to every other certification.
 
 ---
@@ -593,7 +594,98 @@ Each lab follows the existing pattern and says in each step what Floci only stor
 
 ---
 
-## 9. Extending to other certification tracks
+## 9. DevOps Engineer – Professional (DOP-C02)
+
+**Added 2026-11-02.** Checked against the [DOP-C02 exam guide](https://docs.aws.amazon.com/aws-certification/latest/devops-engineer-professional-02/devops-engineer-professional-02.html) and a disposable Floci **2.4.0** emulator (`compose.labs.yml` pinned to 2.4.0, port 14566, IAM enforcement and signature validation on), with the Floci 2.4.0 source as the reference for anything a probe could not settle. The tags live in `dashboard/labs/exams.py` like the other tracks, so the labs page has a **DOP-C02 DevOps Engineer – Professional** study track.
+
+### Exam guide
+
+| Domain (weight) | Task statements |
+|---|---|
+| 1 SDLC Automation (22%) | 1.1 Implement CI/CD pipelines · 1.2 Integrate automated testing into CI/CD pipelines · 1.3 Build and manage artifacts · 1.4 Implement deployment strategies for instance, container, and serverless environments |
+| 2 Configuration Management and IaC (17%) | 2.1 Define cloud infrastructure and reusable components to provision and manage systems throughout their lifecycle · 2.2 Deploy automation to create, onboard, and secure AWS accounts in a multi-account or multi-Region environment · 2.3 Design and build automated solutions for complex tasks and large-scale environments |
+| 3 Resilient Cloud Solutions (15%) | 3.1 Implement highly available solutions to meet resilience and business requirements · 3.2 Implement solutions that are scalable to meet business requirements · 3.3 Implement automated recovery processes to meet RTO and RPO requirements |
+| 4 Monitoring and Logging (15%) | 4.1 Configure the collection, aggregation, and storage of logs and metrics · 4.2 Audit, monitor, and analyze logs and metrics to detect issues · 4.3 Automate monitoring and event management of complex environments |
+| 5 Incident and Event Response (14%) | 5.1 Manage event sources to process, notify, and take action in response to events · 5.2 Implement configuration changes in response to events · 5.3 Troubleshoot system and application failures |
+| 6 Security and Compliance (17%) | 6.1 Implement techniques for identity and access management at scale · 6.2 Apply automation for security controls and data protection · 6.3 Implement security monitoring and auditing solutions |
+
+65 scored and 10 unscored questions; passing score 750. A professional exam asks for the best of several working designs, so the labs aim at the trade-offs: which deployment strategy, which automation, and what to do when it fails.
+
+### Coverage by task statement (existing 100 labs)
+
+52 existing labs are tagged for DOP tasks. Legend as in §1; ○ here means a concept card but no lab.
+
+| Task | Coverage | Covered by | Gap |
+|---|---|---|---|
+| 1.1 | ● | codepipeline/lambda-cicd (CodeBuild, CodePipeline with approval, CodeDeploy), ssm/parameter-store-config, secretsmanager/secret-lifecycle | Build secrets injected from Parameter Store and Secrets Manager (1.1.4), pipeline events |
+| 1.2 | ◐ | codepipeline/lambda-cicd (unit tests, a failing build read from its phase) | Coverage gates, a test stage that calls AWS services, load tests (1.2.2, 1.2.4, 1.2.5) |
+| 1.3 | ◐ | codepipeline/lambda-cicd (zip artifacts in S3), cloudformation/sam-environments (layers), ecs/fargate-microservice (container image) | ECR repository policies, tag immutability and lifecycle, CodeArtifact, Image Builder (card) |
+| 1.4 | ◐ | lambda-cicd (Lambda canary), lambda/performance-cost (weighted alias), elasticloadbalancing/ha-web-tier (instance refresh) | ECS blue/green, EC2 in-place deployments with the CodeDeploy agent (1.4.2, 1.4.4) |
+| 2.1 | ◐ | cloudformation/s3-sqs-stack (change sets), sam-environments (SAM, AppConfig), well-architected-review | StackSets, custom resources, stack protection, Service Catalog (2.1.2, 2.1.4) |
+| 2.2 | ◐ | iam/multi-account-guardrails (Organizations, OUs, SCPs, delegated admin), iam/role-trust-policy, cloudtrail/governance-tour | Automated account baselines across accounts and Regions |
+| 2.3 | ◐ | ec2/guided-ssm-command (Run Command), ec2/guided-userdata, both Step Functions labs | State Manager, Patch Manager, Inventory and Automation are unsupported (card) |
+| 3.1 | ● | elasticloadbalancing/ha-web-tier, rds/aurora-resilience, route53/routing-failover, dynamodb/capacity-at-scale, cloudfront/edge-delivery, ec2/nat-three-tier, well-architected-review | — |
+| 3.2 | ● | ha-web-tier (Auto Scaling), ecs/fargate-microservice, eks/control-plane-nodegroup, lambda/performance-cost, elasticache/cache-aside, apigateway/rest-api-developer, capacity-at-scale | — |
+| 3.3 | ● | backup/backup-dr-plan, route53/routing-failover, rds/aurora-resilience, s3/data-protection-tiers, s3/version-recovery, ha-web-tier | FIS and Resilience Hub (card) |
+| 4.1 | ● | cloudwatch/log-groups-metric-filters, serverless-observability, kinesis/streaming-data-lake, s3/lifecycle-retention, ec2/network-scale-out (flow logs) | Subscription filters, KMS-encrypted log groups, metric streams, the CloudWatch agent (4.1.3, 4.1.6, 4.1.8) |
+| 4.2 | ● | cloudwatch/serverless-observability (dashboards, Logs Insights), metric-alarms, streaming-data-lake (Athena), log-groups-metric-filters | X-Ray (card) |
+| 4.3 | ● | dynamodb/capacity-at-scale (auto scaling), ha-web-tier (target tracking, health checks), metric-alarms, eventbridge/application-spine, route53/routing-failover, cloudtrail/governance-tour (Config rules), ec2/guided-ssm-command | Config remediation |
+| 5.1 | ● | eventbridge/application-spine, lambda/async-error-handling, sqs/dead-letter-redrive, sns/sqs-fanout, s3/object-notifications-sqs, both Step Functions labs | Service events such as CodePipeline and Parameter Store changes |
+| 5.2 | ○ | Concept card | Nothing changes configuration in response to an event yet |
+| 5.3 | ◐ | lambda-cicd (failed build phase), ec2/guided-broken-route, lambda/async-error-handling, sqs/dead-letter-redrive | Failed CodeDeploy lifecycle events, CloudFormation rollbacks, failed scaling activities |
+| 6.1 | ● | iam/account-hardening, identity-enforcement-capstone, role-trust-policy, sts-session-policy, instance roles, secretsmanager/secret-lifecycle | Automated rotation, ABAC (6.1.2, 6.1.3) |
+| 6.2 | ● | iam/multi-account-guardrails, cloudtrail/governance-tour, wafv2/edge-throttling, kms/key-management, s3/bucket-security, s3/data-protection-tiers, ec2/s3-gateway-endpoint | Macie, Network Firewall (card) |
+| 6.3 | ● | cloudtrail/governance-tour (CloudTrail, Config, GuardDuty and Security Hub alerts), iam/account-hardening (credential report), ec2/network-scale-out (flow logs) | — |
+
+Domain 3 and most of domains 4 and 6 are already hands-on from the SAA and DVA work. The gaps are where the professional exam goes deeper than the associate exams: multi-account and multi-Region infrastructure as code, container and instance deployments, testing in the pipeline, remediation, and troubleshooting. Eleven new concept cards cover the theory, eight of them naming a planned lab, and the X-Ray card now also covers DOP 4.2.
+
+### What Floci 2.4.0 does for DevOps services
+
+Probed 2026-11-02 with real SDK calls, and checked against the Floci source at the 2.4.0 tag.
+
+| Area | Result |
+|---|---|
+| **CloudFormation StackSets** | **Behaves.** A self-managed StackSet deploys real stack instances into several Regions (an SNS topic appears in us-west-2), and operations report `SUCCEEDED`. A service-managed StackSet is refused until trusted access with Organizations is activated (`ActivateOrganizationsAccess` exists), as on AWS. |
+| **CloudFormation stacks** | **Mostly behaves.** Lambda-backed custom resources run for real (the function gets a `ResponseURL`, and `Fn::GetAtt` reads its `Data`), exports work, and termination protection blocks `DeleteStack`. **Not supported:** `DetectStackDrift` and resource drift, `ListTypes` (no registry or modules). `SetStackPolicy` is accepted but not enforced (an update the policy denies succeeds) and `GetStackPolicy` returns nothing. Rollback triggers are stored. |
+| **AWS Service Catalog** | **Control plane only.** Portfolios, products, launch constraints, principals, and organization shares work, and `ProvisionProduct` returns a `SUCCEEDED` record, but no stack or resource is created. |
+| **CodeDeploy (EC2)** | **Behaves, through SSM.** A Server deployment targets instances by EC2 tag filters (an `autoScalingGroups` list alone finds none) and runs each AppSpec hook script with SSM Run Command on the instance, in lifecycle order; a failing script marks the event `ScriptFailed` and the deployment `Failed`, and an instance without SSM fails the hook as the missing agent would. DownloadBundle and Install always succeed (no files are copied), and the AppSpec must be passed inline as `appSpecContent`. |
+| **CodeDeploy (ECS)** | **Behaves (from source, to verify in the lab).** A deployment creates a green task set, runs Lambda hooks, moves the production listener to the green target group, and deletes the blue task set. |
+| **CodeBuild extras** | **Behaves (from source).** `env/parameter-store` and `env/secrets-manager` in the buildspec are resolved, and builds get `AWS_ENDPOINT_URL` so tests can call Floci. Report groups exist. |
+| **CodePipeline events** | **Behaves (from source).** Execution, stage, and action state changes reach the default event bus as `aws.codepipeline` events. |
+| **ECR** | **Partial.** Repositories with tag immutability, scan on push, repository policies, lifecycle policies, and replication configuration are stored, and Floci starts a real registry container for image pushes. Lifecycle preview and scan findings are unsupported, and lifecycle rules don't expire images. |
+| **CodeArtifact** | **Control plane.** Domains, repositories, tokens, and repository endpoints work. |
+| **EC2 Image Builder** | Unsupported. |
+| **Auto Scaling** | **Partial.** Groups launch real instances within about 10 seconds. Lifecycle hooks, warm pools, and scheduled actions are stored, but a launching hook does not hold the instance in `Pending:Wait`, and an instance marked `Unhealthy` (or stopped) is not replaced. Instance refresh replaces instances. `PutNotificationConfiguration` is unsupported. |
+| **Systems Manager** | **Partial.** Run Command and documents work, and associations are stored. Automation executions, Patch Manager, Inventory, Compliance, and OpsCenter are unsupported. Parameter changes emit `Parameter Store Change` events. |
+| **AWS Config** | **Partial.** Recorder, delivery channel, rules, and conformance packs are stored; managed and custom Lambda rules stay `INSUFFICIENT_DATA` after `StartConfigRulesEvaluation` (the Lambda is not invoked), but `PutEvaluations` exists. Remediation configurations and aggregators are unsupported. |
+| **CloudWatch** | **Partial.** Metric alarms and **composite alarms** evaluate for real (a composite of two alarms reaches ALARM). Metric streams are stored. Anomaly detectors and Synthetics canaries are unsupported. |
+| **CloudWatch Logs** | **Partial.** KMS-encrypted log groups and retention are stored, and a subscription filter to Kinesis delivers only matching events, gzip-encoded as on AWS. Export tasks are unsupported. |
+| **Secrets Manager rotation** | **Behaves, with one quirk.** `RotateSecret` invokes the rotation Lambda for `createSecret`, `setSecret`, `testSecret`, and `finishSecret`, and moves the labels. Floci creates the `AWSPENDING` version itself before the first step, so a function that checks for an existing pending version (as the AWS templates do) never writes the new value. |
+| **IAM tag conditions (ABAC)** | **Not evaluated.** A policy with `aws:ResourceTag/...` or `aws:PrincipalTag/...` conditions denies every request, on SSM and SQS alike, so ABAC can't be shown by allow and deny. |
+| **EventBridge service events** | **Partial.** CodePipeline, ECS task state, Parameter Store, Secrets Manager (CloudTrail-style), S3, Scheduler, and Step Functions events arrive. Auto Scaling, Config compliance, Health, and general CloudTrail API events do not. |
+| **FIS** | **Control plane.** Experiment templates and experiments are validated and tracked; no fault is injected. |
+| **Elastic Beanstalk, Control Tower, Detective, Network Firewall, ACM, Managed Prometheus** | Control plane only (stored). |
+| **X-Ray, Synthetics, Health, Resilience Hub, Proton, App Runner, Managed Grafana, License Manager, Compute Optimizer, Trusted Advisor** | Unsupported. |
+
+### Wave P: DevOps Professional labs
+
+A new curriculum level, **Level 10: DevOps Professional**, holds these labs. Each lab follows the existing pattern and says in each step what Floci only stores versus what it does. Ship one lab per PR, in this order.
+
+| # | Proposed lab | Steps | DOP | Floci |
+|---|---|---|---|---|
+| P-1 | **Multi-Region baseline with StackSets**: a baseline StackSet deployed to two Regions with per-Region parameter overrides, a Lambda-backed custom resource, exports and termination protection, a stack policy the lab checks itself, a drift check by comparing live settings to the template, and a Service Catalog product with a launch constraint | ~8 | 2.1, 2.2 | ✅ StackSets and custom resources real; ⚠️ no drift, stack policy and Service Catalog provisioning not applied |
+| P-2 | **Container blue/green with CodeDeploy**: an ECR repository with immutable tags, scan on push and a lifecycle policy, an image pushed to it, an ECS service behind an ALB with blue and green target groups, a CodeDeploy ECS deployment with a test hook, and a failed hook that stops the rollout | ~8 | 1.4, 1.3, 3.2 | ✅ task sets and listener swap (to confirm); ⚠️ ECR lifecycle and scans stored only |
+| P-3 | **In-place deployments and troubleshooting**: an Auto Scaling group with SSM-managed instances, a CodeDeploy Server deployment whose hooks run on each instance, a failing `ValidateService` traced through lifecycle events, a fix and redeploy, an instance refresh, and a CloudFormation rollback read from its events | ~8 | 1.4, 5.3, 3.2 | ✅ hooks run over SSM; ⚠️ lifecycle hooks and unhealthy replacement not simulated |
+| P-4 | **Pipeline quality gates**: CodeBuild with secrets from Parameter Store and Secrets Manager, unit tests with a coverage threshold, an integration test stage that calls DynamoDB through Floci, a report group, and pipeline state change events routed to SQS for failed stages | ~8 | 1.2, 1.1, 5.1, 5.3 | ✅ (builds, secrets, events from source; to confirm) |
+| P-5 | **Event-driven remediation**: a Parameter Store change that a Lambda function reverts from its EventBridge event, an S3 setting fixed the same way, a Config rule fed by `PutEvaluations`, a composite alarm that gates the response, and a Step Functions workflow that remediates and records what it changed | ~8 | 5.2, 4.3, 5.1, 6.2 | ✅ events, Lambda, composite alarms; ⚠️ no Config remediation or Automation, so Lambda does the fix |
+| P-6 | **Centralized logging pipeline**: KMS-encrypted log groups with retention, a subscription filter streaming errors to Kinesis, a consumer that lands them in S3 with a lifecycle rule, a metric filter and a composite alarm, Logs Insights and Athena queries, and a metric stream | ~8 | 4.1, 4.2, 6.3 | ✅ subscription delivery real; ⚠️ metric streams stored only |
+| P-7 | **Machine identity at scale**: a Secrets Manager rotation function through all four steps, a permissions boundary for roles a team creates, role chaining with session policies, and an ABAC policy whose tag decisions the lab evaluates itself | ~8 | 6.1, 6.2 | ✅ rotation and boundaries real; ⚠️ ABAC not evaluated |
+
+**Projected DOP coverage:** today 12 of 19 task statements are ● hands-on, six are ◐, and 5.2 is a concept card only. P-1 makes 2.1 and 2.2 hands-on, P-2 makes 1.3 and 1.4 hands-on, P-3 makes 5.3 hands-on, P-4 makes 1.2 hands-on, and P-5 makes 5.2 hands-on. 2.3 stays partial, because Floci 2.4.0 has no Automation, Patch Manager, or Inventory.
+
+---
+
+## 10. Extending to other certification tracks
 
 The structure above is exam-agnostic. A new track needs three things:
 
@@ -607,7 +699,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 |---|---|---|---|
 | **Developer – Associate (DVA-C02)** | **Track live since 2026-10-24; see [§7](#7-developer--associate-dva-c02).** | Wave D (D-1 to D-6) | X-Ray, CodeCommit, and Private CA unsupported |
 | **CloudOps Engineer – Associate (SOA-C03)**, which replaced SysOps (SOA-C02, retired 2025-09-29) | Medium. CloudWatch, SSM Run Command, the route-repair lab, and CloudFormation fit. | CloudWatch agent and dashboards, alarms to auto-remediation, Backup, ASG ops, Config remediation | SSM Automation, Patch Manager, and Session Manager unsupported; composite alarms unsupported |
-| **DevOps Engineer – Professional** | Medium. CloudFormation, ECS, EKS, and EventBridge. | Blue/green and canary deployments (Lambda aliases are verified), CodePipeline, StackSets, drift, event-driven remediation | Pipeline execution depth unverified |
+| **DevOps Engineer – Professional (DOP-C02)** | **Track live since 2026-11-02; see [§9](#9-devops-engineer--professional-dop-c02).** | Wave P (P-1 to P-7) | No drift detection, SSM Automation, Patch Manager, Config remediation, or ABAC evaluation |
 | **Solutions Architect – Professional** (training vendors report SAP-C02's last day as 2026-11-16 with a successor to follow; not confirmed on aws.amazon.com) | Builds on the SAA track. | Multi-account network hub (TGW), cross-account roles at scale, DR across Regions, migration with DMS | Hybrid networking and real multi-Region behavior are mostly concept |
 | **Security – Specialty** | IAM, KMS, S3 security, VPC controls. | KMS and key policies, Secrets rotation, GuardDuty, Security Hub, Macie, Config rules, CloudTrail analysis, WAF | **Key-policy and SCP enforcement gaps** limit "prove the deny" labs; detection services are control plane only |
 | **Advanced Networking – Specialty** (AWS lists retirement on 2026-12-31) | VPC labs. | Low priority given the retirement | VPN and Direct Connect unsupported |
@@ -619,7 +711,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 
 ---
 
-## 10. Keeping this current
+## 11. Keeping this current
 
 - **When AWS revises a guide,** update `EXAM_GUIDES`. The "no orphan objective" test then flags labs tagged with removed task IDs.
 - **When Floci upgrades,** rerun the probe for anything marked control plane, unsupported, or inconclusive in §4. Several topics, especially SCP and KMS key-policy enforcement, S3 replication, and NAT egress, would move labs from "configuration only" to "prove it works."

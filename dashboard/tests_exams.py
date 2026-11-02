@@ -112,9 +112,24 @@ class ExamTracksApiTests(SimpleTestCase):
         self.assertIn(('kms', 'key-management'), secure)
         self.assertIn(('kinesis', 'streaming-data-lake'), {(lab['service'], lab['key']) for lab in tasks['1.3']['labs']})
 
+    def test_devops_professional_track_reuses_existing_labs(self):
+        tracks = exam_tracks(all_labs())
+        dop = next(exam for exam in tracks['exams'] if exam['code'] == 'DOP-C02')
+        tasks = {task['id']: task for domain in dop['domains'] for task in domain['tasks']}
+        self.assertEqual(len(tasks), 19)
+        self.assertEqual([domain['weight'] for domain in dop['domains']], [22, 17, 15, 15, 14, 17])
+        self.assertEqual(dop['passing_score'], 750)
+        pipelines = {(lab['service'], lab['key']) for lab in tasks['1.1']['labs']}
+        self.assertIn(('codepipeline', 'lambda-cicd'), pipelines)
+        recovery = {(lab['service'], lab['key']) for lab in tasks['3.3']['labs']}
+        self.assertIn(('backup', 'backup-dr-plan'), recovery)
+        self.assertIn('auto-remediation', tasks['5.2']['concepts'])
+        self.assertIn('multi-account-iac', tasks['2.1']['concepts'])
+        self.assertIn('tracing-xray', tasks['4.2']['concepts'])
+
     def test_exams_endpoint_and_catalog_include_tags(self):
         exams = self.client.get(reverse('dashboard:labs-exams')).json()
-        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02', 'AIF-C01'])
+        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02', 'AIF-C01', 'DOP-C02'])
         self.assertEqual(len(exams['concepts']), len(CONCEPT_CARDS))
 
         catalog = self.client.get(reverse('dashboard:labs-catalog')).json()
