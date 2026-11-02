@@ -12,6 +12,7 @@ from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
 
+from . import cloudwatch_logging_labs as centralized_logging
 from . import cloudwatch_observability_labs as serverless_observability
 
 REGION = 'us-east-1'
@@ -181,7 +182,7 @@ LOGS_FILTERS_LAB = {
     ],
 }
 
-LABS = [METRIC_ALARMS_LAB, LOGS_FILTERS_LAB, serverless_observability.LAB]
+LABS = [METRIC_ALARMS_LAB, LOGS_FILTERS_LAB, serverless_observability.LAB, centralized_logging.LAB]
 
 
 def client(name: str):
@@ -461,6 +462,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
     if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
         from .cloudwatch_observability_labs import run_step as observability_run_step
         return observability_run_step(step_key)
+    if service_key == 'cloudwatch' and lab_key == 'centralized-logging':
+        from .cloudwatch_logging_labs import run_step as logging_run_step
+        return logging_run_step(step_key)
     if service_key == 'cloudwatch' and lab_key == 'metric-alarms':
         runners = {
             'create-metric-alarm': step_create_alarm,
@@ -488,14 +492,17 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
         from .cloudwatch_observability_labs import status as observability_status
         return observability_status()
-    if lab_key == 'metric-alarms':
+    if service_key == 'cloudwatch' and lab_key == 'centralized-logging':
+        from .cloudwatch_logging_labs import status as logging_status
+        return logging_status()
+    if service_key == 'cloudwatch' and lab_key == 'metric-alarms':
         keys = {
             'create-metric-alarm': 'alarm',
             'publish-healthy-metrics': 'healthy',
             'publish-error-spike': 'spike',
             'describe-alarms': 'alarm-state',
         }
-    elif lab_key == 'log-groups-metric-filters':
+    elif service_key == 'cloudwatch' and lab_key == 'log-groups-metric-filters':
         keys = {
             'create-log-group': 'log-group',
             'put-retention-policy': 'retention',
@@ -529,6 +536,9 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
         from .cloudwatch_observability_labs import reset as observability_reset
         return observability_reset()
+    if service_key == 'cloudwatch' and lab_key == 'centralized-logging':
+        from .cloudwatch_logging_labs import reset as logging_reset
+        return logging_reset()
     started = time.perf_counter()
     cw = client('cloudwatch')
     logs = client('logs')

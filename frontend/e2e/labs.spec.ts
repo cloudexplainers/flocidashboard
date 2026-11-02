@@ -151,8 +151,11 @@ test('DevOps Professional study track lists DOP-C02 domains with labs and planne
   await expect(remediation.getByRole('button', { name: /^Remediate configuration drift automatically from events/ }).first()).toBeVisible();
   await page.getByText('Domain 4: Monitoring and Logging', { exact: true }).click();
   const logging = page.getByTestId('exam-task-DOP-C02-4.1');
-  await logging.getByText('Concept: Collecting, storing, and securing logs and metrics').click();
-  await expect(logging.getByText('Planned lab: P-6 Centralized logging pipeline')).toBeVisible();
+  await expect(logging.getByRole('button', { name: /^Centralize logs from two services/ }).first()).toBeVisible();
+  await page.getByText('Domain 6: Security and Compliance', { exact: true }).click();
+  const identity = page.getByTestId('exam-task-DOP-C02-6.1');
+  await identity.getByText('Concept: Identity and access at scale').click();
+  await expect(identity.getByText('Planned lab: P-7 Machine identity at scale')).toBeVisible();
 });
 
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
@@ -270,7 +273,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
   await page.goto('/labs/?service=iam&lab=create-user-alice');
   await page.getByRole('link', { name: /Next: #3\./ }).click();
   release();
-  await expect(page.getByText('Lesson #3 of 105', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #3 of 106', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
   await expect(page.getByRole('button', { name: '▶ Run all remaining steps', exact: true })).toBeEnabled();
 });
@@ -289,7 +292,7 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('link', { name: /Next: #2\./ }).click();
   release();
-  await expect(page.getByText('Lesson #2 of 105', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #2 of 106', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);

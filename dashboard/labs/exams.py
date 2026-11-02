@@ -445,6 +445,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ssm', 'fleet-release-troubleshooting'): _tags(dop='5.3 1.4 3.2'),
     ('codepipeline', 'pipeline-quality-gates'): _tags(dop='1.2 1.1 5.1 5.3'),
     ('eventbridge', 'drift-remediation'): _tags(dop='5.2 4.3 5.1 6.2'),
+    ('cloudwatch', 'centralized-logging'): _tags(dop='4.1 4.2 6.3'),
 }
 
 
@@ -1008,8 +1009,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Metric streams send CloudWatch metrics continuously to Firehose (and on to S3 or a partner); log group retention and S3 lifecycle rules control how long data is kept.',
             'Encrypt log groups with a KMS key whose key policy allows the CloudWatch Logs service principal; query logs with Logs Insights or with Athena once they land in S3.',
         ],
-        'related_labs': [('cloudwatch', 'log-groups-metric-filters'), ('cloudwatch', 'serverless-observability'), ('kinesis', 'streaming-data-lake')],
-        'planned': 'P-6 Centralized logging pipeline',
+        'related_labs': [('cloudwatch', 'centralized-logging'), ('cloudwatch', 'log-groups-metric-filters'), ('cloudwatch', 'serverless-observability'), ('kinesis', 'streaming-data-lake')],
+        'planned': None,
     },
     {
         'key': 'auto-remediation',
