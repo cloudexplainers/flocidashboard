@@ -1717,6 +1717,28 @@ Checked live on a throwaway Floci 2.4.0 (a full run after reset, a check_labs ru
 | Pipeline CodeBuild action | Starts the project with its own source; the input artifact is ignored. | Projects read the same S3 object as the source stage |
 | Stage state-change events | Published to the default bus; a rule on `FAILED` stages delivers them to SQS. | Real |
 
+## Drift remediation lab (2026-11-02)
+
+`eventbridge/drift-remediation` (DOP 5.2, 4.3, 5.1, 6.2), 8 steps, in `dashboard/labs/eventbridge_remediation_labs.py`
+(dispatched from `monolith.py`, the fifth lab of Level 10: DevOps Professional, Wave P item P-5). It creates the
+parameters under `/lab-remediate/app/` with the baseline `/lab-remediate/approved`, the table `lab-remediate-log`, the
+bucket `lab-remediate-uploads`, the function `lab-remediate-fixer` with its role, the rule `lab-remediate-drift`, the
+Config rule `lab-remediate-approved-settings`, the alarms `lab-remediate-drift-rate`, `lab-remediate-deployment` and
+`lab-remediate-storm`, the state machine `lab-remediate-workflow` with its roles, and the queue
+`lab-remediate-escalations`. Reset removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 (a full run after reset, a check_labs run, then reset):
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Parameter Store Change events | Published for Create, Update and Delete with the name and type; a rule with `$or` and a `prefix` filter matches them. | Real; reverted about a second after the change |
+| S3 Object Created events | Published when the bucket has `EventBridgeConfiguration`. A new bucket refuses ACLs (BucketOwnerEnforced) until ownership is ObjectWriter. | Real |
+| Custom Config rule | Stored; its function is never invoked. `PutEvaluations` reads the rule name from the result token and fails with `NoSuchConfigRuleException` before the rule exists. | The lab invokes the periodic run itself, before and after the fix (event-driven reports can land out of order, so the periodic run settles the result) |
+| Metric alarms | Evaluated about once a minute; with `notBreaching` they return to OK a minute after the data stops. | Real, so the storm steps take a minute or two |
+| Composite alarm | Evaluated when a child changes state. | Real |
+| EventBridge to Step Functions | Starts the workflow with the event as input; `lambda:invoke`, `sqs:sendMessage` and `dynamodb:putItem` tasks run. | Real |
+| Secrets Manager events | None arrived on the default bus without a trail. | Not used |
+
 ## Recommended next work
 
 | Item | Why not here |
