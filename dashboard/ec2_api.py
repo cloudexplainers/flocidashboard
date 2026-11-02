@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import base64
 import gzip
+import time
 from typing import Any
 from botocore.config import Config
-from botocore.exceptions import ClientError, ConnectionClosedError
+from botocore.exceptions import ClientError, ConnectionClosedError, EndpointConnectionError
 
 from .aws import FlociClientFactory
+
+VPC_DELETE_CHECK_ATTEMPTS = 10
+VPC_DELETE_CHECK_DELAY_SECONDS = 1.5
 
 
 def _ec2_client():
@@ -286,21 +290,28 @@ def delete_vpc(vpc_id: str) -> dict[str, Any]:
     ec2 = _ec2_client()
     try:
         ec2.delete_vpc(VpcId=vpc)
-    except ConnectionClosedError:
+    except (ConnectionClosedError, EndpointConnectionError):
         # Floci removes the VPC's Docker network while answering, and on a Linux Docker host that can drop the
-        # connection after the VPC is gone. Report the delete only when Floci no longer lists the VPC.
-        if _vpc_exists(ec2, vpc):
+        # connection and leave Floci unreachable for a few seconds after the VPC is gone. Report the delete
+        # only when Floci, once reachable again, no longer lists the VPC.
+        if _vpc_exists_once_reachable(ec2, vpc):
             raise
     return {'vpc_id': vpc, 'deleted': True}
 
 
-def _vpc_exists(ec2, vpc_id: str) -> bool:
-    try:
-        return bool(ec2.describe_vpcs(VpcIds=[vpc_id]).get('Vpcs'))
-    except ClientError as exc:
-        if exc.response.get('Error', {}).get('Code') == 'InvalidVpcID.NotFound':
-            return False
-        raise
+def _vpc_exists_once_reachable(ec2, vpc_id: str) -> bool:
+    for attempt in range(VPC_DELETE_CHECK_ATTEMPTS):
+        try:
+            return bool(ec2.describe_vpcs(VpcIds=[vpc_id]).get('Vpcs'))
+        except ClientError as exc:
+            if exc.response.get('Error', {}).get('Code') == 'InvalidVpcID.NotFound':
+                return False
+            raise
+        except (ConnectionClosedError, EndpointConnectionError):
+            if attempt == VPC_DELETE_CHECK_ATTEMPTS - 1:
+                return True
+            time.sleep(VPC_DELETE_CHECK_DELAY_SECONDS)
+    return True
 
 
 def create_subnet(vpc_id: str, cidr_block: str, *, availability_zone: str | None = None, name: str | None = None) -> dict[str, Any]:

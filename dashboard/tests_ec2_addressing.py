@@ -3,7 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
-from botocore.exceptions import ClientError, ConnectionClosedError
+from botocore.exceptions import ClientError, ConnectionClosedError, EndpointConnectionError
 from django.test import SimpleTestCase
 from django.urls import reverse
 
@@ -104,6 +104,21 @@ class DeleteVpcTests(SimpleTestCase):
     def test_dropped_connection_after_the_vpc_is_gone_counts_as_deleted(self):
         self.ec2.describe_vpcs.side_effect = ClientError({'Error': {'Code': 'InvalidVpcID.NotFound'}}, 'DescribeVpcs')
         self.assertEqual(delete_vpc('vpc-1'), {'vpc_id': 'vpc-1', 'deleted': True})
+
+    @patch('dashboard.ec2_api.time.sleep')
+    def test_waits_for_floci_to_answer_again(self, sleep_mock):
+        self.ec2.describe_vpcs.side_effect = [
+            EndpointConnectionError(endpoint_url='http://floci:4566/'),
+            ClientError({'Error': {'Code': 'InvalidVpcID.NotFound'}}, 'DescribeVpcs'),
+        ]
+        self.assertTrue(delete_vpc('vpc-1')['deleted'])
+        sleep_mock.assert_called_once()
+
+    @patch('dashboard.ec2_api.time.sleep')
+    def test_floci_that_never_answers_again_is_an_error(self, sleep_mock):
+        self.ec2.describe_vpcs.side_effect = EndpointConnectionError(endpoint_url='http://floci:4566/')
+        with self.assertRaises(ConnectionClosedError):
+            delete_vpc('vpc-1')
 
     def test_dropped_connection_with_the_vpc_still_listed_is_an_error(self):
         self.ec2.describe_vpcs.return_value = {'Vpcs': [{'VpcId': 'vpc-1'}]}

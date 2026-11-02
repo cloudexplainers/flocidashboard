@@ -7,7 +7,7 @@
 - DynamoDB basics lab: the update step passes on Floci 2.4.0, which returns 84.00 as 84 the way DynamoDB does; the check now compares numbers, not strings.
 - Edge security lab: the usage plan step passes on Floci 2.4.0, which reads a plan's quota back with offset 0 as API Gateway does.
 - CloudTrail notes and the governance tour lab: trails deliver S3 data events and, on Floci 2.4.0, Secrets Manager PutSecretValue and UpdateSecret management events as log files; LookupEvents still returns nothing. Security Hub's default standards are now listed; its findings API is still misrouted.
-- EC2 console, Delete VPC: on a Linux Docker host Floci 2.4.0 can drop the connection while it removes the VPC's Docker network, after the VPC is already gone. The console now checks and reports the delete when Floci no longer lists the VPC, instead of a 502.
+- EC2 console, Delete VPC: on a Linux Docker host Floci 2.4.0 can drop the connection while it removes the VPC's Docker network, and stay unreachable for a few seconds, after the VPC is already gone. The console now waits for Floci to answer and reports the delete when it no longer lists the VPC, instead of a 502.
 - EC2 guided labs (IMDS, user data and the others with an instance): reset waits for the instance to finish terminating before deleting its subnet, which failed with DependencyViolation on Floci 2.4.0.
 
 ## 2.2.0 — 2026-10-26
