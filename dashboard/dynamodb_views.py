@@ -7,12 +7,16 @@ from django.views.decorators.http import require_http_methods
 
 from .actions import handle_action_error, parse_json_body
 from .dynamodb_api import (
+    create_table_backup,
+    delete_table_backup,
+    list_table_backups,
+    restore_table_from_backup,
+    restore_table_to_point_in_time,
     export_table_to_s3,
     list_table_exports,
     create_table,
     delete_item,
     delete_table,
-    describe_continuous_backups,
     update_point_in_time_recovery,
     update_table_capacity,
     describe_time_to_live,
@@ -161,15 +165,42 @@ def dynamodb_table_detail(request, table_name: str):
         return handle_action_error(exc, service='dynamodb', operation='delete_table' if request.method == 'DELETE' else 'update_table')
 
 
-@require_http_methods(['GET', 'PUT'])
+@require_http_methods(['GET', 'POST', 'PUT'])
 def dynamodb_table_backups(request, table_name: str):
+    """GET lists on-demand backups and the PITR window, POST creates a backup, PUT turns PITR on or off."""
+    operations = {'GET': 'list_backups', 'POST': 'create_backup', 'PUT': 'update_continuous_backups'}
     try:
         if request.method == 'GET':
-            return JsonResponse(describe_continuous_backups(table_name))
+            return JsonResponse(list_table_backups(table_name))
         body = parse_json_body(request)
+        if request.method == 'POST':
+            return JsonResponse(create_table_backup(table_name, body.get('backup_name', '')))
         return JsonResponse(update_point_in_time_recovery(table_name, enabled=body.get('enabled') is True))
     except Exception as exc:
-        operation = 'describe_continuous_backups' if request.method == 'GET' else 'update_continuous_backups'
+        return handle_action_error(exc, service='dynamodb', operation=operations[request.method])
+
+
+@require_http_methods(['POST'])
+def dynamodb_table_restore(request, table_name: str):
+    """Point-in-time restore into a new table; an empty restore_time means the latest restorable time."""
+    try:
+        body = parse_json_body(request)
+        return JsonResponse(restore_table_to_point_in_time(
+            table_name, body.get('target_table_name', ''), restore_time=body.get('restore_time') or ''))
+    except Exception as exc:
+        return handle_action_error(exc, service='dynamodb', operation='restore_table_to_point_in_time')
+
+
+@require_http_methods(['POST', 'DELETE'])
+def dynamodb_backup(request):
+    """POST restores a backup into a new table; DELETE deletes the backup."""
+    try:
+        body = parse_json_body(request)
+        if request.method == 'DELETE':
+            return JsonResponse(delete_table_backup(body.get('backup_arn', '')))
+        return JsonResponse(restore_table_from_backup(body.get('backup_arn', ''), body.get('target_table_name', '')))
+    except Exception as exc:
+        operation = 'delete_backup' if request.method == 'DELETE' else 'restore_table_from_backup'
         return handle_action_error(exc, service='dynamodb', operation=operation)
 
 

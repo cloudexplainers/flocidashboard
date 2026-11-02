@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -411,12 +412,6 @@ def update_table_capacity(table_name: str, *, billing_mode: str, read_capacity_u
     return {'table': clean_name, 'status': table.get('TableStatus'), 'billing_mode': payload['BillingMode']}
 
 
-def describe_continuous_backups(table_name: str) -> dict[str, Any]:
-    clean_name = validate_table_name(table_name)
-    description = _dynamodb_client().describe_continuous_backups(TableName=clean_name).get('ContinuousBackupsDescription', {})
-    return {'table': clean_name, 'continuous_backups': _json_safe(description)}
-
-
 def update_point_in_time_recovery(table_name: str, *, enabled: bool) -> dict[str, Any]:
     clean_name = validate_table_name(table_name)
     description = _dynamodb_client().update_continuous_backups(
@@ -424,6 +419,109 @@ def update_point_in_time_recovery(table_name: str, *, enabled: bool) -> dict[str
         PointInTimeRecoverySpecification={'PointInTimeRecoveryEnabled': bool(enabled)},
     ).get('ContinuousBackupsDescription', {})
     return {'table': clean_name, 'continuous_backups': _json_safe(description)}
+
+
+def _new_table_name(value: str) -> str:
+    name = (value or '').strip()
+    if not TABLE_NAME_PATTERN.match(name):
+        raise ValueError('New table name must be 3-255 letters, numbers, underscores, hyphens or dots')
+    return name
+
+
+def _backup_summary(item: dict[str, Any]) -> dict[str, Any]:
+    return _json_safe({
+        'arn': item.get('BackupArn'),
+        'name': item.get('BackupName'),
+        'status': item.get('BackupStatus'),
+        'type': item.get('BackupType'),
+        'table': item.get('TableName'),
+        'size_bytes': item.get('BackupSizeBytes'),
+        'created': item.get('BackupCreationDateTime'),
+    })
+
+
+def list_table_backups(table_name: str) -> dict[str, Any]:
+    """ListBackups for one table, newest first, with its PITR window."""
+    clean_name = validate_table_name(table_name)
+    client = _dynamodb_client()
+    summaries: list[dict[str, Any]] = []
+    kwargs: dict[str, Any] = {'TableName': clean_name}
+    while True:
+        page = client.list_backups(**kwargs)
+        summaries.extend(page.get('BackupSummaries', []))
+        if not page.get('LastEvaluatedBackupArn'):
+            break
+        kwargs['ExclusiveStartBackupArn'] = page['LastEvaluatedBackupArn']
+    backups = [_backup_summary(item) for item in summaries]
+    backups.sort(key=lambda item: str(item.get('created') or ''), reverse=True)
+    continuous = client.describe_continuous_backups(TableName=clean_name).get('ContinuousBackupsDescription', {})
+    return {'table': clean_name, 'backups': backups, 'continuous_backups': _json_safe(continuous)}
+
+
+def create_table_backup(table_name: str, backup_name: str) -> dict[str, Any]:
+    """CreateBackup (on-demand backup). Backup names follow the table-name rules."""
+    clean_name = validate_table_name(table_name)
+    name = (backup_name or '').strip()
+    if not TABLE_NAME_PATTERN.match(name):
+        raise ValueError('Backup name must be 3-255 letters, numbers, underscores, hyphens or dots')
+    details = _dynamodb_client().create_backup(TableName=clean_name, BackupName=name).get('BackupDetails', {})
+    return _backup_summary({**details, 'TableName': clean_name})
+
+
+def delete_table_backup(backup_arn: str) -> dict[str, Any]:
+    arn = (backup_arn or '').strip()
+    if not arn:
+        raise ValueError('Backup ARN is required')
+    details = _dynamodb_client().delete_backup(BackupArn=arn).get('BackupDescription', {}).get('BackupDetails', {})
+    return {'arn': arn, 'status': details.get('BackupStatus') or 'DELETED', 'deleted': True}
+
+
+def restore_table_from_backup(backup_arn: str, target_table_name: str) -> dict[str, Any]:
+    """RestoreTableFromBackup into a new table; the source table isn't changed."""
+    arn = (backup_arn or '').strip()
+    if not arn:
+        raise ValueError('Backup ARN is required')
+    target = _new_table_name(target_table_name)
+    table = _dynamodb_client().restore_table_from_backup(TargetTableName=target, BackupArn=arn).get('TableDescription', {})
+    return _json_safe({'table': target, 'status': table.get('TableStatus'), 'backup_arn': arn})
+
+
+def _parse_restore_time(value: str) -> datetime:
+    text = value.strip()
+    try:
+        parsed = datetime.fromisoformat(text[:-1] + '+00:00' if text.endswith(('Z', 'z')) else text)
+    except ValueError as exc:
+        raise ValueError('Restore time must be an ISO 8601 date and time, for example 2026-11-02T15:30:00Z') from exc
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def restore_table_to_point_in_time(table_name: str, target_table_name: str, *, restore_time: str = '') -> dict[str, Any]:
+    """RestoreTableToPointInTime into a new table, at a custom time or the latest restorable time.
+
+    Floci reports LatestRestorableDateTime as the moment PITR was turned on and never moves it,
+    so UseLatestRestorableTime would drop every write since then. For "latest" this sends the
+    current time instead, which Floci accepts (AWS's latest is about five minutes back).
+    """
+    clean_name = validate_table_name(table_name)
+    target = _new_table_name(target_table_name)
+    client = _dynamodb_client()
+    kwargs: dict[str, Any] = {'SourceTableName': clean_name, 'TargetTableName': target}
+    if (restore_time or '').strip():
+        kwargs['RestoreDateTime'] = _parse_restore_time(restore_time)
+    else:
+        pitr = client.describe_continuous_backups(TableName=clean_name).get('ContinuousBackupsDescription', {})
+        window = pitr.get('PointInTimeRecoveryDescription') or {}
+        if window.get('PointInTimeRecoveryStatus') != 'ENABLED':
+            raise ValueError('Turn on point-in-time recovery first: there is no recovery window to restore from')
+        latest = datetime.now(timezone.utc)
+        earliest = window.get('EarliestRestorableDateTime')
+        if isinstance(earliest, datetime) and latest < earliest:
+            latest = earliest
+        kwargs['RestoreDateTime'] = latest
+    table = client.restore_table_to_point_in_time(**kwargs).get('TableDescription', {})
+    restored_to = (table.get('RestoreSummary') or {}).get('RestoreDateTime') or kwargs['RestoreDateTime']
+    return _json_safe({'table': target, 'status': table.get('TableStatus'), 'source': clean_name,
+                       'restore_time': restored_to.isoformat() if isinstance(restored_to, datetime) else restored_to})
 
 
 def list_table_exports(table_name: str) -> dict[str, Any]:

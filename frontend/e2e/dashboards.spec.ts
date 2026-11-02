@@ -4785,6 +4785,79 @@ test('DynamoDB exports list a failed export and start a new one to S3', async ({
   await expect(page.getByRole('row', { name: /analytics-exports/ })).toContainText('IN_PROGRESS');
 });
 
+test('DynamoDB creates, restores and deletes on-demand backups and restores to a point in time', async ({ page }) => {
+  await inventory(page, 'dynamodb', { tables: [{ ...dynamoReviewTable, continuous_backups: { PointInTimeRecoveryDescription: { PointInTimeRecoveryStatus: 'ENABLED' } } }] });
+  const nightly = { arn: 'arn:backup/nightly', name: 'Orders-nightly', status: 'AVAILABLE', type: 'USER', table: 'Orders', size_bytes: 0, created: '2026-11-02T10:00:00Z' };
+  let backups: any[] = [nightly];
+  const calls: any[] = [];
+  await page.route('**/api/dynamodb/tables/Orders/backups/', route => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON();
+      calls.push({ path: 'create', body });
+      backups = [{ ...nightly, arn: 'arn:backup/new', name: body.backup_name, status: 'CREATING' }, ...backups];
+      return route.fulfill({ json: { arn: 'arn:backup/new', name: body.backup_name, status: 'CREATING' } });
+    }
+    return route.fulfill({ json: { table: 'Orders', backups, continuous_backups: { PointInTimeRecoveryDescription: { PointInTimeRecoveryStatus: 'ENABLED', EarliestRestorableDateTime: '2026-11-02T09:00:00Z' } } } });
+  });
+  await page.route('**/api/dynamodb/backups/', route => {
+    const body = route.request().postDataJSON();
+    calls.push({ path: route.request().method(), body });
+    if (route.request().method() === 'DELETE') backups = backups.filter(item => item.arn !== body.backup_arn);
+    return route.fulfill({ json: { table: body.target_table_name, status: 'CREATING' } });
+  });
+  await page.route('**/api/dynamodb/tables/Orders/restore/', route => {
+    const body = route.request().postDataJSON();
+    calls.push({ path: 'pitr', body });
+    return route.fulfill({ json: { table: body.target_table_name, status: 'CREATING', restore_time: body.restore_time || '2026-11-02T15:00:00Z' } });
+  });
+  await page.goto('/dynamodb/capacity?table=Orders');
+  await expect(page.getByRole('row', { name: /Orders-nightly/ })).toContainText('AVAILABLE');
+  await expect(page.getByTestId('floci-note').filter({ visible: true, hasText: 'reports every backup' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Create backup', exact: true }).click();
+  const create = page.getByRole('dialog', { name: 'Create backup of Orders' });
+  await create.getByLabel('Backup name').fill('b1');
+  await expect(create.getByRole('button', { name: 'Create backup', exact: true })).toBeDisabled();
+  await create.getByLabel('Backup name').fill('Orders-before-migration');
+  await create.getByRole('button', { name: 'Create backup', exact: true }).click();
+  await expect(page.getByText('Created backup Orders-before-migration of Orders.')).toBeVisible();
+  expect(calls[0]).toEqual({ path: 'create', body: { backup_name: 'Orders-before-migration' } });
+  await expect(page.getByRole('row', { name: /Orders-before-migration/ })).toContainText('CREATING');
+
+  await page.getByRole('row', { name: /Orders-before-migration/ }).getByRole('radio').check();
+  await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeDisabled();
+  await page.getByRole('row', { name: /Orders-nightly/ }).getByRole('radio').check();
+  await page.getByRole('button', { name: 'Restore', exact: true }).click();
+  const restore = page.getByRole('dialog', { name: 'Restore backup' });
+  await expect(restore.getByLabel('New table name')).toHaveValue('Orders-restored');
+  await restore.getByRole('button', { name: 'Restore', exact: true }).click();
+  await expect(page.getByText('Restoring backup Orders-nightly into the new table Orders-restored.')).toBeVisible();
+  expect(calls[1]).toEqual({ path: 'POST', body: { backup_arn: 'arn:backup/nightly', target_table_name: 'Orders-restored' } });
+
+  await page.getByRole('row', { name: /Orders-nightly/ }).getByRole('radio').check();
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Delete backup?' }).getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByText('Deleted backup Orders-nightly.')).toBeVisible();
+  expect(calls[2]).toEqual({ path: 'DELETE', body: { backup_arn: 'arn:backup/nightly' } });
+  await expect(page.getByRole('row', { name: /Orders-nightly/ })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Restore to point in time', exact: true }).click();
+  const pitr = page.getByRole('dialog', { name: 'Restore to point in time' });
+  await expect(pitr.getByTestId('floci-note')).toContainText('never moves it forward');
+  await pitr.getByRole('button', { name: 'Restore', exact: true }).click();
+  expect(calls[3]).toEqual({ path: 'pitr', body: { target_table_name: 'Orders-pitr', restore_time: '' } });
+  await expect(page.getByText('Restoring Orders as it was at 2026-11-02T15:00:00.000Z into the new table Orders-pitr.')).toBeVisible();
+  await page.getByRole('button', { name: 'Restore to point in time', exact: true }).click();
+  await pitr.getByRole('radio', { name: 'Custom date and time' }).check();
+  await expect(pitr.getByText('Earliest restorable time: 2026-11-02T09:00:00.000Z')).toBeVisible();
+  await pitr.getByLabel('Custom restore time', { exact: true }).fill('not a time');
+  await expect(pitr.getByRole('button', { name: 'Restore', exact: true })).toBeDisabled();
+  await pitr.getByLabel('Custom restore time', { exact: true }).fill('2026-11-02T12:00:00Z');
+  await pitr.getByLabel('New table name').fill('Orders-noon');
+  await pitr.getByRole('button', { name: 'Restore', exact: true }).click();
+  expect(calls[4]).toEqual({ path: 'pitr', body: { target_table_name: 'Orders-noon', restore_time: '2026-11-02T12:00:00Z' } });
+});
+
 test('Route 53 creates a private hosted zone on a VPC and manages its VPC associations', async ({ page }) => {
   let zones: any[] = [];
   let createdZone: any;

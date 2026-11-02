@@ -1,5 +1,6 @@
 import { normalizeDynamoTable } from './dynamoResources';
 import { DynamoDBExports } from '../components/DynamoDBExports';
+import { DynamoDBBackups, DynamoDBPitrRestore } from '../components/DynamoDBBackups';
 import { DynamoTableSchema, capacityModeLabel } from '../components/DynamoTableSchema';
 import { DynamoQueryBuilder, DynamoItemsRequest } from '../components/DynamoQueryBuilder';
 import ConfirmActionModal from '../components/ConfirmActionModal';
@@ -328,6 +329,11 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
     } finally {
       setSavingCapacity(false);
     }
+  };
+
+  const handleRestored = (message: string) => {
+    setActionMessage({ type: 'success', text: message });
+    loadTables();
   };
 
   const handleTogglePitr = async () => {
@@ -699,9 +705,12 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                           variant="h3"
                           description="In AWS, point-in-time recovery (PITR) keeps continuous backups, so you can restore the table to any second in the recovery period."
                           actions={
-                            <Button loading={savingPitr} disabled={pitrEnabled === undefined} onClick={handleTogglePitr}>
-                              {pitrEnabled ? 'Turn off' : 'Turn on'}
-                            </Button>
+                            <SpaceBetween direction="horizontal" size="xs">
+                              <DynamoDBPitrRestore key={activeTable.TableName} tableName={activeTable.TableName} pitrEnabled={pitrEnabled} onRestored={handleRestored} />
+                              <Button loading={savingPitr} disabled={pitrEnabled === undefined} onClick={handleTogglePitr}>
+                                {pitrEnabled ? 'Turn off' : 'Turn on'}
+                              </Button>
+                            </SpaceBetween>
                           }
                         >
                           Point-in-time recovery (PITR)
@@ -721,12 +730,12 @@ export const DynamoDBConsole: React.FC<DynamoDBConsoleProps> = ({ activeTab, onT
                       </Box>
                       <FlociNote>
                         Floci keeps the table&apos;s change history while PITR is on, and
-                        RestoreTableToPointInTime restores it into a new table, as on AWS.
-                        Floci also takes on-demand backups (CreateBackup); Floci 2.3.0 and
-                        older did neither.
+                        restores it into a new table at the time you choose, as on AWS.
                       </FlociNote>
                       </SpaceBetween>
                     </Container>
+
+                    <DynamoDBBackups key={activeTable.TableName} tableName={activeTable.TableName} onRestored={handleRestored} />
                   </SpaceBetween>
                 ),
               },

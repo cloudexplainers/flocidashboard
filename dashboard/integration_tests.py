@@ -282,6 +282,30 @@ class ConsoleFeatureLiveTests(SimpleTestCase):
         self.assertEqual(len(exports), 1)
         self.assertIn(exports[0]['status'], {'IN_PROGRESS', 'COMPLETED'})
 
+    def test_dynamodb_backup_and_restores(self):
+        import time
+        ddb = self.factory.client('dynamodb')
+        ddb.create_table(TableName=self.name, KeySchema=[{'AttributeName': 'pk', 'KeyType': 'HASH'}],
+                         AttributeDefinitions=[{'AttributeName': 'pk', 'AttributeType': 'S'}], BillingMode='PAY_PER_REQUEST')
+        for suffix in ('', '-backup', '-pitr'):
+            self.addCleanup(lambda name=self.name + suffix: ddb.delete_table(TableName=name))
+        ddb.put_item(TableName=self.name, Item={'pk': {'S': 'before-backup'}})
+        base = f'/api/dynamodb/tables/{self.name}'
+        backup = self.call('post', f'{base}/backups/', {'backup_name': f'{self.name}-b'})
+        self.addCleanup(lambda: ddb.delete_backup(BackupArn=backup['arn']))
+        self.assertEqual([item['arn'] for item in self.call('get', f'{base}/backups/')['backups']], [backup['arn']])
+        self.call('put', f'{base}/backups/', {'enabled': True})
+        time.sleep(1)
+        ddb.put_item(TableName=self.name, Item={'pk': {'S': 'after-backup'}})
+        time.sleep(1)
+        self.call('post', '/api/dynamodb/backups/', {'backup_arn': backup['arn'], 'target_table_name': f'{self.name}-backup'})
+        # Latest restorable time: Floci's reported latest stays at the moment PITR went on, so the console sends now.
+        self.call('post', f'{base}/restore/', {'target_table_name': f'{self.name}-pitr'})
+        time.sleep(1)
+        keys = lambda table: sorted(item['pk']['S'] for item in ddb.scan(TableName=table)['Items'])  # noqa: E731
+        self.assertEqual(keys(f'{self.name}-backup'), ['before-backup'])
+        self.assertEqual(keys(f'{self.name}-pitr'), ['after-backup', 'before-backup'])
+
     def test_kinesis_split_merge_and_scale(self):
         kinesis = self.factory.client('kinesis')
         kinesis.create_stream(StreamName=self.name, ShardCount=1)
