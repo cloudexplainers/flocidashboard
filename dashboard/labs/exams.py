@@ -442,6 +442,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     # Level 10
     ('cloudformation', 'stacksets-baseline'): _tags(dop='2.1 2.2 6.2'),
     ('ecs', 'container-blue-green'): _tags(dop='1.4 1.3 3.2'),
+    ('ssm', 'fleet-release-troubleshooting'): _tags(dop='5.3 1.4 3.2'),
 }
 
 
@@ -947,9 +948,10 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'CodeDeploy on ECS creates a replacement task set, shifts the listener from the blue to the green target group (all at once, canary, or linear), runs Lambda hooks such as AfterAllowTestTraffic, and terminates the blue task set after a wait.',
             'For Lambda, CodeDeploy shifts an alias between versions; for Auto Scaling groups, instance refresh replaces instances in batches with a minimum healthy percentage.',
             'Automatic rollback triggers on a failed deployment or a CloudWatch alarm; the service role and the instance profile need access to the artifact bucket or repository.',
+            'Floci runs ECS blue/green and Lambda deployments for real, but its in-place deployments reach no EC2 instances, so the fleet release lab releases in place with Run Command and an instance refresh.',
         ],
-        'related_labs': [('ecs', 'container-blue-green'), ('codepipeline', 'lambda-cicd'), ('lambda', 'performance-cost'), ('elasticloadbalancing', 'ha-web-tier')],
-        'planned': 'P-3 In-place deployments and troubleshooting',
+        'related_labs': [('ecs', 'container-blue-green'), ('ssm', 'fleet-release-troubleshooting'), ('codepipeline', 'lambda-cicd'), ('lambda', 'performance-cost'), ('elasticloadbalancing', 'ha-web-tier')],
+        'planned': None,
     },
     {
         'key': 'multi-account-iac',
@@ -1030,8 +1032,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'ECS: stopped tasks carry a stopped reason (image pull failure, failed health check, out of memory). Auto Scaling: scaling activities explain failed launches (capacity, invalid launch template, lifecycle hook timeouts).',
             'CloudWatch Synthetics canaries test endpoints on a schedule and catch failures before users do.',
         ],
-        'related_labs': [('codepipeline', 'lambda-cicd'), ('ec2', 'guided-broken-route'), ('lambda', 'async-error-handling')],
-        'planned': 'P-3 In-place deployments and troubleshooting',
+        'related_labs': [('ssm', 'fleet-release-troubleshooting'), ('codepipeline', 'lambda-cicd'), ('ec2', 'guided-broken-route'), ('lambda', 'async-error-handling')],
+        'planned': None,
     },
     {
         'key': 'identity-at-scale',
