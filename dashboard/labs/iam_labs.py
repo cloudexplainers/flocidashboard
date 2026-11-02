@@ -11,6 +11,7 @@ from django.core.cache import cache
 
 from dashboard.aws import _clean_response
 from . import iam_account_hardening_labs as account_hardening
+from . import iam_machine_identity_labs as machine_identity
 from . import iam_organizations_labs as multi_account
 from .monolith import (
     AWS_ACCOUNT_ID,
@@ -2517,6 +2518,7 @@ LABS = [
     IAM_INSTANCE_PROFILE_LAB,
     IAM_ENFORCEMENT_CAPSTONE_LAB,
     account_hardening.LAB,
+    machine_identity.LAB,
     multi_account.LAB,
 ]
 
@@ -2529,6 +2531,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
     if service_key == 'iam' and lab_key == 'account-hardening':
         from .iam_account_hardening_labs import run_step as hardening_run_step
         return hardening_run_step(step_key)
+
+    if service_key == 'iam' and lab_key == 'machine-identity':
+        from .iam_machine_identity_labs import run_step as identity_run_step
+        return identity_run_step(step_key)
 
     if service_key == 'iam' and lab_key == 'create-user-alice' and step_key == 'create-user':
         return _run_iam_create_user_alice()
@@ -2648,6 +2654,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'iam' and lab_key == 'account-hardening':
         from .iam_account_hardening_labs import status as hardening_status
         return hardening_status()
+
+    if service_key == 'iam' and lab_key == 'machine-identity':
+        from .iam_machine_identity_labs import status as identity_status
+        return identity_status()
 
     if service_key == 'iam' and lab_key == 'create-user-alice':
         verification = _verify_iam_user('Alice')
@@ -2955,6 +2965,10 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'iam' and lab_key == 'account-hardening':
         from .iam_account_hardening_labs import reset as hardening_reset
         return hardening_reset()
+
+    if service_key == 'iam' and lab_key == 'machine-identity':
+        from .iam_machine_identity_labs import reset as identity_reset
+        return identity_reset()
 
     if service_key == 'iam' and lab_key == 'create-user-alice':
         return _reset_iam_create_user_alice()

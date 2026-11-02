@@ -1765,6 +1765,29 @@ Checked live on a throwaway Floci 2.4.0, and against the 2.4.0 source for S3 lif
 | Destinations | PutDestination and PutDestinationPolicy work, and putting the destination again returns its policy; DescribeDestinations and DeleteDestination are unsupported; a subscription filter to the destination is accepted but delivers nothing. | Stored only |
 | Metric streams | PutMetricStream and GetMetricStream work (state `running`); no metrics are sent. | Stored only |
 
+## Machine identity lab (2026-11-02)
+
+`iam/machine-identity` (DOP 6.1, 6.2), 8 steps, in `dashboard/labs/iam_machine_identity_labs.py` (dispatched from
+`iam_labs.py`, the last lab of Level 10: DevOps Professional, Wave P item P-7). It creates the policy
+`lab-identity-team-boundary`, the roles `lab-identity-team-admin`, `team-orders-worker`, `lab-identity-ci`,
+`team-orders-deployer`, `lab-identity-abac` and `lab-identity-rotator-role`, the queues `team-orders-jobs`,
+`team-orders-audit` and `team-payments-jobs`, the table `lab-identity-db`, the secret `lab-identity/orders-db`, and the
+function `lab-identity-rotator`. Reset removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement on (as `compose.labs.yml` sets it), and against the 2.4.0
+source for rotation:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Permissions boundary | Caps an assumed role whose own policy allows `*` (IAM and SSM denied, SQS allowed). | Real |
+| `iam:PermissionsBoundary` condition | CreateRole without the boundary, or with another one, is denied; with it, allowed. | Real |
+| Explicit deny | DeleteRolePermissionsBoundary and CreatePolicyVersion are denied. | Real |
+| Role chaining | A role session assumes another role; a session policy narrows it to one queue's ARN. A chained session of 7200 seconds is issued (AWS caps chaining at one hour). | Real; the cap is not applied |
+| ABAC | Any `aws:ResourceTag` or `aws:PrincipalTag` condition, static or `${aws:PrincipalTag/...}`, denies every request. | The lab evaluates the tags itself |
+| Rotation | RotateSecret runs the function for createSecret, setSecret, testSecret and finishSecret in the background, after creating an empty AWSPENDING version itself; labels move. After a successful rotation AWSPENDING stays on the current version (as on AWS). | Real |
+| Failed rotation | A failed step leaves AWSPENDING on the new version and on the current one; every later RotateSecret, even with the pending version's token, is refused with "A previous rotation isn't complete" and Floci never retries it. CancelRotateSecret reports the version, and removing its AWSPENDING label unblocks rotation. | The lab cancels, clears the label, and rotates again |
+| Scheduled rotation | On by default (`scheduled-rotation-enabled`, 60-second tick). | Mentioned |
+
 ## Recommended next work
 
 | Item | Why not here |

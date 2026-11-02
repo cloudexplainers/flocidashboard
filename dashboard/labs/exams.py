@@ -446,6 +446,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('codepipeline', 'pipeline-quality-gates'): _tags(dop='1.2 1.1 5.1 5.3'),
     ('eventbridge', 'drift-remediation'): _tags(dop='5.2 4.3 5.1 6.2'),
     ('cloudwatch', 'centralized-logging'): _tags(dop='4.1 4.2 6.3'),
+    ('iam', 'machine-identity'): _tags(dop='6.1 6.2'),
 }
 
 
@@ -1050,8 +1051,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Permissions boundaries let teams create their own roles without exceeding a ceiling; SCPs set the ceiling for whole accounts.',
             'Floci runs rotation functions, but its IAM evaluator does not resolve tag condition keys, so ABAC policies deny every request and the lab checks tags itself.',
         ],
-        'related_labs': [('iam', 'account-hardening'), ('secretsmanager', 'secret-lifecycle'), ('iam', 'identity-enforcement-capstone')],
-        'planned': 'P-7 Machine identity at scale',
+        'related_labs': [('iam', 'machine-identity'), ('iam', 'account-hardening'), ('secretsmanager', 'secret-lifecycle'), ('iam', 'identity-enforcement-capstone')],
+        'planned': None,
     },
     {
         'key': 'security-automation',
