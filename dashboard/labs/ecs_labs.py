@@ -12,6 +12,8 @@ from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
 
+from . import ecs_bluegreen_labs as container_blue_green
+
 REGION = 'us-east-1'
 ACCOUNT = '000000000000'
 CACHE_PREFIX = 'floci-lab:ecs:'
@@ -67,7 +69,7 @@ ECS_FARGATE_LAB = {
     ],
 }
 
-LABS = [ECS_FARGATE_LAB]
+LABS = [ECS_FARGATE_LAB, container_blue_green.LAB]
 
 
 def client(name: str):
@@ -267,7 +269,10 @@ def step_update_service() -> dict[str, Any]:
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
-    if lab_key != 'fargate-microservice':
+    if service_key == 'ecs' and lab_key == 'container-blue-green':
+        from .ecs_bluegreen_labs import run_step as bg_run_step
+        return bg_run_step(step_key)
+    if not (service_key == 'ecs' and lab_key == 'fargate-microservice'):
         raise ValueError(f'Unknown ECS lab: {lab_key}')
     runners = {
         'create-cluster': step_create_cluster,
@@ -284,7 +289,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
-    if lab_key != 'fargate-microservice':
+    if service_key == 'ecs' and lab_key == 'container-blue-green':
+        from .ecs_bluegreen_labs import status as bg_status
+        return bg_status()
+    if not (service_key == 'ecs' and lab_key == 'fargate-microservice'):
         raise ValueError(f'Unknown ECS lab: {lab_key}')
     ecs = client('ecs')
 
@@ -357,7 +365,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
-    if lab_key != 'fargate-microservice':
+    if service_key == 'ecs' and lab_key == 'container-blue-green':
+        from .ecs_bluegreen_labs import reset as bg_reset
+        return bg_reset()
+    if not (service_key == 'ecs' and lab_key == 'fargate-microservice'):
         raise ValueError(f'Unknown ECS lab: {lab_key}')
     started = time.perf_counter()
     ecs = client('ecs')

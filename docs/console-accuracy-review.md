@@ -1644,6 +1644,34 @@ Checked live on a throwaway Floci 2.4.0 (a full run, two more runs after reset, 
 
 `check_labs --service cloudformation --lab stacksets-baseline` passed on 2.4.0.
 
+## Container blue/green lab (2026-11-02)
+
+`ecs/container-blue-green` (DOP 1.4, 1.3, 3.2), 8 steps, in `dashboard/labs/ecs_bluegreen_labs.py` (dispatched from
+`ecs_labs.py`, the second lab of Level 10: DevOps Professional, Wave P item P-2). It creates the ECR repository
+`lab-storefront` (immutable tags, scan on push, a lifecycle policy) with `release-1`, `release-2` and two untagged scratch
+builds pushed through the layer API, the load balancer `lab-storefront-alb` with the target groups `lab-storefront-blue`
+and `lab-storefront-green` and listeners on 80 and 8080, the cluster `lab-storefront-cluster` with the service
+`lab-storefront` (CODE_DEPLOY controller), the CodeDeploy application and deployment group `lab-storefront-bluegreen`
+(canary, automatic rollback, the `lab-storefront-5xx` alarm), the role `lab-storefront-codedeploy`, and the smoke-test
+function `lab-storefront-smoke-test` with its role. Reset removes all of it; roles only if the lab tagged them.
+
+Checked live on a throwaway Floci 2.4.0 (three full runs with a reset before each, then reset):
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Immutable tags | `PutImage` of a new manifest under an existing tag answers `ImageTagAlreadyExistsException`. | Real |
+| Push without Docker | Layer upload and `PutImage` write a real OCI image; untagged writes by digest work. | Real |
+| Untagged images | `DescribeImages` and `ListImages` list tagged images only; an untagged image is found by digest. | Looks the scratch builds up by digest |
+| Scan on push, lifecycle | Stored; `StartImageScan`, `DescribeImageScanFindings` unsupported; no preview, nothing expires. | Evaluates the policy itself |
+| CODE_DEPLOY service | Created without a first task set. Floci keeps starting its tasks, which stop with `TaskFailedToStart` (placeholder image). | Says the tasks fail to start |
+| ECS blue/green | Green task set, Lambda hook (`BeforeAllowTraffic`), listener 90/10 then 100% green in about 5 s, old task set deleted. | Real |
+| Listener reading | The shift shows in `DescribeRules` (default rule) but not in `DescribeListeners` `DefaultActions`. | Reads `DescribeRules` |
+| Target group pair | Every deployment shifts from the first target group to the second; they never alternate. | Not exercised (the failed release never moves traffic) |
+| Test traffic | The test listener and `AfterAllowTestTraffic` are ignored. | Smoke test runs on `BeforeAllowTraffic` |
+| Failed hook | `HOOK_EXECUTION_FAILURE`, traffic untouched, green task set left `ACTIVE`, no rollback info. | Deletes the leftover task set |
+| Alarm and auto rollback settings | Stored only. | Says so |
+| `DeleteCluster` right after the service | `ClusterContainsTasksException` while the last task stops. | Reset retries |
+
 ## Recommended next work
 
 | Item | Why not here |
