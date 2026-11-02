@@ -141,6 +141,17 @@ test('AI Practitioner study track has concept cards and quizzes for every task',
   await expect(design.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
+test('DevOps Professional study track lists DOP-C02 domains with labs and planned labs', async ({ page }) => {
+  await page.goto('/labs/?track=DOP-C02');
+  await expect(page.getByText('DOP-C02 · AWS Certified DevOps Engineer – Professional')).toBeVisible();
+  const pipelines = page.getByTestId('exam-task-DOP-C02-1.1');
+  await expect(pipelines.getByRole('button', { name: /^Ship a Lambda service through a CI\/CD pipeline/ }).first()).toBeVisible();
+  await page.getByText('Domain 5: Incident and Event Response', { exact: true }).click();
+  const remediation = page.getByTestId('exam-task-DOP-C02-5.2');
+  await remediation.getByText('Concept: Automatic remediation of configuration changes').click();
+  await expect(remediation.getByText('Planned lab: P-5 Event-driven remediation')).toBeVisible();
+});
+
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
   await page.goto('/labs/?track=NOT-AN-EXAM');
   await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();
