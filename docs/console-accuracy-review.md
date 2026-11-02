@@ -1739,6 +1739,32 @@ Checked live on a throwaway Floci 2.4.0 (a full run after reset, a check_labs ru
 | EventBridge to Step Functions | Starts the workflow with the event as input; `lambda:invoke`, `sqs:sendMessage` and `dynamodb:putItem` tasks run. | Real |
 | Secrets Manager events | None arrived on the default bus without a trail. | Not used |
 
+## Centralized logging lab (2026-11-02)
+
+`cloudwatch/centralized-logging` (DOP 4.1, 4.2, 6.3), 9 steps, in `dashboard/labs/cloudwatch_logging_labs.py`
+(dispatched from `cloudwatch_labs.py`, the sixth lab of Level 10: DevOps Professional, Wave P item P-6). It creates the
+KMS key `alias/lab-central-logs`, the log groups `/lab-central/orders` and `/lab-central/payments`, the metric filters
+`lab-central-errors`, the alarms `lab-central-orders-errors`, `lab-central-payments-errors` and `lab-central-incident`,
+the Kinesis stream `lab-central-errors`, the Firehose stream `lab-central-archive` with the bucket
+`lab-central-log-archive`, the roles `lab-central-logs-role` and `lab-central-firehose-role`, the destination
+`lab-central-security`, and the metric stream `lab-central-metrics`. Reset removes all of it except the destination
+(Floci has no DeleteDestination; the next run replaces it) and schedules the key for deletion.
+
+Checked live on a throwaway Floci 2.4.0, and against the 2.4.0 source for S3 lifecycle:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| KMS key on a log group | Stored and shown by DescribeLogGroups; a write with the key disabled is accepted and readable. | Stored only; the step shows the accepted write |
+| Metric filter dimensions | `{'Service': '$.service'}` creates one series per service. | Real |
+| Metric and composite alarms | Evaluated about once a minute; the composite follows its children. | Real (about 45 seconds) |
+| Subscription filter to Kinesis | Delivers only matching events, as gzip DATA_MESSAGE envelopes. More than two filters per log group are allowed. | Real; the limit is not enforced |
+| Subscription filter to Firehose | Delivered; Firehose writes gzip envelopes back to back (with a newline between) to S3 when its 60-second buffer ends. | Real |
+| S3 lifecycle | Expiration is applied by a background sweeper; storage class transitions are not. | Expiration applied, transitions stored |
+| Logs Insights | `fields`, `filter`, `sort` and `limit` work across several groups; `stats`, `parse` and `like` fail, and `@log` is empty. | The lab counts the rows by service itself |
+| Athena over the archive | Floci's DuckDB engine needs the `httpfs` extension from the internet, so queries fail offline. | Not used; the lab reads the archive |
+| Destinations | PutDestination and PutDestinationPolicy work, and putting the destination again returns its policy; DescribeDestinations and DeleteDestination are unsupported; a subscription filter to the destination is accepted but delivers nothing. | Stored only |
+| Metric streams | PutMetricStream and GetMetricStream work (state `running`); no metrics are sent. | Stored only |
+
 ## Recommended next work
 
 | Item | Why not here |
