@@ -507,6 +507,8 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('eventbridge', 'drift-remediation'): _tags(dop='5.2 4.3 5.1 6.2', soa='1.2 3.2 4.1'),
     ('cloudwatch', 'centralized-logging'): _tags(dop='4.1 4.2 6.3', soa='1.1 4.2'),
     ('iam', 'machine-identity'): _tags(dop='6.1 6.2', soa='4.1 4.2'),
+    # Level 11
+    ('cloudwatch', 'fleet-monitoring'): _tags(soa='1.1 2.1 1.2', dop='4.3'),
 }
 
 
@@ -1139,8 +1141,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Dashboards are JSON, can show metrics from several Regions and, with cross-account observability (a monitoring account linked to source accounts), from several accounts. Share a dashboard publicly, with chosen email addresses, or through SSO.',
             'Floci evaluates metric and composite alarms, publishes to SNS, and runs Application Auto Scaling policies from alarms, but stores EC2 alarm actions without applying them and sends no alarm state change events, and there is no agent to install on its instances.',
         ],
-        'related_labs': [('cloudwatch', 'metric-alarms'), ('cloudwatch', 'serverless-observability'), ('cloudwatch', 'centralized-logging'), ('cloudwatch', 'log-groups-metric-filters')],
-        'planned': 'O-1 Fleet monitoring and alarm actions',
+        'related_labs': [('cloudwatch', 'fleet-monitoring'), ('cloudwatch', 'metric-alarms'), ('cloudwatch', 'serverless-observability'), ('cloudwatch', 'centralized-logging'), ('cloudwatch', 'log-groups-metric-filters')],
+        'planned': None,
     },
     {
         'key': 'operational-runbooks',
@@ -1182,8 +1184,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Databases: RDS read replicas and storage autoscaling, Aurora Serverless v2 and Aurora Auto Scaling for replicas, and DynamoDB on-demand or provisioned with auto scaling.',
             'Floci launches and terminates Auto Scaling instances when capacity changes and runs Application Auto Scaling policies on ECS services from alarms, but stores EC2 Auto Scaling scaling policies and scheduled actions without running them.',
         ],
-        'related_labs': [('elasticloadbalancing', 'ha-web-tier'), ('dynamodb', 'capacity-at-scale'), ('elasticache', 'cache-aside'), ('ecs', 'fargate-microservice'), ('rds', 'aurora-resilience')],
-        'planned': 'O-1 Fleet monitoring and alarm actions',
+        'related_labs': [('cloudwatch', 'fleet-monitoring'), ('elasticloadbalancing', 'ha-web-tier'), ('dynamodb', 'capacity-at-scale'), ('elasticache', 'cache-aside'), ('ecs', 'fargate-microservice'), ('rds', 'aurora-resilience')],
+        'planned': None,
     },
     {
         'key': 'health-checks-multi-az',

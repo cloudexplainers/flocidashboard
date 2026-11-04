@@ -230,8 +230,18 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'iam', key: 'machine-identity', title: 'Manage machine identities at scale: boundaries, chained roles, ABAC, and credential rotation', stepCount: 8 },
     ],
   },
+  {
+    id: 'level-11-cloudops-associate',
+    title: 'Level 11: CloudOps Associate',
+    subtitle: 'Operate workloads: monitoring and alarm actions, remediation, performance, backups, provisioning, access, and networks',
+    badge: 'Associate',
+    color: 'blue',
+    description: 'Run a workload day to day for the CloudOps Engineer – Associate exam. Store a CloudWatch agent configuration in Parameter Store, collect memory, disk, and process metrics from two instances, and alarm on a crashed web server with SNS notifications and EC2 reboot and recover actions. Combine the alarms in a composite fleet alarm, follow a failure from the alarm to the on-call queue and back to OK, scale an ECS service out from a backlog alarm with Application Auto Scaling, and build a dashboard that shows two Regions and a second account.',
+    labs: [
+      { service: 'cloudwatch', key: 'fleet-monitoring', title: 'Monitor an EC2 fleet with agent metrics, alarm actions, alarm-driven scaling, and a shared dashboard', stepCount: 8 },
+    ],
+  },
 ];
-
 let nextLabId = 1;
 export const LAB_CURRICULUM: CurriculumLevel[] = LEVEL_DEFINITIONS.map((level) => ({
   ...level,
