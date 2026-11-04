@@ -51,8 +51,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
         return LABS
     if service_key == 'eventbridge':
         from .eventbridge_application import LAB
+        from .eventbridge_ops_automation_labs import LAB as OPS_LAB
         from .eventbridge_remediation_labs import LAB as REMEDIATION_LAB
-        return [LAB, REMEDIATION_LAB]
+        return [LAB, REMEDIATION_LAB, OPS_LAB]
     if service_key == 'dynamodb':
         from .dynamodb_labs import LABS
         return LABS
@@ -97,7 +98,8 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
         return LABS
     if service_key == 'backup':
         from .backup_labs import LABS
-        return LABS
+        from .backup_restore_drill_labs import LAB as DRILL_LAB
+        return [*LABS, DRILL_LAB]
     if service_key == 'cloudfront':
         from .cloudfront_labs import LABS
         return LABS
@@ -579,6 +581,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'eventbridge' and lab_key == 'drift-remediation':
         from .eventbridge_remediation_labs import run_step
         return run_step(step_key)
+    if service_key == 'eventbridge' and lab_key == 'ops-automation':
+        from .eventbridge_ops_automation_labs import run_step
+        return run_step(step_key)
     if service_key == 'stepfunctions':
         from .stepfunctions_labs import run_step
         return run_step(service_key, lab_key, step_key)
@@ -609,7 +614,10 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'kinesis':
         from .kinesis_labs import run_step
         return run_step(service_key, lab_key, step_key)
-    if service_key == 'backup':
+    if service_key == 'backup' and lab_key == 'restore-drill':
+        from .backup_restore_drill_labs import run_step
+        return run_step(step_key)
+    if service_key == 'backup' and lab_key == 'backup-dr-plan':
         from .backup_labs import run_step
         return run_step(service_key, lab_key, step_key)
     if service_key == 'cloudfront':
@@ -714,6 +722,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'eventbridge' and lab_key == 'drift-remediation':
         from .eventbridge_remediation_labs import status
         return status()
+    if service_key == 'eventbridge' and lab_key == 'ops-automation':
+        from .eventbridge_ops_automation_labs import status
+        return status()
     if service_key == 'stepfunctions':
         from .stepfunctions_labs import status
         return status(service_key, lab_key)
@@ -744,7 +755,10 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'kinesis':
         from .kinesis_labs import status
         return status(service_key, lab_key)
-    if service_key == 'backup':
+    if service_key == 'backup' and lab_key == 'restore-drill':
+        from .backup_restore_drill_labs import status
+        return status()
+    if service_key == 'backup' and lab_key == 'backup-dr-plan':
         from .backup_labs import status
         return status(service_key, lab_key)
     if service_key == 'cloudfront':
@@ -854,6 +868,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'eventbridge' and lab_key == 'drift-remediation':
         from .eventbridge_remediation_labs import reset
         return reset()
+    if service_key == 'eventbridge' and lab_key == 'ops-automation':
+        from .eventbridge_ops_automation_labs import reset
+        return reset()
     if service_key == 'stepfunctions':
         from .stepfunctions_labs import reset
         return reset(service_key, lab_key)
@@ -884,7 +901,10 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'kinesis':
         from .kinesis_labs import reset
         return reset(service_key, lab_key)
-    if service_key == 'backup':
+    if service_key == 'backup' and lab_key == 'restore-drill':
+        from .backup_restore_drill_labs import reset
+        return reset()
+    if service_key == 'backup' and lab_key == 'backup-dr-plan':
         from .backup_labs import reset
         return reset(service_key, lab_key)
     if service_key == 'cloudfront':

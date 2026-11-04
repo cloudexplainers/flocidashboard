@@ -509,6 +509,9 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('iam', 'machine-identity'): _tags(dop='6.1 6.2', soa='4.1 4.2'),
     # Level 11
     ('cloudwatch', 'fleet-monitoring'): _tags(soa='1.1 2.1 1.2', dop='4.3'),
+    ('eventbridge', 'ops-automation'): _tags(soa='1.2 3.2', dop='5.2 4.3'),
+    ('ec2', 'performance-tuning'): _tags(soa='1.3 2.1 1.1'),
+    ('backup', 'restore-drill'): _tags(soa='2.3 2.2', dop='3.3'),
 }
 
 
@@ -1155,8 +1158,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Maintenance windows schedule Run Command, Automation, and Lambda tasks; State Manager associations keep instances in a desired state; Patch Manager patches against a baseline.',
             'Floci runs Run Command, EventBridge rules with input transformers, and Lambda targets, and stores Automation documents, but cannot start Automation executions or maintenance windows, so labs run the same steps with Lambda or Run Command.',
         ],
-        'related_labs': [('eventbridge', 'drift-remediation'), ('eventbridge', 'application-spine'), ('ec2', 'guided-ssm-command'), ('ssm', 'fleet-release-troubleshooting')],
-        'planned': 'O-2 Event-driven operations and runbooks',
+        'related_labs': [('eventbridge', 'ops-automation'), ('eventbridge', 'drift-remediation'), ('eventbridge', 'application-spine'), ('ec2', 'guided-ssm-command'), ('ssm', 'fleet-release-troubleshooting')],
+        'planned': None,
     },
     {
         'key': 'performance-optimization',
@@ -1170,8 +1173,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'RDS: Performance Insights shows database load by wait event and SQL; RDS Proxy pools connections for Lambda-heavy apps; read replicas offload reads; storage autoscaling grows storage before it runs out.',
             'Floci applies EBS volume modifications and stores Transfer Acceleration, EFS lifecycle policies, and RDS settings such as Performance Insights, but has no placement groups, Compute Optimizer, Performance Insights metrics, or FSx.',
         ],
-        'related_labs': [('ec2', 'block-file-storage'), ('s3', 'multipart-upload'), ('lambda', 'performance-cost'), ('rds', 'aurora-resilience'), ('dms', 'migration-toolkit')],
-        'planned': 'O-3 Performance tuning from metrics',
+        'related_labs': [('ec2', 'performance-tuning'), ('ec2', 'block-file-storage'), ('s3', 'multipart-upload'), ('lambda', 'performance-cost'), ('rds', 'aurora-resilience'), ('dms', 'migration-toolkit')],
+        'planned': None,
     },
     {
         'key': 'scaling-operations',
@@ -1212,8 +1215,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'DR strategies from cheapest and slowest to fastest: backup and restore, pilot light, warm standby, and multi-site active/active.',
             'Floci restores DynamoDB to a point in time and from backups, restores RDS from snapshots and to a point in time (as a copy of the source as it is now), creates AMIs, and keeps S3 versions, but does not support EBS snapshots or AWS Backup restore jobs.',
         ],
-        'related_labs': [('backup', 'backup-dr-plan'), ('rds', 'aurora-resilience'), ('s3', 'version-recovery'), ('s3', 'data-protection-tiers'), ('dynamodb', 'capacity-at-scale')],
-        'planned': 'O-4 Backup and restore drill',
+        'related_labs': [('backup', 'restore-drill'), ('backup', 'backup-dr-plan'), ('rds', 'aurora-resilience'), ('s3', 'version-recovery'), ('s3', 'data-protection-tiers'), ('dynamodb', 'capacity-at-scale')],
+        'planned': None,
     },
     {
         'key': 'provisioning-troubleshooting',

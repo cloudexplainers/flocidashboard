@@ -12,6 +12,7 @@ from django.core.cache import cache
 from dashboard.aws import _clean_response
 from . import ec2_nat_labs as nat_three_tier
 from . import ec2_network_labs as network_scale_out
+from . import ec2_performance_labs as performance_tuning
 from . import ec2_shared_responsibility_labs as shared_responsibility
 from . import ec2_storage_labs as block_file_storage
 from .ec2_guided import GUIDED_EC2_LABS
@@ -2686,6 +2687,7 @@ LABS = [
     block_file_storage.LAB,
     network_scale_out.LAB,
     shared_responsibility.LAB,
+    performance_tuning.LAB,
     *GUIDED_EC2_LABS,
 ]
 
@@ -2694,6 +2696,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
     if service_key == 'ec2' and lab_key == 'nat-three-tier':
         from .ec2_nat_labs import run_step as nat_run_step
         return nat_run_step(step_key)
+
+    if service_key == 'ec2' and lab_key == 'performance-tuning':
+        from .ec2_performance_labs import run_step as perf_run_step
+        return perf_run_step(step_key)
 
     if service_key == 'ec2' and lab_key == 'block-file-storage':
         from .ec2_storage_labs import run_step as storage_run_step
@@ -2791,6 +2797,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'ec2' and lab_key == 'nat-three-tier':
         from .ec2_nat_labs import status as nat_status
         return nat_status()
+
+    if service_key == 'ec2' and lab_key == 'performance-tuning':
+        from .ec2_performance_labs import status as perf_status
+        return perf_status()
 
     if service_key == 'ec2' and lab_key == 'block-file-storage':
         from .ec2_storage_labs import status as storage_status
@@ -3147,6 +3157,10 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'ec2' and lab_key == 'nat-three-tier':
         from .ec2_nat_labs import reset as nat_reset
         return nat_reset()
+
+    if service_key == 'ec2' and lab_key == 'performance-tuning':
+        from .ec2_performance_labs import reset as perf_reset
+        return perf_reset()
 
     if service_key == 'ec2' and lab_key == 'block-file-storage':
         from .ec2_storage_labs import reset as storage_reset
