@@ -122,7 +122,7 @@ class LabsRegistryAuditTests(SimpleTestCase):
 class LabsPageTests(SimpleTestCase):
     def test_labs_package_facades_preserve_public_api(self):
         self.assertIs(facade_run_lab_step, run_lab_step)
-        self.assertEqual(len(all_labs()), 111)
+        self.assertEqual(len(all_labs()), 114)
         self.assertTrue(labs_for_service('iam'))
         self.assertTrue(issubclass(Lab, dict))
         self.assertTrue(issubclass(LabStep, dict))
@@ -135,7 +135,7 @@ class LabsPageTests(SimpleTestCase):
         response = self.client.get(reverse('dashboard:labs-catalog'))
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["total_labs"], 111)
+        self.assertEqual(data["total_labs"], 114)
         self.assertIn('services', data)
         self.assertIn('labs', data)
         self.assertGreaterEqual(len(data['services']), 20)
@@ -592,7 +592,8 @@ class LabsRunnerTests(SimpleTestCase):
     def test_cloudformation_lab_registry_includes_s3_sqs_stack_workflow(self):
         labs = labs_for_service('cloudformation')
 
-        self.assertEqual([lab['key'] for lab in labs], ['s3-sqs-stack', 'sam-environments', 'well-architected-review', 'stacksets-baseline'])
+        self.assertEqual([lab['key'] for lab in labs], ['s3-sqs-stack', 'sam-environments', 'well-architected-review', 'stacksets-baseline',
+                                                     'deployment-troubleshooting'])
         self.assertEqual(labs[0]['key'], 's3-sqs-stack')
         self.assertEqual(
             [step['key'] for step in labs[0]['steps']],
@@ -614,7 +615,7 @@ class LabsRunnerTests(SimpleTestCase):
     def test_ec2_lab_registry_includes_public_private_vpc_workflow(self):
         labs = labs_for_service('ec2')
 
-        self.assertEqual(len(labs), 16)
+        self.assertEqual(len(labs), 17)
         self.assertEqual(labs[0]['key'], 'vpc-public-private')
         self.assertEqual(
             [step['key'] for step in labs[0]['steps']],
@@ -7194,16 +7195,16 @@ class LabsRunnerTests(SimpleTestCase):
     ):
         run_mock.return_value = {
             'service': 'iam',
-            'lab': 'multi-account-guardrails',
-            'step': 'delegated-admin',
+            'lab': 'access-troubleshooting',
+            'step': 'compliance-pack',
             'verified': True,
         }
         status_mock.return_value = {'complete': True, 'steps': {}}
 
         response = self.client.post(reverse('dashboard:lab-step-run', kwargs={
             'service_key': 'iam',
-            'lab_key': 'multi-account-guardrails',
-            'step_key': 'delegated-admin',
+            'lab_key': 'access-troubleshooting',
+            'step_key': 'compliance-pack',
         }))
 
         payload = response.json()

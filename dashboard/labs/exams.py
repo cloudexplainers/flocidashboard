@@ -512,6 +512,9 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('eventbridge', 'ops-automation'): _tags(soa='1.2 3.2', dop='5.2 4.3'),
     ('ec2', 'performance-tuning'): _tags(soa='1.3 2.1 1.1'),
     ('backup', 'restore-drill'): _tags(soa='2.3 2.2', dop='3.3'),
+    ('cloudformation', 'deployment-troubleshooting'): _tags(soa='3.1 4.1', dop='5.3'),
+    ('iam', 'access-troubleshooting'): _tags(soa='4.1 4.2', dop='6.2'),
+    ('ec2', 'network-troubleshooting'): _tags(soa='5.3 5.1 5.2'),
 }
 
 
@@ -1229,8 +1232,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Third-party tools such as Terraform and Git-based workflows deploy the same resources through the AWS APIs; state, drift, and permissions problems look the same.',
             'Floci runs CloudFormation stacks and rollbacks, StackSets, AMI creation, and RAM resource shares, with IAM enforcement for permission errors, but has no Image Builder or CDK toolkit of its own.',
         ],
-        'related_labs': [('cloudformation', 's3-sqs-stack'), ('cloudformation', 'stacksets-baseline'), ('ssm', 'fleet-release-troubleshooting'), ('ecs', 'container-blue-green')],
-        'planned': 'O-5 Provisioning troubleshooting and sharing',
+        'related_labs': [('cloudformation', 'deployment-troubleshooting'), ('cloudformation', 's3-sqs-stack'), ('cloudformation', 'stacksets-baseline'), ('ssm', 'fleet-release-troubleshooting'), ('ecs', 'container-blue-green')],
+        'planned': None,
     },
     {
         'key': 'access-troubleshooting',
@@ -1243,8 +1246,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Trusted Advisor security checks (open security groups, root MFA, exposed access keys, public buckets) point at fixes; AWS Config rules and conformance packs monitor compliance continuously.',
             'Floci enforces IAM policies, boundaries, and SCP-style denies when IAM enforcement is on and runs the policy simulator, but has no Trusted Advisor, does not route Access Analyzer findings or policy validation, and stores conformance packs without evaluating them.',
         ],
-        'related_labs': [('iam', 'account-hardening'), ('iam', 'identity-enforcement-capstone'), ('iam', 'multi-account-guardrails'), ('cloudtrail', 'governance-tour')],
-        'planned': 'O-6 Access troubleshooting and compliance',
+        'related_labs': [('iam', 'access-troubleshooting'), ('iam', 'account-hardening'), ('iam', 'identity-enforcement-capstone'), ('iam', 'multi-account-guardrails'), ('cloudtrail', 'governance-tour')],
+        'planned': None,
     },
     {
         'key': 'data-protection-operations',
@@ -1258,8 +1261,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Remediate findings from Security Hub, GuardDuty, Config, and Inspector with EventBridge rules and automation.',
             'Floci enforces KMS key states and IAM permissions on KMS calls, issues ACM certificates at once, and stores GuardDuty and Security Hub settings, but has no Inspector findings or Macie discovery.',
         ],
-        'related_labs': [('kms', 'key-management'), ('secretsmanager', 'secret-lifecycle'), ('s3', 'default-encryption'), ('cloudtrail', 'governance-tour'), ('s3', 'metadata-tags')],
-        'planned': 'O-6 Access troubleshooting and compliance',
+        'related_labs': [('iam', 'access-troubleshooting'), ('kms', 'key-management'), ('secretsmanager', 'secret-lifecycle'), ('s3', 'default-encryption'), ('cloudtrail', 'governance-tour'), ('s3', 'metadata-tags')],
+        'planned': None,
     },
     {
         'key': 'network-operations',
@@ -1273,8 +1276,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Audit network protection in an account: Route 53 Resolver DNS Firewall, AWS WAF, Shield, and Network Firewall. Cut network cost with endpoints instead of NAT for AWS traffic and by keeping traffic in one AZ.',
             'Floci stores VPC networking, including network ACLs, egress-only gateways, peering, and Transit Gateways, without routing real traffic by it, and has no Reachability Analyzer, Network Monitor, VPN, or Direct Connect.',
         ],
-        'related_labs': [('ec2', 'security-controls'), ('ec2', 'guided-broken-route'), ('ec2', 'network-scale-out'), ('ec2', 'nat-three-tier'), ('ec2', 's3-gateway-endpoint')],
-        'planned': 'O-7 Network troubleshooting',
+        'related_labs': [('ec2', 'network-troubleshooting'), ('ec2', 'security-controls'), ('ec2', 'guided-broken-route'), ('ec2', 'network-scale-out'), ('ec2', 'nat-three-tier'), ('ec2', 's3-gateway-endpoint')],
+        'planned': None,
     },
     {
         'key': 'dns-content-delivery',
@@ -1288,8 +1291,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Global Accelerator gives two static anycast IP addresses and fast regional failover for TCP and UDP; CloudFront caches HTTP content at the edge.',
             'Floci stores Route 53 records, health checks, Resolver rules, and CloudFront distributions, but does not support query logging or CloudFront invalidations, and its health checks never probe.',
         ],
-        'related_labs': [('route53', 'routing-failover'), ('cloudfront', 'edge-delivery')],
-        'planned': 'O-7 Network troubleshooting',
+        'related_labs': [('ec2', 'network-troubleshooting'), ('route53', 'routing-failover'), ('cloudfront', 'edge-delivery')],
+        'planned': None,
     },
 ]
 

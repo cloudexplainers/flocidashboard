@@ -1881,6 +1881,75 @@ Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature valid
 | AWS Backup | `StartBackupJob` creates a recovery point; restore jobs and `ListRestoreTestingPlans` are not routed (S3 signature error with validation on). | The lab restores through each service |
 | EBS snapshots | `CreateSnapshot` is unsupported. | App files live on the root volume, captured by the AMI |
 
+## Provisioning troubleshooting lab (2026-11-04)
+
+`cloudformation/deployment-troubleshooting` (SOA 3.1, 4.1), 7 steps, in
+`dashboard/labs/cloudformation_troubleshooting_labs.py` (dispatched from `cloudformation_labs.py`, Level 11: CloudOps
+Associate, Wave O item O-5). It creates the user `lab-deploy-ci`, the stacks `lab-deploy-ops`, `lab-deploy-network`
+and `lab-deploy-app` (with the Auto Scaling group `lab-deploy-web`), nine network interfaces in the /28 subnet, the AMI
+`lab-deploy-web-golden-<time>` in us-east-1 and us-west-2, and the RAM share `lab-deploy-shared-subnets`. Reset removes
+all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| IAM on CloudFormation | `CreateStack` is denied without the action and allowed with it; Tags also need `cloudformation:TagResource`. Floci matches CloudFormation calls only against `Resource: "*"` (a stack ARN pattern is denied). | Real; the policy uses `*` with a note |
+| Resource permissions | Stack resources are created without checking the caller's or the service role's permissions for them, even with `--role-arn`. | Explained |
+| Template checks | Unknown property names, out-of-range values (SQS `VisibilityTimeout: 999999`), missing capabilities for IAM resources and bad `GetAtt` names all create successfully. A value the service refuses (SQS `MessageRetentionPeriod: 30`) fails with the service's message. A /29 subnet fails as invalid. | The lab uses a value SQS refuses |
+| Rollback | First-create failure ends in `ROLLBACK_COMPLETE`; `UpdateStack` is refused there. | Real |
+| Exports | A missing `Fn::ImportValue` fails with "No export named"; a duplicate export name fails. Floci lets an imported export change and its stack be deleted, and has no `ListImports`. | Real, with the gaps noted |
+| Subnet addresses | `AvailableIpAddressCount` counts five reserved addresses, network interfaces and instances; `RunInstances` fails with `InsufficientFreeAddressesInSubnet`, and Auto Scaling records a failed launch activity with that reason and stops short of desired capacity. | Real |
+| Delete failures | A stack whose Auto Scaling group was deleted outside it ends in `DELETE_FAILED` (AWS treats a missing resource as deleted), and `RetainResources` is ignored. | Reset deletes the stack first; a placeholder group unsticks it |
+| AMIs | `CopyImage` to another Region works; `ModifyImageAttribute` is unsupported. A slow `CreateImage` can be retried by the SDK and report a duplicate name. | Real copy; launch permission explained |
+| AWS RAM | `CreateResourceShare` stores the share with ASSOCIATED principal and resource associations. | Stored |
+| Termination protection | `DeleteStack` is refused while it is on. | Real |
+
+## Access troubleshooting lab (2026-11-04)
+
+`iam/access-troubleshooting` (SOA 4.1, 4.2), 7 steps, in `dashboard/labs/iam_access_troubleshooting_labs.py`
+(dispatched from `iam_labs.py`, Level 11: CloudOps Associate, Wave O item O-6). It creates the user `lab-access-analyst`
+with an access key, the bucket `lab-access-reports`, the queue `lab-access-jobs`, the key `alias/lab-access-reports`, a
+certificate for `reports.lab.example`, the load balancer `lab-access-alb` with the target group `lab-access-web`, the
+analyzer `lab-access-analyzer`, the conformance pack `lab-access-s3-baseline`, and two custom Config rules. Reset
+removes all of it (the key is scheduled for deletion).
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| IAM on S3 | `s3:ListBucket` on the bucket ARN and `s3:GetObject` on `reports/*` are enforced per object; the error reads "User is not authorized to perform: s3:GetObject". An explicit deny in a bucket policy is enforced. | Real |
+| CloudTrail | `LookupEvents` returns no events for denied calls. | The lab records the error from the response |
+| Policy simulator | `SimulatePrincipalPolicy` gives `implicitDeny` for a missing action; `SimulateCustomPolicy` evaluates a proposed policy per action and resource ARN. | Real |
+| Region guardrail | A Deny with `StringNotEquals aws:RequestedRegion` blocks us-west-2 and leaves us-east-1. | Real |
+| KMS | An IAM grant on the key ARN is enforced (`AccessDeniedException` without it); a disabled key gives `DisabledException`. A Deny in the key policy is ignored. | Real; key policy gap noted |
+| ACM and ELB | A requested certificate is `ISSUED` at once with a DNS validation record. HTTPS listeners keep the certificate and `SslPolicy`; HTTP redirect actions are stored. `InUseBy` names the load balancer, and `DeleteCertificate` is refused with `ResourceInUseException`. | Real; Floci does not terminate TLS |
+| Access Analyzer | `CreateAnalyzer` and `GetAnalyzer` work (`ACTIVE`); `ListFindings`, `ListFindingsV2` and `ValidatePolicy` are not routed (S3 signature error with validation on). | The lab scans the bucket policy itself |
+| `aws:SecureTransport` | A Deny when it is false does not block plain HTTP requests. | The lab checks the statement |
+| AWS Config | `PutConformancePack` stores the pack but creates none of its rules. Custom rules accept `PutEvaluations` when `ResultToken` is the rule name, and `DescribeComplianceByConfigRule` reports the result. | The lab evaluates and records the rules |
+
+## Network troubleshooting lab (2026-11-04)
+
+`ec2/network-troubleshooting` (SOA 5.3, 5.1, 5.2), 7 steps, in `dashboard/labs/ec2_network_troubleshooting_labs.py`
+(dispatched from `ec2_labs.py`, Level 11: CloudOps Associate, Wave O item O-7, the last of Wave O). It creates the VPC
+`lab-nettrouble` (10.62.0.0/16 with an Amazon IPv6 block) with three subnets, an internet gateway, an egress-only
+gateway, a NAT gateway with an Elastic IP, two route tables, the network ACL `lab-nettrouble-web`, two security groups,
+a web server network interface, a flow log, the bucket `lab-nettrouble-logs-000000000000`, the load balancer
+`lab-nettrouble-alb`, the private zone `app.internal`, an outbound Resolver endpoint and the forwarding rule
+`lab-nettrouble-corp`, a DNS Firewall domain list, two cache policies and a distribution. Reset removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Network ACLs | Custom ACLs, numbered entries with port ranges, the 32767 default deny, and `ReplaceNetworkAclAssociation` are stored. No traffic is filtered. | The lab evaluates the rules in order |
+| Flow logs | A subnet flow log to S3 with a custom format (including `flow-direction`) is ACTIVE; no records are written. | The lab builds the records AWS would write |
+| Routes | NAT gateway (with an Elastic IP) and egress-only gateway routes, including `::/0`, are stored and active. Reachability Analyzer is unsupported. | The lab traces routes by longest prefix |
+| IPv6 | `AmazonProvidedIpv6CidrBlock` gives the VPC a /56; a subnet can get a /64 at creation, but `AssociateSubnetCidrBlock` is unsupported. Floci accepts a malformed IPv6 subnet block. | The subnet is created with its /64 |
+| ELB access logs | `access_logs.s3.*` attributes are stored; no log files are written. | The lab reads sample entries in the AWS format |
+| DNS | `ModifyVpcAttribute` for DNS support and hostnames, private hosted zones, outbound Resolver endpoints, forwarding rules and their VPC associations work. `UpdateFirewallDomains`, `ListFirewallDomains` and firewall rule groups are unknown operations. Nothing answers DNS queries. | The lab resolves each name itself |
+| CloudFront | Custom cache policies (query string allow lists, cookies) and a distribution with a custom origin reach Deployed; no edge cache or invalidations. | The lab computes cache keys and the hit ratio |
+
 ## Recommended next work
 
 | Item | Why not here |
