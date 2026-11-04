@@ -159,6 +159,17 @@ test('DevOps Professional study track lists DOP-C02 domains with labs and planne
   await expect(identity.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
+test('CloudOps Associate study track lists SOA-C03 domains with labs and planned labs', async ({ page }) => {
+  await page.goto('/labs/?track=SOA-C03');
+  await expect(page.getByText('SOA-C03 · AWS Certified CloudOps Engineer – Associate')).toBeVisible();
+  const alarms = page.getByTestId('exam-task-SOA-C03-1.1');
+  await expect(alarms.getByRole('button', { name: /^Publish custom CloudWatch metrics and trigger alarms/ }).first()).toBeVisible();
+  await page.getByText('Domain 5: Networking and Content Delivery', { exact: true }).click();
+  const network = page.getByTestId('exam-task-SOA-C03-5.3');
+  await network.getByText('Concept: Operating and troubleshooting VPC networks').click();
+  await expect(network.getByText('Planned lab: O-7 Network troubleshooting')).toBeVisible();
+});
+
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
   await page.goto('/labs/?track=NOT-AN-EXAM');
   await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();
