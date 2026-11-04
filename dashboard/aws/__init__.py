@@ -572,7 +572,10 @@ def _record_load_error(exc: Exception) -> None:
     code = _error_code(exc)
     if code and _ABSENT_CODE.match(code):
         return
-    message = exc.response.get('Error', {}).get('Message') if isinstance(exc, ClientError) else None
+    if _is_unrouted_operation(exc):
+        message = UNROUTED_OPERATION_MESSAGE
+    else:
+        message = exc.response.get('Error', {}).get('Message') if isinstance(exc, ClientError) else None
     entry = {
         'operation': getattr(exc, 'operation_name', None) or exc.__class__.__name__,
         'code': code,
@@ -643,8 +646,25 @@ def _chunks(values: list[Any], size: int) -> list[list[Any]]:
     return [values[index:index + size] for index in range(0, len(values), size)]
 
 
+# With signature validation on, Floci checks the signature before routing, so a
+# path it has no handler for is attributed to S3 and rejected as
+# AuthorizationHeaderMalformed ("incorrect service "kafka". This endpoint belongs
+# to "s3"."). Without validation the same call answers UnknownOperationException.
+_UNROUTED_TO_S3 = re.compile(r'incorrect service (?:&quot;|")(?!s3(?:&quot;|"))[\w-]+(?:&quot;|")\. This endpoint belongs to (?:&quot;|")s3(?:&quot;|")')
+UNROUTED_OPERATION_MESSAGE = 'Floci has no route for this operation (its signature check attributed the request to S3).'
+
+
+def _is_unrouted_operation(exc: Exception) -> bool:
+    if not isinstance(exc, ClientError):
+        return False
+    error = exc.response.get('Error', {})
+    return bool(_UNROUTED_TO_S3.search(str(error.get('Message') or '')))
+
+
 def _error_code(exc: Exception) -> Optional[str]:
     if isinstance(exc, ClientError):
+        if _is_unrouted_operation(exc):
+            return 'UnknownOperationException'
         return exc.response.get('Error', {}).get('Code')
 
     return None

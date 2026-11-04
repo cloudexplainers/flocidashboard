@@ -44,6 +44,43 @@ class LoadErrorCollectionTests(SimpleTestCase):
 
         self.assertEqual(errors, [])
 
+    def test_operation_floci_attributes_to_s3_is_an_unknown_operation(self):
+        # Floci 2.4.0 with signature validation on answers an unrouted REST path
+        # (Kafka ListKafkaVersions, IoT ListRoleAliases, Backup ListRestoreJobs)
+        # with an S3 signature error; botocore keeps the XML body as the message.
+        from dashboard.aws import UNROUTED_OPERATION_MESSAGE, _error_code, _safe_value, collect_load_errors
+
+        body = (
+            '<?xml version="1.0" encoding="UTF-8"?><Error><Code>AuthorizationHeaderMalformed</Code>'
+            '<Message>The authorization header is malformed; incorrect service &quot;kafka&quot;. '
+            'This endpoint belongs to &quot;s3&quot;.</Message></Error>'
+        )
+        unrouted = client_error('400', 'ListKafkaVersions', body)
+
+        def loader():
+            return _safe_value(lambda: _raise(unrouted), [])
+
+        result, errors = collect_load_errors(loader)
+
+        self.assertEqual(result, [])
+        self.assertEqual(errors, [{'operation': 'ListKafkaVersions', 'code': 'UnknownOperationException', 'error': UNROUTED_OPERATION_MESSAGE}])
+        # A real S3 signature error is not mistaken for an unrouted operation.
+        s3_error = client_error(
+            'AuthorizationHeaderMalformed', 'ListObjectsV2',
+            'The authorization header is malformed; incorrect service "s3". This endpoint belongs to "s3".',
+        )
+        self.assertEqual(_error_code(s3_error), 'AuthorizationHeaderMalformed')
+
+    def test_unrouted_operation_is_reported_as_unsupported(self):
+        from dashboard.aws import _safe_value
+        from dashboard.views import _inventory_response
+
+        body = '<Error><Message>incorrect service &quot;iot&quot;. This endpoint belongs to &quot;s3&quot;.</Message></Error>'
+
+        response = _inventory_response(lambda: {'aliases': _safe_value(lambda: _raise(client_error('400', 'ListRoleAliases', body)), [])})
+
+        self.assertTrue(json.loads(response.content)['load_errors'][0]['unsupported'])
+
     def test_safe_value_outside_collection_still_returns_fallback(self):
         from dashboard.aws import _safe_value
 
