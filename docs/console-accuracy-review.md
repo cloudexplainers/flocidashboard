@@ -1788,6 +1788,32 @@ source for rotation:
 | Failed rotation | A failed step leaves AWSPENDING on the new version and on the current one; every later RotateSecret, even with the pending version's token, is refused with "A previous rotation isn't complete" and Floci never retries it. CancelRotateSecret reports the version, and removing its AWSPENDING label unblocks rotation. | The lab cancels, clears the label, and rotates again |
 | Scheduled rotation | On by default (`scheduled-rotation-enabled`, 60-second tick). | Mentioned |
 
+## Fleet monitoring lab (2026-11-04)
+
+`cloudwatch/fleet-monitoring` (SOA 1.1, 2.1, 1.2), 8 steps, in `dashboard/labs/cloudwatch_fleet_monitoring_labs.py`
+(dispatched from `cloudwatch_labs.py`, the first lab of Level 11: CloudOps Associate, Wave O item O-1). It creates the
+parameter `AmazonCloudWatch-lab-fleet`, the topic `lab-fleet-ops-alerts`, the queue `lab-fleet-ops-inbox`, two
+instances tagged `App=lab-fleet-monitoring`, the alarms `lab-fleet-web-1-web-down`, `lab-fleet-web-2-web-down`, two
+`...-system-check` alarms, the composite alarm `lab-fleet-degraded` and the alarm `lab-fleet-backlog-high`, the ECS
+cluster `lab-fleet-ops` with the service `report-worker`, its scalable target and step policy, and the dashboard
+`lab-fleet-operations`. Reset removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on, and against the 2.4.0 source
+for alarm actions:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| CloudWatch agent | No agent or `AmazonCloudWatch-ManageAgent` document; the instances are containers. | The lab collects memory, disk, and process counts with Run Command and publishes them to `CWAgent` with the agent's dimensions |
+| Processes in instances | PID 1 is `tail -f /dev/null` and does not reap children, so a killed process stays as a zombie (`[name] <defunct>`) and `pgrep` still counts it. | Counts with `ps -eo args=` and an anchored pattern |
+| User data | Runs some seconds after the instance is running, and once in three runs did not start the process within 150 seconds. | Starts the process with Run Command if it never appears |
+| Alarm actions | Only SNS topics and Application Auto Scaling policies run (`AlarmSnsNotifier`, `ScalingPolicyAlarmActionHandler`); EC2 actions (`arn:aws:automate:...:ec2:reboot`, `recover`) are stored and never applied. | Real for SNS and scaling; the instance keeps running after its reboot alarm fires |
+| AWS/EC2 metrics | None are published, so a `StatusCheckFailed_System` alarm stays `INSUFFICIENT_DATA`. | Stored only |
+| Alarm state change events | No `CloudWatch Alarm State Change` events reach EventBridge. | Explained, not used |
+| `TreatMissingData=ignore` | Keeps the last state between collections. | Real |
+| Composite alarm | Follows its children within seconds. | Real |
+| Application Auto Scaling | A step policy run by an alarm changes the ECS service's desired count (1 to 3 for a breach of 150) with a `Successful` scaling activity whose cause names the alarm. The policy runs again on every evaluation while the alarm stays in ALARM; the cooldown decides whether it scales. | Real |
+| Dashboards | `PutDashboard` stores widgets for another Region and another `accountId` and returns no validation messages; `GetDashboard` returns the body as written. | Stored only |
+
 ## Recommended next work
 
 | Item | Why not here |

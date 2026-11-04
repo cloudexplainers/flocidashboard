@@ -12,6 +12,7 @@ from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
 
+from . import cloudwatch_fleet_monitoring_labs as fleet_monitoring
 from . import cloudwatch_logging_labs as centralized_logging
 from . import cloudwatch_observability_labs as serverless_observability
 
@@ -182,7 +183,8 @@ LOGS_FILTERS_LAB = {
     ],
 }
 
-LABS = [METRIC_ALARMS_LAB, LOGS_FILTERS_LAB, serverless_observability.LAB, centralized_logging.LAB]
+LABS = [METRIC_ALARMS_LAB, LOGS_FILTERS_LAB, serverless_observability.LAB, centralized_logging.LAB,
+        fleet_monitoring.LAB]
 
 
 def client(name: str):
@@ -462,6 +464,9 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
     if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
         from .cloudwatch_observability_labs import run_step as observability_run_step
         return observability_run_step(step_key)
+    if service_key == 'cloudwatch' and lab_key == 'fleet-monitoring':
+        from .cloudwatch_fleet_monitoring_labs import run_step as fleet_run_step
+        return fleet_run_step(step_key)
     if service_key == 'cloudwatch' and lab_key == 'centralized-logging':
         from .cloudwatch_logging_labs import run_step as logging_run_step
         return logging_run_step(step_key)
@@ -492,6 +497,9 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
         from .cloudwatch_observability_labs import status as observability_status
         return observability_status()
+    if service_key == 'cloudwatch' and lab_key == 'fleet-monitoring':
+        from .cloudwatch_fleet_monitoring_labs import status as fleet_status
+        return fleet_status()
     if service_key == 'cloudwatch' and lab_key == 'centralized-logging':
         from .cloudwatch_logging_labs import status as logging_status
         return logging_status()
@@ -536,6 +544,9 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
     if service_key == 'cloudwatch' and lab_key == 'serverless-observability':
         from .cloudwatch_observability_labs import reset as observability_reset
         return observability_reset()
+    if service_key == 'cloudwatch' and lab_key == 'fleet-monitoring':
+        from .cloudwatch_fleet_monitoring_labs import reset as fleet_reset
+        return fleet_reset()
     if service_key == 'cloudwatch' and lab_key == 'centralized-logging':
         from .cloudwatch_logging_labs import reset as logging_reset
         return logging_reset()
