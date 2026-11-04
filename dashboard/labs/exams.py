@@ -512,6 +512,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('eventbridge', 'ops-automation'): _tags(soa='1.2 3.2', dop='5.2 4.3'),
     ('ec2', 'performance-tuning'): _tags(soa='1.3 2.1 1.1'),
     ('backup', 'restore-drill'): _tags(soa='2.3 2.2', dop='3.3'),
+    ('cloudformation', 'deployment-troubleshooting'): _tags(soa='3.1 4.1', dop='5.3'),
 }
 
 
@@ -1229,8 +1230,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Third-party tools such as Terraform and Git-based workflows deploy the same resources through the AWS APIs; state, drift, and permissions problems look the same.',
             'Floci runs CloudFormation stacks and rollbacks, StackSets, AMI creation, and RAM resource shares, with IAM enforcement for permission errors, but has no Image Builder or CDK toolkit of its own.',
         ],
-        'related_labs': [('cloudformation', 's3-sqs-stack'), ('cloudformation', 'stacksets-baseline'), ('ssm', 'fleet-release-troubleshooting'), ('ecs', 'container-blue-green')],
-        'planned': 'O-5 Provisioning troubleshooting and sharing',
+        'related_labs': [('cloudformation', 'deployment-troubleshooting'), ('cloudformation', 's3-sqs-stack'), ('cloudformation', 'stacksets-baseline'), ('ssm', 'fleet-release-troubleshooting'), ('ecs', 'container-blue-green')],
+        'planned': None,
     },
     {
         'key': 'access-troubleshooting',

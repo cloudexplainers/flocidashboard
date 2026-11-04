@@ -242,6 +242,7 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'eventbridge', key: 'ops-automation', title: 'Run event-driven operations: fix a silent rule, replay missed events, catch failed deliveries, and run a runbook', stepCount: 8 },
       { service: 'ec2', key: 'performance-tuning', title: 'Tune performance from metrics: right-size an instance, move a volume to gp3, and tune RDS and S3', stepCount: 8 },
       { service: 'backup', key: 'restore-drill', title: 'Run a timed backup and restore drill across EC2, DynamoDB, S3, and RDS', stepCount: 8 },
+      { service: 'cloudformation', key: 'deployment-troubleshooting', title: 'Troubleshoot deployments: denied deploys, failed stacks, full subnets, AMI copies, and shared subnets', stepCount: 7 },
     ],
   },
 ];

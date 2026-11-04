@@ -1881,6 +1881,30 @@ Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature valid
 | AWS Backup | `StartBackupJob` creates a recovery point; restore jobs and `ListRestoreTestingPlans` are not routed (S3 signature error with validation on). | The lab restores through each service |
 | EBS snapshots | `CreateSnapshot` is unsupported. | App files live on the root volume, captured by the AMI |
 
+## Provisioning troubleshooting lab (2026-11-04)
+
+`cloudformation/deployment-troubleshooting` (SOA 3.1, 4.1), 7 steps, in
+`dashboard/labs/cloudformation_troubleshooting_labs.py` (dispatched from `cloudformation_labs.py`, Level 11: CloudOps
+Associate, Wave O item O-5). It creates the user `lab-deploy-ci`, the stacks `lab-deploy-ops`, `lab-deploy-network`
+and `lab-deploy-app` (with the Auto Scaling group `lab-deploy-web`), nine network interfaces in the /28 subnet, the AMI
+`lab-deploy-web-golden-<time>` in us-east-1 and us-west-2, and the RAM share `lab-deploy-shared-subnets`. Reset removes
+all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| IAM on CloudFormation | `CreateStack` is denied without the action and allowed with it; Tags also need `cloudformation:TagResource`. Floci matches CloudFormation calls only against `Resource: "*"` (a stack ARN pattern is denied). | Real; the policy uses `*` with a note |
+| Resource permissions | Stack resources are created without checking the caller's or the service role's permissions for them, even with `--role-arn`. | Explained |
+| Template checks | Unknown property names, out-of-range values (SQS `VisibilityTimeout: 999999`), missing capabilities for IAM resources and bad `GetAtt` names all create successfully. A value the service refuses (SQS `MessageRetentionPeriod: 30`) fails with the service's message. A /29 subnet fails as invalid. | The lab uses a value SQS refuses |
+| Rollback | First-create failure ends in `ROLLBACK_COMPLETE`; `UpdateStack` is refused there. | Real |
+| Exports | A missing `Fn::ImportValue` fails with "No export named"; a duplicate export name fails. Floci lets an imported export change and its stack be deleted, and has no `ListImports`. | Real, with the gaps noted |
+| Subnet addresses | `AvailableIpAddressCount` counts five reserved addresses, network interfaces and instances; `RunInstances` fails with `InsufficientFreeAddressesInSubnet`, and Auto Scaling records a failed launch activity with that reason and stops short of desired capacity. | Real |
+| Delete failures | A stack whose Auto Scaling group was deleted outside it ends in `DELETE_FAILED` (AWS treats a missing resource as deleted), and `RetainResources` is ignored. | Reset deletes the stack first; a placeholder group unsticks it |
+| AMIs | `CopyImage` to another Region works; `ModifyImageAttribute` is unsupported. A slow `CreateImage` can be retried by the SDK and report a duplicate name. | Real copy; launch permission explained |
+| AWS RAM | `CreateResourceShare` stores the share with ASSOCIATED principal and resource associations. | Stored |
+| Termination protection | `DeleteStack` is refused while it is on. | Real |
+
 ## Recommended next work
 
 | Item | Why not here |
