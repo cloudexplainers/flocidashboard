@@ -510,6 +510,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     # Level 11
     ('cloudwatch', 'fleet-monitoring'): _tags(soa='1.1 2.1 1.2', dop='4.3'),
     ('eventbridge', 'ops-automation'): _tags(soa='1.2 3.2', dop='5.2 4.3'),
+    ('ec2', 'performance-tuning'): _tags(soa='1.3 2.1 1.1'),
 }
 
 
@@ -1171,8 +1172,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'RDS: Performance Insights shows database load by wait event and SQL; RDS Proxy pools connections for Lambda-heavy apps; read replicas offload reads; storage autoscaling grows storage before it runs out.',
             'Floci applies EBS volume modifications and stores Transfer Acceleration, EFS lifecycle policies, and RDS settings such as Performance Insights, but has no placement groups, Compute Optimizer, Performance Insights metrics, or FSx.',
         ],
-        'related_labs': [('ec2', 'block-file-storage'), ('s3', 'multipart-upload'), ('lambda', 'performance-cost'), ('rds', 'aurora-resilience'), ('dms', 'migration-toolkit')],
-        'planned': 'O-3 Performance tuning from metrics',
+        'related_labs': [('ec2', 'performance-tuning'), ('ec2', 'block-file-storage'), ('s3', 'multipart-upload'), ('lambda', 'performance-cost'), ('rds', 'aurora-resilience'), ('dms', 'migration-toolkit')],
+        'planned': None,
     },
     {
         'key': 'scaling-operations',

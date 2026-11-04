@@ -1837,6 +1837,30 @@ Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature valid
 | EventBridge Scheduler | `rate(1 minute)` fires a Lambda target with its `Input`; universal targets such as `aws-sdk:ssm:sendCommand` are accepted and never run. | Real for Lambda |
 | AWS/Events metrics | None (`MatchedEvents`, `FailedInvocations`). | Explained |
 
+## Performance tuning lab (2026-11-04)
+
+`ec2/performance-tuning` (SOA 1.3, 2.1, 1.1), 8 steps, in `dashboard/labs/ec2_performance_labs.py` (dispatched from
+`ec2_labs.py`, Level 11: CloudOps Associate, Wave O item O-3). It creates the launch template `lab-perf-app`, the
+instances `lab-perf-app-small` and `lab-perf-app-right` (tag `App=lab-perf-tuning`), the alarms `lab-perf-cpu-high`
+and `lab-perf-memory-oom`, the volume `lab-perf-data`, the database `lab-perf-db`, the secret
+`lab-perf-db-credentials`, the role `lab-perf-proxy-role`, the proxy `lab-perf-proxy`, and the bucket
+`lab-perf-transfer`. Reset removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Instance limits | Types in its catalog (`DescribeInstanceTypes`: t2, t3 up to medium, m5.large, Graviton types) get a CPU quota and memory limit: t3.micro 2 vCPUs and 1 GiB, t2.xlarge 4 vCPUs and 16 GiB. Other types (t3.large, c5.large, m5.xlarge) run unlimited. | Real; the lab picks from the catalog |
+| CPU and memory | Three busy workers on 2 vCPUs are throttled at 100%; a 1,200 MiB job on 1 GiB is killed (exit 137, `oom_kill` counted). | Real |
+| Boot | Floci installs packages for the metadata proxy for some seconds after an instance answers Run Command, using about half a vCPU. | The lab waits for it before measuring |
+| Resizing | `ModifyInstanceAttribute` changes the reported type of a stopped instance, but the container keeps its old limits after start. | The lab replaces the instance from a new template version |
+| Architecture | `RunInstances` refuses an x86_64 image on an Arm type. | Real |
+| `ModifyVolume` | Completes at once, accepts more than 16,000 gp3 IOPS, and has no six-hour wait. | The lab checks gp3 limits itself |
+| RDS | A real PostgreSQL; `MaxAllocatedStorage` and Performance Insights settings are stored; a class change applies at once. No Performance Insights API and no AWS/RDS metrics. | Stored settings explained |
+| RDS Proxy | `CreateDBProxy` and `RegisterDBProxyTargets` work and the target reports `AVAILABLE`. | Real |
+| S3 | Multipart uploads give `-N` ETags and ranged GETs return the range; Transfer Acceleration is stored only. | Real, acceleration stored |
+| Compute Optimizer | Unknown operation. | Explained |
+
 ## Recommended next work
 
 | Item | Why not here |
