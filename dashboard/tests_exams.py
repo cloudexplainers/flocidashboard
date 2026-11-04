@@ -127,9 +127,29 @@ class ExamTracksApiTests(SimpleTestCase):
         self.assertIn('multi-account-iac', tasks['2.1']['concepts'])
         self.assertIn('tracing-xray', tasks['4.2']['concepts'])
 
+    def test_cloudops_associate_track_reuses_existing_labs(self):
+        tracks = exam_tracks(all_labs())
+        soa = next(exam for exam in tracks['exams'] if exam['code'] == 'SOA-C03')
+        tasks = {task['id']: task for domain in soa['domains'] for task in domain['tasks']}
+        self.assertEqual(len(tasks), 13)
+        self.assertEqual([domain['weight'] for domain in soa['domains']], [22, 22, 22, 16, 18])
+        self.assertEqual(soa['passing_score'], 720)
+        for task_id, task in tasks.items():
+            with self.subTest(task=task_id):
+                self.assertTrue(task['labs'], f'SOA {task_id} has no lab')
+                self.assertTrue(task['concepts'], f'SOA {task_id} has no concept card')
+        alarms = {(lab['service'], lab['key']) for lab in tasks['1.1']['labs']}
+        self.assertIn(('cloudwatch', 'metric-alarms'), alarms)
+        backups = {(lab['service'], lab['key']) for lab in tasks['2.3']['labs']}
+        self.assertIn(('backup', 'backup-dr-plan'), backups)
+        troubleshooting = {(lab['service'], lab['key']) for lab in tasks['5.3']['labs']}
+        self.assertIn(('ec2', 'guided-broken-route'), troubleshooting)
+        self.assertIn('operational-runbooks', tasks['1.2']['concepts'])
+        self.assertIn('hybrid-connectivity', tasks['5.3']['concepts'])
+
     def test_exams_endpoint_and_catalog_include_tags(self):
         exams = self.client.get(reverse('dashboard:labs-exams')).json()
-        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02', 'AIF-C01', 'DOP-C02'])
+        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02', 'AIF-C01', 'DOP-C02', 'SOA-C03'])
         self.assertEqual(len(exams['concepts']), len(CONCEPT_CARDS))
 
         catalog = self.client.get(reverse('dashboard:labs-catalog')).json()

@@ -1,6 +1,6 @@
-# Certification Coverage: CLF-C02, SAA-C03, DVA-C02, AIF-C01, and DOP-C02
+# Certification Coverage: CLF-C02, SAA-C03, DVA-C02, AIF-C01, DOP-C02, and SOA-C03
 
-This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)), since 2026-10-26, **AWS Certified AI Practitioner (AIF-C01)** ([§8](#8-ai-practitioner-aif-c01)), and, since 2026-11-02, **AWS Certified DevOps Engineer – Professional (DOP-C02)** ([§9](#9-devops-engineer--professional-dop-c02)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
+This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)), since 2026-10-26, **AWS Certified AI Practitioner (AIF-C01)** ([§8](#8-ai-practitioner-aif-c01)), since 2026-11-02, **AWS Certified DevOps Engineer – Professional (DOP-C02)** ([§9](#9-devops-engineer--professional-dop-c02)), and, since 2026-11-04, **AWS Certified CloudOps Engineer – Associate (SOA-C03)** ([§10](#10-cloudops-engineer--associate-soa-c03)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
 
 It is a planning document. No labs are built here; pick from [the plan](#5-prioritized-lab-plan).
 
@@ -685,7 +685,89 @@ A new curriculum level, **Level 10: DevOps Professional**, holds these labs. Eac
 
 ---
 
-## 10. Extending to other certification tracks
+## 10. CloudOps Engineer – Associate (SOA-C03)
+
+**Added 2026-11-04.** Checked against the [SOA-C03 exam guide](https://docs.aws.amazon.com/aws-certification/latest/sysops-administrator-associate-03/sysops-administrator-associate-03.html) (the guide is titled CloudOps Engineer – Associate, but its URL still says sysops-administrator) and a disposable Floci **2.4.0** emulator (`compose.labs.yml` pinned to 2.4.0, port 14566, IAM enforcement and signature validation on), with the Floci 2.4.0 source as the reference for anything a probe could not settle. SOA-C03 replaced SysOps Administrator – Associate (SOA-C02). The tags live in `dashboard/labs/exams.py` like the other tracks, so the labs page has a **SOA-C03 CloudOps Engineer – Associate** study track.
+
+### Exam guide
+
+| Domain (weight) | Task statements |
+|---|---|
+| 1 Monitoring, Logging, Analysis, Remediation, and Performance Optimization (22%) | 1.1 Implement metrics, alarms, and filters by using AWS monitoring and logging services · 1.2 Identify and remediate issues by using monitoring and availability metrics · 1.3 Implement performance optimization strategies for compute, storage, and database resources |
+| 2 Reliability and Business Continuity (22%) | 2.1 Implement scalability and elasticity · 2.2 Implement highly available and resilient environments · 2.3 Implement backup and restore strategies |
+| 3 Deployment, Provisioning, and Automation (22%) | 3.1 Provision and maintain cloud resources · 3.2 Automate the management of existing resources |
+| 4 Security and Compliance (16%) | 4.1 Implement and manage security and compliance tools and policies · 4.2 Implement strategies to protect data and infrastructure |
+| 5 Networking and Content Delivery (18%) | 5.1 Implement and optimize networking features and connectivity · 5.2 Configure domains, DNS services, and content delivery · 5.3 Troubleshoot network connectivity issues |
+
+65 questions (50 scored, 15 unscored), 130 minutes, passing score 720. SOA-C03 has no exam labs; every question is multiple choice or multiple response. It asks what an operator does: which metric, alarm, or log shows the problem, and which setting or automation fixes it.
+
+### Coverage by task statement (existing 107 labs)
+
+71 existing labs are tagged for SOA tasks, because the operations work overlaps the Solutions Architect and DevOps labs. Eleven new concept cards cover the theory, ten of them naming a planned Wave O lab, and seven earlier cards (hybrid connectivity, fleet configuration, recovery testing, artifacts, multi-account IaC, security automation, and automatic remediation) now also cover SOA tasks. Legend as in §1; ○ here means a concept card but no lab.
+
+| Task | Coverage | Covered by | Gap |
+|---|---|---|---|
+| 1.1 | ● | cloudwatch/metric-alarms, log-groups-metric-filters, serverless-observability (dashboards), centralized-logging (composite alarm), cloudtrail/governance-tour, sns/sqs-fanout, lambda/create-invoke-logs | The CloudWatch agent (1.1.2), alarm actions on EC2 and through EventBridge (1.1.3), cross-account dashboards (1.1.4): **O-1** |
+| 1.2 | ◐ | eventbridge/drift-remediation (fixes from events), application-spine, ec2/guided-ssm-command, sqs/dead-letter-redrive, lambda/async-error-handling, metric-alarms | Event enrichment and rule troubleshooting (1.2.2), Automation runbooks (1.2.3): **O-2** |
+| 1.3 | ◐ | ec2/block-file-storage (gp3, io2, EFS), s3/multipart-upload, lifecycle-retention, data-protection-tiers, lambda/performance-cost, rds/aurora-resilience (read replicas), elasticache/cache-aside, dms/migration-toolkit (DataSync) | EBS modifications from metrics, RDS Proxy and Performance Insights, Transfer Acceleration, EFS lifecycle (1.3.1-1.3.6): **O-3** |
+| 2.1 | ● | elasticloadbalancing/ha-web-tier (Auto Scaling), dynamodb/capacity-at-scale, ecs/fargate-microservice, elasticache/cache-aside, cloudfront/edge-delivery, rds/aurora-resilience, eks/control-plane-nodegroup | Alarm-driven scaling that runs (EC2 Auto Scaling policies are stored only): **O-1** |
+| 2.2 | ● | ha-web-tier (ALB health checks), route53/routing-failover, rds/aurora-resilience, ec2/nat-three-tier, rds/db-instance-lifecycle, well-architected-review | Route 53 health checks never probe (card) |
+| 2.3 | ● | backup/backup-dr-plan, s3/version-recovery, s3/data-protection-tiers, rds/aurora-resilience (PITR, snapshots), dynamodb/capacity-at-scale | A timed restore drill across services: **O-4** |
+| 3.1 | ● | cloudformation/s3-sqs-stack, sam-environments, stacksets-baseline, well-architected-review, ecs/container-blue-green (ECR images), ssm/fleet-release-troubleshooting (stack rollback), codepipeline/lambda-cicd, ec2/guided-userdata | AMIs, permission and subnet-sizing failures, AWS RAM (3.1.1, 3.1.3, 3.1.4): **O-5**; Image Builder, CDK, Terraform (card) |
+| 3.2 | ● | ec2/guided-ssm-command, ssm/fleet-release-troubleshooting, eventbridge/drift-remediation, application-spine, s3/object-notifications-sqs, scheduler/sqs-delivery, stepfunctions/order-processing-workflow, ssm/parameter-store-config | Maintenance windows and Automation (unsupported; card) |
+| 4.1 | ● | iam/account-hardening (password policy, MFA), identity-enforcement-capstone, role-trust-policy, sts-session-policy, multi-account-guardrails (SCPs), machine-identity, s3/bucket-security, cloudtrail/governance-tour, eventbridge/drift-remediation | Policy simulator, Access Analyzer, Region guardrails, conformance packs (4.1.2, 4.1.5): **O-6**; Trusted Advisor (card) |
+| 4.2 | ● | kms/key-management, key-alias-encrypt-decrypt, s3/default-encryption, secretsmanager/secret-lifecycle, ssm/parameter-store-config, cloudtrail/governance-tour (Security Hub, GuardDuty), s3/metadata-tags, lambda/runtime-config, centralized-logging | ACM in transit and KMS troubleshooting (4.2.2, 4.2.3): **O-6** |
+| 5.1 | ● | ec2/vpc-public-private, security-controls, nat-three-tier, s3-gateway-endpoint, sqs-interface-endpoint, guided-private-s3, network-scale-out (peering, Transit Gateway), guided-web-server, wafv2/edge-throttling | Egress-only gateways, DNS Firewall audit (5.1.1, 5.1.3): **O-7** |
+| 5.2 | ● | route53/routing-failover, cloudfront/edge-delivery (with Global Accelerator) | Resolver rules, query logging (unsupported), CloudFront caching issues (no invalidations): **O-7** and card |
+| 5.3 | ◐ | ec2/guided-broken-route, network-scale-out (flow logs), security-controls, guided-web-server | Network ACL return traffic, flow log and ELB log reading, DNS resolution faults: **O-7**; hybrid connectivity and Network Monitor (card) |
+
+Most of domains 2, 4 and 5 are hands-on from the SAA and DOP work. The gaps are the operator's view: the agent and alarm actions, rule and runbook troubleshooting, performance tuning from metrics, timed restores, failed deployments, access troubleshooting, and reading network logs.
+
+### What Floci 2.4.0 does for CloudOps services
+
+Probed 2026-11-04 with real SDK calls, and checked against the Floci source at the 2.4.0 tag. The DevOps probe in §9 still applies (Systems Manager, Auto Scaling, Config, CloudWatch).
+
+| Area | Result |
+|---|---|
+| **CloudWatch alarms** | **Partial.** Metric and composite alarms evaluate. Alarm actions run for SNS and for Application Auto Scaling policies (an alarm scales an ECS service, with cooldowns). EC2 actions (`arn:aws:automate:...:ec2:reboot`) are stored but not applied, and alarm state changes send no `CloudWatch Alarm State Change` events to EventBridge. |
+| **CloudWatch dashboards** | **Behaves (stored).** `PutDashboard` accepts widgets with another `accountId` and `region`, and `GetDashboard` returns them. Observability Access Manager sinks can be listed. `PutAnomalyDetector` is unsupported. |
+| **CloudWatch agent** | No agent. Floci instances are containers; metrics come only from the API (`PutMetricData`). The agent's Parameter Store configuration can be stored. |
+| **EventBridge** | **Behaves.** Input transformers are accepted, `TestEventPattern` evaluates patterns, archives exist. |
+| **Systems Manager** | **Partial.** Automation documents can be created, but `StartAutomationExecution`, maintenance windows, patch baselines (other than listing the defaults), patch states, Inventory, Compliance, Session Manager and OpsItems are unsupported. `AWS-RunShellScript` is not a listed document for associations. |
+| **EBS** | **Partial.** `ModifyVolume` (gp2 to gp3 with IOPS and throughput) completes at once, with a modification record. `CreateSnapshot` is unsupported. Data Lifecycle Manager policies can be listed. |
+| **EC2** | **Partial.** `CreateImage` and `CopyImage` exist. Placement groups and Reachability Analyzer are unsupported. |
+| **RDS** | **Partial.** Snapshots, point-in-time restore, read replicas, promotion, Aurora failover, storage autoscaling (`MaxAllocatedStorage`) and Performance Insights settings exist; RDS Proxy can be created (it needs real subnets). The Performance Insights API is unsupported. |
+| **S3, EFS, FSx, DataSync** | Transfer Acceleration and server access logging are stored. EFS lifecycle policies (to IA and back) are stored. DataSync is control plane. FSx is unsupported. |
+| **IAM and access** | **Partial.** The account password policy is enforced on `CreateLoginProfile`. Virtual MFA devices can be created. The policy simulator (`SimulateCustomPolicy`, `SimulatePrincipalPolicy` for users and roles) evaluates. `aws:RequestedRegion` is resolved in conditions. IAM Access Analyzer creates analyzers, but `ListFindings` and `ValidatePolicy` are not routed (they answer with an S3 signature error). Identity Center has an instance. Trusted Advisor is unsupported. |
+| **AWS Config** | Conformance packs are stored; `DescribeConformancePackCompliance` and remediation configurations are unsupported. |
+| **ACM** | **Control plane.** A requested certificate is `ISSUED` at once, without validation. |
+| **Security services** | GuardDuty and Network Firewall are control plane. Security Hub `GetFindings`, Inspector and Shield are not routed or unsupported. Macie needs to be enabled. |
+| **VPC networking** | **Stored, not routed.** Network ACLs, egress-only internet gateways, VPC peering (with accept) and Transit Gateways are created; flow logs exist (see the network-scale-out lab). Traffic between Floci containers ignores them. VPN and Direct Connect are unsupported. |
+| **Route 53 and Resolver** | Records and health checks stored (health checks never probe). Resolver rules and endpoints list, and DNS Firewall domain lists work, but firewall rule groups and Resolver query logging are unsupported, and public query logging fails. |
+| **CloudFront and Global Accelerator** | Distributions and accelerators are stored; CloudFront invalidations are unsupported. |
+| **ELB** | Load balancer attributes include `access_logs.s3.enabled` (stored); no log files are written. |
+| **AWS RAM** | **Control plane.** Resource shares can be created and listed. |
+| **Unsupported** | Image Builder, Compute Optimizer, Performance Insights, Internet Monitor, Network Monitor, VPC Lattice, Trusted Advisor, Shield, FSx, Direct Connect, VPN. |
+
+### Wave O: CloudOps Associate labs
+
+A new curriculum level, **Level 11: CloudOps Associate**, holds these labs. Each lab follows the existing pattern and says in each step what Floci only stores versus what it does. Ship one lab per PR, in this order.
+
+| # | Proposed lab | Steps | SOA | Floci |
+|---|---|---|---|---|
+| O-1 | **Fleet monitoring and alarm actions** (`cloudwatch/fleet-monitoring`): a CloudWatch agent configuration in Parameter Store, memory and disk metrics collected from instances with Run Command and published to the CWAgent namespace, an alarm per instance that notifies SNS, an EC2 recover action, a composite alarm, an alarm that scales an ECS service through Application Auto Scaling, and a dashboard with widgets from two Regions and a second account | ~8 | 1.1, 2.1, 1.2 | ✅ alarms, SNS, Application Auto Scaling real; ⚠️ no agent (the lab collects for it), EC2 actions stored only |
+| O-2 | **Event-driven operations and runbooks** (`eventbridge/ops-automation`): a rule that never fires debugged with `TestEventPattern`, an input transformer that enriches the alert, a failing target found through its dead-letter queue, an Automation runbook document (stored), the same steps run by a Lambda function and Run Command, and a scheduled operational task with EventBridge Scheduler | ~8 | 1.2, 3.2 | ✅ rules, transformers, DLQs, Lambda, Run Command; ⚠️ Automation executions unsupported |
+| O-3 | **Performance tuning from metrics** (`ec2/performance-tuning`): a gp2 volume moved to gp3 with more IOPS and throughput, an instance resized after a CPU alarm, RDS storage autoscaling, Performance Insights and an RDS Proxy, S3 Transfer Acceleration and multipart thresholds, and EFS lifecycle tiering | ~8 | 1.3, 2.1 | ✅ volume modifications; ⚠️ RDS, S3 and EFS settings stored; no placement groups |
+| O-4 | **Backup and restore drill** (`backup/restore-drill`): an AMI of a configured instance, an RDS snapshot and point-in-time restore, a DynamoDB point-in-time restore, an S3 object recovered from a version, each timed against an RTO and RPO, and the application pointed at the restored resources | ~8 | 2.3, 2.2 | ✅ RDS, DynamoDB and S3 restores real; ⚠️ no EBS snapshots or Backup restore jobs |
+| O-5 | **Provisioning troubleshooting and sharing** (`cloudformation/deployment-troubleshooting`): a stack that fails on a missing permission (IAM enforcement), on a subnet too small for its instances, and on an invalid property, each fixed from the first failed event; an AMI copied to another Region; a subnet shared with AWS RAM | ~8 | 3.1, 4.1 | ✅ stacks, rollbacks, enforcement, AMI copy; ⚠️ RAM shares stored only, subnet sizing checked by the lab |
+| O-6 | **Access troubleshooting and compliance** (`iam/access-troubleshooting`): a denied call found in CloudTrail and explained with the policy simulator, a fixed policy proven, a Region guardrail with `aws:RequestedRegion`, a conformance pack whose rules the lab evaluates, an ACM certificate on an HTTPS listener, and a KMS failure traced to a disabled key | ~8 | 4.1, 4.2 | ✅ enforcement, simulator, KMS key states; ⚠️ conformance packs stored, ACM issues without validation |
+| O-7 | **Network troubleshooting** (`ec2/network-troubleshooting`): a network ACL that drops return traffic, an egress-only gateway for IPv6, flow log records read for REJECT, ELB access log settings, a Route 53 Resolver forwarding rule and a DNS Firewall domain list, and a CloudFront cache-key problem the lab diagnoses | ~8 | 5.3, 5.1, 5.2 | ⚠️ network rules stored, not enforced, so the lab evaluates the path; no invalidations or query logging |
+
+**Projected SOA coverage:** today 10 of 13 task statements are ● hands-on and three are ◐ (1.2, 1.3, 5.3). O-2 makes 1.2 hands-on, O-3 makes 1.3 hands-on, and O-7 makes 5.3 hands-on; the other labs add the operator skills the existing labs skip. After Wave O all 13 are ●, with the agent, Automation, Trusted Advisor, and hybrid connectivity left to concept cards.
+
+---
+
+## 11. Extending to other certification tracks
 
 The structure above is exam-agnostic. A new track needs three things:
 
@@ -698,7 +780,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 | Track | Fit with today's labs | Likely new labs | Floci constraints |
 |---|---|---|---|
 | **Developer – Associate (DVA-C02)** | **Track live since 2026-10-24; see [§7](#7-developer--associate-dva-c02).** | Wave D (D-1 to D-6) | X-Ray, CodeCommit, and Private CA unsupported |
-| **CloudOps Engineer – Associate (SOA-C03)**, which replaced SysOps (SOA-C02, retired 2025-09-29) | Medium. CloudWatch, SSM Run Command, the route-repair lab, and CloudFormation fit. | CloudWatch agent and dashboards, alarms to auto-remediation, Backup, ASG ops, Config remediation | SSM Automation, Patch Manager, and Session Manager unsupported; composite alarms unsupported |
+| **CloudOps Engineer – Associate (SOA-C03)**, which replaced SysOps (SOA-C02, retired 2025-09-29) | **Track live since 2026-11-04; see [§10](#10-cloudops-engineer--associate-soa-c03).** | Wave O (O-1 to O-7) | No CloudWatch agent, Automation executions, Patch Manager, EBS snapshots, Trusted Advisor, or enforced network rules |
 | **DevOps Engineer – Professional (DOP-C02)** | **Track live since 2026-11-02; see [§9](#9-devops-engineer--professional-dop-c02).** | Wave P (P-1 to P-7) | No drift detection, SSM Automation, Patch Manager, Config remediation, or ABAC evaluation |
 | **Solutions Architect – Professional** (training vendors report SAP-C02's last day as 2026-11-16 with a successor to follow; not confirmed on aws.amazon.com) | Builds on the SAA track. | Multi-account network hub (TGW), cross-account roles at scale, DR across Regions, migration with DMS | Hybrid networking and real multi-Region behavior are mostly concept |
 | **Security – Specialty** | IAM, KMS, S3 security, VPC controls. | KMS and key policies, Secrets rotation, GuardDuty, Security Hub, Macie, Config rules, CloudTrail analysis, WAF | **Key-policy and SCP enforcement gaps** limit "prove the deny" labs; detection services are control plane only |
@@ -711,7 +793,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 
 ---
 
-## 11. Keeping this current
+## 12. Keeping this current
 
 - **When AWS revises a guide,** update `EXAM_GUIDES`. The "no orphan objective" test then flags labs tagged with removed task IDs.
 - **When Floci upgrades,** rerun the probe for anything marked control plane, unsupported, or inconclusive in §4. Several topics, especially SCP and KMS key-policy enforcement, S3 replication, and NAT egress, would move labs from "configuration only" to "prove it works."
