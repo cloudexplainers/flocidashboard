@@ -1928,6 +1928,28 @@ Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature valid
 | `aws:SecureTransport` | A Deny when it is false does not block plain HTTP requests. | The lab checks the statement |
 | AWS Config | `PutConformancePack` stores the pack but creates none of its rules. Custom rules accept `PutEvaluations` when `ResultToken` is the rule name, and `DescribeComplianceByConfigRule` reports the result. | The lab evaluates and records the rules |
 
+## Network troubleshooting lab (2026-11-04)
+
+`ec2/network-troubleshooting` (SOA 5.3, 5.1, 5.2), 7 steps, in `dashboard/labs/ec2_network_troubleshooting_labs.py`
+(dispatched from `ec2_labs.py`, Level 11: CloudOps Associate, Wave O item O-7, the last of Wave O). It creates the VPC
+`lab-nettrouble` (10.62.0.0/16 with an Amazon IPv6 block) with three subnets, an internet gateway, an egress-only
+gateway, a NAT gateway with an Elastic IP, two route tables, the network ACL `lab-nettrouble-web`, two security groups,
+a web server network interface, a flow log, the bucket `lab-nettrouble-logs-000000000000`, the load balancer
+`lab-nettrouble-alb`, the private zone `app.internal`, an outbound Resolver endpoint and the forwarding rule
+`lab-nettrouble-corp`, a DNS Firewall domain list, two cache policies and a distribution. Reset removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Network ACLs | Custom ACLs, numbered entries with port ranges, the 32767 default deny, and `ReplaceNetworkAclAssociation` are stored. No traffic is filtered. | The lab evaluates the rules in order |
+| Flow logs | A subnet flow log to S3 with a custom format (including `flow-direction`) is ACTIVE; no records are written. | The lab builds the records AWS would write |
+| Routes | NAT gateway (with an Elastic IP) and egress-only gateway routes, including `::/0`, are stored and active. Reachability Analyzer is unsupported. | The lab traces routes by longest prefix |
+| IPv6 | `AmazonProvidedIpv6CidrBlock` gives the VPC a /56; a subnet can get a /64 at creation, but `AssociateSubnetCidrBlock` is unsupported. Floci accepts a malformed IPv6 subnet block. | The subnet is created with its /64 |
+| ELB access logs | `access_logs.s3.*` attributes are stored; no log files are written. | The lab reads sample entries in the AWS format |
+| DNS | `ModifyVpcAttribute` for DNS support and hostnames, private hosted zones, outbound Resolver endpoints, forwarding rules and their VPC associations work. `UpdateFirewallDomains`, `ListFirewallDomains` and firewall rule groups are unknown operations. Nothing answers DNS queries. | The lab resolves each name itself |
+| CloudFront | Custom cache policies (query string allow lists, cookies) and a distribution with a custom origin reach Deployed; no edge cache or invalidations. | The lab computes cache keys and the hit ratio |
+
 ## Recommended next work
 
 | Item | Why not here |

@@ -244,6 +244,7 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'backup', key: 'restore-drill', title: 'Run a timed backup and restore drill across EC2, DynamoDB, S3, and RDS', stepCount: 8 },
       { service: 'cloudformation', key: 'deployment-troubleshooting', title: 'Troubleshoot deployments: denied deploys, failed stacks, full subnets, AMI copies, and shared subnets', stepCount: 7 },
       { service: 'iam', key: 'access-troubleshooting', title: 'Troubleshoot access: denied calls, the policy simulator, KMS, TLS, external access, and compliance', stepCount: 7 },
+      { service: 'ec2', key: 'network-troubleshooting', title: 'Troubleshoot networks: ACLs, flow logs, egress, IPv6, load balancer logs, DNS, and caching', stepCount: 7 },
     ],
   },
 ];

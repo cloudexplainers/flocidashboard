@@ -514,6 +514,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('backup', 'restore-drill'): _tags(soa='2.3 2.2', dop='3.3'),
     ('cloudformation', 'deployment-troubleshooting'): _tags(soa='3.1 4.1', dop='5.3'),
     ('iam', 'access-troubleshooting'): _tags(soa='4.1 4.2', dop='6.2'),
+    ('ec2', 'network-troubleshooting'): _tags(soa='5.3 5.1 5.2'),
 }
 
 
@@ -1275,8 +1276,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Audit network protection in an account: Route 53 Resolver DNS Firewall, AWS WAF, Shield, and Network Firewall. Cut network cost with endpoints instead of NAT for AWS traffic and by keeping traffic in one AZ.',
             'Floci stores VPC networking, including network ACLs, egress-only gateways, peering, and Transit Gateways, without routing real traffic by it, and has no Reachability Analyzer, Network Monitor, VPN, or Direct Connect.',
         ],
-        'related_labs': [('ec2', 'security-controls'), ('ec2', 'guided-broken-route'), ('ec2', 'network-scale-out'), ('ec2', 'nat-three-tier'), ('ec2', 's3-gateway-endpoint')],
-        'planned': 'O-7 Network troubleshooting',
+        'related_labs': [('ec2', 'network-troubleshooting'), ('ec2', 'security-controls'), ('ec2', 'guided-broken-route'), ('ec2', 'network-scale-out'), ('ec2', 'nat-three-tier'), ('ec2', 's3-gateway-endpoint')],
+        'planned': None,
     },
     {
         'key': 'dns-content-delivery',
@@ -1290,8 +1291,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Global Accelerator gives two static anycast IP addresses and fast regional failover for TCP and UDP; CloudFront caches HTTP content at the edge.',
             'Floci stores Route 53 records, health checks, Resolver rules, and CloudFront distributions, but does not support query logging or CloudFront invalidations, and its health checks never probe.',
         ],
-        'related_labs': [('route53', 'routing-failover'), ('cloudfront', 'edge-delivery')],
-        'planned': 'O-7 Network troubleshooting',
+        'related_labs': [('ec2', 'network-troubleshooting'), ('route53', 'routing-failover'), ('cloudfront', 'edge-delivery')],
+        'planned': None,
     },
 ]
 

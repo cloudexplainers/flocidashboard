@@ -12,6 +12,7 @@ from django.core.cache import cache
 from dashboard.aws import _clean_response
 from . import ec2_nat_labs as nat_three_tier
 from . import ec2_network_labs as network_scale_out
+from . import ec2_network_troubleshooting_labs as network_troubleshooting
 from . import ec2_performance_labs as performance_tuning
 from . import ec2_shared_responsibility_labs as shared_responsibility
 from . import ec2_storage_labs as block_file_storage
@@ -2688,11 +2689,16 @@ LABS = [
     network_scale_out.LAB,
     shared_responsibility.LAB,
     performance_tuning.LAB,
+    network_troubleshooting.LAB,
     *GUIDED_EC2_LABS,
 ]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'ec2' and lab_key == 'network-troubleshooting':
+        from .ec2_network_troubleshooting_labs import run_step as troubleshoot_run_step
+        return troubleshoot_run_step(step_key)
+
     if service_key == 'ec2' and lab_key == 'nat-three-tier':
         from .ec2_nat_labs import run_step as nat_run_step
         return nat_run_step(step_key)
@@ -2794,6 +2800,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'ec2' and lab_key == 'network-troubleshooting':
+        from .ec2_network_troubleshooting_labs import status as troubleshoot_status
+        return troubleshoot_status()
+
     if service_key == 'ec2' and lab_key == 'nat-three-tier':
         from .ec2_nat_labs import status as nat_status
         return nat_status()
@@ -3154,6 +3164,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'ec2' and lab_key == 'network-troubleshooting':
+        from .ec2_network_troubleshooting_labs import reset as troubleshoot_reset
+        return troubleshoot_reset()
+
     if service_key == 'ec2' and lab_key == 'nat-three-tier':
         from .ec2_nat_labs import reset as nat_reset
         return nat_reset()
