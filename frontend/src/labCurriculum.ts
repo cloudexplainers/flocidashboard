@@ -241,6 +241,7 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'cloudwatch', key: 'fleet-monitoring', title: 'Monitor an EC2 fleet with agent metrics, alarm actions, alarm-driven scaling, and a shared dashboard', stepCount: 8 },
       { service: 'eventbridge', key: 'ops-automation', title: 'Run event-driven operations: fix a silent rule, replay missed events, catch failed deliveries, and run a runbook', stepCount: 8 },
       { service: 'ec2', key: 'performance-tuning', title: 'Tune performance from metrics: right-size an instance, move a volume to gp3, and tune RDS and S3', stepCount: 8 },
+      { service: 'backup', key: 'restore-drill', title: 'Run a timed backup and restore drill across EC2, DynamoDB, S3, and RDS', stepCount: 8 },
     ],
   },
 ];

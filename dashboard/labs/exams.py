@@ -511,6 +511,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('cloudwatch', 'fleet-monitoring'): _tags(soa='1.1 2.1 1.2', dop='4.3'),
     ('eventbridge', 'ops-automation'): _tags(soa='1.2 3.2', dop='5.2 4.3'),
     ('ec2', 'performance-tuning'): _tags(soa='1.3 2.1 1.1'),
+    ('backup', 'restore-drill'): _tags(soa='2.3 2.2', dop='3.3'),
 }
 
 
@@ -1214,8 +1215,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'DR strategies from cheapest and slowest to fastest: backup and restore, pilot light, warm standby, and multi-site active/active.',
             'Floci restores DynamoDB to a point in time and from backups, restores RDS from snapshots and to a point in time (as a copy of the source as it is now), creates AMIs, and keeps S3 versions, but does not support EBS snapshots or AWS Backup restore jobs.',
         ],
-        'related_labs': [('backup', 'backup-dr-plan'), ('rds', 'aurora-resilience'), ('s3', 'version-recovery'), ('s3', 'data-protection-tiers'), ('dynamodb', 'capacity-at-scale')],
-        'planned': 'O-4 Backup and restore drill',
+        'related_labs': [('backup', 'restore-drill'), ('backup', 'backup-dr-plan'), ('rds', 'aurora-resilience'), ('s3', 'version-recovery'), ('s3', 'data-protection-tiers'), ('dynamodb', 'capacity-at-scale')],
+        'planned': None,
     },
     {
         'key': 'provisioning-troubleshooting',

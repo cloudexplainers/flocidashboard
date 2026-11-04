@@ -1861,6 +1861,26 @@ Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature valid
 | S3 | Multipart uploads give `-N` ETags and ranged GETs return the range; Transfer Acceleration is stored only. | Real, acceleration stored |
 | Compute Optimizer | Unknown operation. | Explained |
 
+## Backup and restore drill lab (2026-11-04)
+
+`backup/restore-drill` (SOA 2.3, 2.2), 8 steps, in `dashboard/labs/backup_restore_drill_labs.py` (dispatched from
+`monolith.py`, Level 11: CloudOps Associate, Wave O item O-4). It creates the instances `lab-drill-web` and
+`lab-drill-web-restored`, the AMI `lab-drill-golden`, the tables `lab-drill-orders` and `lab-drill-orders-restored`,
+the bucket `lab-drill-assets`, the databases `lab-drill-db` and `lab-drill-db-restored`, the snapshot
+`lab-drill-db-before-drill`, and the parameters `/lab-drill/app/config` and `/lab-drill/recovery-targets`. Reset
+removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| `CreateImage` | Available in seconds; an instance launched from the AMI has the files written on the source. `CopyImage` works. | Real |
+| DynamoDB PITR | `RestoreTableToPointInTime` with a time one second before the incident restores the deleted and changed items. | Real |
+| S3 versions | The overwritten object keeps its earlier version; copying it back makes it latest. | Real |
+| RDS | `LatestRestorableTime` follows the clock; `RestoreDBInstanceToPointInTime` and `RestoreDBInstanceFromDBSnapshot` start a real PostgreSQL in seconds; snapshots are available at once. | Real, timings shorter than AWS |
+| AWS Backup | `StartBackupJob` creates a recovery point; restore jobs and `ListRestoreTestingPlans` are not routed (S3 signature error with validation on). | The lab restores through each service |
+| EBS snapshots | `CreateSnapshot` is unsupported. | App files live on the root volume, captured by the AMI |
+
 ## Recommended next work
 
 | Item | Why not here |
