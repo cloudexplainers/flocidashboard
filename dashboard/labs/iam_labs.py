@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError
 from django.core.cache import cache
 
 from dashboard.aws import _clean_response
+from . import iam_access_troubleshooting_labs as access_troubleshooting
 from . import iam_account_hardening_labs as account_hardening
 from . import iam_machine_identity_labs as machine_identity
 from . import iam_organizations_labs as multi_account
@@ -2520,10 +2521,15 @@ LABS = [
     account_hardening.LAB,
     machine_identity.LAB,
     multi_account.LAB,
+    access_troubleshooting.LAB,
 ]
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'iam' and lab_key == 'access-troubleshooting':
+        from .iam_access_troubleshooting_labs import run_step as troubleshooting_run_step
+        return troubleshooting_run_step(step_key)
+
     if service_key == 'iam' and lab_key == 'multi-account-guardrails':
         from .iam_organizations_labs import run_step as organizations_run_step
         return organizations_run_step(step_key)
@@ -2647,6 +2653,10 @@ def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'iam' and lab_key == 'access-troubleshooting':
+        from .iam_access_troubleshooting_labs import status as troubleshooting_status
+        return troubleshooting_status()
+
     if service_key == 'iam' and lab_key == 'multi-account-guardrails':
         from .iam_organizations_labs import status as organizations_status
         return organizations_status()
@@ -2958,6 +2968,10 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'iam' and lab_key == 'access-troubleshooting':
+        from .iam_access_troubleshooting_labs import reset as troubleshooting_reset
+        return troubleshooting_reset()
+
     if service_key == 'iam' and lab_key == 'multi-account-guardrails':
         from .iam_organizations_labs import reset as organizations_reset
         return organizations_reset()

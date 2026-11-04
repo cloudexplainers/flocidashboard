@@ -1905,6 +1905,29 @@ Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature valid
 | AWS RAM | `CreateResourceShare` stores the share with ASSOCIATED principal and resource associations. | Stored |
 | Termination protection | `DeleteStack` is refused while it is on. | Real |
 
+## Access troubleshooting lab (2026-11-04)
+
+`iam/access-troubleshooting` (SOA 4.1, 4.2), 7 steps, in `dashboard/labs/iam_access_troubleshooting_labs.py`
+(dispatched from `iam_labs.py`, Level 11: CloudOps Associate, Wave O item O-6). It creates the user `lab-access-analyst`
+with an access key, the bucket `lab-access-reports`, the queue `lab-access-jobs`, the key `alias/lab-access-reports`, a
+certificate for `reports.lab.example`, the load balancer `lab-access-alb` with the target group `lab-access-web`, the
+analyzer `lab-access-analyzer`, the conformance pack `lab-access-s3-baseline`, and two custom Config rules. Reset
+removes all of it (the key is scheduled for deletion).
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| IAM on S3 | `s3:ListBucket` on the bucket ARN and `s3:GetObject` on `reports/*` are enforced per object; the error reads "User is not authorized to perform: s3:GetObject". An explicit deny in a bucket policy is enforced. | Real |
+| CloudTrail | `LookupEvents` returns no events for denied calls. | The lab records the error from the response |
+| Policy simulator | `SimulatePrincipalPolicy` gives `implicitDeny` for a missing action; `SimulateCustomPolicy` evaluates a proposed policy per action and resource ARN. | Real |
+| Region guardrail | A Deny with `StringNotEquals aws:RequestedRegion` blocks us-west-2 and leaves us-east-1. | Real |
+| KMS | An IAM grant on the key ARN is enforced (`AccessDeniedException` without it); a disabled key gives `DisabledException`. A Deny in the key policy is ignored. | Real; key policy gap noted |
+| ACM and ELB | A requested certificate is `ISSUED` at once with a DNS validation record. HTTPS listeners keep the certificate and `SslPolicy`; HTTP redirect actions are stored. `InUseBy` names the load balancer, and `DeleteCertificate` is refused with `ResourceInUseException`. | Real; Floci does not terminate TLS |
+| Access Analyzer | `CreateAnalyzer` and `GetAnalyzer` work (`ACTIVE`); `ListFindings`, `ListFindingsV2` and `ValidatePolicy` are not routed (S3 signature error with validation on). | The lab scans the bucket policy itself |
+| `aws:SecureTransport` | A Deny when it is false does not block plain HTTP requests. | The lab checks the statement |
+| AWS Config | `PutConformancePack` stores the pack but creates none of its rules. Custom rules accept `PutEvaluations` when `ResultToken` is the rule name, and `DescribeComplianceByConfigRule` reports the result. | The lab evaluates and records the rules |
+
 ## Recommended next work
 
 | Item | Why not here |

@@ -513,6 +513,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('ec2', 'performance-tuning'): _tags(soa='1.3 2.1 1.1'),
     ('backup', 'restore-drill'): _tags(soa='2.3 2.2', dop='3.3'),
     ('cloudformation', 'deployment-troubleshooting'): _tags(soa='3.1 4.1', dop='5.3'),
+    ('iam', 'access-troubleshooting'): _tags(soa='4.1 4.2', dop='6.2'),
 }
 
 
@@ -1244,8 +1245,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Trusted Advisor security checks (open security groups, root MFA, exposed access keys, public buckets) point at fixes; AWS Config rules and conformance packs monitor compliance continuously.',
             'Floci enforces IAM policies, boundaries, and SCP-style denies when IAM enforcement is on and runs the policy simulator, but has no Trusted Advisor, does not route Access Analyzer findings or policy validation, and stores conformance packs without evaluating them.',
         ],
-        'related_labs': [('iam', 'account-hardening'), ('iam', 'identity-enforcement-capstone'), ('iam', 'multi-account-guardrails'), ('cloudtrail', 'governance-tour')],
-        'planned': 'O-6 Access troubleshooting and compliance',
+        'related_labs': [('iam', 'access-troubleshooting'), ('iam', 'account-hardening'), ('iam', 'identity-enforcement-capstone'), ('iam', 'multi-account-guardrails'), ('cloudtrail', 'governance-tour')],
+        'planned': None,
     },
     {
         'key': 'data-protection-operations',
@@ -1259,8 +1260,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Remediate findings from Security Hub, GuardDuty, Config, and Inspector with EventBridge rules and automation.',
             'Floci enforces KMS key states and IAM permissions on KMS calls, issues ACM certificates at once, and stores GuardDuty and Security Hub settings, but has no Inspector findings or Macie discovery.',
         ],
-        'related_labs': [('kms', 'key-management'), ('secretsmanager', 'secret-lifecycle'), ('s3', 'default-encryption'), ('cloudtrail', 'governance-tour'), ('s3', 'metadata-tags')],
-        'planned': 'O-6 Access troubleshooting and compliance',
+        'related_labs': [('iam', 'access-troubleshooting'), ('kms', 'key-management'), ('secretsmanager', 'secret-lifecycle'), ('s3', 'default-encryption'), ('cloudtrail', 'governance-tour'), ('s3', 'metadata-tags')],
+        'planned': None,
     },
     {
         'key': 'network-operations',
