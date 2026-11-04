@@ -1814,6 +1814,29 @@ for alarm actions:
 | Application Auto Scaling | A step policy run by an alarm changes the ECS service's desired count (1 to 3 for a breach of 150) with a `Successful` scaling activity whose cause names the alarm. The policy runs again on every evaluation while the alarm stays in ALARM; the cooldown decides whether it scales. | Real |
 | Dashboards | `PutDashboard` stores widgets for another Region and another `accountId` and returns no validation messages; `GetDashboard` returns the body as written. | Stored only |
 
+## Event-driven operations lab (2026-11-04)
+
+`eventbridge/ops-automation` (SOA 1.2, 3.2), 8 steps, in `dashboard/labs/eventbridge_ops_automation_labs.py`
+(dispatched from `monolith.py`, Level 11: CloudOps Associate, Wave O item O-2). It creates the bus `lab-ops` with the
+archive `lab-ops-archive`, the queues `lab-ops-inbox` and `lab-ops-target-dlq`, the rule `lab-ops-disk-high`, the
+instance `lab-ops-web`, the Automation document `LabOps-ClearCache`, the function `lab-ops-clear-cache` with the role
+`lab-ops-runbook-role`, and the schedule `lab-ops-nightly-cleanup` with the role `lab-ops-scheduler-role`. Reset
+removes all of it.
+
+Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.4.0 | Lab says |
+| --- | --- | --- |
+| Case-sensitive patterns | `["critical"]` does not match `CRITICAL`, in `TestEventPattern` and in delivery. `equals-ignore-case` matches. | Real |
+| Numeric matching | `{"numeric": [">=", 90]}` never matches, in `TestEventPattern` or in delivery (it is on `main`). | Shown as unsupported |
+| Input transformers | `InputPathsMap` and `InputTemplate` render the alert text. | Real |
+| Archive and replay | The archive records the bus; `StartReplay` needs the archive ARN as `EventSourceArn` (the bus ARN fails) and replays through the rule named in `FilterArns`. | Real |
+| Target dead-letter queue | An event the target cannot take goes to the DLQ with `TARGET_ARN`, `RULE_ARN`, `ERROR_CODE` (`NO_RESOURCE`), `ERROR_MESSAGE` and `RETRY_ATTEMPTS` (0; no retries for a missing function). | Real |
+| Automation | `CreateDocument` stores a schema 0.3 runbook; `StartAutomationExecution` is not supported. | The function runs the runbook's steps |
+| Lambda calling SSM | The function reaches Floci's Run Command and SQS. With IAM enforcement on, Floci checks the role's policy, and matches `ssm:SendCommand` against an SSM resource in the account, not the instance or the `AWS-RunShellScript` document ARN. | Policy also lists `arn:aws:ssm:<region>:<account>:*` |
+| EventBridge Scheduler | `rate(1 minute)` fires a Lambda target with its `Input`; universal targets such as `aws-sdk:ssm:sendCommand` are accepted and never run. | Real for Lambda |
+| AWS/Events metrics | None (`MatchedEvents`, `FailedInvocations`). | Explained |
+
 ## Recommended next work
 
 | Item | Why not here |

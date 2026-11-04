@@ -239,6 +239,7 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     description: 'Run a workload day to day for the CloudOps Engineer – Associate exam. Store a CloudWatch agent configuration in Parameter Store, collect memory, disk, and process metrics from two instances, and alarm on a crashed web server with SNS notifications and EC2 reboot and recover actions. Combine the alarms in a composite fleet alarm, follow a failure from the alarm to the on-call queue and back to OK, scale an ECS service out from a backlog alarm with Application Auto Scaling, and build a dashboard that shows two Regions and a second account.',
     labs: [
       { service: 'cloudwatch', key: 'fleet-monitoring', title: 'Monitor an EC2 fleet with agent metrics, alarm actions, alarm-driven scaling, and a shared dashboard', stepCount: 8 },
+      { service: 'eventbridge', key: 'ops-automation', title: 'Run event-driven operations: fix a silent rule, replay missed events, catch failed deliveries, and run a runbook', stepCount: 8 },
     ],
   },
 ];

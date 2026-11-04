@@ -14,7 +14,7 @@ class EventBridgeApplicationLabTests(SimpleTestCase):
 
     def test_eventbridge_lab_is_registered_with_failure_experiments(self):
         labs = labs_for_service('eventbridge')
-        self.assertEqual([lab['key'] for lab in labs], ['application-spine', 'drift-remediation'])
+        self.assertEqual([lab['key'] for lab in labs], ['application-spine', 'drift-remediation', 'ops-automation'])
         step_keys = [step['key'] for step in labs[0]['steps']]
         self.assertEqual(step_keys[-3:], ['malformed-event', 'missing-permission', 'disabled-rule'])
 

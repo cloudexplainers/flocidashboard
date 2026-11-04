@@ -173,7 +173,7 @@ class CheckTests(SimpleTestCase):
 class RegistrationTests(SimpleTestCase):
     def test_lab_is_listed_and_tagged(self):
         self.assertEqual([item['key'] for item in labs_for_service('eventbridge')],
-                         ['application-spine', 'drift-remediation'])
+                         ['application-spine', 'drift-remediation', 'ops-automation'])
         tags = LAB_EXAM_TAGS[('eventbridge', 'drift-remediation')]
         self.assertIn({'exam': 'DOP-C02', 'task': '5.2', 'primary': True}, tags)
         card = next(card for card in CONCEPT_CARDS if card['key'] == 'auto-remediation')

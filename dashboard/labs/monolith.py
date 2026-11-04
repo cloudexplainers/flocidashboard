@@ -51,8 +51,9 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
         return LABS
     if service_key == 'eventbridge':
         from .eventbridge_application import LAB
+        from .eventbridge_ops_automation_labs import LAB as OPS_LAB
         from .eventbridge_remediation_labs import LAB as REMEDIATION_LAB
-        return [LAB, REMEDIATION_LAB]
+        return [LAB, REMEDIATION_LAB, OPS_LAB]
     if service_key == 'dynamodb':
         from .dynamodb_labs import LABS
         return LABS
@@ -579,6 +580,9 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'eventbridge' and lab_key == 'drift-remediation':
         from .eventbridge_remediation_labs import run_step
         return run_step(step_key)
+    if service_key == 'eventbridge' and lab_key == 'ops-automation':
+        from .eventbridge_ops_automation_labs import run_step
+        return run_step(step_key)
     if service_key == 'stepfunctions':
         from .stepfunctions_labs import run_step
         return run_step(service_key, lab_key, step_key)
@@ -713,6 +717,9 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status()
     if service_key == 'eventbridge' and lab_key == 'drift-remediation':
         from .eventbridge_remediation_labs import status
+        return status()
+    if service_key == 'eventbridge' and lab_key == 'ops-automation':
+        from .eventbridge_ops_automation_labs import status
         return status()
     if service_key == 'stepfunctions':
         from .stepfunctions_labs import status
@@ -853,6 +860,9 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset()
     if service_key == 'eventbridge' and lab_key == 'drift-remediation':
         from .eventbridge_remediation_labs import reset
+        return reset()
+    if service_key == 'eventbridge' and lab_key == 'ops-automation':
+        from .eventbridge_ops_automation_labs import reset
         return reset()
     if service_key == 'stepfunctions':
         from .stepfunctions_labs import reset

@@ -509,6 +509,7 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('iam', 'machine-identity'): _tags(dop='6.1 6.2', soa='4.1 4.2'),
     # Level 11
     ('cloudwatch', 'fleet-monitoring'): _tags(soa='1.1 2.1 1.2', dop='4.3'),
+    ('eventbridge', 'ops-automation'): _tags(soa='1.2 3.2', dop='5.2 4.3'),
 }
 
 
@@ -1155,8 +1156,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Maintenance windows schedule Run Command, Automation, and Lambda tasks; State Manager associations keep instances in a desired state; Patch Manager patches against a baseline.',
             'Floci runs Run Command, EventBridge rules with input transformers, and Lambda targets, and stores Automation documents, but cannot start Automation executions or maintenance windows, so labs run the same steps with Lambda or Run Command.',
         ],
-        'related_labs': [('eventbridge', 'drift-remediation'), ('eventbridge', 'application-spine'), ('ec2', 'guided-ssm-command'), ('ssm', 'fleet-release-troubleshooting')],
-        'planned': 'O-2 Event-driven operations and runbooks',
+        'related_labs': [('eventbridge', 'ops-automation'), ('eventbridge', 'drift-remediation'), ('eventbridge', 'application-spine'), ('ec2', 'guided-ssm-command'), ('ssm', 'fleet-release-troubleshooting')],
+        'planned': None,
     },
     {
         'key': 'performance-optimization',
