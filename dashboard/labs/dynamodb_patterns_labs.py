@@ -84,10 +84,16 @@ CONSISTENCY_COMMAND = (
 )
 QUERY_COMMAND = (
     f'aws dynamodb query --table-name {TABLE} --key-condition-expression "PK = :c AND begins_with(SK, :o)" '
-    f'--limit {PAGE_SIZE} [--exclusive-start-key <LastEvaluatedKey>]\n'
-    f'aws dynamodb query ... --filter-expression "#t > :big" --expression-attribute-names \'{{"#t": "total"}}\'\n'
-    f'aws dynamodb scan --table-name {TABLE} --filter-expression "#t > :big" ...\n'
-    f'aws dynamodb query --table-name {TABLE} --index-name {GSI} --key-condition-expression "GSI1PK = :open"'
+    f'--expression-attribute-values \'{{":c": {{"S": "{CUSTOMER}"}}, ":o": {{"S": "ORDER#"}}}}\' '
+    f'--limit {PAGE_SIZE}   # repeat with --exclusive-start-key <LastEvaluatedKey>\n'
+    f'aws dynamodb query --table-name {TABLE} --key-condition-expression "PK = :c AND begins_with(SK, :o)" '
+    f'--filter-expression "#t > :big" --expression-attribute-names \'{{"#t": "total"}}\' '
+    f'--expression-attribute-values \'{{":c": {{"S": "{CUSTOMER}"}}, ":o": {{"S": "ORDER#"}}, '
+    f'":big": {{"N": "{BIG_ORDER_TOTAL}"}}}}\'\n'
+    f'aws dynamodb scan --table-name {TABLE} --filter-expression "#t > :big" --expression-attribute-names \'{{"#t": "total"}}\' '
+    f'--expression-attribute-values \'{{":big": {{"N": "{BIG_ORDER_TOTAL}"}}}}\'\n'
+    f'aws dynamodb query --table-name {TABLE} --index-name {GSI} --key-condition-expression "GSI1PK = :open" '
+    f'--expression-attribute-values \'{{":open": {{"S": "STATUS#OPEN"}}}}\''
 )
 PARTIQL_COMMAND = (
     f'aws dynamodb execute-statement --statement "SELECT SK, total FROM \\"{TABLE}\\" WHERE PK = ? AND begins_with(SK, ?)" '

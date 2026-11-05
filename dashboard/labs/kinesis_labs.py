@@ -170,7 +170,7 @@ DELIVERY_COMMAND = (
     '--delivery-stream-type KinesisStreamAsSource '
     f'--kinesis-stream-source-configuration KinesisStreamARN={STREAM_ARN},RoleARN={ROLE_ARN} '
     f"--extended-s3-destination-configuration 'RoleARN={ROLE_ARN},BucketARN=arn:aws:s3:::{LAKE_BUCKET},"
-    f'Prefix={FIREHOSE_PREFIX},ErrorOutputPrefix={ERROR_PREFIX},'
+    f'Prefix="{FIREHOSE_PREFIX}",ErrorOutputPrefix="{ERROR_PREFIX}",'
     f"BufferingHints={{SizeInMBs={BUFFER_MB},IntervalInSeconds={BUFFER_SECONDS}}},CompressionFormat=UNCOMPRESSED'"
 )
 PRODUCE_COMMAND = (

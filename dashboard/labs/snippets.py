@@ -160,6 +160,8 @@ _FILE_TOKEN = '{"__floci_snippet_file__": %d}'
 _FILE_TOKEN_RE = re.compile(r'^\{"__floci_snippet_file__": (\d+)\}$')
 _PLACEHOLDER_RE = re.compile(r'^<[^<>]+>$')
 
+_ABBREVIATED_NOTE = 'The lab abbreviates this command (...); fill in the remaining parameters.'
+
 _driver_lock = threading.Lock()
 _driver_state: dict[str, Any] = {}
 
@@ -183,6 +185,24 @@ def _driver():
         saved = os.environ.get('AWS_DATA_PATH')
         try:
             from awscli.clidriver import create_clidriver
+            from awscli.customizations import toplevelbool
+
+            # The CLI expects one command per process: each EC2 command it parses registers a
+            # --flag/--no-flag check on every EC2 command. In a reused driver that check then
+            # runs against other commands' arguments and breaks them, so skip missing flags.
+            check = toplevelbool.validate_boolean_mutex_groups
+
+            def _check_own_flags(boolean_pairs, parsed_args, **kwargs):
+                own = [
+                    (pos, neg)
+                    for pos, neg in boolean_pairs
+                    if hasattr(parsed_args, pos.py_name) and hasattr(parsed_args, neg.py_name)
+                ]
+                return check(own, parsed_args, **kwargs)
+
+            if not getattr(check, '_floci_safe', False):
+                _check_own_flags._floci_safe = True
+                toplevelbool.validate_boolean_mutex_groups = _check_own_flags
 
             driver = create_clidriver()
             driver.session.get_component('data_loader')
@@ -356,12 +376,16 @@ def _parse_aws_uncached(tokens: list[str], files: list[tuple[str, bool]]) -> tup
             token = _FILE_TOKEN % (len(files) - 1)
         args.append(token)
         i += 1
-    abbreviated = '...' in args
+    elided = '...' in args  # whole arguments left out: the CLI parser would reject the line
+    # Values the lab shortens ("PASSWORD=...", '[...]') parse but are not runnable as written.
+    abbreviated = elided or any('...' in a for a in args if not _PLACEHOLDER_RE.match(a))
 
     if cli_service == 's3':
         call = _s3_highlevel(cli_operation, args, files)
         if call:
             call.region, call.profile, call.cli = region, profile, f's3 {cli_operation}'
+            if abbreviated and not call.note:
+                call.note = _ABBREVIATED_NOTE
         return call, '' if call else f'`aws s3 {cli_operation}` has no single boto3 call'
     if cli_operation == 'wait' and args:
         call, reason = _waiter_call(cli_service, args, region, profile)
@@ -416,7 +440,7 @@ def _parse_aws_uncached(tokens: list[str], files: list[tuple[str, bool]]) -> tup
             streaming = 'Payload'
 
     params = None
-    if not abbreviated:
+    if not elided:
         parse_args = list(args)
         if streaming:
             # Pull the positional outfile out first so placeholders in it don't confuse the parser.
@@ -448,7 +472,7 @@ def _parse_aws_uncached(tokens: list[str], files: list[tuple[str, bool]]) -> tup
         query=query,
         outfile=outfile if streaming else '',
         streaming_member=streaming,
-        note='The lab abbreviates this command (...); fill in the remaining parameters.' if abbreviated else '',
+        note=_ABBREVIATED_NOTE if abbreviated else '',
     ), ''
 
 
