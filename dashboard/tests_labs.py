@@ -7410,16 +7410,47 @@ class MultiSdkSnippetsTests(SimpleTestCase):
         self.assertIn("create_bucket", snippet)
         self.assertIn("Bucket='demo-bucket'", snippet)
 
+    def test_boto3_snippet_uses_cli_parsing_for_shorthand_lists_and_numbers(self):
+        from dashboard.labs.snippets import generate_boto3_snippet
+
+        snippet = generate_boto3_snippet(
+            'aws ec2 run-instances --image-id ami-1 --security-group-ids sg-1 sg-2 '
+            '--tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=web}]" --query Instances[0].InstanceId'
+        )
+        self.assertIn("SecurityGroupIds=['sg-1', 'sg-2']", snippet)
+        self.assertIn("'Tags': [{'Key': 'Name', 'Value': 'web'}]", snippet)
+        self.assertIn('MinCount=1', snippet)
+        self.assertIn("print(jmespath.search('Instances[0].InstanceId', response))", snippet)
+        self.assertNotIn('Query=', snippet)
+
+    def test_boto3_snippet_reads_file_arguments_and_skips_cli_only_options(self):
+        from dashboard.labs.snippets import generate_boto3_snippet
+
+        snippet = generate_boto3_snippet(
+            'aws lambda invoke --function-name f --cli-binary-format raw-in-base64-out --payload \'{"a": 1}\' out.json\n'
+            'aws iam put-role-policy --role-name r --policy-name p --policy-document file://policy.json'
+        )
+        self.assertNotIn('CliBinaryFormat', snippet)
+        self.assertIn("PolicyDocument=open('policy.json').read()", snippet)
+        self.assertIn("with open('out.json', 'wb') as f:", snippet)
+
     def test_generate_terraform_snippet_for_s3_and_sqs(self):
         from dashboard.labs.snippets import generate_terraform_snippet
 
         s3_tf = generate_terraform_snippet('aws s3api create-bucket --bucket orders-bucket')
-        self.assertIn('resource "aws_s3_bucket" "lab_bucket"', s3_tf)
-        self.assertIn('bucket        = "orders-bucket"', s3_tf)
+        self.assertIn('resource "aws_s3_bucket" "orders_bucket"', s3_tf)
+        self.assertIn('bucket = "orders-bucket"', s3_tf)
 
         sqs_tf = generate_terraform_snippet('aws sqs create-queue --queue-name orders-queue.fifo')
-        self.assertIn('resource "aws_sqs_queue" "lab_queue"', sqs_tf)
-        self.assertIn('fifo_queue                  = true', sqs_tf)
+        self.assertIn('resource "aws_sqs_queue" "orders_queue_fifo"', sqs_tf)
+        self.assertIn('fifo_queue = true', sqs_tf)
+
+    def test_terraform_snippet_explains_steps_without_a_resource(self):
+        from dashboard.labs.snippets import generate_terraform_snippet
+
+        tf = generate_terraform_snippet('aws lambda invoke --function-name f out.json')
+        self.assertNotIn('resource "', tf)
+        self.assertIn('aws lambda invoke: no Terraform equivalent', tf)
 
     def test_get_step_snippets_returns_all_three_targets(self):
         from dashboard.labs.snippets import get_step_snippets
@@ -7432,3 +7463,48 @@ class MultiSdkSnippetsTests(SimpleTestCase):
         self.assertEqual(snippets['cli'], 'aws iam create-user --user-name Alice')
         self.assertIn('iam = boto3.client(\'iam\')', snippets['boto3'])
         self.assertIn('resource "aws_iam_user"', snippets['terraform'])
+
+    def test_every_lab_snippet_is_valid_python_and_real_terraform(self):
+        """Every boto3 snippet compiles and calls real API operations with real parameters;
+        every Terraform snippet only declares resource types the generator knows exist."""
+        import ast
+
+        import botocore.session
+
+        from dashboard.labs.registry import all_labs
+        from dashboard.labs.snippets import _TF_RESOURCE_TYPES, get_step_snippets
+
+        session = botocore.session.get_session()
+        models = {}
+        helpers = {'upload_file', 'download_file', 'generate_presigned_url', 'get_waiter'}
+        for lab in all_labs():
+            for step in lab.get('steps', []):
+                where = f"{lab.get('service')}/{lab.get('key')}/{step.get('key')}"
+                snippets = get_step_snippets(step, lab.get('service'))
+                tree = ast.parse(snippets['boto3'], filename=where)
+                clients = {}
+                for node in ast.walk(tree):
+                    if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+                            and getattr(node.value.func, 'attr', '') == 'client'):
+                        clients[node.targets[0].id] = node.value.args[0].value
+                for node in ast.walk(tree):
+                    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                            and isinstance(node.func.value, ast.Name) and node.func.value.id in clients):
+                        continue
+                    if node.func.attr in helpers:
+                        continue
+                    service = clients[node.func.value.id]
+                    if service not in models:
+                        model = session.get_service_model(service)
+                        models[service] = (model, {botocore.xform_name(n): n for n in model.operation_names})
+                    model, ops = models[service]
+                    self.assertIn(node.func.attr, ops, where)
+                    shape = model.operation_model(ops[node.func.attr]).input_shape
+                    members = shape.members if shape else {}
+                    for kw in node.keywords:
+                        self.assertIn(kw.arg, members, f'{where}: {service}.{node.func.attr}({kw.arg}=...)')
+
+                tf = snippets['terraform']
+                self.assertEqual(tf.count('{'), tf.count('}'), where)
+                for resource_type in re.findall(r'^resource "([^"]+)"', tf, re.M):
+                    self.assertIn(resource_type, _TF_RESOURCE_TYPES, where)

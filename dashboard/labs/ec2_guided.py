@@ -61,7 +61,10 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'launch-userdata-instance',
                 'title': 'Launch instance with UserData script',
-                'command': "aws ec2 run-instances --image-id ami-ubuntu2204 --user-data '#!/bin/sh\\necho floci-userdata-ok > /tmp/floci-userdata.txt\\n'",
+                'command': (
+                    "printf '#!/bin/sh\\necho floci-userdata-ok > /tmp/floci-userdata.txt\\n' > userdata.sh\n"
+                    "aws ec2 run-instances --image-id ami-ubuntu2204 --user-data file://userdata.sh"
+                ),
                 'explanation': 'UserData scripts execute automatically as root during the initial instance boot sequence.',
             },
             {

@@ -152,7 +152,7 @@ CANARY_COMMAND = (
     f'--environment Variables={{PRICING_RULE={V2_RULE}}}\n'
     f'aws lambda publish-version --function-name {FUNCTION} --description "{V2_DESCRIPTION}"\n'
     f'aws lambda update-alias --function-name {FUNCTION} --name {ALIAS} --function-version 1 '
-    f"--routing-config 'AdditionalVersionWeights={{\"2\"={CANARY_WEIGHT}}}'\n"
+    f"--routing-config 'AdditionalVersionWeights={{2={CANARY_WEIGHT}}}'\n"
     f'# invoke {FUNCTION}:{ALIAS} {CANARY_INVOCATIONS} times and count ExecutedVersion'
 )
 CONCURRENCY_COMMAND = (
