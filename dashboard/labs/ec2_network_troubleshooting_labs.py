@@ -129,7 +129,7 @@ DNS_COMMAND = (
     '--hosted-zone-config PrivateZone=true --caller-reference <ref>\n'
     f'aws route53resolver create-resolver-endpoint --name {RESOLVER_ENDPOINT} --direction OUTBOUND ...\n'
     f'aws route53resolver create-resolver-rule --name {RESOLVER_RULE} --rule-type FORWARD '
-    f'--domain-name {CORP_DOMAIN} --target-ips Ip={CORP_DNS},Port=53 --resolver-endpoint-id <endpoint>\n'
+    f'--domain-name {CORP_DOMAIN} --target-ips Ip={CORP_DNS},Port=53 --resolver-endpoint-id <endpoint> --creator-request-id <ref>\n'
     'aws route53resolver associate-resolver-rule --resolver-rule-id <rule> --vpc-id <vpc>\n'
     f'aws route53resolver create-firewall-domain-list --name {DOMAIN_LIST}'
 )

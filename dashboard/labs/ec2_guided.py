@@ -40,13 +40,13 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'query-instance-id',
                 'title': 'Query instance ID from IMDS',
-                'command': 'aws ssm send-command --instance-ids <instance-id> --parameters commands="curl -s http://169.254.169.254/latest/meta-data/instance-id"',
+                'command': 'aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters commands="curl -s http://169.254.169.254/latest/meta-data/instance-id"',
                 'explanation': 'Queries the special non-routable link-local IP 169.254.169.254 from within the guest operating system.',
             },
             {
                 'key': 'query-network-meta',
                 'title': 'Query guest IP address from IMDS',
-                'command': 'aws ssm send-command --instance-ids <instance-id> --parameters commands="curl -s http://169.254.169.254/latest/meta-data/local-ipv4"',
+                'command': 'aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters commands="curl -s http://169.254.169.254/latest/meta-data/local-ipv4"',
                 'explanation': 'Retrieves the primary private IPv4 address assigned to the guest interface.',
             },
         ],
@@ -61,19 +61,22 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'launch-userdata-instance',
                 'title': 'Launch instance with UserData script',
-                'command': "aws ec2 run-instances --image-id ami-ubuntu2204 --user-data '#!/bin/sh\\necho floci-userdata-ok > /tmp/floci-userdata.txt\\n'",
+                'command': (
+                    "printf '#!/bin/sh\\necho floci-userdata-ok > /tmp/floci-userdata.txt\\n' > userdata.sh\n"
+                    "aws ec2 run-instances --image-id ami-ubuntu2204 --user-data file://userdata.sh"
+                ),
                 'explanation': 'UserData scripts execute automatically as root during the initial instance boot sequence.',
             },
             {
                 'key': 'verify-userdata-artifact',
                 'title': 'Read generated UserData file artifact',
-                'command': "aws ssm send-command --instance-ids <instance-id> --parameters commands='cat /tmp/floci-userdata.txt'",
+                'command': "aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters commands='cat /tmp/floci-userdata.txt'",
                 'explanation': 'Inspects the guest filesystem through SSM to verify that UserData completed and created the output file.',
             },
             {
                 'key': 'verify-script-execution',
                 'title': 'Confirm initialization status',
-                'command': "aws ssm send-command --instance-ids <instance-id> --parameters commands='test -f /tmp/floci-userdata.txt && echo \"artifact-confirmed\"'",
+                'command': "aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters commands='test -f /tmp/floci-userdata.txt && echo \"artifact-confirmed\"'",
                 'explanation': 'Validates file existence and execution completion.',
             },
         ],
@@ -106,7 +109,7 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'query-role-credentials',
                 'title': 'Retrieve role credentials via IMDS',
-                'command': 'aws ssm send-command --instance-ids <instance-id> --parameters commands="curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/FlociGuidedEc2Role"',
+                'command': 'aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters commands="curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/FlociGuidedEc2Role"',
                 'explanation': 'Queries IMDS for temporary security credentials, proving the role-to-profile-to-instance chain.',
             },
         ],
@@ -133,7 +136,7 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'verify-web-response',
                 'title': 'Test HTTP response from web server',
-                'command': "aws ssm send-command --instance-ids <instance-id> --parameters commands='curl -s http://127.0.0.1:8080/'",
+                'command': "aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters commands='curl -s http://127.0.0.1:8080/'",
                 'explanation': 'Sends an HTTP GET request to port 8080 and verifies the 200 OK response payload.',
             },
         ],
