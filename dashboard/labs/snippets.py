@@ -26,6 +26,7 @@ import copy
 import io
 import json
 import keyword
+import os
 import re
 import shlex
 import threading
@@ -176,22 +177,33 @@ def _driver():
     """One AWS CLI driver, set up once through main() so its session handlers register once."""
     driver = _driver_state.get('driver')
     if driver is None:
-        from awscli.clidriver import create_clidriver
+        # Importing awscli sets AWS_DATA_PATH for the whole process, which changes how every
+        # boto3 session in the dashboard loads config. Let the CLI's own session load its data,
+        # then put the variable back.
+        saved = os.environ.get('AWS_DATA_PATH')
+        try:
+            from awscli.clidriver import create_clidriver
 
-        driver = create_clidriver()
-        driver.session.register('calling-command.*.*', _captured)
-        sink = io.StringIO()
-        with contextlib.redirect_stderr(sink), contextlib.redirect_stdout(sink):
-            driver.main(['sts', 'get-caller-identity', *_SAFE_GLOBALS])
+            driver = create_clidriver()
+            driver.session.get_component('data_loader')
+            driver.session.register('calling-command.*.*', _captured)
+            sink = io.StringIO()
+            with contextlib.redirect_stderr(sink), contextlib.redirect_stdout(sink):
+                driver.main(['sts', 'get-caller-identity', *_SAFE_GLOBALS])
+        finally:
+            if saved is None:
+                os.environ.pop('AWS_DATA_PATH', None)
+            else:
+                os.environ['AWS_DATA_PATH'] = saved
         _driver_state['driver'] = driver
     return driver
 
 
 def _operation_command(cli_service: str, cli_operation: str):
     """Return (service command, operation command) when it is a plain API operation."""
+    table = _driver()._get_command_table()  # imports awscli safely before anything else does
     from awscli.clidriver import ServiceOperation
 
-    table = _driver()._get_command_table()
     service_cmd = table.get(cli_service)
     if service_cmd is None or not hasattr(service_cmd, 'service_model'):
         return None, None
