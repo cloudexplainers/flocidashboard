@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fixed: on Docker Desktop on Apple silicon, Floci 2.4.0 runs x86 AMIs under emulation, and two labs failed there. In `cloudwatch/fleet-monitoring` the web server process never showed in `ps` (a Perl `$0` rename isn't visible under emulation), so its alarms never cleared; it now runs a copy of `sleep` under the server's name. In `ec2/performance-tuning` the 1,200 MiB report job finished inside the 1 GiB limit because its zero-filled buffer was never really used; it now writes every byte, and is killed as intended.
 - Lab snippets: every lab's Python (`boto3`) and Terraform tabs are generated from the AWS CLI command using the AWS CLI's own parser, so arguments map correctly, and the Terraform tab shows real resources for about 90 create operations (a note otherwise). Every lab's Python snippets were replayed against Floci 2.4.0, which fixed several lab commands (SSM `--document-name`, Route 53 Resolver `--creator-request-id`, quoted Firehose prefixes, and DynamoDB expression values).
 - README: rewritten around a three-command quickstart, with links to the Cloud Explainers YouTube channel and website. The longer setup, configuration, and testing notes moved to `docs/guide.md`.
 - Top navigation: a cloudexplainers.com link sits next to Learn Cloud Computing (hidden on narrow screens).

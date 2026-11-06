@@ -119,9 +119,11 @@ WORKLOAD_SCRIPT = CGROUP_HELPERS + (
     'echo "throttled=$((t2 - t1))"'
 )
 SETTLED_SCRIPT = 'echo "busy=$(ps -eo comm= | grep -cE \'^(apt|apt-get|dpkg|http|gpgv)$\')"'
+# The job writes every byte it holds. A zero-filled buffer (vec) can finish inside a 1 GiB limit when Docker emulates the
+# instance's architecture, as Docker Desktop on Apple silicon does for x86 AMIs, so the kill never came.
 REPORT_SCRIPT = CGROUP_HELPERS + (
     'before=$(oom_kills)\n'
-    f'perl -e \'$0="lab-perf-report"; vec(my $data, {REPORT_MIB} * 1048576 - 1, 8) = 1; print "report=done\\n"\'\n'
+    f'perl -e \'$0="lab-perf-report"; my $data = "r" x ({REPORT_MIB} * 1048576); print "report=done\\n"\'\n'
     'echo "exit=$?"\n'
     'echo "oom=$(( $(oom_kills) - before ))"'
 )
