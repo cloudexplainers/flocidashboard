@@ -573,6 +573,10 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('cloudformation', 'deployment-troubleshooting'): _tags(soa='3.1 4.1', dop='5.3'),
     ('iam', 'access-troubleshooting'): _tags(soa='4.1 4.2', dop='6.2', dea='4.2 4.3'),
     ('ec2', 'network-troubleshooting'): _tags(soa='5.3 5.1 5.2'),
+    # Level 12
+    ('redshift', 'serverless-warehouse'): _tags(dea='2.1 2.4 2.3 3.2 4.2 4.3', saa='3.5'),
+    ('glue', 'catalog-quality'): _tags(dea='2.2 3.4 2.4 3.2 3.3'),
+    ('stepfunctions', 'etl-pipeline'): _tags(dea='1.2 1.3 1.4 3.1 3.3 3.4', dva='1.1'),
 }
 
 
@@ -1378,8 +1382,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Troubleshoot jobs from their metrics and logs: out-of-memory errors mean larger workers or fewer records per partition, a slow stage usually means data skew (one key with most rows), and JDBC sources need the right driver, a VPC connection, and a security group that allows the port.',
             'Floci records Glue jobs and runs but does not run their scripts, and EMR runs Spark only when Floci is started in docker runner mode, so labs transform data in Lambda and SQL.',
         ],
-        'related_labs': [('kinesis', 'streaming-data-lake'), ('ecs', 'fargate-microservice'), ('lambda', 'performance-cost')],
-        'planned': 'E-3 Event-driven batch ETL',
+        'related_labs': [('kinesis', 'streaming-data-lake'), ('ecs', 'fargate-microservice'), ('lambda', 'performance-cost'), ('stepfunctions', 'etl-pipeline')],
+        'planned': None,
     },
     {
         'key': 'pipeline-orchestration',
@@ -1392,7 +1396,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Design for failure: idempotent steps (safe to rerun), checkpoints or manifests of processed files, dead-letter queues, and alerts to SNS or SQS when a run fails.',
             'Floci runs Step Functions with Lambda, SNS, SQS, DynamoDB, and the Redshift Data API, and MWAA as a real Airflow, but the Glue and Athena service integrations are not supported, so a workflow calls them through Lambda.',
         ],
-        'related_labs': [('stepfunctions', 'order-processing-workflow'), ('stepfunctions', 'parallel-retry-workflow'), ('eventbridge', 'application-spine'), ('scheduler', 'sqs-delivery'), ('sqs', 'dead-letter-redrive')],
+        'related_labs': [('stepfunctions', 'order-processing-workflow'), ('stepfunctions', 'parallel-retry-workflow'), ('eventbridge', 'application-spine'), ('scheduler', 'sqs-delivery'), ('sqs', 'dead-letter-redrive'), ('stepfunctions', 'etl-pipeline')],
         'planned': 'E-4 Airflow pipeline on MWAA',
     },
     {
@@ -1405,7 +1409,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Write SQL that scans less: select only the needed columns, filter on partition columns, and prefer joins on distribution keys. Log row counts and errors so a run can be audited.',
             'Distributed processing splits data into partitions processed in parallel; a shuffle moves data between workers and is the expensive part. Graphs and trees model lineage and hierarchies.',
         ],
-        'related_labs': [('lambda', 'performance-cost'), ('cloudformation', 'sam-environments'), ('codepipeline', 'lambda-cicd'), ('cloudformation', 's3-sqs-stack'), ('lambda', 'runtime-config')],
+        'related_labs': [('lambda', 'performance-cost'), ('cloudformation', 'sam-environments'), ('codepipeline', 'lambda-cicd'), ('cloudformation', 's3-sqs-stack'), ('lambda', 'runtime-config'), ('stepfunctions', 'etl-pipeline')],
         'planned': None,
     },
     {
@@ -1419,8 +1423,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Locks: Redshift serializes writes to a table and can block on long transactions (check STV_LOCKS); RDS row locks can deadlock concurrent updates. Transfer Family brings SFTP uploads straight into S3.',
             'Floci runs Redshift and Redshift Serverless as real PostgreSQL behind the Data API, so standard SQL, views, materialized views, and grants work, but Redshift-only syntax (DISTKEY, SORTKEY, ENCODE, COPY, UNLOAD, Spectrum) is not accepted.',
         ],
-        'related_labs': [('dynamodb', 'capacity-at-scale'), ('rds', 'db-instance-lifecycle'), ('elasticache', 'cache-aside'), ('s3vectors', 'rag-knowledge-base'), ('ec2', 'block-file-storage')],
-        'planned': 'E-1 Redshift Serverless warehouse',
+        'related_labs': [('dynamodb', 'capacity-at-scale'), ('rds', 'db-instance-lifecycle'), ('elasticache', 'cache-aside'), ('s3vectors', 'rag-knowledge-base'), ('ec2', 'block-file-storage'), ('redshift', 'serverless-warehouse')],
+        'planned': None,
     },
     {
         'key': 'data-cataloging',
@@ -1433,8 +1437,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Glue connections hold JDBC, Kafka, and network settings for sources and targets. Amazon SageMaker Catalog adds a business catalog with glossaries and subscriptions on top of the technical catalog.',
             'Floci stores the catalog, partitions, partition indexes, and table versions, and Athena reads them, but crawlers finish without creating tables or partitions.',
         ],
-        'related_labs': [('kinesis', 'streaming-data-lake')],
-        'planned': 'E-2 Catalog, schema evolution, and data quality',
+        'related_labs': [('kinesis', 'streaming-data-lake'), ('glue', 'catalog-quality')],
+        'planned': None,
     },
     {
         'key': 'data-lifecycle',
@@ -1446,8 +1450,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'S3 versioning recovers overwritten or deleted objects; DynamoDB TTL deletes expired items at no cost (within days) and streams the deletes. Object Lock and legal holds keep data that must not be deleted; for a deletion request, find every copy (lake, warehouse, backups) and delete or anonymize it.',
             'Protect data with cross-Region replication, Redshift snapshots, DynamoDB point-in-time recovery, and AWS Backup.',
         ],
-        'related_labs': [('s3', 'lifecycle-retention'), ('s3', 'version-recovery'), ('s3', 'data-protection-tiers'), ('dynamodb', 'capacity-at-scale'), ('backup', 'backup-dr-plan')],
-        'planned': 'E-1 Redshift Serverless warehouse',
+        'related_labs': [('s3', 'lifecycle-retention'), ('s3', 'version-recovery'), ('s3', 'data-protection-tiers'), ('dynamodb', 'capacity-at-scale'), ('backup', 'backup-dr-plan'), ('redshift', 'serverless-warehouse')],
+        'planned': None,
     },
     {
         'key': 'schema-design-evolution',
@@ -1459,8 +1463,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Schema evolution: the Glue Schema Registry checks each new Avro, JSON, or Protobuf version against a compatibility mode (BACKWARD, FORWARD, FULL, or NONE), Glue keeps versions of each table definition, and Iceberg adds and renames columns without rewriting data.',
             'AWS SCT and DMS Schema Conversion convert schemas between engines. SageMaker ML Lineage Tracking and SageMaker Catalog record lineage. For RAG, Bedrock knowledge bases split documents into chunks and store their embeddings.',
         ],
-        'related_labs': [('dynamodb', 'application-patterns'), ('dynamodb', 'crud-query'), ('dms', 'migration-toolkit')],
-        'planned': 'E-2 Catalog, schema evolution, and data quality',
+        'related_labs': [('dynamodb', 'application-patterns'), ('dynamodb', 'crud-query'), ('dms', 'migration-toolkit'), ('redshift', 'serverless-warehouse'), ('glue', 'catalog-quality')],
+        'planned': None,
     },
     {
         'key': 'data-analysis',
@@ -1473,8 +1477,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'QuickSight builds dashboards (SPICE caches data in memory); Glue DataBrew and SageMaker Data Wrangler clean and profile data visually.',
             'Floci runs Athena SQL in DuckDB and Redshift SQL in PostgreSQL. QuickSight dashboards, DataBrew, and Athena Spark are not emulated.',
         ],
-        'related_labs': [('kinesis', 'streaming-data-lake')],
-        'planned': 'E-1 Redshift Serverless warehouse',
+        'related_labs': [('kinesis', 'streaming-data-lake'), ('redshift', 'serverless-warehouse'), ('glue', 'catalog-quality')],
+        'planned': None,
     },
     {
         'key': 'pipeline-monitoring',
@@ -1485,7 +1489,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'CloudTrail records who started, changed, or deleted a job, crawler, or table. Logs Insights, Athena over logs in S3, and OpenSearch analyze logs at scale.',
             'Troubleshoot from the evidence: a failed Airflow task has its own log and retry count, a Step Functions execution history shows the failing state and its error, and a Glue job run shows its error message and metrics.',
         ],
-        'related_labs': [('cloudwatch', 'metric-alarms'), ('cloudwatch', 'log-groups-metric-filters'), ('cloudwatch', 'centralized-logging'), ('lambda', 'async-error-handling'), ('sqs', 'dead-letter-redrive')],
+        'related_labs': [('cloudwatch', 'metric-alarms'), ('cloudwatch', 'log-groups-metric-filters'), ('cloudwatch', 'centralized-logging'), ('lambda', 'async-error-handling'), ('sqs', 'dead-letter-redrive'), ('stepfunctions', 'etl-pipeline'), ('glue', 'catalog-quality')],
         'planned': 'E-4 Airflow pipeline on MWAA',
     },
     {
@@ -1499,8 +1503,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Data skew puts most rows on one key or partition, so one worker does most of the work; add a random salt to the key, split hot keys, or repartition.',
             'Floci stores Glue Data Quality rulesets but does not evaluate them, and has no DataBrew, so the lab runs the same rules as Athena SQL.',
         ],
-        'related_labs': [('kinesis', 'streaming-data-lake')],
-        'planned': 'E-2 Catalog, schema evolution, and data quality',
+        'related_labs': [('kinesis', 'streaming-data-lake'), ('glue', 'catalog-quality'), ('stepfunctions', 'etl-pipeline')],
+        'planned': None,
     },
     {
         'key': 'data-authentication',
@@ -1526,7 +1530,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Store credentials and settings in Secrets Manager or Parameter Store, never in code or DAG files.',
             'Floci stores Lake Formation grants and LF-Tags without enforcing them, but enforces IAM policies and Redshift (PostgreSQL) grants.',
         ],
-        'related_labs': [('iam', 'machine-identity'), ('iam', 'identity-enforcement-capstone'), ('s3', 'bucket-security'), ('ssm', 'parameter-store-config'), ('iam', 'access-troubleshooting')],
+        'related_labs': [('iam', 'machine-identity'), ('iam', 'identity-enforcement-capstone'), ('s3', 'bucket-security'), ('ssm', 'parameter-store-config'), ('iam', 'access-troubleshooting'), ('redshift', 'serverless-warehouse')],
         'planned': 'E-6 Data lake governance',
     },
     {
@@ -1538,7 +1542,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Encrypt in transit with TLS (require it with aws:SecureTransport on buckets, and require_ssl on Redshift), or encrypt on the client before sending.',
             'Mask or anonymize personal data: hash or tokenize identifiers, show only the last digits, drop columns analysts do not need, or use Redshift dynamic data masking policies. Macie finds personal data in S3.',
         ],
-        'related_labs': [('kms', 'key-management'), ('s3', 'default-encryption'), ('bedrock', 'guardrails-least-privilege'), ('s3', 'bucket-security')],
+        'related_labs': [('kms', 'key-management'), ('s3', 'default-encryption'), ('bedrock', 'guardrails-least-privilege'), ('s3', 'bucket-security'), ('redshift', 'serverless-warehouse')],
         'planned': 'E-6 Data lake governance',
     },
     {

@@ -12,6 +12,8 @@ from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
 
+from . import stepfunctions_etl_labs as etl_pipeline
+
 REGION = 'us-east-1'
 ACCOUNT = '000000000000'
 CACHE_PREFIX = 'floci-lab:stepfunctions:'
@@ -197,7 +199,7 @@ PARALLEL_RETRY_LAB = {
     ],
 }
 
-LABS = [ORDER_PROCESSING_LAB, PARALLEL_RETRY_LAB]
+LABS = [ORDER_PROCESSING_LAB, PARALLEL_RETRY_LAB, etl_pipeline.LAB]
 
 
 def client(name: str):
@@ -454,13 +456,37 @@ RUNNERS = {
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
+    if service_key == 'stepfunctions' and lab_key == 'etl-pipeline':
+        from .stepfunctions_etl_labs import run_step as etl_run_step
+        return etl_run_step(step_key)
+    if service_key == 'stepfunctions' and lab_key == 'order-processing-workflow':
+        runners = {
+            'create-execution-role': step_create_role,
+            'create-choice-state-machine': step_create_choice_sm,
+            'start-vip-execution': step_execute_vip,
+            'start-standard-execution': step_execute_std,
+            'inspect-execution-history': step_inspect_history,
+        }
+        if step_key in runners:
+            return runners[step_key]()
+    if service_key == 'stepfunctions' and lab_key == 'parallel-retry-workflow':
+        runners = {
+            'create-parallel-state-machine': step_create_parallel_sm,
+            'execute-parallel-success': step_execute_parallel,
+            'describe-parallel-execution': step_describe_parallel,
+        }
+        if step_key in runners:
+            return runners[step_key]()
     if lab_key not in RUNNERS or step_key not in RUNNERS[lab_key]:
         raise ValueError(f'Unknown Step Functions lab step: {lab_key}/{step_key}')
     return RUNNERS[lab_key][step_key]()
 
 
 def status(service_key: str, lab_key: str) -> dict[str, Any]:
-    if lab_key == 'order-processing-workflow':
+    if service_key == 'stepfunctions' and lab_key == 'etl-pipeline':
+        from .stepfunctions_etl_labs import status as etl_status
+        return etl_status()
+    if service_key == 'stepfunctions' and lab_key == 'order-processing-workflow':
         keys = {
             'create-execution-role': 'role',
             'create-choice-state-machine': 'choice-sm',
@@ -468,7 +494,7 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
             'start-standard-execution': 'std-exec',
             'inspect-execution-history': 'history',
         }
-    elif lab_key == 'parallel-retry-workflow':
+    elif service_key == 'stepfunctions' and lab_key == 'parallel-retry-workflow':
         keys = {
             'create-parallel-state-machine': 'parallel-sm',
             'execute-parallel-success': 'parallel-exec',
@@ -499,6 +525,11 @@ def status(service_key: str, lab_key: str) -> dict[str, Any]:
 
 
 def reset(service_key: str, lab_key: str) -> dict[str, Any]:
+    if service_key == 'stepfunctions' and lab_key == 'etl-pipeline':
+        from .stepfunctions_etl_labs import reset as etl_reset
+        return etl_reset()
+    if not (service_key == 'stepfunctions' and lab_key in ('order-processing-workflow', 'parallel-retry-workflow')):
+        raise ValueError(f'Unknown Step Functions lab: {lab_key}')
     started = time.perf_counter()
     sfn = client('stepfunctions')
     iam = client('iam')

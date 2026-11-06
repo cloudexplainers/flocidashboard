@@ -247,6 +247,19 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
       { service: 'ec2', key: 'network-troubleshooting', title: 'Troubleshoot networks: ACLs, flow logs, egress, IPv6, load balancer logs, DNS, and caching', stepCount: 7 },
     ],
   },
+  {
+    id: 'level-12-data-engineer-associate',
+    title: 'Level 12: Data Engineer Associate',
+    subtitle: 'Build data pipelines: warehouses, catalogs, data quality, batch ETL, orchestration, streaming, and governance',
+    badge: 'Associate',
+    color: 'blue',
+    description: 'Build and run data pipelines for the Data Engineer – Associate exam. Design a Redshift Serverless star schema, load it through the Data API, keep a materialized view fresh, and give an analyst a masked view. Catalog a data lake in Glue, score it against data quality rules, quarantine bad rows, and evolve the schema under the Schema Registry. Then build an event-driven batch ETL pipeline with Step Functions, Lambda, and S3 that alerts on bad files and never duplicates data on a rerun.',
+    labs: [
+      { service: 'redshift', key: 'serverless-warehouse', title: 'Build a Redshift Serverless warehouse: star schema, loads, materialized views, and masked access', stepCount: 8 },
+      { service: 'glue', key: 'catalog-quality', title: 'Catalog a data lake, check data quality, and evolve the schema with Glue and Athena', stepCount: 8 },
+      { service: 'stepfunctions', key: 'etl-pipeline', title: 'Build an event-driven batch ETL pipeline with Step Functions, Lambda, and S3', stepCount: 8 },
+    ],
+  },
 ];
 let nextLabId = 1;
 export const LAB_CURRICULUM: CurriculumLevel[] = LEVEL_DEFINITIONS.map((level) => ({
