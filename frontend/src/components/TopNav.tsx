@@ -104,14 +104,24 @@ export const TopNav: React.FC<TopNavProps> = ({
       />
       {targetNode &&
         createPortal(
-          <a
-            href="https://www.youtube.com/@cloudexplainers"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="learn-cloud-link"
-          >
-            Learn Cloud Computing
-          </a>,
+          <>
+            <a
+              href="https://www.youtube.com/@cloudexplainers"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="learn-cloud-link"
+            >
+              Learn Cloud Computing
+            </a>
+            <a
+              href="https://cloudexplainers.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="learn-cloud-link cloud-explainers-site-link"
+            >
+              cloudexplainers.com
+            </a>
+          </>,
           targetNode
         )}
     </div>

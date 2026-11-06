@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Lab snippets: every lab's Python (`boto3`) and Terraform tabs are generated from the AWS CLI command using the AWS CLI's own parser, so arguments map correctly, and the Terraform tab shows real resources for about 90 create operations (a note otherwise). Every lab's Python snippets were replayed against Floci 2.4.0, which fixed several lab commands (SSM `--document-name`, Route 53 Resolver `--creator-request-id`, quoted Firehose prefixes, and DynamoDB expression values).
+- README: rewritten around a three-command quickstart, with links to the Cloud Explainers YouTube channel and website. The longer setup, configuration, and testing notes moved to `docs/guide.md`.
+- Top navigation: a cloudexplainers.com link sits next to Learn Cloud Computing (hidden on narrow screens).
+
 ## 2.3.0 — 2026-11-04
 
 - New lab, **Troubleshoot networks: ACLs, flow logs, egress, IPv6, load balancer logs, DNS, and caching** (`ec2/network-troubleshooting`, 7 steps, SOA 5.3, 5.1 and 5.2), the seventh and last lab of **Level 11: CloudOps Associate**, which completes Wave O. HTTPS to a web server hangs because a stateless network ACL drops the reply to the client's ephemeral port; flow log records with the flow-direction field show ACCEPT in and REJECT out, and an outbound rule for 1024-65535 fixes it; a private subnet with only the local route gets a NAT gateway; an IPv6 subnet gets an egress-only internet gateway; load balancer access logs tell a target that closed the connection (502) from one that timed out (504), no healthy targets (503) and an app error (500); private DNS resolves once enableDnsHostnames is on, a forwarding rule to on-premises DNS works once it is associated with the VPC, and a DNS Firewall domain list blocks bad domains; and a CloudFront cache policy that keys on every query string and cookie is replaced by one that keys on `lang` only, taking the sample hit ratio from 0% to 83%. On Floci 2.4.0 every network object is real but no packets move and no flow or access logs are written, so the lab evaluates the paths, DNS answers and cache keys itself.
