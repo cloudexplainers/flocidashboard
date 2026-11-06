@@ -141,7 +141,7 @@ test('AI Practitioner study track has concept cards and quizzes for every task',
   await expect(design.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
-test('DevOps Professional study track lists DOP-C02 domains with labs and planned labs', async ({ page }) => {
+test('DevOps Professional study track lists DOP-C02 domains with a lab for every task', async ({ page }) => {
   await page.goto('/labs/?track=DOP-C02');
   await expect(page.getByText('DOP-C02 · AWS Certified DevOps Engineer – Professional')).toBeVisible();
   const pipelines = page.getByTestId('exam-task-DOP-C02-1.1');
@@ -181,7 +181,8 @@ test('Data Engineer Associate study track lists DEA-C01 domains with labs and pl
   await expect(quality.getByRole('button', { name: 'Catalog a data lake, check data quality, and evolve the schema with Glue and Athena' }).first()).toBeVisible();
   const monitoring = page.getByTestId('exam-task-DEA-C01-3.3');
   await monitoring.getByText('Concept: Monitoring, logging, and troubleshooting data pipelines').click();
-  await expect(monitoring.getByText('Planned lab: E-4 Airflow pipeline on MWAA')).toBeVisible();
+  await expect(monitoring.getByText(/Planned lab:/)).toHaveCount(0);
+  await expect(monitoring.getByRole('button', { name: /Orchestrate a daily pipeline with Airflow on MWAA/ }).first()).toBeVisible();
 });
 
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
@@ -299,7 +300,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
   await page.goto('/labs/?service=iam&lab=create-user-alice');
   await page.getByRole('link', { name: /Next: #3\./ }).click();
   release();
-  await expect(page.getByText('Lesson #3 of 117', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #3 of 120', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
   await expect(page.getByRole('button', { name: '▶ Run all remaining steps', exact: true })).toBeEnabled();
 });
@@ -318,7 +319,7 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('link', { name: /Next: #2\./ }).click();
   release();
-  await expect(page.getByText('Lesson #2 of 117', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #2 of 120', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);

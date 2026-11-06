@@ -23,6 +23,8 @@ from django.core.cache import cache
 
 from dashboard.aws import FlociClientFactory, _clean_response
 
+from . import kinesis_stream_labs as stream_processing
+
 SERVICE = 'kinesis'
 LAB_KEY = 'streaming-data-lake'
 CACHE_PREFIX = f'floci-lab:{SERVICE}:{LAB_KEY}:'
@@ -344,7 +346,7 @@ LAB = {
     ],
 }
 
-LABS = [LAB]
+LABS = [LAB, stream_processing.LAB]
 STEP_KEYS = [step['key'] for step in LAB['steps']]
 
 
@@ -975,9 +977,22 @@ RUNNERS = {
 
 
 def run_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any]:
-    if service_key != SERVICE or lab_key != LAB_KEY:
+    if service_key == 'kinesis' and lab_key == 'stream-processing':
+        from .kinesis_stream_labs import run_step as stream_run_step
+        return stream_run_step(step_key)
+    if not (service_key == 'kinesis' and lab_key == 'streaming-data-lake'):
         raise ValueError('Lab not found')
-    runner = RUNNERS.get(step_key)
+    runner = {
+        'lake-buckets': step_lake_buckets,
+        'data-stream': step_data_stream,
+        'delivery-stream': step_delivery_stream,
+        'produce-events': step_produce_events,
+        'land-in-s3': step_land_in_s3,
+        'glue-catalog': step_glue_catalog,
+        'athena-workgroup': step_athena_workgroup,
+        'query-clicks': step_query_clicks,
+        'convert-parquet': step_convert_parquet,
+    }.get(step_key)
     if not runner:
         raise ValueError(f'Unknown step {step_key} for lab {LAB_KEY}')
     return runner()
@@ -993,7 +1008,10 @@ def _safe(check) -> bool:
 
 
 def status(service_key: str = SERVICE, lab_key: str = LAB_KEY) -> dict[str, Any]:
-    if service_key != SERVICE or lab_key != LAB_KEY:
+    if service_key == 'kinesis' and lab_key == 'stream-processing':
+        from .kinesis_stream_labs import status as stream_status
+        return stream_status()
+    if not (service_key == 'kinesis' and lab_key == 'streaming-data-lake'):
         raise ValueError('Lab not found')
     checks = {
         'lake-buckets': lambda: _check_buckets()[0],
@@ -1028,7 +1046,10 @@ def status(service_key: str = SERVICE, lab_key: str = LAB_KEY) -> dict[str, Any]
 
 def reset(service_key: str = SERVICE, lab_key: str = LAB_KEY) -> dict[str, Any]:
     """Delete the delivery stream, data stream, role, Glue tables and database, workgroup, and both buckets."""
-    if service_key != SERVICE or lab_key != LAB_KEY:
+    if service_key == 'kinesis' and lab_key == 'stream-processing':
+        from .kinesis_stream_labs import reset as stream_reset
+        return stream_reset()
+    if not (service_key == 'kinesis' and lab_key == 'streaming-data-lake'):
         raise ValueError('Lab not found')
     started = time.perf_counter()
     deleted: list[str] = []

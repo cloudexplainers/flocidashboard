@@ -142,6 +142,12 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'glue':
         from .glue_catalog_quality_labs import LABS
         return LABS
+    if service_key == 'mwaa':
+        from .mwaa_airflow_labs import LABS
+        return LABS
+    if service_key == 'lakeformation':
+        from .lakeformation_governance_labs import LABS
+        return LABS
     return []
 
 
@@ -340,6 +346,16 @@ LAB_BATCH_ORDER = [
         'service': 'glue',
         'title': 'Glue catalog and data quality lab',
         'summary': 'Catalog a lake in Glue, check data quality, and evolve the schema.',
+    },
+    {
+        'service': 'mwaa',
+        'title': 'Airflow on MWAA lab',
+        'summary': 'Orchestrate a daily pipeline with Airflow on MWAA.',
+    },
+    {
+        'service': 'lakeformation',
+        'title': 'Lake Formation governance lab',
+        'summary': 'Govern a data lake with Lake Formation, KMS, IAM, and CloudTrail.',
     },
 ]
 
@@ -734,6 +750,12 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
     if service_key == 'glue' and lab_key == 'catalog-quality':
         from .glue_catalog_quality_labs import run_step
         return run_step(step_key)
+    if service_key == 'mwaa' and lab_key == 'airflow-pipeline':
+        from .mwaa_airflow_labs import run_step
+        return run_step(step_key)
+    if service_key == 'lakeformation' and lab_key == 'lake-governance':
+        from .lakeformation_governance_labs import run_step
+        return run_step(step_key)
     raise ValueError('Lab step not found')
 
 
@@ -880,6 +902,12 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         return status()
     if service_key == 'glue' and lab_key == 'catalog-quality':
         from .glue_catalog_quality_labs import status
+        return status()
+    if service_key == 'mwaa' and lab_key == 'airflow-pipeline':
+        from .mwaa_airflow_labs import status
+        return status()
+    if service_key == 'lakeformation' and lab_key == 'lake-governance':
+        from .lakeformation_governance_labs import status
         return status()
     return {
         'service': service_key,
@@ -1032,6 +1060,12 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         return reset()
     if service_key == 'glue' and lab_key == 'catalog-quality':
         from .glue_catalog_quality_labs import reset
+        return reset()
+    if service_key == 'mwaa' and lab_key == 'airflow-pipeline':
+        from .mwaa_airflow_labs import reset
+        return reset()
+    if service_key == 'lakeformation' and lab_key == 'lake-governance':
+        from .lakeformation_governance_labs import reset
         return reset()
     raise ValueError('Lab reset not found')
 

@@ -376,7 +376,7 @@ Certification study path: [`docs/certification-coverage.md`](./docs/certificatio
 
 Feasible follow-ups:
 
-- Build the certification lab waves from `docs/certification-coverage.md`. Waves 1, 2, 3, C, D, AI, P, and O have shipped, and Wave E for Data Engineer – Associate is half done (E-1 Redshift Serverless warehouse, E-2 Glue catalog and data quality, and E-3 event-driven batch ETL are in Level 12). Next are E-4 an Airflow pipeline on MWAA, E-5 stream processing with Kinesis, Lambda, and MSK, and E-6 data lake governance.
+- Build the certification lab waves from `docs/certification-coverage.md`. Waves 1, 2, 3, C, D, AI, P, O, and E have shipped; Level 12: Data Engineer Associate holds all six Wave E labs (Redshift Serverless warehouse, Glue catalog and data quality, batch ETL with Step Functions, Airflow on MWAA, Kinesis stream processing, and lake governance).
 - Add exam and task tags to labs, plus a study-track view (Levels · CLF-C02 · SAA-C03) with domain-weighted progress.
 
 - Continue the new serverless application spine with S3 object-created notifications to Lambda, EventBridge rules to Lambda or SQS, and EventBridge Pipes source-to-target flows where local support is reliable.
