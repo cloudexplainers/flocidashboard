@@ -105,8 +105,11 @@ COLLECT_SCRIPT = (
     "df -P / | awk 'NR==2{sub(\"%\",\"\",$5); print \"disk=\" $5}'\n"
     f"echo \"pids=$(ps -eo args= | grep -c '^{PROCESS}')\""
 )
+# The process runs a copy of sleep under the server's name. Renaming a process from inside (Perl's $0) doesn't show in
+# ps when Docker emulates the instance's architecture, as Docker Desktop on Apple silicon does for x86 AMIs.
 START_SCRIPT = (
-    f"nohup perl -e '$0=\"{PROCESS}\"; sleep 86400' >/dev/null 2>&1 &\n"
+    f"cp /bin/sleep /usr/local/bin/{PROCESS}\n"
+    f"nohup {PROCESS} 86400 >/dev/null 2>&1 &\n"
     f"sleep 1; echo \"pids=$(ps -eo args= | grep -c '^{PROCESS}')\""
 )
 STOP_SCRIPT = f"pkill -f '^{PROCESS}' || true\nsleep 1\necho \"pids=$(ps -eo args= | grep -c '^{PROCESS}')\""
