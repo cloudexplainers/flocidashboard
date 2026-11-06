@@ -178,8 +178,10 @@ test('Data Engineer Associate study track lists DEA-C01 domains with labs and pl
   await expect(ingestion.getByRole('button', { name: /Stream clickstream events into an S3 data lake/ }).first()).toBeVisible();
   await page.getByText('Domain 3: Data Operations and Support', { exact: true }).click();
   const quality = page.getByTestId('exam-task-DEA-C01-3.4');
-  await quality.getByText('Concept: Data quality rules, profiling, sampling, and skew').click();
-  await expect(quality.getByText('Planned lab: E-2 Catalog, schema evolution, and data quality')).toBeVisible();
+  await expect(quality.getByRole('button', { name: 'Catalog a data lake, check data quality, and evolve the schema with Glue and Athena' }).first()).toBeVisible();
+  const monitoring = page.getByTestId('exam-task-DEA-C01-3.3');
+  await monitoring.getByText('Concept: Monitoring, logging, and troubleshooting data pipelines').click();
+  await expect(monitoring.getByText('Planned lab: E-4 Airflow pipeline on MWAA')).toBeVisible();
 });
 
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
@@ -297,7 +299,7 @@ test('late status from a previous lab cannot complete the next lab', async ({ pa
   await page.goto('/labs/?service=iam&lab=create-user-alice');
   await page.getByRole('link', { name: /Next: #3\./ }).click();
   release();
-  await expect(page.getByText('Lesson #3 of 114', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #3 of 117', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toHaveCount(4);
   await expect(page.getByRole('button', { name: '▶ Run all remaining steps', exact: true })).toBeEnabled();
 });
@@ -316,7 +318,7 @@ test('navigating during Run all prevents stale outputs and subsequent steps', as
   await expect.poll(() => calls).toBe(1);
   await page.getByRole('link', { name: /Next: #2\./ }).click();
   release();
-  await expect(page.getByText('Lesson #2 of 114', { exact: true })).toBeVisible();
+  await expect(page.getByText('Lesson #2 of 117', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run step', exact: true })).toBeEnabled();
   await expect(page.getByText('Old lab output', { exact: true })).toHaveCount(0);
   expect(calls).toBe(1);

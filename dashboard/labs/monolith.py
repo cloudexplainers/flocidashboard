@@ -136,6 +136,12 @@ def labs_for_service(service_key: str) -> list[dict[str, Any]]:
     if service_key == 'bedrock':
         from .bedrock_labs import LABS
         return LABS
+    if service_key == 'redshift':
+        from .redshift_warehouse_labs import LABS
+        return LABS
+    if service_key == 'glue':
+        from .glue_catalog_quality_labs import LABS
+        return LABS
     return []
 
 
@@ -324,6 +330,16 @@ LAB_BATCH_ORDER = [
         'service': 'bedrock',
         'title': 'Responsible AI lab',
         'summary': 'Finish the AI Practitioner level: a Bedrock guardrail with content filters, a denied topic, blocked words, PII rules and grounding, a released version beside a changing draft, an evaluation of sample prompts, PII masked in the client, a KMS key and a private prompt log, a least-privilege policy simulated against two models, and a CloudTrail trail with a responsible AI checklist.',
+    },
+    {
+        'service': 'redshift',
+        'title': 'Redshift warehouse lab',
+        'summary': 'Start the Data Engineer level: a Redshift Serverless namespace and workgroup, a star schema with distribution and sort keys, staged files loaded in one transaction through the Data API, a materialized view refreshed after a late file, rolling averages, a masked view for an analyst, an export with lifecycle rules, and a usage limit and snapshot.',
+    },
+    {
+        'service': 'glue',
+        'title': 'Glue catalog and data quality lab',
+        'summary': 'Catalog a lake in Glue, check data quality, and evolve the schema.',
     },
 ]
 
@@ -712,6 +728,12 @@ def run_lab_step(service_key: str, lab_key: str, step_key: str) -> dict[str, Any
         from .cloudformation_labs import run_step
         return run_step(service_key, lab_key, step_key)
 
+    if service_key == 'redshift' and lab_key == 'serverless-warehouse':
+        from .redshift_warehouse_labs import run_step
+        return run_step(step_key)
+    if service_key == 'glue' and lab_key == 'catalog-quality':
+        from .glue_catalog_quality_labs import run_step
+        return run_step(step_key)
     raise ValueError('Lab step not found')
 
 
@@ -853,6 +875,12 @@ def lab_status(service_key: str, lab_key: str) -> dict[str, Any]:
         from .cloudformation_labs import status
         return status(service_key, lab_key)
 
+    if service_key == 'redshift' and lab_key == 'serverless-warehouse':
+        from .redshift_warehouse_labs import status
+        return status()
+    if service_key == 'glue' and lab_key == 'catalog-quality':
+        from .glue_catalog_quality_labs import status
+        return status()
     return {
         'service': service_key,
         'lab': lab_key,
@@ -999,6 +1027,12 @@ def reset_lab(service_key: str, lab_key: str) -> dict[str, Any]:
         from .cloudformation_labs import reset
         return reset(service_key, lab_key)
 
+    if service_key == 'redshift' and lab_key == 'serverless-warehouse':
+        from .redshift_warehouse_labs import reset
+        return reset()
+    if service_key == 'glue' and lab_key == 'catalog-quality':
+        from .glue_catalog_quality_labs import reset
+        return reset()
     raise ValueError('Lab reset not found')
 
 
