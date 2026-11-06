@@ -577,6 +577,9 @@ LAB_EXAM_TAGS: dict[tuple[str, str], list[dict[str, Any]]] = {
     ('redshift', 'serverless-warehouse'): _tags(dea='2.1 2.4 2.3 3.2 4.2 4.3', saa='3.5'),
     ('glue', 'catalog-quality'): _tags(dea='2.2 3.4 2.4 3.2 3.3'),
     ('stepfunctions', 'etl-pipeline'): _tags(dea='1.2 1.3 1.4 3.1 3.3 3.4', dva='1.1'),
+    ('mwaa', 'airflow-pipeline'): _tags(dea='1.3 3.1 3.3 1.4'),
+    ('kinesis', 'stream-processing'): _tags(dea='1.1 1.4 3.3', dva='1.1'),
+    ('lakeformation', 'lake-governance'): _tags(dea='4.2 4.3 4.5 4.4 4.1'),
 }
 
 
@@ -1368,8 +1371,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Ingest from databases with DMS change data capture, from SaaS apps with AppFlow, from files with DataSync or Transfer Family, and on a schedule with EventBridge Scheduler or Airflow.',
             'Floci runs Kinesis, Firehose delivery, and Lambda event source mappings, MSK as a real Redpanda broker, and Flink as a real cluster for an application JAR; AppFlow is not emulated.',
         ],
-        'related_labs': [('kinesis', 'streaming-data-lake'), ('dynamodb', 'capacity-at-scale'), ('lambda', 'sqs-event-source'), ('dms', 'migration-toolkit')],
-        'planned': 'E-5 Stream processing with Kinesis, Lambda, and MSK',
+        'related_labs': [('kinesis', 'streaming-data-lake'), ('dynamodb', 'capacity-at-scale'), ('lambda', 'sqs-event-source'), ('dms', 'migration-toolkit'), ('kinesis', 'stream-processing')],
+        'planned': None,
     },
     {
         'key': 'data-transformation',
@@ -1396,8 +1399,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Design for failure: idempotent steps (safe to rerun), checkpoints or manifests of processed files, dead-letter queues, and alerts to SNS or SQS when a run fails.',
             'Floci runs Step Functions with Lambda, SNS, SQS, DynamoDB, and the Redshift Data API, and MWAA as a real Airflow, but the Glue and Athena service integrations are not supported, so a workflow calls them through Lambda.',
         ],
-        'related_labs': [('stepfunctions', 'order-processing-workflow'), ('stepfunctions', 'parallel-retry-workflow'), ('eventbridge', 'application-spine'), ('scheduler', 'sqs-delivery'), ('sqs', 'dead-letter-redrive'), ('stepfunctions', 'etl-pipeline')],
-        'planned': 'E-4 Airflow pipeline on MWAA',
+        'related_labs': [('stepfunctions', 'order-processing-workflow'), ('stepfunctions', 'parallel-retry-workflow'), ('eventbridge', 'application-spine'), ('scheduler', 'sqs-delivery'), ('sqs', 'dead-letter-redrive'), ('stepfunctions', 'etl-pipeline'), ('mwaa', 'airflow-pipeline')],
+        'planned': None,
     },
     {
         'key': 'data-engineering-code',
@@ -1409,7 +1412,7 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Write SQL that scans less: select only the needed columns, filter on partition columns, and prefer joins on distribution keys. Log row counts and errors so a run can be audited.',
             'Distributed processing splits data into partitions processed in parallel; a shuffle moves data between workers and is the expensive part. Graphs and trees model lineage and hierarchies.',
         ],
-        'related_labs': [('lambda', 'performance-cost'), ('cloudformation', 'sam-environments'), ('codepipeline', 'lambda-cicd'), ('cloudformation', 's3-sqs-stack'), ('lambda', 'runtime-config'), ('stepfunctions', 'etl-pipeline')],
+        'related_labs': [('lambda', 'performance-cost'), ('cloudformation', 'sam-environments'), ('codepipeline', 'lambda-cicd'), ('cloudformation', 's3-sqs-stack'), ('lambda', 'runtime-config'), ('stepfunctions', 'etl-pipeline'), ('mwaa', 'airflow-pipeline')],
         'planned': None,
     },
     {
@@ -1489,8 +1492,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'CloudTrail records who started, changed, or deleted a job, crawler, or table. Logs Insights, Athena over logs in S3, and OpenSearch analyze logs at scale.',
             'Troubleshoot from the evidence: a failed Airflow task has its own log and retry count, a Step Functions execution history shows the failing state and its error, and a Glue job run shows its error message and metrics.',
         ],
-        'related_labs': [('cloudwatch', 'metric-alarms'), ('cloudwatch', 'log-groups-metric-filters'), ('cloudwatch', 'centralized-logging'), ('lambda', 'async-error-handling'), ('sqs', 'dead-letter-redrive'), ('stepfunctions', 'etl-pipeline'), ('glue', 'catalog-quality')],
-        'planned': 'E-4 Airflow pipeline on MWAA',
+        'related_labs': [('cloudwatch', 'metric-alarms'), ('cloudwatch', 'log-groups-metric-filters'), ('cloudwatch', 'centralized-logging'), ('lambda', 'async-error-handling'), ('sqs', 'dead-letter-redrive'), ('stepfunctions', 'etl-pipeline'), ('glue', 'catalog-quality'), ('mwaa', 'airflow-pipeline'), ('kinesis', 'stream-processing')],
+        'planned': None,
     },
     {
         'key': 'data-quality',
@@ -1516,8 +1519,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Network access: security groups allow the database port only from the pipeline, VPC endpoints (gateway for S3 and DynamoDB, interface for the rest) keep traffic off the internet, and S3 Access Points give each application its own policy and network origin.',
             'With managed services AWS runs the servers; with self-managed ones (Kafka on EC2) you patch and secure them. SageMaker Unified Studio groups users into domains, domain units, and projects.',
         ],
-        'related_labs': [('secretsmanager', 'secret-lifecycle'), ('iam', 'role-trust-policy'), ('ec2', 'security-controls'), ('ec2', 's3-gateway-endpoint'), ('iam', 'machine-identity')],
-        'planned': 'E-6 Data lake governance',
+        'related_labs': [('secretsmanager', 'secret-lifecycle'), ('iam', 'role-trust-policy'), ('ec2', 'security-controls'), ('ec2', 's3-gateway-endpoint'), ('iam', 'machine-identity'), ('lakeformation', 'lake-governance')],
+        'planned': None,
     },
     {
         'key': 'data-authorization',
@@ -1530,8 +1533,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Store credentials and settings in Secrets Manager or Parameter Store, never in code or DAG files.',
             'Floci stores Lake Formation grants and LF-Tags without enforcing them, but enforces IAM policies and Redshift (PostgreSQL) grants.',
         ],
-        'related_labs': [('iam', 'machine-identity'), ('iam', 'identity-enforcement-capstone'), ('s3', 'bucket-security'), ('ssm', 'parameter-store-config'), ('iam', 'access-troubleshooting'), ('redshift', 'serverless-warehouse')],
-        'planned': 'E-6 Data lake governance',
+        'related_labs': [('iam', 'machine-identity'), ('iam', 'identity-enforcement-capstone'), ('s3', 'bucket-security'), ('ssm', 'parameter-store-config'), ('iam', 'access-troubleshooting'), ('redshift', 'serverless-warehouse'), ('lakeformation', 'lake-governance')],
+        'planned': None,
     },
     {
         'key': 'data-encryption-masking',
@@ -1542,8 +1545,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Encrypt in transit with TLS (require it with aws:SecureTransport on buckets, and require_ssl on Redshift), or encrypt on the client before sending.',
             'Mask or anonymize personal data: hash or tokenize identifiers, show only the last digits, drop columns analysts do not need, or use Redshift dynamic data masking policies. Macie finds personal data in S3.',
         ],
-        'related_labs': [('kms', 'key-management'), ('s3', 'default-encryption'), ('bedrock', 'guardrails-least-privilege'), ('s3', 'bucket-security'), ('redshift', 'serverless-warehouse')],
-        'planned': 'E-6 Data lake governance',
+        'related_labs': [('kms', 'key-management'), ('s3', 'default-encryption'), ('bedrock', 'guardrails-least-privilege'), ('s3', 'bucket-security'), ('redshift', 'serverless-warehouse'), ('lakeformation', 'lake-governance')],
+        'planned': None,
     },
     {
         'key': 'audit-logging',
@@ -1555,8 +1558,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Application and pipeline logs go to CloudWatch Logs with a retention period; Redshift audit logging records connections and queries; EMR writes cluster and step logs to S3 for large volumes. Analyze them with Logs Insights, Athena, or OpenSearch.',
             'Floci has CloudTrail trails and lookups for some services, but no CloudTrail Lake.',
         ],
-        'related_labs': [('cloudtrail', 'governance-tour'), ('cloudwatch', 'centralized-logging'), ('cloudwatch', 'log-groups-metric-filters')],
-        'planned': 'E-6 Data lake governance',
+        'related_labs': [('cloudtrail', 'governance-tour'), ('cloudwatch', 'centralized-logging'), ('cloudwatch', 'log-groups-metric-filters'), ('lakeformation', 'lake-governance')],
+        'planned': None,
     },
     {
         'key': 'data-privacy-governance',
@@ -1569,8 +1572,8 @@ CONCEPT_CARDS: list[dict[str, Any]] = [
             'Governance frameworks such as data mesh give domains ownership of their data products, with a central catalog and standard access controls.',
             'Floci does not route Macie findings, so the lab finds personal data itself.',
         ],
-        'related_labs': [('iam', 'multi-account-guardrails'), ('cloudtrail', 'governance-tour'), ('backup', 'backup-dr-plan'), ('s3', 'data-protection-tiers')],
-        'planned': 'E-6 Data lake governance',
+        'related_labs': [('iam', 'multi-account-guardrails'), ('cloudtrail', 'governance-tour'), ('backup', 'backup-dr-plan'), ('s3', 'data-protection-tiers'), ('lakeformation', 'lake-governance')],
+        'planned': None,
     },
 ]
 

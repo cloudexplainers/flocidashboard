@@ -253,11 +253,14 @@ const LEVEL_DEFINITIONS: CurriculumLevelDefinition[] = [
     subtitle: 'Build data pipelines: warehouses, catalogs, data quality, batch ETL, orchestration, streaming, and governance',
     badge: 'Associate',
     color: 'blue',
-    description: 'Build and run data pipelines for the Data Engineer – Associate exam. Design a Redshift Serverless star schema, load it through the Data API, keep a materialized view fresh, and give an analyst a masked view. Catalog a data lake in Glue, score it against data quality rules, quarantine bad rows, and evolve the schema under the Schema Registry. Then build an event-driven batch ETL pipeline with Step Functions, Lambda, and S3 that alerts on bad files and never duplicates data on a rerun.',
+    description: 'Build and run data pipelines for the Data Engineer – Associate exam. Design a Redshift Serverless star schema, load it through the Data API, keep a materialized view fresh, and give an analyst a masked view. Catalog a data lake in Glue, score it against data quality rules, quarantine bad rows, and evolve the schema under the Schema Registry. Then build an event-driven batch ETL pipeline with Step Functions, Lambda, and S3 that alerts on bad files and never duplicates data on a rerun. Orchestrate the daily batch with Airflow on MWAA, process a click stream with Kinesis and Lambda, and govern the lake with encryption, Lake Formation tags, PII masking, and audited access.',
     labs: [
       { service: 'redshift', key: 'serverless-warehouse', title: 'Build a Redshift Serverless warehouse: star schema, loads, materialized views, and masked access', stepCount: 8 },
       { service: 'glue', key: 'catalog-quality', title: 'Catalog a data lake, check data quality, and evolve the schema with Glue and Athena', stepCount: 8 },
       { service: 'stepfunctions', key: 'etl-pipeline', title: 'Build an event-driven batch ETL pipeline with Step Functions, Lambda, and S3', stepCount: 8 },
+      { service: 'mwaa', key: 'airflow-pipeline', title: 'Orchestrate a daily pipeline with Airflow on MWAA: DAGs, retries, failures, reruns, and rollbacks', stepCount: 8 },
+      { service: 'kinesis', key: 'stream-processing', title: 'Process a click stream with Kinesis and Lambda: batching, poison records, replay, fan-out, and resharding', stepCount: 8 },
+      { service: 'lakeformation', key: 'lake-governance', title: 'Govern a data lake: encryption, Lake Formation tags and grants, PII masking, and access audits', stepCount: 8 },
     ],
   },
 ];
