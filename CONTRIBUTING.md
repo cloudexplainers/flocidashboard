@@ -39,7 +39,7 @@ npm run dev      # Vite dev server
 npm run build    # type-check and write dashboard/static/dashboard/dist/
 ```
 
-See the [README](./README.md#configuration) for endpoint, Region, credential, and profile settings.
+See the [guide](./docs/guide.md#configuration) for endpoint, Region, credential, and profile settings.
 
 ## Project layout
 

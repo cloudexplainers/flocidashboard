@@ -63,7 +63,7 @@ test('global search supports keyboard navigation and region opens real configura
   await expect(page).toHaveURL(/\/settings$/);
 });
 
-test('top navigation includes Learn Cloud Computing link next to home', async ({ page }) => {
+test('top navigation includes the YouTube and website links next to home', async ({ page }) => {
   await page.goto('/');
   const homeLink = page.getByRole('link', { name: 'home', exact: true });
   const learnLink = page.getByRole('link', { name: 'Learn Cloud Computing', exact: true });
@@ -72,6 +72,10 @@ test('top navigation includes Learn Cloud Computing link next to home', async ({
   await expect(learnLink).toBeVisible();
   await expect(learnLink).toHaveAttribute('href', 'https://www.youtube.com/@cloudexplainers');
   await expect(learnLink).toHaveAttribute('target', '_blank');
+  const siteLink = page.getByRole('link', { name: 'cloudexplainers.com', exact: true });
+  await expect(siteLink).toBeVisible();
+  await expect(siteLink).toHaveAttribute('href', 'https://cloudexplainers.com');
+  await expect(siteLink).toHaveAttribute('target', '_blank');
 
   const homeBox = await homeLink.boundingBox();
   const learnBox = await learnLink.boundingBox();

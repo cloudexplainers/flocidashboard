@@ -83,6 +83,11 @@ textarea {
   border-radius: var(--border-radius-control-default-focus-ring-akwhsf, 4px);
 }
 
+/* On narrow screens keep the YouTube link and drop the website link to save room. */
+@media (max-width: 1100px) {
+  .cloud-explainers-site-link { display: none; }
+}
+
 #resource-operations { scroll-margin-top: 96px; }
 
 /* CLI panels keep terminal contrast while the surrounding controls use Cloudscape. */
