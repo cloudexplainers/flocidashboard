@@ -171,6 +171,17 @@ test('CloudOps Associate study track lists SOA-C03 domains with labs', async ({ 
   await expect(network.getByText(/Planned lab:/)).toHaveCount(0);
 });
 
+test('Data Engineer Associate study track lists DEA-C01 domains with labs and planned labs', async ({ page }) => {
+  await page.goto('/labs/?track=DEA-C01');
+  await expect(page.getByText('DEA-C01 · AWS Certified Data Engineer – Associate')).toBeVisible();
+  const ingestion = page.getByTestId('exam-task-DEA-C01-1.1');
+  await expect(ingestion.getByRole('button', { name: /Stream clickstream events into an S3 data lake/ }).first()).toBeVisible();
+  await page.getByText('Domain 3: Data Operations and Support', { exact: true }).click();
+  const quality = page.getByTestId('exam-task-DEA-C01-3.4');
+  await quality.getByText('Concept: Data quality rules, profiling, sampling, and skew').click();
+  await expect(quality.getByText('Planned lab: E-2 Catalog, schema evolution, and data quality')).toBeVisible();
+});
+
 test('study track choice switches views and unknown tracks fall back to levels', async ({ page }) => {
   await page.goto('/labs/?track=NOT-AN-EXAM');
   await expect(page.getByPlaceholder(/^Filter labs by number/)).toBeVisible();

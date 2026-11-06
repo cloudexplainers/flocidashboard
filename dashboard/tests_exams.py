@@ -147,9 +147,28 @@ class ExamTracksApiTests(SimpleTestCase):
         self.assertIn('operational-runbooks', tasks['1.2']['concepts'])
         self.assertIn('hybrid-connectivity', tasks['5.3']['concepts'])
 
+    def test_data_engineer_associate_track_covers_every_task(self):
+        tracks = exam_tracks(all_labs())
+        dea = next(exam for exam in tracks['exams'] if exam['code'] == 'DEA-C01')
+        tasks = {task['id']: task for domain in dea['domains'] for task in domain['tasks']}
+        self.assertEqual(len(tasks), 17)
+        self.assertEqual([domain['weight'] for domain in dea['domains']], [34, 26, 22, 18])
+        self.assertEqual(dea['passing_score'], 720)
+        for task_id, task in tasks.items():
+            with self.subTest(task=task_id):
+                self.assertTrue(task['concepts'], f'DEA {task_id} has no concept card')
+        ingestion = {(lab['service'], lab['key']) for lab in tasks['1.1']['labs']}
+        self.assertIn(('kinesis', 'streaming-data-lake'), ingestion)
+        lifecycle = {(lab['service'], lab['key']) for lab in tasks['2.3']['labs']}
+        self.assertIn(('s3', 'lifecycle-retention'), lifecycle)
+        authorization = {(lab['service'], lab['key']) for lab in tasks['4.2']['labs']}
+        self.assertIn(('iam', 'machine-identity'), authorization)
+        self.assertIn('data-quality', tasks['3.4']['concepts'])
+        self.assertIn('pipeline-orchestration', tasks['3.1']['concepts'])
+
     def test_exams_endpoint_and_catalog_include_tags(self):
         exams = self.client.get(reverse('dashboard:labs-exams')).json()
-        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02', 'AIF-C01', 'DOP-C02', 'SOA-C03'])
+        self.assertEqual([exam['code'] for exam in exams['exams']], ['CLF-C02', 'SAA-C03', 'DVA-C02', 'AIF-C01', 'DOP-C02', 'SOA-C03', 'DEA-C01'])
         self.assertEqual(len(exams['concepts']), len(CONCEPT_CARDS))
 
         catalog = self.client.get(reverse('dashboard:labs-catalog')).json()

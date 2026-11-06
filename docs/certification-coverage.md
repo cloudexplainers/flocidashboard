@@ -1,6 +1,6 @@
-# Certification Coverage: CLF-C02, SAA-C03, DVA-C02, AIF-C01, DOP-C02, and SOA-C03
+# Certification Coverage: CLF-C02, SAA-C03, DVA-C02, AIF-C01, DOP-C02, SOA-C03, and DEA-C01
 
-This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)), since 2026-10-26, **AWS Certified AI Practitioner (AIF-C01)** ([§8](#8-ai-practitioner-aif-c01)), since 2026-11-02, **AWS Certified DevOps Engineer – Professional (DOP-C02)** ([§9](#9-devops-engineer--professional-dop-c02)), and, since 2026-11-04, **AWS Certified CloudOps Engineer – Associate (SOA-C03)** ([§10](#10-cloudops-engineer--associate-soa-c03)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
+This document maps the Floci Dashboard workflow labs to the official AWS exam guides for **AWS Certified Cloud Practitioner (CLF-C02)** and **AWS Certified Solutions Architect – Associate (SAA-C03)**, and, since 2026-10-24, **AWS Certified Developer – Associate (DVA-C02)** ([§7](#7-developer--associate-dva-c02)), since 2026-10-26, **AWS Certified AI Practitioner (AIF-C01)** ([§8](#8-ai-practitioner-aif-c01)), since 2026-11-02, **AWS Certified DevOps Engineer – Professional (DOP-C02)** ([§9](#9-devops-engineer--professional-dop-c02)), since 2026-11-04, **AWS Certified CloudOps Engineer – Associate (SOA-C03)** ([§10](#10-cloudops-engineer--associate-soa-c03)), and, since 2026-11-06, **AWS Certified Data Engineer – Associate (DEA-C01)** ([§11](#11-data-engineer--associate-dea-c01)). It also lists what is missing and proposes a prioritized plan to close the gaps. It is the first step toward exam-aligned study tracks for every AWS certification.
 
 It is a planning document. No labs are built here; pick from [the plan](#5-prioritized-lab-plan).
 
@@ -18,6 +18,7 @@ It is a planning document. No labs are built here; pick from [the plan](#5-prior
 - **Developer – Associate (DVA-C02) is the third track (2026-10-24).** **Wave D** (six labs, [§7](#7-developer--associate-dva-c02)) is complete: CI/CD with CodeBuild, CodePipeline and CodeDeploy, API Gateway stages and authorizers, DynamoDB application patterns, SAM with AppConfig, Lambda async error handling, and serverless observability. All 13 DVA task statements now have hands-on labs; X-Ray and Private CA stay concept cards because Floci lacks them. **Wave 3** (governance, multi-account, network scale-out, edge security, and cost; seven items, [§5](#wave-3-governance-multi-account-cost-and-clf-oriented-labs)) is complete as of 2026-10-25.
 - **AI Practitioner (AIF-C01) is the fourth track (2026-10-26).** Every task statement has a concept card and a four-question quiz, and ten existing labs are tagged, nine of them for the security and governance domain. Floci 2.3.0 runs real SageMaker training jobs and endpoints and real S3 Vectors similarity search, while Bedrock, Comprehend, Rekognition, Textract, Translate, and Transcribe return stub answers. **Wave AI is complete** (five labs shipped 2026-10-26, [§8](#8-ai-practitioner-aif-c01)): the AI services tour, SageMaker from training to endpoint, RAG with S3 Vectors, prompt patterns with evaluation, and responsible AI with guardrails, which together give hands-on practice for nine of the 14 task statements.
 - **DevOps Engineer – Professional (DOP-C02) is the fifth track (2026-11-02).** 52 existing labs were tagged, and with the first five Wave P labs (P-1 to P-5, shipped) 18 of its 19 task statements are hands-on (resilience, monitoring, and security come from the SAA and DVA work). **Wave P** (seven labs, [§9](#9-devops-engineer--professional-dop-c02)) fills the professional-level gaps: StackSets across Regions, container and in-place deployments, pipeline test gates, event-driven remediation, centralized logging, and machine identity. Floci 2.4.0 runs StackSets, custom resources, ECS blue/green deployments, composite alarms, log subscriptions, and secret rotation, but not drift detection, SSM Automation, Patch Manager, Config remediation, or ABAC.
+- **Data Engineer – Associate (DEA-C01) is the seventh track (2026-11-06).** 57 existing labs are tagged and 16 concept cards cover every task statement; 12 of 17 are already hands-on. **Wave E** (six labs, [§11](#11-data-engineer--associate-dea-c01)) adds a Redshift Serverless warehouse, the Glue catalog with schema evolution and data quality, event-driven batch ETL, an Airflow pipeline on MWAA, stream processing, and lake governance. Floci 2.4.0 runs Redshift as real PostgreSQL behind the Data API, Athena in DuckDB, real Airflow, and real Kafka, but Glue scripts and crawlers don't run, Glue Data Quality is stored only, and Lake Formation is not enforced.
 - **UI direction:** add exam and task tags to each lab in one Python registry, then add a "Study track" switcher (Levels · CLF-C02 · SAA-C03) with domain-weighted progress and concept cards for objectives that can't be labbed. The same structure extends to every other certification.
 
 ---
@@ -767,7 +768,85 @@ A new curriculum level, **Level 11: CloudOps Associate**, holds these labs. Each
 
 ---
 
-## 11. Extending to other certification tracks
+## 11. Data Engineer – Associate (DEA-C01)
+
+**Added 2026-11-06.** Checked against the [DEA-C01 exam guide](https://docs.aws.amazon.com/aws-certification/latest/data-engineer-associate-01/data-engineer-associate-01.html) and a disposable Floci **2.4.0** emulator (`compose.labs.yml` pinned to 2.4.0, port 14566, IAM enforcement and signature validation on), with the Floci 2.4.0 source as the reference for anything a probe could not settle. The tags live in `dashboard/labs/exams.py` like the other tracks, so the labs page has a **DEA-C01 Data Engineer – Associate** study track.
+
+### Exam guide
+
+| Domain (weight) | Task statements |
+|---|---|
+| 1 Data Ingestion and Transformation (34%) | 1.1 Perform data ingestion · 1.2 Transform and process data · 1.3 Orchestrate data pipelines · 1.4 Apply programming concepts |
+| 2 Data Store Management (26%) | 2.1 Choose a data store · 2.2 Understand data cataloging systems · 2.3 Manage the lifecycle of data · 2.4 Design data models and schema evolution |
+| 3 Data Operations and Support (22%) | 3.1 Automate data processing by using AWS services · 3.2 Analyze data by using AWS services · 3.3 Maintain and monitor data pipelines · 3.4 Ensure data quality |
+| 4 Data Security and Governance (18%) | 4.1 Apply authentication mechanisms · 4.2 Apply authorization mechanisms · 4.3 Ensure data encryption and masking · 4.4 Prepare logs for audit · 4.5 Understand data privacy and governance |
+
+65 questions (50 scored, 15 unscored), 130 minutes, passing score 720. Every question is multiple choice or multiple response. The questions ask which service, format, or setting fits a pipeline: Kinesis or MSK, Glue or EMR, Athena or Redshift, a partition or a sort key, a Lake Formation grant or a bucket policy.
+
+### Coverage by task statement (existing 114 labs)
+
+57 existing labs are tagged for DEA tasks, mostly from the Solutions Architect, Developer, and DevOps work (streaming, S3 lifecycle, DynamoDB, Step Functions, IAM, KMS, and logging). Sixteen new concept cards cover the theory, ten of them naming a planned Wave E lab, and the DynamoDB access patterns card now also covers DEA 2.4. Legend as in §1; ○ here means a concept card but no lab.
+
+| Task | Coverage | Covered by | Gap |
+|---|---|---|---|
+| 1.1 | ● | kinesis/streaming-data-lake (Kinesis, Firehose, replay), dynamodb/capacity-at-scale (streams), lambda/sqs-event-source, s3/object-notifications-sqs, scheduler/sqs-delivery, sns/sqs-fanout, dms/migration-toolkit (CDC), s3/multipart-upload | Kinesis to Lambda batching and failure handling, enhanced fan-out, MSK (E-5) |
+| 1.2 | ◐ | kinesis/streaming-data-lake (Parquet conversion), ecs/fargate-microservice | No transformation job that reads, cleans, and writes partitioned data (E-3); Glue scripts and EMR Spark don't run in Floci (card) |
+| 1.3 | ● | stepfunctions/order-processing-workflow, parallel-retry-workflow, eventbridge/application-spine, sns/sqs-fanout, sqs/dead-letter-redrive, lambda/async-error-handling | No data pipeline orchestration or Airflow (E-3, E-4) |
+| 1.4 | ● | lambda/performance-cost, runtime-config, cloudformation/sam-environments, s3-sqs-stack, codepipeline/lambda-cicd, dynamodb/lambda-writes, lambda/sqs-event-source | — |
+| 2.1 | ● | dynamodb/capacity-at-scale, application-patterns, crud-query, rds/db-instance-lifecycle, aurora-resilience, elasticache/cache-aside, s3vectors/rag-knowledge-base (vector index), ec2/block-file-storage, s3/object-workflow | No Redshift warehouse (E-1) |
+| 2.2 | ◐ | kinesis/streaming-data-lake (a Glue table with partition projection) | Partitions kept in sync, partition indexes, crawlers, connections (E-2) |
+| 2.3 | ● | s3/lifecycle-retention, version-recovery, data-protection-tiers, dynamodb/capacity-at-scale (TTL), backup/backup-dr-plan, restore-drill, rds/aurora-resilience | Loading and unloading Redshift (E-1) |
+| 2.4 | ◐ | dynamodb/application-patterns (key design), crud-query, dms/migration-toolkit (SCT) | Warehouse schema design (E-1) and schema evolution with the Schema Registry and table versions (E-2) |
+| 3.1 | ● | stepfunctions/order-processing-workflow, parallel-retry-workflow, eventbridge/application-spine, scheduler/sqs-delivery, s3/object-notifications-sqs, lambda/create-invoke-logs | Data processing with Athena and Redshift from a pipeline (E-3, E-4) |
+| 3.2 | ◐ | kinesis/streaming-data-lake (Athena queries) | Warehouse SQL, views, window functions (E-1); QuickSight, DataBrew, and Athena Spark not in Floci (card) |
+| 3.3 | ● | cloudwatch/metric-alarms, log-groups-metric-filters, centralized-logging, serverless-observability, cloudtrail/governance-tour, sqs/dead-letter-redrive, lambda/async-error-handling | Troubleshooting a failed pipeline run (E-4) |
+| 3.4 | ○ | — | Data quality rules, quarantine, and alerts (E-2); Glue Data Quality evaluation and DataBrew not in Floci (card) |
+| 4.1 | ● | secretsmanager/secret-lifecycle, iam/role-trust-policy, sts-session-policy, ec2-instance-profile, machine-identity, ec2/security-controls, s3-gateway-endpoint, sqs-interface-endpoint | Database credentials from Secrets Manager and IAM for the Redshift Data API (E-1, E-6) |
+| 4.2 | ● | iam/machine-identity (ABAC), identity-enforcement-capstone, inline-policy-alice, sts-session-policy, access-troubleshooting, s3/bucket-security, ssm/parameter-store-config, secretsmanager/secret-lifecycle, lambda/runtime-config | Lake Formation grants and Redshift database grants (E-1, E-6) |
+| 4.3 | ● | kms/key-management, key-alias-encrypt-decrypt, s3/default-encryption, bucket-security, bedrock/guardrails-least-privilege (PII masking), iam/access-troubleshooting (TLS) | Masking columns for analysts (E-6) |
+| 4.4 | ● | cloudtrail/governance-tour, cloudwatch/centralized-logging, log-groups-metric-filters | Auditing data access in a lake (E-6); CloudTrail Lake not in Floci (card) |
+| 4.5 | ● | iam/multi-account-guardrails (SCPs), cloudtrail/governance-tour (Config), s3/data-protection-tiers (replication), backup/backup-dr-plan | Finding personal data and Region restrictions for a data lake (E-6); Macie findings not routed (card) |
+
+Most of domain 4 and the general parts of domains 1 to 3 are hands-on from earlier tracks. The gaps are the data engineer's own tools: the warehouse, the catalog, data quality, pipeline orchestration, stream processing, and lake governance.
+
+### What Floci 2.4.0 does for data services
+
+Probed 2026-11-06 with real SDK calls, and checked against the Floci source at the 2.4.0 tag. The Wave 2 notes in §4 on Firehose, Glue, and Athena still apply.
+
+| Area | Result |
+|---|---|
+| **Redshift Serverless and Redshift** | **Behaves.** A workgroup (or a provisioned cluster) is a real PostgreSQL 15 container. The Data API runs SQL asynchronously (`ExecuteStatement`, `BatchExecuteStatement` as one transaction, `DescribeStatement`, `GetStatementResult`) and rejects several statements in one `ExecuteStatement`, as AWS does. Window functions, views, and materialized views (with `REFRESH`) work. Database users and grants are enforced: a statement run with another user's secret (`SecretArn`) is refused on a table it was not granted. Namespace snapshots and usage limits exist. Redshift-only syntax fails: `DISTSTYLE`, `DISTKEY`, `SORTKEY`, `ENCODE`, `COPY`, `UNLOAD`, `LISTAGG`, `GETDATE`, and `APPROXIMATE COUNT`. `SVV_TABLE_INFO` exists. |
+| **Athena** | **Behaves.** SQL runs in DuckDB over Glue tables (CSV, JSON, Parquet, Iceberg), including partitioned tables. No CTAS or Hive DDL. The DuckDB sidecar downloads an extension on first use, so Athena needs internet access once. |
+| **Glue Data Catalog** | **Behaves.** Databases, tables, partitions (`BatchCreatePartition`, `GetPartitions` with an expression), partition indexes, table versions, connections. |
+| **Glue Schema Registry** | **Behaves.** Compatibility is enforced: a `BACKWARD` schema accepts a new Avro version that adds a field with a default and refuses one that changes a field's type. |
+| **Glue crawlers, jobs, workflows** | **Control plane.** A crawler runs and finishes without creating tables or partitions. A job run reports `SUCCEEDED` without running its script. Workflows and triggers start runs. |
+| **Glue Data Quality** | **Stored only.** `CreateDataQualityRuleset` stores DQDL; `StartDataQualityRulesetEvaluationRun` is unsupported. |
+| **Lake Formation** | **Stored, not enforced.** Data lake settings, registered locations, grants (including column grants), and LF-Tags are stored and listed. Athena and Redshift ignore them. `CreateDataCellsFilter` is not routed (an S3 signature error). |
+| **Step Functions** | **Partial.** Lambda, SNS, SQS, DynamoDB, and the Redshift Data API (`aws-sdk:redshiftdata`) integrations run. The Athena and Glue integrations (`athena:startQueryExecution`, `glue:startJobRun`, `.sync` or not) are unsupported. |
+| **MWAA** | **Behaves.** An environment is a real Airflow 2.10 (webserver and scheduler) with its own PostgreSQL, ready in about 30 seconds once the images are pulled (about 1.5 GB). DAG files sync from the S3 `dags` folder every 30 seconds (`dags reserialize` loads them at once). `CreateCliToken` and the `/aws_mwaa/cli` endpoint run allowed Airflow CLI commands, and DAG code reaches Floci through boto3. |
+| **MSK** | **Behaves.** A cluster is a real Redpanda broker that Kafka clients can use; configurations are stored. Redpanda's HTTP proxy does not create topics. |
+| **Managed Service for Apache Flink** | **Behaves.** `StartApplication` runs a real Flink cluster and submits the application's JAR from S3. A lab would need a prebuilt JAR. |
+| **EMR and EMR Serverless** | **Control plane** by default. Job runs succeed without running; Spark runs only when Floci is started with the docker runner mode, which the dashboard's Compose file does not set. |
+| **Not routed or unsupported** | Glue DataBrew, AppFlow, QuickSight dashboards, Athena Spark, CloudTrail Lake, Macie findings (`AuthorizationHeaderMalformed`), and the SageMaker Catalog. |
+
+### Wave E: Data Engineer labs
+
+A new curriculum level, **Level 12: Data Engineer Associate**, will hold these labs. Each lab follows the existing pattern and says in each step what Floci only stores versus what it does. The labs ship in two batches (E-1 to E-3, then E-4 to E-6) to keep the number of PRs small.
+
+| # | Proposed lab | Steps | DEA | Floci |
+|---|---|---|---|---|
+| E-1 | **Redshift Serverless warehouse**: a namespace and workgroup, a star schema designed with distribution and sort keys (shown as the Redshift DDL, run as standard SQL), sales staged in S3 and loaded through the Data API in a transaction, a materialized view and a rolling seven-day average, an analyst user who can read only a masked view, a usage limit and a snapshot, and UNLOAD as the exam lens | 8 | 2.1, 2.3, 2.4, 3.2, 4.2 | ✅ PostgreSQL SQL, transactions, materialized views, grants enforced per user; ⚠️ DISTKEY, SORTKEY, COPY and UNLOAD not accepted (the lab loads with INSERT and explains COPY) |
+| E-2 | **Catalog, schema evolution, and data quality**: a partitioned Glue table over raw orders, new partitions registered and found with an expression, a partition index, a new column with a table version, an Avro schema in the Schema Registry that accepts a compatible change and refuses a breaking one, a crawler, a DQDL ruleset evaluated with Athena SQL, bad rows quarantined, and a quality score metric with an alarm | 8 | 2.2, 3.4, 2.4, 3.2 | ✅ catalog, partitions, indexes, table versions, Schema Registry compatibility, Athena; ⚠️ crawlers create nothing and DQDL is stored only (the lab evaluates the rules) |
+| E-3 | **Event-driven batch ETL**: an upload to the raw bucket starts a Step Functions workflow through EventBridge; a Map state runs a Lambda function per file that validates, cleans, and writes date-partitioned JSON; a manifest table makes reruns idempotent; failures retry, then alert through SNS and SQS; an Athena query checks the curated data; and a schedule runs the nightly batch | 8 | 1.3, 1.2, 3.1, 1.1 | ✅ S3 events, EventBridge, Step Functions with Lambda, SNS and DynamoDB, Athena; ⚠️ the Athena and Glue service integrations are unsupported (Lambda calls Athena) |
+| E-4 | **Airflow pipeline on MWAA**: a versioned S3 bucket with a DAG and requirements, an environment, a DAG that lands, transforms, and queries data with retries and a failure alert, a run triggered with a CLI token, a failed task found from its state and log and rerun, variables and connections, and a schedule | 8 | 1.3, 3.1, 3.3 | ✅ real Airflow, DAG sync, CLI, boto3 from tasks; ⚠️ large images, and no Airflow logs in CloudWatch |
+| E-5 | **Stream processing with Kinesis, Lambda, and MSK**: an event source mapping with a batch window, a poison record isolated with bisecting and an on-failure destination, a tumbling window aggregation, an enhanced fan-out consumer, a replay from a timestamp, a hot shard split, and an MSK cluster compared with Kinesis | 8 | 1.1, 1.4 | to probe when built |
+| E-6 | **Data lake governance**: a registered lake location, LF-Tags and grants for analysts (stored, and evaluated by the lab), an IAM policy limited to one prefix (enforced), SSE-KMS with a key policy, personal data found and masked, a Region guardrail, and an audit of data access from CloudTrail | 8 | 4.2, 4.3, 4.5, 4.4, 4.1 | ✅ IAM, KMS states, Redshift grants, CloudTrail lookups; ⚠️ Lake Formation not enforced, Macie not routed |
+
+**Projected DEA coverage:** today 12 of 17 task statements are ● hands-on, four are ◐ (1.2, 2.2, 2.4, 3.2), and 3.4 has a concept card only. E-1 makes 2.4 and 3.2 hands-on, E-2 makes 2.2 and 3.4 hands-on, and E-3 makes 1.2 hands-on. E-4 to E-6 add the data engineer's view to tasks that are already hands-on. Glue ETL scripts, crawlers that infer schemas, DataBrew, QuickSight, and Lake Formation enforcement stay concept cards until Floci adds them.
+
+---
+
+## 12. Extending to other certification tracks
 
 The structure above is exam-agnostic. A new track needs three things:
 
@@ -785,7 +864,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 | **Solutions Architect – Professional** (training vendors report SAP-C02's last day as 2026-11-16 with a successor to follow; not confirmed on aws.amazon.com) | Builds on the SAA track. | Multi-account network hub (TGW), cross-account roles at scale, DR across Regions, migration with DMS | Hybrid networking and real multi-Region behavior are mostly concept |
 | **Security – Specialty** | IAM, KMS, S3 security, VPC controls. | KMS and key policies, Secrets rotation, GuardDuty, Security Hub, Macie, Config rules, CloudTrail analysis, WAF | **Key-policy and SCP enforcement gaps** limit "prove the deny" labs; detection services are control plane only |
 | **Advanced Networking – Specialty** (AWS lists retirement on 2026-12-31) | VPC labs. | Low priority given the retirement | VPN and Direct Connect unsupported |
-| **Data Engineer – Associate** | Low today. | Kinesis, Firehose, Glue, Athena, Lake Formation, Redshift, EMR, Step Functions pipelines | Verify Glue and Athena execution depth first |
+| **Data Engineer – Associate (DEA-C01)** | **Track live since 2026-11-06; see [§11](#11-data-engineer--associate-dea-c01).** | Wave E (E-1 to E-6) | Glue scripts and crawlers don't run, Data Quality is stored only, Lake Formation is not enforced, no DataBrew or QuickSight |
 | **AI Practitioner (AIF-C01)** | **Track and Wave AI complete since 2026-10-26; see [§8](#8-ai-practitioner-aif-c01).** | Fine-tuning and explainability if Floci gains Bedrock customization or SageMaker Clarify | Bedrock answers and the AI services are stubs |
 | **Machine Learning Engineer – Associate** | Medium. Builds on Wave AI's SageMaker lab. | Training jobs with tuning, endpoint variants, batch transform, Feature Store, Pipelines | Only training jobs and endpoints are emulated; no tuning, Pipelines, Model Monitor, or Feature Store |
 
@@ -793,7 +872,7 @@ Labs are shared across tracks, so a lab tagged for SAA 2.1 can also be tagged fo
 
 ---
 
-## 12. Keeping this current
+## 13. Keeping this current
 
 - **When AWS revises a guide,** update `EXAM_GUIDES`. The "no orphan objective" test then flags labs tagged with removed task IDs.
 - **When Floci upgrades,** rerun the probe for anything marked control plane, unsupported, or inconclusive in §4. Several topics, especially SCP and KMS key-policy enforcement, S3 replication, and NAT egress, would move labs from "configuration only" to "prove it works."
