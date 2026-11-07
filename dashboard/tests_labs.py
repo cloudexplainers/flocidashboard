@@ -7655,6 +7655,21 @@ class MultiSdkSnippetsTests(SimpleTestCase):
         self.assertIn('events.put_events()', snippet)
         self.assertNotIn('ref', snippet.split('put_events', 1)[1])
 
+    def test_terraform_refers_to_resources_declared_in_the_same_step(self):
+        """Literal names would let Terraform create a policy before its role; references order them."""
+        from dashboard.labs.snippets import generate_terraform_snippet
+
+        tf = generate_terraform_snippet(
+            'aws iam create-role --role-name worker --assume-role-policy-document file://trust.json\n'
+            'aws iam put-role-policy --role-name worker --policy-name p --policy-document file://p.json\n'
+            'aws sns create-topic --name alerts\n'
+            'aws sns subscribe --topic-arn arn:aws:sns:us-east-1:000000000000:alerts --protocol email '
+            '--notification-endpoint a@example.com'
+        )
+        self.assertIn('role   = aws_iam_role.worker.name', tf)
+        self.assertIn('topic_arn = aws_sns_topic.alerts.arn', tf.replace('  topic_arn', 'topic_arn'))
+        self.assertIn('name               = "worker"', tf)
+
     def test_terraform_flow_log_uses_log_destination(self):
         from dashboard.labs.snippets import generate_terraform_snippet
 

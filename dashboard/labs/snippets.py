@@ -2510,6 +2510,7 @@ def _generate_terraform(command: str) -> str:
     used: set[str] = set()
     variables: dict[str, str] = {}
     previous: dict[str, str] = {}
+    refs: dict[str, tuple[str, _Hcl]] = {}  # literal name or ARN -> (resource type, reference)
     for call, files, reason in _terraform_calls(command):
         if call is None:
             notes.append(f'# aws {reason}: not managed by Terraform')
@@ -2540,6 +2541,8 @@ def _generate_terraform(command: str) -> str:
                 body = [(k, _Hcl(v.expr.replace('PREVIOUS', previous.get('aws_secretsmanager_secret', '')))
                          if isinstance(v, _Hcl) and 'PREVIOUS' in v.expr else v) for k, v in res.body]
                 previous[res.type] = f'{res.type}.{label}'
+                body = _link_references(body, res.type, refs)
+                _register_references(body, res.type, label, refs)
                 lines = [f'resource "{res.type}" "{label}" {{', *_render_body(body, 1, tf), '}']
                 blocks.append(lines)
             skipped = sorted(set(params) - params.seen - _TF_IMPLICIT)
@@ -2568,6 +2571,54 @@ def _generate_terraform(command: str) -> str:
     if notes:
         out += _dedupe(notes) + ['']
     return '\n'.join(_align(out)).rstrip() + '\n'
+
+
+# Attributes that name a resource, and how its ARN ends, so later blocks can refer to it.
+_TF_NAME_KEYS = ('name', 'bucket', 'function_name', 'alarm_name', 'family')
+_TF_ARN_SHAPES = {
+    'aws_iam_role': r'arn:aws:iam::\d{12}:role/(?:[\w+=,.@-]+/)*',
+    'aws_iam_policy': r'arn:aws:iam::\d{12}:policy/(?:[\w+=,.@-]+/)*',
+    'aws_iam_user': r'arn:aws:iam::\d{12}:user/(?:[\w+=,.@-]+/)*',
+    'aws_lambda_function': r'arn:aws:lambda:[\w-]+:\d{12}:function:',
+    'aws_sqs_queue': r'arn:aws:sqs:[\w-]+:\d{12}:',
+    'aws_sns_topic': r'arn:aws:sns:[\w-]+:\d{12}:',
+    'aws_cloudwatch_event_bus': r'arn:aws:events:[\w-]+:\d{12}:event-bus/',
+    'aws_dynamodb_table': r'arn:aws:dynamodb:[\w-]+:\d{12}:table/',
+    'aws_sfn_state_machine': r'arn:aws:states:[\w-]+:\d{12}:stateMachine:',
+    'aws_kinesis_stream': r'arn:aws:kinesis:[\w-]+:\d{12}:stream/',
+    'aws_s3_bucket': r'arn:aws:s3:::',
+}
+
+
+def _register_references(body: list[tuple[str, Any]], kind: str, label: str, refs: dict) -> None:
+    """Remember this resource's name (and ARN shape) so later blocks reference it instead of a literal."""
+    for key, value in body:
+        if key in _TF_NAME_KEYS and isinstance(value, str) and value:
+            refs.setdefault(value, (kind, _Hcl(f'{kind}.{label}.{key}')))
+            if kind in _TF_ARN_SHAPES:
+                refs.setdefault(('arn', kind, value), (kind, _Hcl(f'{kind}.{label}.arn')))
+            return
+
+
+def _link_references(entries: list[tuple[str, Any]], kind: str, refs: dict) -> list[tuple[str, Any]]:
+    """Swap literal names and ARNs of resources declared earlier in the snippet for references,
+    so Terraform creates them first instead of racing them."""
+    def swap(value: Any) -> Any:
+        if isinstance(value, _Body):
+            return _Body(_link_references(value.entries, kind, refs))
+        if isinstance(value, list):
+            return [swap(v) for v in value]
+        if not isinstance(value, str):
+            return value
+        hit = refs.get(value)
+        if hit and hit[0] != kind:
+            return hit[1]
+        for (tag, other, name), (_, ref) in ((k, v) for k, v in refs.items() if isinstance(k, tuple)):
+            if other != kind and re.fullmatch(_TF_ARN_SHAPES[other] + re.escape(name), value):
+                return ref
+        return value
+
+    return [(k, swap(v)) for k, v in entries]
 
 
 def _dedupe(items: list[str]) -> list[str]:
