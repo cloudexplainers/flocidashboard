@@ -66,3 +66,20 @@ class CloudFormationWorkspaceTests(SimpleTestCase):
         self.assertEqual(result['stacks'][0]['resources'][0]['LogicalResourceId'], 'Queue')
         client.describe_stack_resources.assert_called_once_with(StackName='orders')
         self.assertNotIn('describe_stack_resources', [item.args[1] for item in paginate_mock.call_args_list])
+
+    @patch('dashboard.aws._paginate')
+    @patch('dashboard.aws.FlociClientFactory')
+    def test_inventory_marks_an_unreadable_stack_policy_as_a_floci_gap(self, factory_mock, paginate_mock):
+        from .aws import cloudformation_inventory
+        client = factory_mock.return_value.client.return_value
+        client.meta.service_model.operation_names = []
+        client.can_paginate.return_value = False
+        client.describe_stacks.return_value = {'Stacks': [{'StackName': 'orders'}]}
+        client.describe_stack_resources.return_value = {'StackResources': []}
+        client.get_template.return_value = {'TemplateBody': 'Resources: {}'}
+        # botocore raises KeyError when Floci omits GetStackPolicyResult.
+        client.get_stack_policy.side_effect = KeyError('GetStackPolicyResult')
+        paginate_mock.side_effect = lambda _client, operation, _key, **kwargs: [{'StackName': 'orders'}] if operation == 'list_stacks' else []
+        policy = cloudformation_inventory()['stacks'][0]['stack_policy']
+        self.assertNotIn('error', policy)
+        self.assertIn('without a result', policy['unavailable'])
