@@ -68,3 +68,10 @@ class RegistrationTests(SimpleTestCase):
             self.assertIn('How Floci emulates this', step['explanation'], step['key'])
             self.assertIn(step['key'], lab.RUNNERS)
             self.assertIn(step['key'], lab.CHECKS)
+
+
+class SlowCreateTests(SimpleTestCase):
+    def test_environment_create_waits_for_the_containers_and_never_retries(self):
+        config = lab._slow_client('mwaa').meta.config
+        self.assertGreaterEqual(config.read_timeout, 300)
+        self.assertEqual(config.retries['total_max_attempts'], 1)

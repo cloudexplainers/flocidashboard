@@ -108,6 +108,14 @@ docker compose -f compose.labs.yml -p flocidashboard-lab-tests down
 
 Some labs (EC2, Lambda, RDS, ECS, EKS) start extra containers and download images. If any are left behind after `down`, remove the `floci-aws-*` containers on the `flocidashboard-lab-tests` network.
 
+The MWAA lab (`mwaa/airflow-pipeline`) talks to the Airflow CLI endpoint Floci serves on its Docker network (`floci:8700`), so from the host its later steps fail with "not reachable". Audit it from a container on that network:
+
+```bash
+docker run --rm --network flocidashboard-lab-tests -v "$PWD":/app -w /app \
+  -e AWS_ACCESS_KEY_ID=test -e AWS_SECRET_ACCESS_KEY=test -e FLOCI_AWS_PROFILE= -e AWS_DEFAULT_REGION=us-east-1 \
+  flocidashboard-dashboard python manage.py check_labs --endpoint http://floci:4566 --service mwaa
+```
+
 Playwright starts its own Django server on port 18000 with a separate SQLite database. It points that server at `http://localhost:4566` unless you set `E2E_FLOCI_ENDPOINT`; set it to `http://localhost:14566` to keep test traffic off your everyday Floci. Set `E2E_PYTHON` if your interpreter isn't `../.venv/bin/python`. Install the browser once with `npx playwright install chromium`.
 
 ## Before you open a pull request

@@ -20,6 +20,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from django.core.cache import cache
 
@@ -384,6 +385,14 @@ def _client(name: str):
     return FlociClientFactory().client(name)
 
 
+def _slow_client(name: str):
+    # Floci starts the Airflow and Postgres containers inside CreateEnvironment, so a cold
+    # image pull outlasts the inventory timeout; a retry would then fail with "already exists".
+    factory = FlociClientFactory()
+    factory.config = factory.config.merge(Config(read_timeout=300, retries={'max_attempts': 0}))
+    return factory.client(name)
+
+
 def _code(exc: ClientError) -> str:
     return exc.response.get('Error', {}).get('Code') or ''
 
@@ -697,7 +706,7 @@ def step_create_environment() -> dict[str, Any]:
             raise
         iam.create_role(RoleName=ROLE, AssumeRolePolicyDocument=json.dumps(TRUST), Description='MWAA execution role')
     iam.put_role_policy(RoleName=ROLE, PolicyName=INLINE_POLICY, PolicyDocument=json.dumps(EXECUTION_POLICY))
-    mwaa = _client('mwaa')
+    mwaa = _slow_client('mwaa')
     if not _environment():
         mwaa.create_environment(
             Name=ENVIRONMENT, AirflowVersion=AIRFLOW_VERSION, ExecutionRoleArn=ROLE_ARN,

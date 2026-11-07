@@ -17,6 +17,7 @@ import time
 import zipfile
 from typing import Any
 
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from django.core.cache import cache
 
@@ -282,6 +283,14 @@ STEP_KEYS = [step['key'] for step in LAB['steps']]
 
 def _client(name: str):
     return FlociClientFactory().client(name)
+
+
+def _slow_client(name: str):
+    # Floci starts the database container inside CreateDBInstance, so a cold image pull
+    # outlasts the inventory timeout; a retry would then fail with "already exists".
+    factory = FlociClientFactory()
+    factory.config = factory.config.merge(Config(read_timeout=120, retries={'max_attempts': 0}))
+    return factory.client(name)
 
 
 def _code(exc: ClientError) -> str:
@@ -659,12 +668,17 @@ def step_ec2_guest_os() -> dict[str, Any]:
 
 def step_rds_managed_engine() -> dict[str, Any]:
     started = time.perf_counter()
-    rds = _client('rds')
+    rds = _slow_client('rds')
     db = _db()
     settings = {key: value for key, value in DB_SETTINGS.items() if key not in ('Engine', 'MasterUsername', 'AllocatedStorage')}
     if not db:
-        rds.create_db_instance(DBInstanceIdentifier=DB_ID, MasterUserPassword=DB_PASSWORD,
-                               Tags=[LAB_TAG, {'Key': 'Name', 'Value': DB_ID}], **DB_SETTINGS)
+        try:
+            rds.create_db_instance(DBInstanceIdentifier=DB_ID, MasterUserPassword=DB_PASSWORD,
+                                   Tags=[LAB_TAG, {'Key': 'Name', 'Value': DB_ID}], **DB_SETTINGS)
+        except ClientError as exc:
+            # A create still finishing from an earlier click: wait for it below.
+            if _code(exc) not in ('DBInstanceAlreadyExists', 'DBInstanceAlreadyExistsFault'):
+                raise
     elif rds_customer_choices(db):
         modifiable = {key: value for key, value in settings.items() if key not in ('StorageEncrypted', 'DBInstanceClass')}
         rds.modify_db_instance(DBInstanceIdentifier=DB_ID, ApplyImmediately=True, **modifiable)
