@@ -22,6 +22,22 @@ def _cloudformation_optional(loader: Callable[[], Any], empty_codes: set[str]) -
         return {'error': str(exc)}
 
 
+def _stack_policy(cloudformation: Any, name: str) -> Any:
+    try:
+        response = cloudformation.get_stack_policy(StackName=name)
+    except KeyError as exc:
+        # Some Floci versions answer GetStackPolicy without a GetStackPolicyResult element, which
+        # boto3 can't read. That's a gap in the emulator, not a failure of this stack.
+        if exc.args and exc.args[0] == 'GetStackPolicyResult':
+            return {'unavailable': 'Floci answered GetStackPolicy without a result, so the stack policy cannot be read.'}
+        return {'error': str(exc)}
+    except ClientError as exc:
+        return None if _error_code(exc) == 'ValidationError' else {'error': str(exc)}
+    except (AttributeError, BotoCoreError, ValueError, json.JSONDecodeError) as exc:
+        return {'error': str(exc)}
+    return _clean_response(response)
+
+
 def cloudformation_inventory() -> dict[str, Any]:
     factory = core.FlociClientFactory()
     cloudformation = factory.client('cloudformation')
@@ -57,10 +73,7 @@ def cloudformation_inventory() -> dict[str, Any]:
             lambda: core._paginate(cloudformation, 'list_change_sets', 'Summaries', StackName=name),
             {'ValidationError'},
         )
-        stack_policy = _cloudformation_optional(
-            lambda: cloudformation.get_stack_policy(StackName=name),
-            {'ValidationError'},
-        )
+        stack_policy = _stack_policy(cloudformation, name)
 
         described_stack = stack if isinstance(stack, dict) and not stack.get('error') else {}
 
