@@ -457,6 +457,16 @@ def _enis(subnet_id: str) -> list[dict[str, Any]]:
         {'Name': 'subnet-id', 'Values': [subnet_id]}])['NetworkInterfaces'], [])
 
 
+def _live_instances(subnet_ids: list[str]) -> list[dict[str, Any]]:
+    if not subnet_ids:
+        return []
+    reservations = _safe_call(lambda: _client('ec2').describe_instances(Filters=[
+        {'Name': 'subnet-id', 'Values': subnet_ids},
+        {'Name': 'instance-state-name', 'Values': ['pending', 'running', 'shutting-down', 'stopping', 'stopped']},
+    ])['Reservations'], [])
+    return [item for reservation in reservations for item in reservation.get('Instances', [])]
+
+
 def _workload_enis(subnet_id: str) -> list[dict[str, Any]]:
     return [item for item in _enis(subnet_id) if item.get('Description') == 'other workload']
 
@@ -915,7 +925,11 @@ def reset() -> dict[str, Any]:
     if _group():
         attempt(f'autoscaling-group:{GROUP}', lambda: _client('autoscaling').delete_auto_scaling_group(
             AutoScalingGroupName=GROUP, ForceDelete=True))
-    subnet_a = _outputs(NETWORK_STACK).get('SubnetA')
+    outputs = _outputs(NETWORK_STACK)
+    # A force-deleted group's instances shut down in the background, and the subnets can't go until they have.
+    _wait(lambda: not _live_instances([outputs[key] for key in ('SubnetA', 'SubnetB') if outputs.get(key)]),
+          GROUP_WAIT_SECONDS, delay=3)
+    subnet_a = outputs.get('SubnetA')
     if subnet_a:
         ec2 = _client('ec2')
         for eni in _enis(subnet_a):
@@ -923,6 +937,9 @@ def reset() -> dict[str, Any]:
                     lambda eni=eni: ec2.delete_network_interface(NetworkInterfaceId=eni['NetworkInterfaceId']))
     if _stack(NETWORK_STACK):
         attempt(f'stack:{NETWORK_STACK}', lambda: _delete_stack(NETWORK_STACK))
+        left = _stack(NETWORK_STACK)
+        if left:
+            errors.append(f'stack:{NETWORK_STACK}: still {left.get("StackStatus")} ({left.get("StackStatusReason") or "no reason given"})')
     placeholder = f'{TEMPLATE}-placeholder'
     if _safe_call(lambda: _client('ec2').describe_launch_templates(LaunchTemplateNames=[placeholder])
                   ['LaunchTemplates']):

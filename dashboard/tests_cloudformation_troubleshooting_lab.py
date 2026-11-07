@@ -96,3 +96,34 @@ class RegistrationTests(SimpleTestCase):
             self.assertIn('How Floci emulates this', step['explanation'], step['key'])
             self.assertIn(step['key'], lab.RUNNERS)
             self.assertIn(step['key'], lab.CHECKS)
+
+
+class ResetTests(SimpleTestCase):
+    def _reset(self, stack_after_delete):
+        stacks = {lab.NETWORK_STACK: [{'StackStatus': 'CREATE_COMPLETE'}, {'StackStatus': 'CREATE_COMPLETE'},
+                                      stack_after_delete]}
+
+        def stack(name):
+            queue = stacks.get(name) or []
+            return queue.pop(0) if queue else None
+
+        live = [[{'InstanceId': 'i-1'}], []]
+        with patch.object(lab, '_client'), patch.object(lab, '_share', return_value=None), \
+                patch.object(lab, '_image', return_value=None), patch.object(lab, '_group', return_value=None), \
+                patch.object(lab, '_stack', side_effect=stack), patch.object(lab, '_delete_stack'), \
+                patch.object(lab, '_outputs', return_value={'SubnetA': 'subnet-a', 'SubnetB': 'subnet-b'}), \
+                patch.object(lab, '_enis', return_value=[]), patch.object(lab, '_safe_call', return_value=None), \
+                patch.object(lab, '_live_instances', side_effect=lambda subnets: live.pop(0) if live else []) as instances, \
+                patch.object(lab.time, 'sleep'):
+            result = lab.reset()
+        return result, instances
+
+    def test_waits_for_the_groups_instances_before_deleting_the_network(self):
+        result, instances = self._reset(None)
+        instances.assert_called_with(['subnet-a', 'subnet-b'])
+        self.assertEqual(instances.call_count, 2)
+        self.assertEqual(result['errors'], [])
+
+    def test_a_network_stack_left_in_delete_failed_is_reported(self):
+        result, _ = self._reset({'StackStatus': 'DELETE_FAILED', 'StackStatusReason': 'subnet has dependencies'})
+        self.assertTrue(any('DELETE_FAILED' in error for error in result['errors']))
