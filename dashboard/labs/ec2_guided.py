@@ -76,7 +76,7 @@ GUIDED_EC2_LABS = [
             {
                 'key': 'verify-script-execution',
                 'title': 'Confirm initialization status',
-                'command': "aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters commands='test -f /tmp/floci-userdata.txt && echo \"artifact-confirmed\"'",
+                'command': "aws ssm send-command --instance-ids <instance-id> --document-name AWS-RunShellScript --parameters 'commands=[\"test -f /tmp/floci-userdata.txt && echo artifact-confirmed\"]'",
                 'explanation': 'Validates file existence and execution completion.',
             },
         ],

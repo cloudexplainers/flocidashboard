@@ -298,7 +298,7 @@ SERVICE_COMMAND = (
     f'aws ecs create-service --cluster {CLUSTER} --service-name {SERVICE_NAME} --task-definition {FAMILY}:1 '
     f'--desired-count {DESIRED_COUNT} --launch-type FARGATE --deployment-controller type=CODE_DEPLOY '
     f'--load-balancers targetGroupArn=<{BLUE_TG}>,containerName={CONTAINER},containerPort={CONTAINER_PORT} '
-    '--network-configuration awsvpcConfiguration={subnets=[<subnet-a>,<subnet-b>]}'
+    '--network-configuration "awsvpcConfiguration={subnets=[<subnet-a>,<subnet-b>]}"'
 )
 DEPLOYMENT_GROUP_COMMAND = (
     f'aws cloudwatch put-metric-alarm --alarm-name {ALARM} --namespace AWS/ApplicationELB '

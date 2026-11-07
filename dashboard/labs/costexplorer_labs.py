@@ -101,8 +101,8 @@ BUDGET_COMMAND = (
     f'aws sns create-topic --name {TOPIC}\n'
     f'aws budgets create-budget --account-id {ACCOUNT} --budget file://platform-budget.json '
     '--notifications-with-subscribers file://alerts.json   # ACTUAL > 80%, FORECASTED > 100%\n'
-    f'aws budgets create-budget --account-id {ACCOUNT} --budget BudgetName={RI_BUDGET},BudgetType=RI_UTILIZATION,'
-    'TimeUnit=MONTHLY,BudgetLimit={Amount=80,Unit=PERCENTAGE}'
+    f'aws budgets create-budget --account-id {ACCOUNT} --budget "BudgetName={RI_BUDGET},BudgetType=RI_UTILIZATION,'
+    'TimeUnit=MONTHLY,BudgetLimit={Amount=80,Unit=PERCENTAGE}"'
 )
 EXPLORER_COMMAND = (
     'aws ce get-cost-and-usage --time-period Start=<first-of-last-month>,End=<first-of-this-month> '

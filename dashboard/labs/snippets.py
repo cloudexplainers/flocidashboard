@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import decimal
 import io
 import json
 import keyword
@@ -287,17 +288,27 @@ def _model_parse(op_model, args: list[str]) -> dict[str, Any]:
             if _FILE_TOKEN_RE.match(raw) or _PLACEHOLDER_RE.match(raw) or raw.startswith('$'):
                 return raw
             if shape.type_name in ('structure', 'map', 'list'):
-                if raw.lstrip()[:1] in '{[':
+                text, marks = _mark_placeholders(_strip_ellipses(raw))
+                parsed = _NOT_PARSED
+                if text.lstrip()[:1] in '{[':
                     try:
-                        return json.loads(raw)
+                        parsed = json.loads(text)
                     except ValueError:
                         pass
-                try:
-                    parsed = ShorthandParser().parse(raw)
-                    BackCompatVisitor().visit(parsed, shape)
-                    return parsed
-                except Exception:
-                    return raw
+                if parsed is _NOT_PARSED:
+                    try:
+                        parsed = ShorthandParser().parse(text)
+                    except Exception:
+                        parsed = _NOT_PARSED
+                    else:
+                        try:
+                            BackCompatVisitor().visit(parsed, shape)
+                        except Exception:  # a marker stands where a number goes
+                            pass
+                if parsed is _NOT_PARSED:
+                    return _NOT_PARSED  # an unparseable fragment would only mislead; leave it out
+                parsed = _unmark_placeholders(parsed, marks)
+                return parsed if _fits_shape(parsed, shape) else _NOT_PARSED
             if shape.type_name in ('integer', 'long'):
                 return int(raw) if re.fullmatch(r'-?\d+', raw) else raw
             if shape.type_name in ('float', 'double'):
@@ -311,12 +322,63 @@ def _model_parse(op_model, args: list[str]) -> dict[str, Any]:
 
         if shape.type_name == 'list':
             if len(values) == 1 and (values[0].lstrip()[:1] == '[' or _FILE_TOKEN_RE.match(values[0])):
-                params[name] = convert(values[0])
+                value = convert(values[0])
             else:
-                params[name] = [convert(v, shape.member) for v in values]
+                value = [v for v in (convert(v, shape.member) for v in values if v != '...') if v is not _NOT_PARSED]
+                value = value or _NOT_PARSED
         else:
-            params[name] = convert(values[0])
+            value = convert(values[0])
+        if value is not _NOT_PARSED:
+            params[name] = value
     return params
+
+
+_NOT_PARSED = object()
+_MARK_RE = re.compile(r'__FLOCI_PH(\d+)__')
+
+
+def _strip_ellipses(raw: str) -> str:
+    """Drop the "..." a lab uses to shorten a list or document, so the rest still parses."""
+    raw = re.sub(r',\s*\.\.\.(?=\s*[\]}]|\s*$)', '', raw)
+    return re.sub(r'\[\s*\.\.\.\s*\]', '[]', raw)
+
+
+def _mark_placeholders(raw: str) -> tuple[str, list[str]]:
+    """Swap <placeholders> for parseable markers (quoted when they stand where a JSON value goes)."""
+    marks: list[str] = []
+
+    def swap(m: re.Match) -> str:
+        marks.append(m.group(0))
+        token = f'__FLOCI_PH{len(marks) - 1}__'
+        before = raw[:m.start()].rstrip()[-1:]
+        return f'"{token}"' if raw.lstrip()[:1] in '{[' and before in (':', ',', '[') else token
+
+    return _ANGLE_PLACEHOLDER_RE.sub(swap, raw), marks
+
+
+def _unmark_placeholders(value: Any, marks: list[str]) -> Any:
+    if isinstance(value, dict):
+        return {k: _unmark_placeholders(v, marks) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_unmark_placeholders(v, marks) for v in value]
+    if isinstance(value, str) and marks:
+        return _MARK_RE.sub(lambda m: marks[int(m.group(1))], value)
+    return value
+
+
+def _fits_shape(value: Any, shape) -> bool:
+    """False when a parsed value has the wrong container type or fields the API does not have."""
+    kind = shape.type_name
+    if getattr(shape, 'is_document_type', False):
+        return True
+    if kind == 'structure':
+        return isinstance(value, dict) and all(
+            k in shape.members and _fits_shape(v, shape.members[k]) for k, v in value.items())
+    if kind == 'list':
+        return isinstance(value, list) and all(_fits_shape(v, shape.member) for v in value)
+    if kind == 'map':
+        return isinstance(value, dict)
+    return not isinstance(value, (dict, list))
 
 
 @lru_cache(maxsize=None)
@@ -702,6 +764,8 @@ def _py(value: Any, level: int = 0) -> str:
         return f'f{quote}{value.template}{quote}'
     if isinstance(value, _JsonDoc):
         return f'json.dumps({_py(value.value, level)})'
+    if isinstance(value, decimal.Decimal):  # the CLI parses doubles as Decimal; boto3 takes plain numbers
+        return repr(int(value)) if value == value.to_integral_value() else repr(float(value))
     if isinstance(value, dict):
         items = [f'{k!r}: {_py(v, level + 1)}' for k, v in value.items()]
         flat = '{' + ', '.join(items) + '}'
@@ -808,6 +872,9 @@ def _aws_index(tokens: list[str]) -> int:
     return -1
 
 
+# Comments that say the lab expects this call to fail.
+_EXPECTED_ERROR_RE = re.compile(r'\b(refused|denied|denies|AccessDenied)\b|fails with|\w+Exception\b')
+
 _FOR_RE = re.compile(r'^for\s+(\w+)\s+in\s+(.+?)\s*;\s*do\b\s*(.*)$')
 
 
@@ -876,7 +943,17 @@ def _generate_boto3(command: str, service_hint: str) -> str:
                     script.body.append(f'{indent}# No boto3 equivalent ({reason}); run with the CLI:')
                     script.body.append(f'{indent}# {shlex.join(seg)}')
                     continue
-                script.body.extend(_render_call(call, files, scope, script, indent))
+                rendered = _render_call(call, files, scope, script, indent)
+                if comment and _EXPECTED_ERROR_RE.search(comment) and not call.raw:
+                    # The lab shows this call failing; catch the error so the rest of the script still runs.
+                    script.imports.add('botocore.exceptions')
+                    notes = [line for line in rendered if line.strip().startswith('# ')]
+                    body = [line for line in rendered if line not in notes]
+                    rendered = notes + [f'{indent}try:'] + [f'    {line}' if line else line for line in body] + [
+                        f'{indent}except botocore.exceptions.ClientError as err:',
+                        f"{indent}    print(err.response['Error']['Code'], err.response['Error'].get('Message', ''))",
+                    ]
+                script.body.extend(rendered)
                 calls += 1
                 if any(isinstance(v, _FileRef) and v.as_json for v in _walk(call.params, files)):
                     script.imports.add('json')
@@ -1980,8 +2057,14 @@ def _tf_flow_log(p, tf):
     kind = {'VPC': 'vpc_id', 'Subnet': 'subnet_id', 'NetworkInterface': 'eni_id'}.get(p.get('ResourceType'), 'vpc_id')
     body = [(kind, tf.value(ids[0] if ids else None)), ('traffic_type', tf.value(p.get('TrafficType', 'ALL')))]
     body += _pick(p, tf, {'LogDestinationType': 'log_destination_type', 'LogDestination': 'log_destination',
-                          'LogGroupName': 'log_group_name', 'DeliverLogsPermissionArn': 'iam_role_arn',
+                          'DeliverLogsPermissionArn': 'iam_role_arn',
                           'MaxAggregationInterval': 'max_aggregation_interval', 'LogFormat': 'log_format'})
+    group = p.get('LogGroupName')
+    if group and not p.get('LogDestination'):
+        # AWS provider 6 dropped log_group_name: point log_destination at the group's ARN.
+        role = str(p.get('DeliverLogsPermissionArn') or '')
+        account = role.split(':')[4] if role.count(':') >= 5 else '000000000000'
+        body.append(('log_destination', tf.value(f'arn:aws:logs:us-east-1:{account}:log-group:{group}')))
     return [_Res('aws_flow_log', ids[0] if ids else 'lab', body)]
 
 

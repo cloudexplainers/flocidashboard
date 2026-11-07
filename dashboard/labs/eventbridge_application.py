@@ -172,20 +172,20 @@ LAB = {
             'explanation': 'Transforms the processing payload, preserves the full audit envelope, and invokes the notification Lambda. Retry/DLQ fields show the AWS shape; current Floci executes transformation and delivery but does not enforce target retry/DLQ behavior.',
             'artifact_label': 'processing-target.json',
             'artifact': json.dumps(
-                {
+                [{
                     'Id': 'processing',
                     'Arn': QUEUE_ARNS[PROCESSING_QUEUE],
                     'InputTransformer': PROCESSING_TRANSFORMER,
                     'RetryPolicy': RETRY_POLICY,
                     'DeadLetterConfig': DEAD_LETTER_CONFIG,
-                },
+                }],
                 indent=2,
             ),
         },
         {
             'key': 'create-api',
             'title': 'Expose the producer through API Gateway',
-            'command': f'aws apigatewayv2 create-api --name {API_NAME} --protocol-type HTTP\naws apigatewayv2 create-integration --api-id <api-id> --integration-type AWS_PROXY --integration-uri {PRODUCER_FUNCTION_ARN} --payload-format-version 2.0\naws apigatewayv2 create-route --api-id <api-id> --route-key "{ROUTE_KEY}" --target integrations/<integration-id>\naws apigatewayv2 create-stage --api-id <api-id> --stage-name $default --auto-deploy',
+            'command': f'aws apigatewayv2 create-api --name {API_NAME} --protocol-type HTTP\naws apigatewayv2 create-integration --api-id <api-id> --integration-type AWS_PROXY --integration-uri {PRODUCER_FUNCTION_ARN} --payload-format-version 2.0\naws apigatewayv2 create-route --api-id <api-id> --route-key "{ROUTE_KEY}" --target integrations/<integration-id>\naws apigatewayv2 create-stage --api-id <api-id> --stage-name \'$default\' --auto-deploy',
             'explanation': 'Builds the HTTP entry point and Lambda proxy route.',
         },
         {

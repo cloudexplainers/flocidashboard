@@ -193,7 +193,7 @@ INSIGHTS_COMMAND = (
 )
 ALARM_COMMAND = (
     f'aws sns create-topic --name {TOPIC}\n'
-    f'aws sqs create-queue --queue-name {INBOX} --attributes file://inbox-policy.json\n'
+    f'aws sqs create-queue --queue-name {INBOX} --attributes file://inbox-attributes.json\n'
     f'aws sns subscribe --topic-arn {TOPIC_ARN} --protocol sqs --notification-endpoint {INBOX_ARN}\n'
     f'aws cloudwatch put-metric-alarm --alarm-name {ALARM} --namespace {NAMESPACE} --metric-name {ERRORS_METRIC} '
     f'--statistic Sum --period 60 --evaluation-periods 1 --threshold {ALARM_THRESHOLD} '
@@ -304,8 +304,8 @@ LAB = {
                 'notification to the topic (Floci 2.3.0 ran no alarm actions, so nothing reached the queue). The step '
                 'checks the state and the configured actions, and reports whether the ALARM message arrived.'
             ),
-            'artifact_label': 'inbox-policy.json',
-            'artifact': json.dumps(INBOX_POLICY, indent=2),
+            'artifact_label': 'inbox-attributes.json',
+            'artifact': json.dumps({'Policy': json.dumps(INBOX_POLICY)}, indent=2),
         },
         {
             'key': 'dashboard',

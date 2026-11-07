@@ -504,7 +504,7 @@ COVERAGE_COMMAND = (
 )
 REPORT_COMMAND = (
     f'aws codebuild create-report-group --name {REPORT_GROUP} --type TEST '
-    f'--export-config exportConfigType=S3,s3Destination={{bucket={ARTIFACT_BUCKET},path=reports,packaging=NONE}}\n'
+    f'--export-config "exportConfigType=S3,s3Destination={{bucket={ARTIFACT_BUCKET},path=reports,packaging=NONE}}"\n'
     f'aws codebuild list-reports-for-report-group --report-group-arn <arn>\n'
     'aws codebuild describe-test-cases --report-arn <report-arn>\n'
     f'aws s3 cp s3://{ARTIFACT_BUCKET}/{UNIT_PREFIX}/junit.xml -'
