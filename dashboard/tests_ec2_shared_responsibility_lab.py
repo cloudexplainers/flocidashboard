@@ -111,3 +111,20 @@ class RegistrationTests(SimpleTestCase):
     def test_unknown_step_is_rejected(self):
         with self.assertRaises(ValueError):
             lab.run_step('nope')
+
+
+class SlowCreateTests(SimpleTestCase):
+    def test_database_create_waits_for_the_container_and_never_retries(self):
+        config = lab._slow_client('rds').meta.config
+        self.assertGreaterEqual(config.read_timeout, 120)
+        self.assertEqual(config.retries['total_max_attempts'], 1)
+
+    def test_create_already_in_progress_is_not_an_error(self):
+        from botocore.exceptions import ClientError
+        exists = ClientError({'Error': {'Code': 'DBInstanceAlreadyExists'}}, 'CreateDBInstance')
+        with patch.object(lab, '_slow_client') as slow, patch.object(lab, '_db', return_value=None), \
+                patch.object(lab, '_wait'), patch.object(lab, '_check_db', return_value=(False, 'waiting')):
+            slow.return_value.create_db_instance.side_effect = exists
+            slow.return_value.describe_pending_maintenance_actions.return_value = {}
+            result = lab.step_rds_managed_engine()
+        self.assertFalse(result['verified'])
