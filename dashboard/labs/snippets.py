@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import decimal
 import io
 import json
 import keyword
@@ -270,6 +271,10 @@ def _model_parse(op_model, args: list[str]) -> dict[str, Any]:
         flag = token[2:]
         values = []
         while i < len(args) and not args[i].startswith('--'):
+            if args[i] == '...':  # the lab left the rest out; what follows belongs to an elided option
+                while i < len(args) and not args[i].startswith('--'):
+                    i += 1
+                break
             values.append(args[i])
             i += 1
         negated = flag.startswith('no-') and flag[3:] in by_flag
@@ -287,17 +292,27 @@ def _model_parse(op_model, args: list[str]) -> dict[str, Any]:
             if _FILE_TOKEN_RE.match(raw) or _PLACEHOLDER_RE.match(raw) or raw.startswith('$'):
                 return raw
             if shape.type_name in ('structure', 'map', 'list'):
-                if raw.lstrip()[:1] in '{[':
+                text, marks = _mark_placeholders(_strip_ellipses(raw))
+                parsed = _NOT_PARSED
+                if text.lstrip()[:1] in '{[':
                     try:
-                        return json.loads(raw)
+                        parsed = json.loads(text)
                     except ValueError:
                         pass
-                try:
-                    parsed = ShorthandParser().parse(raw)
-                    BackCompatVisitor().visit(parsed, shape)
-                    return parsed
-                except Exception:
-                    return raw
+                if parsed is _NOT_PARSED:
+                    try:
+                        parsed = ShorthandParser().parse(text)
+                    except Exception:
+                        parsed = _NOT_PARSED
+                    else:
+                        try:
+                            BackCompatVisitor().visit(parsed, shape)
+                        except Exception:  # a marker stands where a number goes
+                            pass
+                if parsed is _NOT_PARSED:
+                    return _NOT_PARSED  # an unparseable fragment would only mislead; leave it out
+                parsed = _unmark_placeholders(parsed, marks)
+                return parsed if _fits_shape(parsed, shape) else _NOT_PARSED
             if shape.type_name in ('integer', 'long'):
                 return int(raw) if re.fullmatch(r'-?\d+', raw) else raw
             if shape.type_name in ('float', 'double'):
@@ -311,12 +326,63 @@ def _model_parse(op_model, args: list[str]) -> dict[str, Any]:
 
         if shape.type_name == 'list':
             if len(values) == 1 and (values[0].lstrip()[:1] == '[' or _FILE_TOKEN_RE.match(values[0])):
-                params[name] = convert(values[0])
+                value = convert(values[0])
             else:
-                params[name] = [convert(v, shape.member) for v in values]
+                value = [v for v in (convert(v, shape.member) for v in values if v != '...') if v is not _NOT_PARSED]
+                value = value or _NOT_PARSED
         else:
-            params[name] = convert(values[0])
+            value = convert(values[0])
+        if value is not _NOT_PARSED:
+            params[name] = value
     return params
+
+
+_NOT_PARSED = object()
+_MARK_RE = re.compile(r'__FLOCI_PH(\d+)__')
+
+
+def _strip_ellipses(raw: str) -> str:
+    """Drop the "..." a lab uses to shorten a list or document, so the rest still parses."""
+    raw = re.sub(r',\s*\.\.\.(?=\s*[\]}]|\s*$)', '', raw)
+    return re.sub(r'\[\s*\.\.\.\s*\]', '[]', raw)
+
+
+def _mark_placeholders(raw: str) -> tuple[str, list[str]]:
+    """Swap <placeholders> for parseable markers (quoted when they stand where a JSON value goes)."""
+    marks: list[str] = []
+
+    def swap(m: re.Match) -> str:
+        marks.append(m.group(0))
+        token = f'__FLOCI_PH{len(marks) - 1}__'
+        before = raw[:m.start()].rstrip()[-1:]
+        return f'"{token}"' if raw.lstrip()[:1] in '{[' and before in (':', ',', '[') else token
+
+    return _ANGLE_PLACEHOLDER_RE.sub(swap, raw), marks
+
+
+def _unmark_placeholders(value: Any, marks: list[str]) -> Any:
+    if isinstance(value, dict):
+        return {k: _unmark_placeholders(v, marks) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_unmark_placeholders(v, marks) for v in value]
+    if isinstance(value, str) and marks:
+        return _MARK_RE.sub(lambda m: marks[int(m.group(1))], value)
+    return value
+
+
+def _fits_shape(value: Any, shape) -> bool:
+    """False when a parsed value has the wrong container type or fields the API does not have."""
+    kind = shape.type_name
+    if getattr(shape, 'is_document_type', False):
+        return True
+    if kind == 'structure':
+        return isinstance(value, dict) and all(
+            k in shape.members and _fits_shape(v, shape.members[k]) for k, v in value.items())
+    if kind == 'list':
+        return isinstance(value, list) and all(_fits_shape(v, shape.member) for v in value)
+    if kind == 'map':
+        return isinstance(value, dict)
+    return not isinstance(value, (dict, list))
 
 
 @lru_cache(maxsize=None)
@@ -452,7 +518,7 @@ def _parse_aws_uncached(tokens: list[str], files: list[tuple[str, bool]]) -> tup
             params, parsed_args = captured
             outfile = getattr(parsed_args, 'outfile', '') or outfile
     if params is None:
-        params = _model_parse(op_model, [a for a in args if a != '...'])
+        params = _model_parse(op_model, args)
     if zip_file is not None:
         if op_model.name == 'CreateFunction':
             params['Code'] = {**(params.get('Code') or {}), 'ZipFile': zip_file}
@@ -702,6 +768,8 @@ def _py(value: Any, level: int = 0) -> str:
         return f'f{quote}{value.template}{quote}'
     if isinstance(value, _JsonDoc):
         return f'json.dumps({_py(value.value, level)})'
+    if isinstance(value, decimal.Decimal):  # the CLI parses doubles as Decimal; boto3 takes plain numbers
+        return repr(int(value)) if value == value.to_integral_value() else repr(float(value))
     if isinstance(value, dict):
         items = [f'{k!r}: {_py(v, level + 1)}' for k, v in value.items()]
         flat = '{' + ', '.join(items) + '}'
@@ -808,6 +876,9 @@ def _aws_index(tokens: list[str]) -> int:
     return -1
 
 
+# Comments that say the lab expects this call to fail.
+_EXPECTED_ERROR_RE = re.compile(r'\b(refused|denied|denies|AccessDenied)\b|fails with|\w+Exception\b')
+
 _FOR_RE = re.compile(r'^for\s+(\w+)\s+in\s+(.+?)\s*;\s*do\b\s*(.*)$')
 
 
@@ -876,7 +947,17 @@ def _generate_boto3(command: str, service_hint: str) -> str:
                     script.body.append(f'{indent}# No boto3 equivalent ({reason}); run with the CLI:')
                     script.body.append(f'{indent}# {shlex.join(seg)}')
                     continue
-                script.body.extend(_render_call(call, files, scope, script, indent))
+                rendered = _render_call(call, files, scope, script, indent)
+                if comment and _EXPECTED_ERROR_RE.search(comment) and not call.raw:
+                    # The lab shows this call failing; catch the error so the rest of the script still runs.
+                    script.imports.add('botocore.exceptions')
+                    notes = [line for line in rendered if line.strip().startswith('# ')]
+                    body = [line for line in rendered if line not in notes]
+                    rendered = notes + [f'{indent}try:'] + [f'    {line}' if line else line for line in body] + [
+                        f'{indent}except botocore.exceptions.ClientError as err:',
+                        f"{indent}    print(err.response['Error']['Code'], err.response['Error'].get('Message', ''))",
+                    ]
+                script.body.extend(rendered)
                 calls += 1
                 if any(isinstance(v, _FileRef) and v.as_json for v in _walk(call.params, files)):
                     script.imports.add('json')
@@ -1149,7 +1230,8 @@ def _tags(p: dict, tf: _Tf, key: str = 'Tags') -> dict | None:
         specs = p['TagSpecifications']
         raw = specs[0].get('Tags') if isinstance(specs, list) and specs and isinstance(specs[0], dict) else None
     if isinstance(raw, list):
-        return {t.get('Key', t.get('key')): tf.value(t.get('Value', t.get('value'))) for t in raw if isinstance(t, dict)}
+        return {t.get('Key', t.get('key', t.get('TagKey'))): tf.value(t.get('Value', t.get('value', t.get('TagValue'))))
+                for t in raw if isinstance(t, dict)}
     if isinstance(raw, dict) and set(raw) != {'__floci_snippet_file__'}:
         return {k: tf.value(v) for k, v in raw.items()}
     return None
@@ -1980,8 +2062,14 @@ def _tf_flow_log(p, tf):
     kind = {'VPC': 'vpc_id', 'Subnet': 'subnet_id', 'NetworkInterface': 'eni_id'}.get(p.get('ResourceType'), 'vpc_id')
     body = [(kind, tf.value(ids[0] if ids else None)), ('traffic_type', tf.value(p.get('TrafficType', 'ALL')))]
     body += _pick(p, tf, {'LogDestinationType': 'log_destination_type', 'LogDestination': 'log_destination',
-                          'LogGroupName': 'log_group_name', 'DeliverLogsPermissionArn': 'iam_role_arn',
+                          'DeliverLogsPermissionArn': 'iam_role_arn',
                           'MaxAggregationInterval': 'max_aggregation_interval', 'LogFormat': 'log_format'})
+    group = p.get('LogGroupName')
+    if group and not p.get('LogDestination'):
+        # AWS provider 6 dropped log_group_name: point log_destination at the group's ARN.
+        role = str(p.get('DeliverLogsPermissionArn') or '')
+        account = role.split(':')[4] if role.count(':') >= 5 else '000000000000'
+        body.append(('log_destination', tf.value(f'arn:aws:logs:us-east-1:{account}:log-group:{group}')))
     return [_Res('aws_flow_log', ids[0] if ids else 'lab', body)]
 
 
@@ -2427,6 +2515,8 @@ def _generate_terraform(command: str) -> str:
     used: set[str] = set()
     variables: dict[str, str] = {}
     previous: dict[str, str] = {}
+    refs: dict[str, tuple[str, _Hcl]] = {}  # literal name or ARN -> (resource type, reference)
+    declared: list[tuple[str, str]] = []  # (resource type, label) in order
     for call, files, reason in _terraform_calls(command):
         if call is None:
             notes.append(f'# aws {reason}: not managed by Terraform')
@@ -2457,6 +2547,10 @@ def _generate_terraform(command: str) -> str:
                 body = [(k, _Hcl(v.expr.replace('PREVIOUS', previous.get('aws_secretsmanager_secret', '')))
                          if isinstance(v, _Hcl) and 'PREVIOUS' in v.expr else v) for k, v in res.body]
                 previous[res.type] = f'{res.type}.{label}'
+                body = _link_references(body, res.type, refs)
+                body = _link_placeholders(body, declared, {**variables, **tf.variables})
+                _register_references(body, res.type, label, refs)
+                declared.append((res.type, label))
                 lines = [f'resource "{res.type}" "{label}" {{', *_render_body(body, 1, tf), '}']
                 blocks.append(lines)
             skipped = sorted(set(params) - params.seen - _TF_IMPLICIT)
@@ -2478,6 +2572,8 @@ def _generate_terraform(command: str) -> str:
         return '\n'.join(header + [''] + _dedupe(notes)) + '\n'
 
     out: list[str] = []
+    used_vars = set(re.findall(r'\bvar\.(\w+)', '\n'.join('\n'.join(b) for b in blocks)))
+    variables = {name: ph for name, ph in variables.items() if name in used_vars}
     for name, placeholder in variables.items():
         out += [f'variable "{name}" {{', '  type        = string', f'  description = {_hcl_str("Value for <" + placeholder + ">")}', '}', '']
     for lines in blocks:
@@ -2485,6 +2581,120 @@ def _generate_terraform(command: str) -> str:
     if notes:
         out += _dedupe(notes) + ['']
     return '\n'.join(_align(out)).rstrip() + '\n'
+
+
+# Attributes that name a resource, and how its ARN ends, so later blocks can refer to it.
+_TF_NAME_KEYS = ('name', 'bucket', 'function_name', 'alarm_name', 'family')
+_TF_ARN_SHAPES = {
+    'aws_iam_role': r'arn:aws:iam::\d{12}:role/(?:[\w+=,.@-]+/)*',
+    'aws_iam_policy': r'arn:aws:iam::\d{12}:policy/(?:[\w+=,.@-]+/)*',
+    'aws_iam_user': r'arn:aws:iam::\d{12}:user/(?:[\w+=,.@-]+/)*',
+    'aws_lambda_function': r'arn:aws:lambda:[\w-]+:\d{12}:function:',
+    'aws_sqs_queue': r'arn:aws:sqs:[\w-]+:\d{12}:',
+    'aws_sns_topic': r'arn:aws:sns:[\w-]+:\d{12}:',
+    'aws_cloudwatch_event_bus': r'arn:aws:events:[\w-]+:\d{12}:event-bus/',
+    'aws_dynamodb_table': r'arn:aws:dynamodb:[\w-]+:\d{12}:table/',
+    'aws_sfn_state_machine': r'arn:aws:states:[\w-]+:\d{12}:stateMachine:',
+    'aws_kinesis_stream': r'arn:aws:kinesis:[\w-]+:\d{12}:stream/',
+    'aws_s3_bucket': r'arn:aws:s3:::',
+}
+
+
+def _register_references(body: list[tuple[str, Any]], kind: str, label: str, refs: dict) -> None:
+    """Remember this resource's name (and ARN shape) so later blocks reference it instead of a literal."""
+    for key, value in body:
+        if key in _TF_NAME_KEYS and isinstance(value, str) and value:
+            refs.setdefault(value, (kind, _Hcl(f'{kind}.{label}.{key}')))
+            if kind in _TF_ARN_SHAPES:
+                refs.setdefault(('arn', kind, value), (kind, _Hcl(f'{kind}.{label}.arn')))
+            return
+
+
+def _link_references(entries: list[tuple[str, Any]], kind: str, refs: dict) -> list[tuple[str, Any]]:
+    """Swap literal names and ARNs of resources declared earlier in the snippet for references,
+    so Terraform creates them first instead of racing them."""
+    def swap(value: Any) -> Any:
+        if isinstance(value, _Body):
+            return _Body(_link_references(value.entries, kind, refs))
+        if isinstance(value, list):
+            return [swap(v) for v in value]
+        if not isinstance(value, str):
+            return value
+        hit = refs.get(value)
+        if hit and hit[0] != kind:
+            return hit[1]
+        for (tag, other, name), (_, ref) in ((k, v) for k, v in refs.items() if isinstance(k, tuple)):
+            if other != kind and re.fullmatch(_TF_ARN_SHAPES[other] + re.escape(name), value):
+                return ref
+        return value
+
+    return [(k, swap(v)) for k, v in entries]
+
+
+# Placeholder words -> (resource type, attribute) that the same snippet may already create.
+_TF_PLACEHOLDER_TYPES = [
+    ({'key'}, 'aws_kms_key', 'key_id'),
+    ({'rt'}, 'aws_route_table', 'id'),
+    ({'rtb'}, 'aws_route_table', 'id'),
+    ({'route', 'table'}, 'aws_route_table', 'id'),
+    ({'sg'}, 'aws_security_group', 'id'),
+    ({'security', 'group'}, 'aws_security_group', 'id'),
+    ({'igw'}, 'aws_internet_gateway', 'id'),
+    ({'nat'}, 'aws_nat_gateway', 'id'),
+    ({'eip'}, 'aws_eip', 'allocation_id'),
+    ({'allocation'}, 'aws_eip', 'allocation_id'),
+    ({'vpc'}, 'aws_vpc', 'id'),
+    ({'subnet'}, 'aws_subnet', 'id'),
+    ({'fs'}, 'aws_efs_file_system', 'id'),
+    ({'file', 'system'}, 'aws_efs_file_system', 'id'),
+    ({'topic'}, 'aws_sns_topic', 'arn'),
+    ({'pool'}, 'aws_cognito_user_pool', 'id'),
+    ({'instance'}, 'aws_instance', 'id'),
+    ({'tg'}, 'aws_lb_target_group', 'arn'),
+    ({'target', 'group'}, 'aws_lb_target_group', 'arn'),
+    ({'alb'}, 'aws_lb', 'arn'),
+    ({'zone'}, 'aws_route53_zone', 'zone_id'),
+    ({'api'}, 'aws_api_gateway_rest_api', 'id'),
+    ({'api'}, 'aws_apigatewayv2_api', 'id'),
+    ({'distribution'}, 'aws_cloudfront_distribution', 'id'),
+]
+
+
+def _link_placeholders(entries, declared: list[tuple[str, str]], variables: dict[str, str]):
+    """A <placeholder> for the ID of something this snippet already creates becomes a reference to it,
+    so one terraform apply works instead of asking for an ID that doesn't exist yet."""
+    def target(placeholder: str):
+        words = set(re.findall(r'[a-z0-9]+', placeholder.lower()))
+        if words & {'profile', 'access', 'policy', 'version', 'url', 'name'}:
+            return None  # something other than the resource's own ID or ARN
+        best, best_score, tie = None, -1, False
+        for need, kind, attr in _TF_PLACEHOLDER_TYPES:
+            if not need <= words or ('arn' in words) != (attr == 'arn') and words & {'arn', 'id'}:
+                continue
+            for other, label in declared:
+                if other != kind:
+                    continue
+                score = len(words & set(label.split('_')))
+                if score > best_score:
+                    best, best_score, tie = f'{kind}.{label}.{attr}', score, False
+                elif score == best_score and best != f'{kind}.{label}.{attr}':
+                    tie = True
+        return None if tie else best
+
+    def swap(value):
+        if isinstance(value, _Body):
+            return _Body([(k, swap(v)) for k, v in value.entries])
+        if isinstance(value, list):
+            return [swap(v) for v in value]
+        if isinstance(value, _Hcl):
+            m = re.fullmatch(r'var\.(\w+)', value.expr)
+            if m and m.group(1) in variables:
+                ref = target(variables[m.group(1)])
+                if ref:
+                    return _Hcl(ref)
+        return value
+
+    return [(k, swap(v)) for k, v in entries]
 
 
 def _dedupe(items: list[str]) -> list[str]:

@@ -357,8 +357,7 @@ SQS_BATCH_MESSAGES_LAB = {
             'command': 'aws sqs send-message-batch --queue-url <queue-url> --entries file://send-batch.json',
             'explanation': 'Sends three independent task.created events in one request and verifies every entry succeeded.',
             'artifact_label': 'send-batch.json',
-            'artifact': json.dumps({
-                'Entries': [
+            'artifact': json.dumps([
                     {
                         'Id': f'task-{index}',
                         'MessageBody': text,
@@ -370,8 +369,7 @@ SQS_BATCH_MESSAGES_LAB = {
                         },
                     }
                     for index, text in enumerate(SQS_BATCH_MESSAGE_TEXTS, start=1)
-                ],
-            }, indent=2),
+                ], indent=2),
         },
         {
             'key': 'receive-message',
@@ -385,12 +383,10 @@ SQS_BATCH_MESSAGES_LAB = {
             'command': 'aws sqs delete-message-batch --queue-url <queue-url> --entries file://delete-batch.json',
             'explanation': 'Discovers current receipt handles for the three task events and acknowledges them in one batch request.',
             'artifact_label': 'delete-batch.json',
-            'artifact': json.dumps({
-                'Entries': [
+            'artifact': json.dumps([
                     {'Id': f'task-{index}', 'ReceiptHandle': '<receipt-handle>'}
                     for index in range(1, 4)
-                ],
-            }, indent=2),
+                ], indent=2),
         },
     ],
 }
@@ -606,8 +602,7 @@ SQS_PURGE_DELETE_LAB = {
             'command': 'aws sqs send-message-batch --queue-url <cleanup-queue-url> --entries file://cleanup-messages.json',
             'explanation': 'Adds three attributed messages that belong only to this cleanup lab.',
             'artifact_label': 'cleanup-messages.json',
-            'artifact': json.dumps({
-                'Entries': [
+            'artifact': json.dumps([
                     {
                         'Id': f'cleanup-{index}',
                         'MessageBody': text,
@@ -622,8 +617,7 @@ SQS_PURGE_DELETE_LAB = {
                         SQS_CLEANUP_MESSAGE_TEXTS,
                         start=1,
                     )
-                ],
-            }, indent=2),
+                ], indent=2),
         },
         {
             'key': 'inspect-populated-queue',

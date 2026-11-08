@@ -154,8 +154,8 @@ PROJECT_COMMAND = (
     f'aws codebuild create-project --name {PROJECT} --service-role {BUILD_ROLE} \\\n'
     f'  --source type=S3,location={BUCKET}/{SOURCE_KEY} \\\n'
     f'  --artifacts type=S3,location={BUCKET},path={ARTIFACT_PATH},namespaceType=BUILD_ID,name={ARTIFACT_NAME},packaging=ZIP \\\n'
-    f'  --environment type=LINUX_CONTAINER,computeType=BUILD_GENERAL1_SMALL,image={BUILD_IMAGE},'
-    f'environmentVariables=[{{name=STAGE,value={BUILD_STAGE}}}] \\\n'
+    f'  --environment "type=LINUX_CONTAINER,computeType=BUILD_GENERAL1_SMALL,image={BUILD_IMAGE},'
+    f'environmentVariables=[{{name=STAGE,value={BUILD_STAGE}}}]" \\\n'
     f'  --timeout-in-minutes {BUILD_TIMEOUT_MINUTES}'
 )
 FIRST_BUILD_COMMAND = (

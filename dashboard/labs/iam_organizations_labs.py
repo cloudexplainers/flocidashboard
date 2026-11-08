@@ -119,7 +119,8 @@ ACCOUNTS_COMMAND = '\n'.join(
     f'aws organizations create-account --account-name {name} --email {info["email"]}   # then move-account to {info["ou"]}'
     for name, info in ACCOUNTS.items())
 SCP_COMMAND = '\n'.join(
-    f'aws organizations create-policy --type SERVICE_CONTROL_POLICY --name {name} --content file://{name}.json\n'
+    f'aws organizations create-policy --type SERVICE_CONTROL_POLICY --name {name} '
+    f'--description "{info["description"]}" --content file://{name}.json\n'
     f'aws organizations attach-policy --policy-id <{name}-id> --target-id <{info["target"]}-id>'
     for name, info in SCPS.items())
 EVAL_COMMAND = (
@@ -129,7 +130,8 @@ EVAL_COMMAND = (
 )
 TAG_COMMAND = (
     'aws organizations enable-policy-type --root-id <root-id> --policy-type TAG_POLICY\n'
-    f'aws organizations create-policy --type TAG_POLICY --name {TAG_POLICY} --content file://cost-center.json\n'
+    f'aws organizations create-policy --type TAG_POLICY --name {TAG_POLICY} --description "CostCenter tag values" '
+    '--content file://cost-center.json\n'
     f'aws organizations attach-policy --policy-id <{TAG_POLICY}-id> --target-id <root-id>\n'
     f'aws organizations describe-effective-policy --policy-type TAG_POLICY --target-id <{PROD_ACCOUNT}-id>'
 )

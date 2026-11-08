@@ -112,7 +112,7 @@ APIGW_LAMBDA_REQUEST_LAB = {
         {
             'key': 'create-stage',
             'title': 'Create the default stage',
-            'command': 'aws apigatewayv2 create-stage --api-id <api-id> --stage-name $default --auto-deploy',
+            'command': 'aws apigatewayv2 create-stage --api-id <api-id> --stage-name \'$default\' --auto-deploy',
             'explanation': 'Publishes route changes automatically through the default HTTP API stage.',
         },
         {
@@ -436,7 +436,7 @@ def _run_apigw_create_route() -> dict[str, Any]:
 
 
 def _run_apigw_create_stage() -> dict[str, Any]:
-    command = 'aws apigatewayv2 create-stage --api-id <api-id> --stage-name $default --auto-deploy'
+    command = "aws apigatewayv2 create-stage --api-id <api-id> --stage-name '$default' --auto-deploy"
     started = time.perf_counter()
     api_id = _apigw_lambda_api_id()
     stage_verification = _verify_apigw_lambda_stage()

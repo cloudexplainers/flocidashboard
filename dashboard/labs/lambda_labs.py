@@ -327,7 +327,7 @@ LAMBDA_RUNTIME_CONFIG_LAB = {
         {
             'key': 'create-function',
             'title': 'Create the config reader function',
-            'command': f'aws lambda create-function --function-name {LAMBDA_CONFIG_FUNCTION_NAME} --runtime {LAMBDA_RUNTIME} --role {LAMBDA_CONFIG_ROLE_ARN} --handler {LAMBDA_HANDLER} --zip-file fileb://function.zip --environment Variables={{PARAMETER_NAME={LAMBDA_CONFIG_PARAMETER_NAME},SECRET_ID={LAMBDA_CONFIG_SECRET_NAME}}}',
+            'command': f'aws lambda create-function --function-name {LAMBDA_CONFIG_FUNCTION_NAME} --runtime {LAMBDA_RUNTIME} --role {LAMBDA_CONFIG_ROLE_ARN} --handler {LAMBDA_HANDLER} --zip-file fileb://function.zip --environment "Variables={{PARAMETER_NAME={LAMBDA_CONFIG_PARAMETER_NAME},SECRET_ID={LAMBDA_CONFIG_SECRET_NAME}}}"',
             'explanation': 'Packages a handler that reads SSM and Secrets Manager at invocation time.',
             'artifact_label': 'handler.py',
             'artifact': LAMBDA_CONFIG_HANDLER_SOURCE,
@@ -1151,7 +1151,7 @@ def _run_lambda_config_create_function() -> dict[str, Any]:
         f'aws lambda create-function --function-name {LAMBDA_CONFIG_FUNCTION_NAME} '
         f'--runtime {LAMBDA_RUNTIME} --role {LAMBDA_CONFIG_ROLE_ARN} '
         f'--handler {LAMBDA_HANDLER} --zip-file fileb://function.zip '
-        f'--environment Variables={{PARAMETER_NAME={LAMBDA_CONFIG_PARAMETER_NAME},SECRET_ID={LAMBDA_CONFIG_SECRET_NAME}}}'
+        f'--environment "Variables={{PARAMETER_NAME={LAMBDA_CONFIG_PARAMETER_NAME},SECRET_ID={LAMBDA_CONFIG_SECRET_NAME}}}"'
     )
     started = time.perf_counter()
     environment = {

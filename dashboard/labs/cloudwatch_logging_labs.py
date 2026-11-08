@@ -181,8 +181,8 @@ ARCHIVE_COMMAND = (
     f'aws s3api put-bucket-lifecycle-configuration --bucket {BUCKET} --lifecycle-configuration file://lifecycle.json\n'
     f'aws iam create-role --role-name {FIREHOSE_ROLE} --assume-role-policy-document file://firehose-trust.json\n'
     f'aws firehose create-delivery-stream --delivery-stream-name {ARCHIVE_STREAM} '
-    f'--extended-s3-destination-configuration RoleARN={FIREHOSE_ROLE_ARN},BucketARN=arn:aws:s3:::{BUCKET},'
-    f'Prefix={ARCHIVE_PREFIX},BufferingHints={{IntervalInSeconds={ARCHIVE_BUFFER_SECONDS},SizeInMBs=1}}\n'
+    f'--extended-s3-destination-configuration "RoleARN={FIREHOSE_ROLE_ARN},BucketARN=arn:aws:s3:::{BUCKET},'
+    f'Prefix={ARCHIVE_PREFIX},BufferingHints={{IntervalInSeconds={ARCHIVE_BUFFER_SECONDS},SizeInMBs=1}}"\n'
     + ''.join(
         f'aws logs put-subscription-filter --log-group-name {group} --filter-name {ARCHIVE_SUBSCRIPTION} '
         f'--filter-pattern "" --destination-arn {ARCHIVE_ARN} --role-arn {LOGS_ROLE_ARN}\n'

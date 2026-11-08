@@ -250,15 +250,15 @@ CPU_COMMAND = (
     f'aws ssm send-command --document-name AWS-RunShellScript --instance-ids <id> '
     f'--parameters commands=["<start {WORKERS} workers; sample CPU time and throttling for 10 s>"]\n'
     f'aws cloudwatch put-metric-data --namespace {NAMESPACE} --metric-data '
-    f'MetricName={CPU_METRIC},Value=<percent>,Dimensions=[{{Name=InstanceId,Value=<id>}}] '
-    f'MetricName={THROTTLE_METRIC},Value=<periods>,Dimensions=[{{Name=InstanceId,Value=<id>}}]\n'
+    f'"MetricName={CPU_METRIC},Value=<percent>,Dimensions=[{{Name=InstanceId,Value=<id>}}]" '
+    f'"MetricName={THROTTLE_METRIC},Value=<periods>,Dimensions=[{{Name=InstanceId,Value=<id>}}]"\n'
     f'aws cloudwatch describe-alarms --alarm-names {CPU_ALARM}'
 )
 MEMORY_COMMAND = (
     f'aws ssm send-command --document-name AWS-RunShellScript --instance-ids <id> '
     f'--parameters commands=["<run the {REPORT_MIB} MiB report job; read oom_kill>"]\n'
     f'aws cloudwatch put-metric-data --namespace {NAMESPACE} --metric-data '
-    f'MetricName={OOM_METRIC},Value=1,Dimensions=[{{Name=InstanceId,Value=<id>}}]\n'
+    f'"MetricName={OOM_METRIC},Value=1,Dimensions=[{{Name=InstanceId,Value=<id>}}]"\n'
     f'aws cloudwatch describe-alarms --alarm-names {OOM_ALARM}'
 )
 RIGHT_SIZE_COMMAND = (

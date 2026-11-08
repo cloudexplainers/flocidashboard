@@ -9,6 +9,7 @@ from contextlib import ExitStack
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
+from botocore import xform_name
 from botocore.exceptions import ClientError
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
@@ -7468,11 +7469,12 @@ class MultiSdkSnippetsTests(SimpleTestCase):
         """Every boto3 snippet compiles and calls real API operations with real parameters;
         every Terraform snippet only declares resource types the generator knows exist."""
         import ast
+        import builtins
 
         import botocore.session
 
         from dashboard.labs.registry import all_labs
-        from dashboard.labs.snippets import _TF_RESOURCE_TYPES, get_step_snippets
+        from dashboard.labs.snippets import _TF_RESOURCE_TYPES, _fits_shape, get_step_snippets
 
         session = botocore.session.get_session()
         models = {}
@@ -7503,8 +7505,225 @@ class MultiSdkSnippetsTests(SimpleTestCase):
                     members = shape.members if shape else {}
                     for kw in node.keywords:
                         self.assertIn(kw.arg, members, f'{where}: {service}.{node.func.attr}({kw.arg}=...)')
+                        try:
+                            value = ast.literal_eval(kw.value)
+                        except ValueError:
+                            continue
+                        self.assertTrue(_fits_shape(value, members[kw.arg]),
+                                        f'{where}: {service}.{node.func.attr}({kw.arg}={value!r:.80})')
+                defined = set(dir(builtins))
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.Import, ast.ImportFrom)):
+                        defined.update((a.asname or a.name).split('.')[0] for a in node.names)
+                    elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                        defined.add(node.id)
+                    elif isinstance(node, ast.ExceptHandler) and node.name:
+                        defined.add(node.name)
+                used = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+                self.assertFalse(used - defined, f'{where}: undefined names in the boto3 snippet')
 
                 tf = snippets['terraform']
                 self.assertEqual(tf.count('{'), tf.count('}'), where)
                 for resource_type in re.findall(r'^resource "([^"]+)"', tf, re.M):
                     self.assertIn(resource_type, _TF_RESOURCE_TYPES, where)
+
+    def test_every_complete_lab_cli_line_parses_with_the_aws_cli(self):
+        """Lines the lab shows in full (no "...") are accepted by the AWS CLI's own argument parser."""
+        from dashboard.labs import snippets as S
+        from dashboard.labs.registry import all_labs
+
+        for lab in all_labs():
+            for step in lab.get('steps', []):
+                for line in S._logical_lines(step.get('command', '')):
+                    code, _ = S._split_comment(line.strip())
+                    tokens = S._tokenize(code) if code else None
+                    for seg in S._segments(tokens or []):
+                        start = S._aws_index(seg)
+                        if start < 0:
+                            continue
+                        seg = [re.sub(r'<[^<>]+>', '1', t) for t in seg[start:]]
+                        if len(seg) < 3 or seg[1] in ('s3', 'configure') or seg[2] == 'wait' or any(
+                                '...' in t or '$' in t or t in ('--body', '--zip-file', '--outfile') for t in seg):
+                            continue
+                        service, operation = seg[1], seg[2]
+                        _, op_cmd = S._operation_command(service, operation)
+                        if op_cmd is None:
+                            continue
+                        args, rest = [], seg[3:]
+                        while rest:
+                            token = rest.pop(0)
+                            if token in S._GLOBAL_WITH_VALUE:
+                                rest = rest[1:]
+                            elif token not in S._GLOBAL_FLAGS:
+                                args.append(token)
+                        args = [S._FILE_TOKEN % 0 if t.startswith(('file://', 'fileb://')) else t for t in args]
+                        self.assertIsNotNone(S._cli_parse(service, operation, args),
+                                             f"{lab['service']}/{lab['key']}/{step['key']}: {' '.join(seg)[:160]}")
+
+    def test_lab_commands_survive_the_shell(self):
+        """Unquoted {a,b} would be brace-expanded and $name replaced before the AWS CLI sees them."""
+        from dashboard.labs.registry import all_labs
+
+        for lab in all_labs():
+            for step in lab.get('steps', []):
+                lines = [line.split('   #')[0] for line in step.get('command', '').split('\n')
+                         if not line.lstrip().startswith('#')]
+                problems = _shell_expansions('\n'.join(lines))
+                self.assertFalse(problems, f"{lab['service']}/{lab['key']}/{step['key']}: {problems}")
+
+    def test_lab_artifacts_fit_the_cli_parameter_they_are_passed_to(self):
+        """A step's file (artifact) parses as the parameter its file:// argument fills."""
+        import tempfile
+
+        from botocore.validate import ParamValidator
+
+        from dashboard.labs import snippets as S
+        from dashboard.labs.registry import all_labs
+
+        for lab in all_labs():
+            for step in lab.get('steps', []):
+                name, artifact = step.get('artifact_label'), step.get('artifact')
+                if not name or not artifact:
+                    continue
+                for line in S._logical_lines(step.get('command', '')):
+                    code, _ = S._split_comment(line.strip())
+                    for seg in S._segments(S._tokenize(code) or []) if code else []:
+                        start = S._aws_index(seg)
+                        if start < 0 or f'file://{name}' not in seg or any('...' in t for t in seg):
+                            continue
+                        seg = [re.sub(r'<[^<>]+>', 'x1234567890abcdef', t) for t in seg[start:]]
+                        folder = tempfile.mkdtemp()
+                        path = os.path.join(folder, name)
+                        with open(path, 'w') as handle:
+                            handle.write(artifact)
+                        args, rest = [], seg[3:]
+                        while rest:  # keep only this artifact's file; drop other files and CLI-only options
+                            token = rest.pop(0)
+                            if token.startswith('--') and rest and rest[0].startswith(('file://', 'fileb://')) \
+                                    and rest[0] != f'file://{name}':
+                                rest.pop(0)
+                            elif token in S._GLOBAL_WITH_VALUE:
+                                rest = rest[1:]
+                            else:
+                                args.append(f'file://{path}' if token == f'file://{name}' else token)
+                        _, op_cmd = S._operation_command(seg[1], seg[2])
+                        if op_cmd is None:
+                            continue
+                        where = f"{lab['service']}/{lab['key']}/{step['key']}: {name}"
+                        parsed = S._cli_parse(seg[1], seg[2], args)
+                        required = op_cmd._operation_model.input_shape.required_members
+                        if parsed is None and any(xform_name(m, '-') not in ' '.join(args) for m in required):
+                            continue  # a required argument came from another file
+                        self.assertIsNotNone(parsed, where)
+                        report = ParamValidator().validate(parsed[0], op_cmd._operation_model.input_shape)
+                        problems = [line for line in report.generate_report().splitlines()[1:]
+                                    if 'Missing required' not in line and '<' not in line and 'length' not in line]
+                        self.assertFalse(problems, f'{where}: {problems}')
+
+    def test_boto3_snippet_catches_the_errors_a_lab_expects(self):
+        from dashboard.labs.snippets import generate_boto3_snippet
+
+        snippet = generate_boto3_snippet(
+            'aws iam create-login-profile --user-name a --password weak   # refused\n'
+            'aws iam create-login-profile --user-name a --password Strong-Enough-1!'
+        )
+        self.assertIn('import botocore.exceptions', snippet)
+        self.assertIn('try:\n    response = iam.create_login_profile(', snippet)
+        self.assertIn('except botocore.exceptions.ClientError as err:', snippet)
+        self.assertEqual(snippet.count('try:'), 1)
+        compile(snippet, 'snippet', 'exec')
+
+    def test_boto3_snippet_renders_cli_doubles_as_plain_numbers(self):
+        from dashboard.labs.snippets import generate_boto3_snippet
+
+        snippet = generate_boto3_snippet('aws cloudwatch put-metric-data --namespace N --metric-name M --value 1')
+        self.assertIn("'Value': 1}", snippet)
+        self.assertNotIn('Decimal', snippet)
+        snippet = generate_boto3_snippet('aws cloudwatch put-metric-data --namespace N --metric-name M --value 2.5')
+        self.assertIn("'Value': 2.5}", snippet)
+
+    def test_boto3_snippet_keeps_placeholders_in_shorthand_and_drops_fragments(self):
+        from dashboard.labs.snippets import generate_boto3_snippet
+
+        snippet = generate_boto3_snippet(
+            'aws cloudwatch put-metric-data --namespace N --metric-data '
+            'MetricName=cpu,Value=<percent>,Dimensions=[{Name=InstanceId,Value=<id>}]'
+        )
+        self.assertIn("'Value': PERCENT", snippet)
+        self.assertIn("'Value': '<id>'", snippet)
+        snippet = generate_boto3_snippet('aws ssm send-command --instance-ids i-1 ... commands=["df -h"]')
+        self.assertIn("InstanceIds=['i-1'],", snippet)
+        self.assertNotIn('commands=', snippet)
+        snippet = generate_boto3_snippet('aws events put-events --entries ... ref=disk-2')
+        self.assertIn('events.put_events()', snippet)
+        self.assertNotIn('ref', snippet.split('put_events', 1)[1])
+
+    def test_terraform_refers_to_resources_declared_in_the_same_step(self):
+        """Literal names would let Terraform create a policy before its role; references order them."""
+        from dashboard.labs.snippets import generate_terraform_snippet
+
+        tf = generate_terraform_snippet(
+            'aws iam create-role --role-name worker --assume-role-policy-document file://trust.json\n'
+            'aws iam put-role-policy --role-name worker --policy-name p --policy-document file://p.json\n'
+            'aws sns create-topic --name alerts\n'
+            'aws sns subscribe --topic-arn arn:aws:sns:us-east-1:000000000000:alerts --protocol email '
+            '--notification-endpoint a@example.com'
+        )
+        self.assertIn('role   = aws_iam_role.worker.name', tf)
+        self.assertIn('topic_arn = aws_sns_topic.alerts.arn', tf.replace('  topic_arn', 'topic_arn'))
+        self.assertIn('name               = "worker"', tf)
+
+    def test_terraform_links_placeholder_ids_to_resources_the_step_creates(self):
+        from dashboard.labs.snippets import generate_terraform_snippet
+
+        tf = generate_terraform_snippet(
+            'aws kms create-key --description k --tags TagKey=Lab,TagValue=kms\n'
+            'aws kms create-alias --alias-name alias/k --target-key-id <key-id>\n'
+            'aws ec2 create-security-group --group-name web-sg --description web --vpc-id <vpc-id>\n'
+            'aws ec2 authorize-security-group-ingress --group-id <web-sg-id> --protocol tcp --port 80 --cidr 0.0.0.0/0'
+        )
+        self.assertIn('target_key_id = aws_kms_key.', tf)
+        self.assertIn('security_group_id = aws_security_group.web_sg.id', tf)
+        self.assertIn('tags = { Lab = "kms" }', re.sub(r' +', ' ', tf))
+        self.assertIn('variable "vpc_id"', tf)
+        self.assertNotIn('variable "key_id"', tf)
+        self.assertNotIn('variable "web_sg_id"', tf)
+
+    def test_terraform_flow_log_uses_log_destination(self):
+        from dashboard.labs.snippets import generate_terraform_snippet
+
+        tf = generate_terraform_snippet(
+            'aws ec2 create-flow-logs --resource-type VPC --resource-ids vpc-1 --traffic-type REJECT '
+            '--log-group-name /lab/flow --deliver-logs-permission-arn arn:aws:iam::123456789012:role/flow'
+        )
+        self.assertNotIn('log_group_name', tf)
+        self.assertIn('log_destination', tf)
+        self.assertIn('arn:aws:logs:us-east-1:123456789012:log-group:/lab/flow', tf)
+
+
+def _shell_expansions(command):
+    """Unquoted brace lists and undefined lowercase $variables a shell would expand in a lab command."""
+    defined = set(re.findall(r'\bfor\s+(\w+)\s+in\b', command)) | set(re.findall(r'(?:^|[\s;(])(\w+)=', command))
+    problems, quote, i = [], '', 0
+    while i < len(command):
+        ch = command[i]
+        if quote == "'":
+            quote = '' if ch == "'" else quote
+        elif ch == '\\':
+            i += 1
+        elif ch in '"\'' and (not quote or quote == ch):
+            quote = '' if quote else ch
+        elif ch == '$' and re.match(r'[a-z_]\w*', command[i + 1:]):
+            name = re.match(r'\w+', command[i + 1:]).group(0)
+            if name not in defined:
+                problems.append(f'${name}')
+        elif ch == '{' and not quote and (i == 0 or command[i - 1] != '$'):
+            depth, j = 1, i + 1
+            while j < len(command) and depth and command[j] not in '\'"':
+                depth += {'{': 1, '}': -1}.get(command[j], 0)
+                j += 1
+            body = command[i + 1:j - 1]
+            if depth == 0 and ',' in re.sub(r'\{[^{}]*\}', '', body) and not re.search(r'\s', body):
+                problems.append(command[max(0, i - 20):j][:60])
+        i += 1
+    return problems
