@@ -271,6 +271,10 @@ def _model_parse(op_model, args: list[str]) -> dict[str, Any]:
         flag = token[2:]
         values = []
         while i < len(args) and not args[i].startswith('--'):
+            if args[i] == '...':  # the lab left the rest out; what follows belongs to an elided option
+                while i < len(args) and not args[i].startswith('--'):
+                    i += 1
+                break
             values.append(args[i])
             i += 1
         negated = flag.startswith('no-') and flag[3:] in by_flag
@@ -514,7 +518,7 @@ def _parse_aws_uncached(tokens: list[str], files: list[tuple[str, bool]]) -> tup
             params, parsed_args = captured
             outfile = getattr(parsed_args, 'outfile', '') or outfile
     if params is None:
-        params = _model_parse(op_model, [a for a in args if a != '...'])
+        params = _model_parse(op_model, args)
     if zip_file is not None:
         if op_model.name == 'CreateFunction':
             params['Code'] = {**(params.get('Code') or {}), 'ZipFile': zip_file}
