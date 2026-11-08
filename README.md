@@ -1,4 +1,4 @@
-# Floci Dashboard 2.3.0
+# Floci Dashboard 2.4.0
 
 A local AWS console for [Floci](https://floci.io/), the open-source AWS emulator. Browse 70 AWS services and work through 120 hands-on labs for AWS certification exams, all on your own machine with no AWS account.
 
