@@ -111,6 +111,9 @@ export const LabsConsole: React.FC = () => {
   const labRequestId = useRef(0);
   const stepRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [scrollTarget, setScrollTarget] = useState<string | null>(null);
+  // The URL listener reads the catalog from here, so a lab link clicked just as the
+  // catalog arrives (before the listener re-subscribes with the new list) still opens.
+  const allLabsRef = useRef<LabDefinition[]>([]);
 
   const loadCatalog = async () => {
     setLoading(true);
@@ -118,6 +121,7 @@ export const LabsConsole: React.FC = () => {
     try {
       const data = await fetchLabsCatalog();
       const flattened = (data.services || []).flatMap((s) => s.labs);
+      allLabsRef.current = flattened;
       setAllLabsList(flattened);
 
       setExamError(null);
@@ -168,8 +172,9 @@ export const LabsConsole: React.FC = () => {
       const urlLabKey = params.get('lab');
       const urlServiceKey = params.get('service');
 
-      if (urlLabKey && allLabsList.length > 0) {
-        const found = allLabsList.find((l) => l.key === urlLabKey && (!urlServiceKey || l.service === urlServiceKey));
+      const labs = allLabsRef.current;
+      if (urlLabKey && labs.length > 0) {
+        const found = labs.find((l) => l.key === urlLabKey && (!urlServiceKey || l.service === urlServiceKey));
         if (found) {
           openLab(found, false);
         }
@@ -184,7 +189,7 @@ export const LabsConsole: React.FC = () => {
       window.removeEventListener('popstate', handleUrlSync);
       window.removeEventListener('floci_navigate', handleUrlSync);
     };
-  }, [allLabsList, activeLab]);
+  }, [activeLab]);
 
   const openLab = async (lab: LabDefinition, updateUrl = true) => {
     cancelRunAllRef.current = true;
