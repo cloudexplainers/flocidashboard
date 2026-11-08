@@ -132,6 +132,8 @@ BOUNDARY_COMMAND = (
 )
 ANALYZER_COMMAND = (
     f'aws accessanalyzer create-analyzer --analyzer-name {ANALYZER} --type ACCOUNT\n'
+    f'aws s3api create-bucket --bucket {SHARED_BUCKET}\n'
+    f'aws s3api delete-public-access-block --bucket {SHARED_BUCKET}   # so a public policy can be saved\n'
     f'aws s3api put-bucket-policy --bucket {SHARED_BUCKET} --policy file://public-read.json\n'
     f'aws iam create-role --role-name {PARTNER_ROLE} --assume-role-policy-document file://partner-trust.json\n'
     'aws accessanalyzer list-findings --analyzer-arn <analyzer-arn>'

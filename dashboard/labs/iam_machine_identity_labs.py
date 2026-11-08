@@ -246,7 +246,9 @@ CHAIN_COMMAND = (
 )
 ABAC_COMMAND = (
     ''.join(f'aws sqs tag-queue --queue-url <{queue}> --tags team={team}\n' for queue, team in QUEUE_TAGS.items())
-    + f'aws iam put-role-policy --role-name {ABAC_ROLE} --policy-name {INLINE_POLICY} '
+    + f'aws iam create-role --role-name {ABAC_ROLE} --assume-role-policy-document file://abac-trust.json   '
+    '# sts:AssumeRole and sts:TagSession\n'
+    f'aws iam put-role-policy --role-name {ABAC_ROLE} --policy-name {INLINE_POLICY} '
     '--policy-document file://same-team.json   # aws:ResourceTag/team = ${aws:PrincipalTag/team}\n'
     f'aws sts assume-role --role-arn {ABAC_ROLE_ARN} --role-session-name orders-dev --tags Key=team,Value=orders\n'
     f'aws sqs send-message --queue-url <{JOBS_QUEUE}> --message-body hello       # same team\n'
