@@ -1230,7 +1230,8 @@ def _tags(p: dict, tf: _Tf, key: str = 'Tags') -> dict | None:
         specs = p['TagSpecifications']
         raw = specs[0].get('Tags') if isinstance(specs, list) and specs and isinstance(specs[0], dict) else None
     if isinstance(raw, list):
-        return {t.get('Key', t.get('key')): tf.value(t.get('Value', t.get('value'))) for t in raw if isinstance(t, dict)}
+        return {t.get('Key', t.get('key', t.get('TagKey'))): tf.value(t.get('Value', t.get('value', t.get('TagValue'))))
+                for t in raw if isinstance(t, dict)}
     if isinstance(raw, dict) and set(raw) != {'__floci_snippet_file__'}:
         return {k: tf.value(v) for k, v in raw.items()}
     return None
@@ -2515,6 +2516,7 @@ def _generate_terraform(command: str) -> str:
     variables: dict[str, str] = {}
     previous: dict[str, str] = {}
     refs: dict[str, tuple[str, _Hcl]] = {}  # literal name or ARN -> (resource type, reference)
+    declared: list[tuple[str, str]] = []  # (resource type, label) in order
     for call, files, reason in _terraform_calls(command):
         if call is None:
             notes.append(f'# aws {reason}: not managed by Terraform')
@@ -2546,7 +2548,9 @@ def _generate_terraform(command: str) -> str:
                          if isinstance(v, _Hcl) and 'PREVIOUS' in v.expr else v) for k, v in res.body]
                 previous[res.type] = f'{res.type}.{label}'
                 body = _link_references(body, res.type, refs)
+                body = _link_placeholders(body, declared, {**variables, **tf.variables})
                 _register_references(body, res.type, label, refs)
+                declared.append((res.type, label))
                 lines = [f'resource "{res.type}" "{label}" {{', *_render_body(body, 1, tf), '}']
                 blocks.append(lines)
             skipped = sorted(set(params) - params.seen - _TF_IMPLICIT)
@@ -2568,6 +2572,8 @@ def _generate_terraform(command: str) -> str:
         return '\n'.join(header + [''] + _dedupe(notes)) + '\n'
 
     out: list[str] = []
+    used_vars = set(re.findall(r'\bvar\.(\w+)', '\n'.join('\n'.join(b) for b in blocks)))
+    variables = {name: ph for name, ph in variables.items() if name in used_vars}
     for name, placeholder in variables.items():
         out += [f'variable "{name}" {{', '  type        = string', f'  description = {_hcl_str("Value for <" + placeholder + ">")}', '}', '']
     for lines in blocks:
@@ -2620,6 +2626,72 @@ def _link_references(entries: list[tuple[str, Any]], kind: str, refs: dict) -> l
         for (tag, other, name), (_, ref) in ((k, v) for k, v in refs.items() if isinstance(k, tuple)):
             if other != kind and re.fullmatch(_TF_ARN_SHAPES[other] + re.escape(name), value):
                 return ref
+        return value
+
+    return [(k, swap(v)) for k, v in entries]
+
+
+# Placeholder words -> (resource type, attribute) that the same snippet may already create.
+_TF_PLACEHOLDER_TYPES = [
+    ({'key'}, 'aws_kms_key', 'key_id'),
+    ({'rt'}, 'aws_route_table', 'id'),
+    ({'rtb'}, 'aws_route_table', 'id'),
+    ({'route', 'table'}, 'aws_route_table', 'id'),
+    ({'sg'}, 'aws_security_group', 'id'),
+    ({'security', 'group'}, 'aws_security_group', 'id'),
+    ({'igw'}, 'aws_internet_gateway', 'id'),
+    ({'nat'}, 'aws_nat_gateway', 'id'),
+    ({'eip'}, 'aws_eip', 'allocation_id'),
+    ({'allocation'}, 'aws_eip', 'allocation_id'),
+    ({'vpc'}, 'aws_vpc', 'id'),
+    ({'subnet'}, 'aws_subnet', 'id'),
+    ({'fs'}, 'aws_efs_file_system', 'id'),
+    ({'file', 'system'}, 'aws_efs_file_system', 'id'),
+    ({'topic'}, 'aws_sns_topic', 'arn'),
+    ({'pool'}, 'aws_cognito_user_pool', 'id'),
+    ({'instance'}, 'aws_instance', 'id'),
+    ({'tg'}, 'aws_lb_target_group', 'arn'),
+    ({'target', 'group'}, 'aws_lb_target_group', 'arn'),
+    ({'alb'}, 'aws_lb', 'arn'),
+    ({'zone'}, 'aws_route53_zone', 'zone_id'),
+    ({'api'}, 'aws_api_gateway_rest_api', 'id'),
+    ({'api'}, 'aws_apigatewayv2_api', 'id'),
+    ({'distribution'}, 'aws_cloudfront_distribution', 'id'),
+]
+
+
+def _link_placeholders(entries, declared: list[tuple[str, str]], variables: dict[str, str]):
+    """A <placeholder> for the ID of something this snippet already creates becomes a reference to it,
+    so one terraform apply works instead of asking for an ID that doesn't exist yet."""
+    def target(placeholder: str):
+        words = set(re.findall(r'[a-z0-9]+', placeholder.lower()))
+        if words & {'profile', 'access', 'policy', 'version', 'url', 'name'}:
+            return None  # something other than the resource's own ID or ARN
+        best, best_score, tie = None, -1, False
+        for need, kind, attr in _TF_PLACEHOLDER_TYPES:
+            if not need <= words or ('arn' in words) != (attr == 'arn') and words & {'arn', 'id'}:
+                continue
+            for other, label in declared:
+                if other != kind:
+                    continue
+                score = len(words & set(label.split('_')))
+                if score > best_score:
+                    best, best_score, tie = f'{kind}.{label}.{attr}', score, False
+                elif score == best_score and best != f'{kind}.{label}.{attr}':
+                    tie = True
+        return None if tie else best
+
+    def swap(value):
+        if isinstance(value, _Body):
+            return _Body([(k, swap(v)) for k, v in value.entries])
+        if isinstance(value, list):
+            return [swap(v) for v in value]
+        if isinstance(value, _Hcl):
+            m = re.fullmatch(r'var\.(\w+)', value.expr)
+            if m and m.group(1) in variables:
+                ref = target(variables[m.group(1)])
+                if ref:
+                    return _Hcl(ref)
         return value
 
     return [(k, swap(v)) for k, v in entries]

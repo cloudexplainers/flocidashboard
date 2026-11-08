@@ -7673,6 +7673,22 @@ class MultiSdkSnippetsTests(SimpleTestCase):
         self.assertIn('topic_arn = aws_sns_topic.alerts.arn', tf.replace('  topic_arn', 'topic_arn'))
         self.assertIn('name               = "worker"', tf)
 
+    def test_terraform_links_placeholder_ids_to_resources_the_step_creates(self):
+        from dashboard.labs.snippets import generate_terraform_snippet
+
+        tf = generate_terraform_snippet(
+            'aws kms create-key --description k --tags TagKey=Lab,TagValue=kms\n'
+            'aws kms create-alias --alias-name alias/k --target-key-id <key-id>\n'
+            'aws ec2 create-security-group --group-name web-sg --description web --vpc-id <vpc-id>\n'
+            'aws ec2 authorize-security-group-ingress --group-id <web-sg-id> --protocol tcp --port 80 --cidr 0.0.0.0/0'
+        )
+        self.assertIn('target_key_id = aws_kms_key.', tf)
+        self.assertIn('security_group_id = aws_security_group.web_sg.id', tf)
+        self.assertIn('tags = { Lab = "kms" }', re.sub(r' +', ' ', tf))
+        self.assertIn('variable "vpc_id"', tf)
+        self.assertNotIn('variable "key_id"', tf)
+        self.assertNotIn('variable "web_sg_id"', tf)
+
     def test_terraform_flow_log_uses_log_destination(self):
         from dashboard.labs.snippets import generate_terraform_snippet
 
