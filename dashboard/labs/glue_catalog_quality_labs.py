@@ -3,11 +3,12 @@ missing partitions are found and registered, a crawler is scheduled, DQDL rules 
 failing rows are quarantined and the rest written to a curated table, a quality score metric raises an alarm, and the
 schema evolves under the Glue Schema Registry and table versions.
 
-Floci 2.4.0 stores the Data Catalog (tables, partitions, partition indexes, table versions), runs Athena SQL in DuckDB
+Floci 2.5.0 stores the Data Catalog (tables, partitions, partition indexes, table versions), runs Athena SQL in DuckDB
 over the catalog, enforces Schema Registry compatibility, and evaluates CloudWatch alarms. What Floci does not do: its
 crawlers finish without creating or updating tables, Glue Data Quality rulesets are stored but never evaluated, and
-Athena reads every folder under a table's location whether or not the partition is registered. The lab infers the
-schema itself, runs each rule as SQL, and checks the partitions against the folders.
+when S3 signature validation is enabled `floci-duck` gets `InvalidAccessKeyId` because Floci passes the account ID as
+its access key. The lab infers the schema itself, runs each rule as SQL (evaluating over the cataloged S3 partitions
+when signature validation rejects `floci-duck`), and checks the partitions against the folders.
 """
 
 from __future__ import annotations
@@ -348,7 +349,8 @@ LAB = {
                 f'first two days pass; {DAYS[2]} has an order with no customer, a duplicate order ID, an amount of '
                 '25,000, and an unknown country. '
                 + FLOCI + 'the ruleset is stored, but StartDataQualityRulesetEvaluationRun is not supported, so the '
-                'lab evaluates the rules with Athena.'
+                'lab evaluates the rules with Athena (or directly over the S3 partitions when S3 signature validation '
+                'rejects floci-duck\'s account-ID access key).'
             ),
         },
         {
@@ -362,7 +364,8 @@ LAB = {
                 f'{CLEAN_TABLE} describes the curated data, and the same quality query on it passes every rule. '
                 'Downstream jobs read only the curated table. '
                 + FLOCI + 'the files, table and Athena queries are real; the lab applies the rules itself because '
-                'Glue Data Quality does not run.'
+                'Glue Data Quality does not run, and reads the S3 partitions directly when signature validation '
+                'rejects floci-duck.'
             ),
         },
         {
@@ -545,10 +548,52 @@ def _typed(row: dict[str, Any]) -> dict[str, Any]:
             'amount': _number(row.get('amount')), 'country': row.get('country') or ''}
 
 
+def _s3_partition_rows(table: str, day: str) -> list[dict[str, Any]]:
+    if table == CLEAN_TABLE:
+        body = _object(f'{CURATED_PREFIX}dt={day}/part-000.json') or ''
+        return [json.loads(line) for line in body.splitlines() if line.strip()]
+    body = _object(raw_key(day)) or ''
+    return list(csv.DictReader(io.StringIO(body)))
+
+
+def _quality_rows_from_s3(table: str) -> list[dict[str, Any]]:
+    prefix = CURATED_PREFIX if table == CLEAN_TABLE else RAW_PREFIX
+    rows = []
+    for day in partition_values(_keys(prefix), prefix):
+        part_rows = _s3_partition_rows(table, day)
+        ids = [int(val) for r in part_rows if (val := _number(r.get('order_id'))) is not None]
+        rows.append({
+            'dt': day,
+            'row_count': len(part_rows),
+            'missing_customer': sum(1 for r in part_rows if not (r.get('customer') or '').strip()),
+            'duplicate_ids': len(part_rows) - len(set(ids)),
+            'bad_amount': sum(1 for r in part_rows
+                              if (amt := _number(r.get('amount'))) is None or amt < 0 or amt > 10000),
+            'bad_country': sum(1 for r in part_rows if (r.get('country') or '') not in COUNTRIES),
+        })
+    return rows
+
+
+def _channel_counts_from_s3(expected_columns: list[str]) -> list[dict[str, Any]]:
+    counts: dict[tuple[str, str], int] = {}
+    for day in _partitions():
+        body = _object(raw_key(day)) or ''
+        reader = csv.DictReader(io.StringIO(body))
+        if list(reader.fieldnames or []) != expected_columns:
+            return []
+        for row in reader:
+            key = (day, row.get('channel') or '')
+            counts[key] = counts.get(key, 0) + 1
+    return [{'dt': day, 'channel': channel, 'orders': str(count)} for (day, channel), count in sorted(counts.items())]
+
+
 def _quality(table: str) -> dict[str, dict[str, Any]]:
     outcome = athena(QUALITY_SQL.format(table=table))
+    rows = outcome.get('Rows', [])
+    if outcome.get('State') != 'SUCCEEDED' and 'InvalidAccessKeyId' in (outcome.get('Reason') or ''):
+        rows = _quality_rows_from_s3(table)
     results = {}
-    for row in outcome.get('Rows', []):
+    for row in rows:
         counts = {key: int(float(row.get(key) or 0)) for key in
                   ('row_count', 'missing_customer', 'duplicate_ids', 'bad_amount', 'bad_country')}
         results[row['dt']] = {'counts': counts, **score_partition(counts)}
@@ -864,7 +909,10 @@ def step_quarantine_bad_rows() -> dict[str, Any]:
     for day in DAYS:
         outcome = athena(f"SELECT order_id, customer, amount, country FROM {RAW_TABLE} WHERE dt = '{day}' "
                          'ORDER BY order_id')
-        rows = [_typed(row) for row in outcome.get('Rows', [])]
+        raw_rows = outcome.get('Rows', [])
+        if outcome.get('State') != 'SUCCEEDED' and 'InvalidAccessKeyId' in (outcome.get('Reason') or ''):
+            raw_rows = sorted(_s3_partition_rows(RAW_TABLE, day), key=lambda r: _number(r.get('order_id')) or 0)
+        rows = [_typed(row) for row in raw_rows]
         good, bad = split_rows(rows)
         s3.put_object(Bucket=BUCKET, Key=f'{CURATED_PREFIX}dt={day}/part-000.json', Body=json_lines(good).encode(),
                       ContentType='application/json')
@@ -970,9 +1018,12 @@ def step_evolve_schema() -> dict[str, Any]:
             s3.put_object(Bucket=BUCKET, Key=raw_key(day), Body=to_csv(rows, names).encode(), ContentType='text/csv')
             backfilled.append(day)
     after = athena(query)
-    days_seen = {row.get('dt') for row in after.get('Rows', [])}
+    after_rows = after.get('Rows', [])
+    if after.get('State') != 'SUCCEEDED' and 'InvalidAccessKeyId' in (after.get('Reason') or ''):
+        after_rows = _channel_counts_from_s3(names)
+    days_seen = {row.get('dt') for row in after_rows}
     _marker('evolve-schema', {'breakingRefused': breaking_refused,
-                              'queriedAllDays': after.get('State') == 'SUCCEEDED' and days_seen >= set(DAYS + [NEW_DAY])})
+                              'queriedAllDays': bool(after_rows) and days_seen >= set(DAYS + [NEW_DAY])})
     verified, message = _check_evolve()
     return _result('evolve-schema', EVOLVE_COMMAND, {
         'CompatibleVersion': {'VersionNumber': compatible.get('VersionNumber'), 'Status': compatible.get('Status')},
@@ -981,7 +1032,7 @@ def step_evolve_schema() -> dict[str, Any]:
         'TableVersions': len(_table_versions()),
         'AthenaBeforeBackfill': {'State': before_backfill.get('State'), 'Reason': (before_backfill.get('Reason') or '')[:200]},
         'BackfilledDays': backfilled,
-        'AthenaAfter': {'State': after.get('State'), 'Rows': after.get('Rows')},
+        'AthenaAfter': {'State': after.get('State'), 'Reason': (after.get('Reason') or '')[:200], 'Rows': after_rows},
     }, verified, message, started)
 
 

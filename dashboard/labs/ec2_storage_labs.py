@@ -350,10 +350,10 @@ def _group(name: str) -> dict[str, Any] | None:
     return groups[0] if groups else None
 
 
-def _instance(name: str) -> dict[str, Any] | None:
+def _instance(name: str, states: list[str] | None = None) -> dict[str, Any] | None:
     reservations = _client('ec2').describe_instances(Filters=[
         {'Name': 'tag:Name', 'Values': [name]},
-        {'Name': 'instance-state-name', 'Values': ['pending', 'running']},
+        {'Name': 'instance-state-name', 'Values': states or ['pending', 'running']},
     ]).get('Reservations', [])
     instances = [instance for reservation in reservations for instance in reservation.get('Instances', [])]
     return instances[0] if instances else None
@@ -882,18 +882,25 @@ def reset() -> dict[str, Any]:
     deleted: list[str] = []
     errors: list[str] = []
 
-    def attempt(label: str, call) -> bool:
-        try:
-            call()
-            deleted.append(label)
-            return True
-        except ClientError as exc:
-            code = _code(exc)
-            if 'NotFound' in code or 'NotAttached' in code:
+    def attempt(label: str, call, retry_codes: set[str] = frozenset()) -> bool:
+        for _try in range(15):
+            try:
+                call()
+                deleted.append(label)
+                return True
+            except ClientError as exc:
+                code = _code(exc)
+                if 'NotFound' in code or 'NotAttached' in code:
+                    return False
+                if code in retry_codes:
+                    time.sleep(2)
+                    continue
+                errors.append(f'{label}: {exc}')
                 return False
-            errors.append(f'{label}: {exc}')
-        except BotoCoreError as exc:
-            errors.append(f'{label}: {exc}')
+            except BotoCoreError as exc:
+                errors.append(f'{label}: {exc}')
+                return False
+        errors.append(f'{label}: still in use after retries')
         return False
 
     ec2, efs = _client('ec2'), _client('efs')
@@ -914,10 +921,11 @@ def reset() -> dict[str, Any]:
         attempt(f'file-system:{file_system_id}', lambda: efs.delete_file_system(FileSystemId=file_system_id))
 
     # Terminate the instances first: Floci cannot delete a volume's backing file while an instance has it mounted.
-    instance_ids = [instance['InstanceId'] for instance in (_instance(APP_1), _instance(APP_2)) if instance]
+    active_states = ['pending', 'running', 'stopping', 'stopped', 'shutting-down']
+    instance_ids = [instance['InstanceId'] for instance in (_instance(APP_1, active_states), _instance(APP_2, active_states)) if instance]
     if instance_ids:
         attempt(f'instances:{",".join(instance_ids)}', lambda: ec2.terminate_instances(InstanceIds=instance_ids))
-        _wait(lambda: not _instance(APP_1) and not _instance(APP_2), timeout=120, delay=2)
+        _wait(lambda: not _instance(APP_1, active_states) and not _instance(APP_2, active_states), timeout=120, delay=2)
     for name in (GP3_NAME, IO2_NAME):
         volume = _volume(name)
         if not volume:
@@ -929,7 +937,8 @@ def reset() -> dict[str, Any]:
     for name in (EFS_SG, APP_SG):
         group = _group(name)
         if group:
-            attempt(f'security-group:{name}', lambda group=group: ec2.delete_security_group(GroupId=group['GroupId']))
+            attempt(f'security-group:{name}', lambda group=group: ec2.delete_security_group(GroupId=group['GroupId']),
+                    retry_codes={'DependencyViolation', 'InvalidGroup.InUse'})
 
     cache.delete_many([CACHE_PREFIX + step for step in STEP_KEYS])
     payload = {'status': 'reset', 'deleted_resources': deleted, 'errors': errors}

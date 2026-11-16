@@ -43,6 +43,17 @@ class HelperTests(SimpleTestCase):
         self.assertNotIn('channel', lab.AVRO_V1)
         self.assertIn('"order_id", "type": "string"', lab.AVRO_BREAKING)
 
+    def test_s3_quality_fallback_matches_day_rows(self):
+        from unittest.mock import patch
+        names = [name for name, _ in lab.COLUMNS]
+        objects = {lab.raw_key(day): lab.to_csv(lab.day_rows(day), names) for day in lab.DAYS}
+        with patch.object(lab, '_keys', return_value=list(objects)), \
+                patch.object(lab, '_object', side_effect=lambda k: objects.get(k)), \
+                patch.object(lab, 'athena', return_value={'State': 'FAILED', 'Reason': 'InvalidAccessKeyId', 'Rows': []}):
+            results = lab._quality(lab.RAW_TABLE)
+        self.assertEqual(results[lab.DAYS[0]]['score'], 1.0)
+        self.assertEqual(results[lab.DAYS[2]]['score'], 0.2)
+
 
 class RegistrationTests(SimpleTestCase):
     def test_lab_is_listed_and_tagged(self):

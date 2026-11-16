@@ -385,12 +385,30 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
         for t in tasks:
             ecs.stop_task(cluster=CLUSTER_NAME, task=t)
             deleted.append(f'task:{t}')
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            active = []
+            for desired in ('PENDING', 'RUNNING'):
+                active.extend(ecs.list_tasks(cluster=CLUSTER_NAME, desiredStatus=desired).get('taskArns', []))
+            if not active:
+                break
+            for t in active:
+                try:
+                    ecs.stop_task(cluster=CLUSTER_NAME, task=t)
+                except Exception:
+                    pass
+            time.sleep(1)
     except Exception:
         pass
 
     try:
-        ecs.delete_cluster(cluster=CLUSTER_NAME)
-        deleted.append(f'cluster:{CLUSTER_NAME}')
+        for _ in range(15):
+            try:
+                ecs.delete_cluster(cluster=CLUSTER_NAME)
+                deleted.append(f'cluster:{CLUSTER_NAME}')
+                break
+            except ClientError:
+                time.sleep(2)
     except Exception:
         pass
 
@@ -405,7 +423,18 @@ def reset(service_key: str, lab_key: str) -> dict[str, Any]:
     ]:
         value = marked(key)
         if value:
-            operation(**{parameter: value})
+            for attempt in range(15):
+                try:
+                    operation(**{parameter: value})
+                    break
+                except ClientError as exc:
+                    code = exc.response.get('Error', {}).get('Code') or ''
+                    if 'NotFound' in code:
+                        break
+                    if code in ('DependencyViolation', 'InvalidGroup.InUse') and attempt < 14:
+                        time.sleep(2)
+                        continue
+                    raise
     for k in ['cluster', 'task_def_arn', 'task_arn', 'service', 'scaled', 'vpc_id', 'subnet_id', 'group_id']:
         cache.delete(CACHE_PREFIX + k)
 

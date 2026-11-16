@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: matched labs and Athena notes to Floci 2.5.0 (`floci/floci:latest`):
+  - `iam/machine-identity`: Floci 2.5.0 enforces `MaxSessionDuration` and the 1-hour session limit on role chaining (`ValidationError`), so the step sets `MaxSessionDuration=7200` on `lab-id-deployer`, shows the 2-hour chained `AssumeRole` refused by the 1-hour chaining cap, and assumes the role for 1 hour with the session policy.
+  - `ec2/performance-tuning`: Floci 2.5.0 installs Instance Connect trust anchors (`update-ca-certificates`) and generates SSH host keys (`ssh-keygen -A`) in the background after marking an EC2 container running; the settling check now waits for `update-ca-certificates`, `ssh-keygen`, and `sshd` startup to finish before sampling CPU on the right-sized instance.
+  - `ec2/block-file-storage`, `ec2/shared-responsibility`, and `ecs/fargate-microservice`: reset waits for instances in `shutting-down` and stopping ECS task containers before deleting security groups, subnets, and VPCs, avoiding `DependencyViolation` on Floci 2.5.0.
+  - `stepfunctions/etl-pipeline`, `kinesis/streaming-data-lake`, and `glue/catalog-quality`: on Floci 2.5.0, Athena passes the 12-digit account ID as `floci-duck`'s S3 access key, which S3 signature validation (`FLOCI_AUTH_VALIDATE_SIGNATURES=true`) rejects with `InvalidAccessKeyId`. Those steps still submit the Athena queries, record the `InvalidAccessKeyId` response, and evaluate the cataloged S3 partitions directly when signature validation blocks `floci-duck`.
+
 ## 2.4.0 — 2026-11-08
 
 - New study track, **AWS Certified Data Engineer – Associate (DEA-C01)**: the seventh exam track on the labs page, with all four domains and 17 task statements from the exam guide. 57 existing labs are tagged for DEA tasks (streaming ingestion, Step Functions, S3 lifecycle, DynamoDB, IAM, KMS, and logging), and 16 new concept cards cover streaming ingestion, transformation engines and file formats, pipeline orchestration, pipeline code, choosing a data store, catalogs and partitions, the data lifecycle, schema design and evolution, analysis with Athena and Redshift, pipeline monitoring, data quality, authentication, authorization with Lake Formation and Redshift grants, encryption and masking, audit logs, and privacy and governance. The DynamoDB access patterns card now covers DEA 2.4 too.

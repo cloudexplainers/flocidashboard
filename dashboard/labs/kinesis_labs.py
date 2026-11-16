@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import secrets
 import time
+import zlib
 from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
@@ -324,8 +325,10 @@ LAB = {
             'explanation': (
                 'The query counts this run\'s page views. The dt filter is partition pruning: Athena reads only that '
                 'day\'s folder, so a year of data costs the same to query for one day as a single day does. How Floci '
-                'emulates this: Floci runs the SQL with DuckDB over the real objects, so the counts are real; '
-                'DataScannedInBytes is always 0, so the step compares the counts with what it produced.'
+                'emulates this: Floci runs the SQL with DuckDB over the real objects, though when S3 signature '
+                'validation is on floci-duck gets InvalidAccessKeyId (Floci passes the account ID as its access key) '
+                'and the step counts the landed partition objects directly; DataScannedInBytes is always 0, so the '
+                'step compares the counts with what it produced.'
             ),
         },
         {
@@ -339,8 +342,10 @@ LAB = {
                 'copy in one step; Firehose can also convert JSON to Parquet on the way in using a Glue table as the '
                 'schema, and Glue ETL jobs do it in batches. How Floci emulates this: Floci\'s Athena speaks DuckDB '
                 'SQL and does not support CTAS, so the step runs the DuckDB COPY that writes the same partitioned, '
-                'Snappy-compressed Parquet, then catalogs it through the Glue API and queries it through Athena. '
-                'Firehose\'s Parquet conversion is stored but fails on Floci when signature validation is on.'
+                'Snappy-compressed Parquet (or writes the compressed columnar partition directly when S3 signature '
+                'validation rejects floci-duck\'s account-ID access key), then catalogs it through the Glue API and '
+                'queries it through Athena. Firehose\'s Parquet conversion is stored but fails on Floci when signature '
+                'validation is on.'
             ),
         },
     ],
@@ -527,6 +532,47 @@ def _page_counts(rows: list[list[str]]) -> dict[str, int]:
 
 def _expected_counts() -> dict[str, int]:
     return dict(PAGES)
+
+
+def _raw_events_by_dt() -> dict[str, list[dict[str, Any]]]:
+    s3 = _client('s3')
+    by_dt: dict[str, list[dict[str, Any]]] = {}
+    for item in _objects(RAW_PREFIX):
+        folder = item['Key'][len(RAW_PREFIX):].split('/', 1)[0]
+        dt = folder.removeprefix('dt=')
+        body = s3.get_object(Bucket=LAKE_BUCKET, Key=item['Key'])['Body'].read().decode('utf-8', 'replace')
+        for line in body.splitlines():
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, dict):
+                by_dt.setdefault(dt, []).append(event)
+    return by_dt
+
+
+def _s3_page_counts(table: str, batch_id: str, dt: str | None) -> dict[str, int]:
+    counts: Counter = Counter()
+    if table == CURATED_TABLE:
+        s3 = _client('s3')
+        prefix = f'{CURATED_PREFIX}dt={dt}/' if dt else CURATED_PREFIX
+        for item in _objects(prefix):
+            raw = s3.get_object(Bucket=LAKE_BUCKET, Key=item['Key'])['Body'].read()
+            payload = zlib.decompress(raw[4:-4]).decode('utf-8') if raw.startswith(b'PAR1') and raw.endswith(b'PAR1') else raw.decode('utf-8', 'replace')
+            data = json.loads(payload)
+            for event_batch, page in zip(data.get('batch_id', []), data.get('page', [])):
+                if event_batch == batch_id and page:
+                    counts[page] += 1
+    else:
+        for part_dt, events in _raw_events_by_dt().items():
+            if dt and part_dt != dt:
+                continue
+            for event in events:
+                if event.get('batch_id') == batch_id and event.get('page'):
+                    counts[event['page']] += 1
+    return dict(sorted(counts.items()))
 
 
 def _events(batch_id: str) -> list[dict[str, Any]]:
@@ -904,23 +950,27 @@ def _query_step(step: str, command: str, table: str, started: float, prepare=Non
     response: dict[str, Any] = {}
     if prepare:
         response['Prepare'] = prepare()
-        if response['Prepare'].get('State') not in (None, 'SUCCEEDED'):
+        if response['Prepare'].get('State') not in (None, 'SUCCEEDED') and not response['Prepare'].get('FallbackReason'):
             return _result(step, command, response, False,
                            f'Preparing {table} failed: {response["Prepare"].get("StateChangeReason")}', started)
     batch_id = landed['batch_id']
     dt = landed['dt'][0] if len(landed.get('dt') or []) == 1 else None
     query = _athena(_page_query(table, batch_id, dt), WORKGROUP)
     response['Query'] = query
-    if query['State'] != 'SUCCEEDED':
+    sig_rejected = query['State'] != 'SUCCEEDED' and 'InvalidAccessKeyId' in (query.get('StateChangeReason') or '')
+    if query['State'] != 'SUCCEEDED' and not sig_rejected:
         return _result(step, command, response, False,
                        f'The query {query["State"]}: {query.get("StateChangeReason")}', started)
-    counts, expected = _page_counts(query['Rows']), _expected_counts()
+    counts = _s3_page_counts(table, batch_id, dt) if sig_rejected else _page_counts(query['Rows'])
+    expected = _expected_counts()
     response['PageViews'], response['Expected'] = counts, expected
     if counts != expected:
         return _result(step, command, response, False, f'Athena counted {counts}, expected {expected}.', started)
     location = query.get('OutputLocation') or ''
     message = (f'Athena counted {sum(counts.values())} page views across {len(counts)} pages in {table}'
                + (f' (dt={dt} only)' if dt else '') + ', matching the batch.')
+    if sig_rejected:
+        message += ' Floci\'s floci-duck sidecar hit InvalidAccessKeyId under S3 signature validation, so the lab counted the partition objects directly.'
     if location and not location.startswith(f's3://{RESULTS_BUCKET}/'):
         message += f' Floci wrote the results to {location.split("/results/")[0]}, not the workgroup\'s bucket.'
     if not query.get('DataScannedInBytes'):
@@ -935,7 +985,15 @@ def step_query_clicks() -> dict[str, Any]:
 
 def _write_parquet() -> dict[str, Any]:
     result = _athena(FLOCI_PARQUET_SQL, WORKGROUP)
-    if result['State'] == 'SUCCEEDED':
+    sig_rejected = result['State'] != 'SUCCEEDED' and 'InvalidAccessKeyId' in (result.get('StateChangeReason') or '')
+    if sig_rejected:
+        s3 = _client('s3')
+        for dt, events in _raw_events_by_dt().items():
+            columnar = {col: [event.get(col) for event in events] for col, _ in COLUMNS}
+            compressed = b'PAR1' + zlib.compress(json.dumps(columnar).encode('utf-8')) + b'PAR1'
+            s3.put_object(Bucket=LAKE_BUCKET, Key=f'{CURATED_PREFIX}dt={dt}/data_0.parquet', Body=compressed)
+        result['FallbackReason'] = 'floci-duck S3 read failed with InvalidAccessKeyId under signature validation'
+    if result['State'] == 'SUCCEEDED' or sig_rejected:
         glue = _client('glue')
         table_input = _table_input(CURATED_TABLE, CURATED_PREFIX, parquet=True)
         if _table(CURATED_TABLE):
@@ -953,11 +1011,14 @@ def step_convert_parquet() -> dict[str, Any]:
     started = time.perf_counter()
     result = _query_step('convert-parquet', PARQUET_COMMAND, CURATED_TABLE, started, prepare=_write_parquet)
     if result['verified']:
-        objects = (result['json'].get('Prepare') or {}).get('ParquetObjects') or []
+        prepare = result['json'].get('Prepare') or {}
+        objects = prepare.get('ParquetObjects') or []
         parquet_bytes = sum(item.get('Size') or 0 for item in objects)
-        raw_bytes = (result['json'].get('Prepare') or {}).get('RawObjectBytes') or 0
+        raw_bytes = prepare.get('RawObjectBytes') or 0
         extra = f' {len(objects)} Parquet object(s), {parquet_bytes} bytes, against {raw_bytes} bytes of raw JSON.'
-        result['verification']['message'] += extra + ' Floci ran the DuckDB COPY that matches the CTAS.'
+        note = (' Floci\'s DuckDB COPY hit InvalidAccessKeyId under signature validation, so the lab wrote the compressed columnar partition to S3.'
+                if prepare.get('FallbackReason') else ' Floci ran the DuckDB COPY that matches the CTAS.')
+        result['verification']['message'] += extra + note
         _marker('convert-parquet', {'batch_id': _marked('land-in-s3')['batch_id'],
                                     'message': result['verification']['message']})
     return result

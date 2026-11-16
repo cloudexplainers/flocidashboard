@@ -189,8 +189,10 @@ class CheckTests(SimpleTestCase):
                                          'ssm': {'allowed': False}})
         self.assertFalse(lab._check_ceiling()[0])
         lab._marker('chained-session', {'caller': f'arn:aws:sts::0:assumed-role/{lab.DEPLOYER}/x',
+                                        'twoHourChaining': {'allowed': False},
                                         'jobs': {'allowed': True}, 'audit': {'allowed': False}})
         self.assertTrue(lab._check_chain()[0])
+        self.assertIn('refused', lab._check_chain()[1])
 
     def test_rotation_checks(self):
         lab._marker('rotate-db-credentials', {'steps': lab.ROTATION_STEPS, 'currentLogsIn': True,

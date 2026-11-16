@@ -420,3 +420,20 @@ class KinesisDataLakeLabTests(SimpleTestCase):
         result = reset_lab(SERVICE, LAB)
         self.assertEqual(result['errors'], [])
         self.assertEqual(result['deleted_resources'], [])
+
+    def test_queries_fall_back_when_floci_duck_hits_invalid_access_key_id(self):
+        for step in lab.STEP_KEYS[:7]:
+            self.assertTrue(run_lab_step(SERVICE, LAB, step)['verified'], step)
+        failed_query = {'QueryExecutionId': 'q-fail', 'State': 'FAILED',
+                        'StateChangeReason': 'InvalidAccessKeyId: The AWS Access Key Id you provided does not exist',
+                        'OutputLocation': 's3://floci-athena-results/results/q-fail.csv',
+                        'DataScannedInBytes': 0, 'Rows': []}
+        with patch.object(lab, '_athena', return_value=dict(failed_query)):
+            clicks = run_lab_step(SERVICE, LAB, 'query-clicks')
+            parquet = run_lab_step(SERVICE, LAB, 'convert-parquet')
+        self.assertTrue(clicks['verified'])
+        self.assertIn('InvalidAccessKeyId', clicks['verification']['message'])
+        self.assertEqual(clicks['json']['PageViews'], dict(lab.PAGES))
+        self.assertTrue(parquet['verified'])
+        self.assertIn('InvalidAccessKeyId', parquet['verification']['message'])
+        self.assertEqual(parquet['json']['PageViews'], dict(lab.PAGES))

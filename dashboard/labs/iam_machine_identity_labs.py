@@ -3,11 +3,11 @@ role chaining from a CI role with a session policy, attribute-based access contr
 credential rotated by a Secrets Manager rotation function through all four steps, including a rotation that fails its
 test and is cleared.
 
-Floci 2.4.0 enforces IAM for these calls: permissions boundaries, the iam:PermissionsBoundary condition key, explicit
-denies, and session policies all decide real requests. It runs the rotation function for every step and moves the
-version labels. What Floci does not do: it does not resolve tag condition keys (aws:ResourceTag, aws:PrincipalTag), so
-an ABAC policy denies every request and the lab evaluates the tag decisions itself; it does not cap a chained role
-session at one hour; and it never retries a failed rotation, so the lab clears the stuck version and rotates again.
+Floci enforces IAM for these calls: permissions boundaries, the iam:PermissionsBoundary condition key, explicit
+denies, session policies, and the one-hour role-chaining cap all decide real requests. It runs the rotation function
+for every step and moves the version labels. What Floci does not do: it does not resolve tag condition keys
+(aws:ResourceTag, aws:PrincipalTag), so an ABAC policy denies every request and the lab evaluates the tag decisions
+itself; and it never retries a failed rotation, so the lab clears the stuck version and rotates again.
 """
 
 from __future__ import annotations
@@ -239,7 +239,9 @@ CEILING_COMMAND = (
 CHAIN_COMMAND = (
     f'aws sts assume-role --role-arn {CI_ROLE_ARN} --role-session-name pipeline\n'
     f'aws sts assume-role --role-arn {DEPLOYER_ARN} --role-session-name pipeline-deploy '
-    f'--duration-seconds {CHAINED_SECONDS} --policy file://only-jobs-queue.json   # with the CI role\'s credentials\n'
+    f'--duration-seconds {CHAINED_SECONDS} --policy file://only-jobs-queue.json   # refused: chaining is capped at 1 hour\n'
+    f'aws sts assume-role --role-arn {DEPLOYER_ARN} --role-session-name pipeline-deploy '
+    '--policy file://only-jobs-queue.json   # with the CI role\'s credentials\n'
     'aws sts get-caller-identity\n'
     f'aws sqs send-message --queue-url <{JOBS_QUEUE}> --message-body deploy-1      # allowed\n'
     f'aws sqs send-message --queue-url <{AUDIT_QUEUE}> --message-body deploy-1     # the session policy denies it'
@@ -339,9 +341,9 @@ LAB = {
                 f'A pipeline runs as {CI_ROLE}, which may only assume {DEPLOYER}. It passes a session policy that '
                 f'narrows the deploy session to sending messages to {JOBS_QUEUE}, so this deployment cannot touch '
                 f'{AUDIT_QUEUE} even though the deploy role could. The caller identity names the deploy role and the '
-                'session. On AWS a chained session lasts at most one hour, so asking for two hours fails. '
-                + FLOCI + 'the chain and the session policy are enforced, but Floci issues the two-hour chained '
-                'session; the step reports the expiration it returned.'
+                'session. On AWS a chained session lasts at most one hour, even when the target role allows a longer '
+                'session, so asking for two hours fails. '
+                + FLOCI + 'the chain, the one-hour role-chaining cap, and the session policy are all enforced.'
             ),
         },
         {
@@ -528,14 +530,19 @@ def _role(name: str) -> dict[str, Any] | None:
     return _safe_call(lambda: _client('iam').get_role(RoleName=name)['Role'])
 
 
-def _ensure_role(name: str, trust: dict[str, Any], policy: dict[str, Any], boundary: str | None = None) -> None:
+def _ensure_role(name: str, trust: dict[str, Any], policy: dict[str, Any], boundary: str | None = None,
+                 max_session_duration: int | None = None) -> None:
     iam = _client('iam')
     if not _role(name):
-        kwargs = {'PermissionsBoundary': boundary} if boundary else {}
+        kwargs: dict[str, Any] = {'PermissionsBoundary': boundary} if boundary else {}
+        if max_session_duration is not None:
+            kwargs['MaxSessionDuration'] = max_session_duration
         iam.create_role(RoleName=name, AssumeRolePolicyDocument=json.dumps(trust),
                         Tags=[{'Key': 'Lab', 'Value': LAB_KEY}], **kwargs)
     else:
         iam.update_assume_role_policy(RoleName=name, PolicyDocument=json.dumps(trust))
+        if max_session_duration is not None:
+            iam.update_role(RoleName=name, MaxSessionDuration=max_session_duration)
     iam.put_role_policy(RoleName=name, PolicyName=INLINE_POLICY, PolicyDocument=json.dumps(policy))
 
 
@@ -630,6 +637,9 @@ def _check_chain() -> tuple[bool, str]:
         return False, 'The chained session is not running as the deploy role.'
     if not (marker.get('jobs') or {}).get('allowed') or (marker.get('audit') or {}).get('allowed') is not False:
         return False, f'The session policy should allow {JOBS_QUEUE} and deny {AUDIT_QUEUE}: {marker or "not run"}.'
+    if (marker.get('twoHourChaining') or {}).get('allowed') is False:
+        return True, (f'The 2-hour chained request was refused by the 1-hour chaining cap, and the 1-hour chained '
+                      f'session reached {JOBS_QUEUE} only, as its session policy says.')
     return True, f'The chained session reached {JOBS_QUEUE} only, as its session policy says.'
 
 
@@ -747,16 +757,21 @@ def step_chained_session() -> dict[str, Any]:
     for name in (JOBS_QUEUE, AUDIT_QUEUE):
         if not _queue_url(name):
             _client('sqs').create_queue(QueueName=name)
-    _ensure_role(DEPLOYER, _trust({'AWS': CI_ROLE_ARN}), DEPLOYER_POLICY, boundary=BOUNDARY_ARN)
+    _ensure_role(DEPLOYER, _trust({'AWS': CI_ROLE_ARN}), DEPLOYER_POLICY, boundary=BOUNDARY_ARN,
+                 max_session_duration=CHAINED_SECONDS)
     _ensure_role(CI_ROLE, _trust({'AWS': ROOT}), CI_POLICY)
     ci = _assume(CI_ROLE_ARN, 'pipeline')['Credentials']
-    chained = _assume(DEPLOYER_ARN, 'pipeline-deploy', client=_session_client('sts', ci),
-                      DurationSeconds=CHAINED_SECONDS, Policy=json.dumps(SESSION_POLICY))
+    ci_sts = _session_client('sts', ci)
+    two_hours = _attempt(lambda: ci_sts.assume_role(
+        RoleArn=DEPLOYER_ARN, RoleSessionName='pipeline-deploy', DurationSeconds=CHAINED_SECONDS,
+        Policy=json.dumps(SESSION_POLICY)))
+    chained = _assume(DEPLOYER_ARN, 'pipeline-deploy', client=ci_sts, Policy=json.dumps(SESSION_POLICY))
     credentials = chained['Credentials']
     sqs = _session_client('sqs', credentials)
     lifetime = round((credentials['Expiration'].timestamp() - time.time()) / 60)
     marker = {
         'caller': _session_client('sts', credentials).get_caller_identity()['Arn'],
+        'twoHoursChained': two_hours,
         'sessionMinutes': lifetime,
         'jobs': _attempt(lambda: sqs.send_message(QueueUrl=_queue_url(JOBS_QUEUE), MessageBody='deploy-1')),
         'audit': _attempt(lambda: sqs.send_message(QueueUrl=_queue_url(AUDIT_QUEUE), MessageBody='deploy-1')),
@@ -764,8 +779,9 @@ def step_chained_session() -> dict[str, Any]:
     _marker('chained-session', marker)
     verified, message = _check_chain()
     if verified:
-        message += (f' Floci issued a {lifetime}-minute chained session; AWS caps role chaining at 60 minutes.'
-                    if lifetime > 60 else ' The chained session lasts at most an hour, as on AWS.')
+        message += (' Asking for two hours failed and the chained session lasts at most an hour, as on AWS.'
+                    if not two_hours['allowed'] and lifetime <= 60
+                    else f' Floci issued a {lifetime}-minute chained session.')
     return _result('chained-session', CHAIN_COMMAND, {**marker, 'SessionPolicy': SESSION_POLICY}, verified, message,
                    started)
 

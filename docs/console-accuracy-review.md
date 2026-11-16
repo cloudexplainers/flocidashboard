@@ -1950,6 +1950,17 @@ Checked live on a throwaway Floci 2.4.0 with IAM enforcement and signature valid
 | DNS | `ModifyVpcAttribute` for DNS support and hostnames, private hosted zones, outbound Resolver endpoints, forwarding rules and their VPC associations work. `UpdateFirewallDomains`, `ListFirewallDomains` and firewall rule groups are unknown operations. Nothing answers DNS queries. | The lab resolves each name itself |
 | CloudFront | Custom cache policies (query string allow lists, cookies) and a distribution with a custom origin reach Deployed; no edge cache or invalidations. | The lab computes cache keys and the hit ratio |
 
+## Floci 2.5.0 full lab audit (2026-11-16)
+
+All 120 labs were audited against `floci/floci:latest` (Floci 2.5.0) with IAM enforcement and signature validation on:
+
+| Behavior | Floci 2.5.0 | Dashboard / lab change |
+| --- | --- | --- |
+| STS role chaining duration | `AssumeRole` now enforces `MaxSessionDuration` on the target role and caps role-chained sessions at 3,600 seconds (`The requested DurationSeconds exceeds the 1 hour session limit for roles assumed by role chaining`). | `iam/machine-identity` sets `MaxSessionDuration=7200` on `lab-id-deployer`, records the refused 2-hour chained call, and assumes the role for 1 hour with the session policy. |
+| EC2 post-boot setup | After `markRunning`, Floci runs `update-ca-certificates` and `ssh-keygen -A` to start `sshd`, which uses ~1 vCPU for 10–15 seconds. | `ec2/performance-tuning` waits for `update-ca-certificates` and `ssh-keygen` to exit and `sshd` to be running before sampling CPU on the right-sized instance. |
+| Security group dependencies on delete | `DeleteSecurityGroup` checks `hasSecurityGroupDependencies`, which includes instances still in `shutting-down` and ECS task ENIs while containers stop. | `ec2/block-file-storage`, `ec2/shared-responsibility`, and `ecs/fargate-microservice` resets wait for `shutting-down` instances and stopping ECS tasks and retry `DependencyViolation` / `InvalidGroup.InUse`. |
+| Athena `floci-duck` S3 access key | `AthenaService` passes `accountId` (`000000000000`) to `floci-duck` as `s3_access_key`; with `FLOCI_AUTH_VALIDATE_SIGNATURES=true`, S3 rejects unregistered numeric access key IDs with `InvalidAccessKeyId`. | `stepfunctions/etl-pipeline`, `kinesis/streaming-data-lake`, and `glue/catalog-quality` run the Athena queries, record the `InvalidAccessKeyId` failure, and evaluate the cataloged S3 partitions directly, explaining the limitation in the step and Athena console notes. |
+
 ## Recommended next work
 
 | Item | Why not here |

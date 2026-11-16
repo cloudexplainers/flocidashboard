@@ -414,7 +414,7 @@ def _group() -> dict[str, Any] | None:
 def _instance() -> dict[str, Any] | None:
     reservations = _client('ec2').describe_instances(Filters=[
         {'Name': 'tag:Name', 'Values': [WEB_INSTANCE]},
-        {'Name': 'instance-state-name', 'Values': ['pending', 'running', 'stopping', 'stopped']},
+        {'Name': 'instance-state-name', 'Values': ['pending', 'running', 'stopping', 'stopped', 'shutting-down']},
     ]).get('Reservations', [])
     instances = [item for reservation in reservations for item in reservation.get('Instances', [])]
     return instances[0] if instances else None
@@ -853,17 +853,25 @@ def reset() -> dict[str, Any]:
     deleted: list[str] = []
     errors: list[str] = []
 
-    def attempt(label: str, call) -> None:
-        try:
-            call()
-            deleted.append(label)
-        except ClientError as exc:
-            code = _code(exc)
-            if 'NotFound' in code or code.startswith('NoSuch') or code in ('ResourceNotFoundException',):
+    def attempt(label: str, call, retry_codes: set[str] = frozenset()) -> None:
+        for _try in range(15):
+            try:
+                call()
+                deleted.append(label)
                 return
-            errors.append(f'{label}: {exc}')
-        except BotoCoreError as exc:
-            errors.append(f'{label}: {exc}')
+            except ClientError as exc:
+                code = _code(exc)
+                if 'NotFound' in code or code.startswith('NoSuch') or code in ('ResourceNotFoundException',):
+                    return
+                if code in retry_codes:
+                    time.sleep(2)
+                    continue
+                errors.append(f'{label}: {exc}')
+                return
+            except BotoCoreError as exc:
+                errors.append(f'{label}: {exc}')
+                return
+        errors.append(f'{label}: still in use after retries')
 
     ec2, rds, lam, iam, s3 = (_client(name) for name in ('ec2', 'rds', 'lambda', 'iam', 's3'))
     try:
@@ -886,7 +894,8 @@ def reset() -> dict[str, Any]:
     except (ClientError, BotoCoreError):
         group = None
     if group:
-        attempt(f'security-group:{WEB_SG}', lambda: ec2.delete_security_group(GroupId=group['GroupId']))
+        attempt(f'security-group:{WEB_SG}', lambda: ec2.delete_security_group(GroupId=group['GroupId']),
+                retry_codes={'DependencyViolation', 'InvalidGroup.InUse'})
     try:
         db = _db()
     except (ClientError, BotoCoreError):

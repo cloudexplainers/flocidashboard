@@ -118,7 +118,10 @@ WORKLOAD_SCRIPT = CGROUP_HELPERS + (
     'echo "wall_ns=$((e - s))"\n'
     'echo "throttled=$((t2 - t1))"'
 )
-SETTLED_SCRIPT = 'echo "busy=$(ps -eo comm= | grep -cE \'^(apt|apt-get|dpkg|http|gpgv)$\')"'
+SETTLED_SCRIPT = (
+    'echo "busy=$(ps -eo comm= | grep -cE \'^(apt|apt-get|dpkg|http|gpgv|update-ca-cert|ssh-keygen)$\')"\n'
+    'echo "sshd=$(ps -eo comm= | grep -c \'^sshd$\')"'
+)
 # The job writes every byte it holds. A zero-filled buffer (vec) can finish inside a 1 GiB limit when Docker emulates the
 # instance's architecture, as Docker Desktop on Apple silicon does for x86 AMIs, so the kill never came.
 REPORT_SCRIPT = CGROUP_HELPERS + (
@@ -797,8 +800,9 @@ def _ready(instance_id: str) -> bool:
 
     if not _wait(running, BOOT_TIMEOUT, delay=3):
         return False
-    # Boot installs packages for a while; measuring CPU during it would count that work too.
-    return _wait(lambda: _run_shell(instance_id, SETTLED_SCRIPT)['Stdout'] == 'busy=0', BOOT_TIMEOUT, delay=5)
+    # Boot installs packages and starts sshd for a while; measuring CPU during it would count that work too.
+    return _wait(lambda: (lambda v: v.get('busy') == '0' and int(v.get('sshd') or 0) > 0)(
+        parse_values(_run_shell(instance_id, SETTLED_SCRIPT)['Stdout'])), BOOT_TIMEOUT, delay=5)
 
 
 def _need(name: str, step: str, command: str, started: float) -> tuple[dict | None, dict | None]:

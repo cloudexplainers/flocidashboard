@@ -145,6 +145,11 @@ class CheckTests(SimpleTestCase):
         lab._marker('query-curated', {'counts': lab.EXPECTED_FINAL, 'revenue': lab.EXPECTED_AMOUNTS})
         with patch.object(lab, '_table', return_value={'Name': lab.TABLE}):
             self.assertTrue(lab._check_query()[0])
+            lab._marker('query-curated', {'counts': lab.EXPECTED_FINAL, 'revenue': lab.EXPECTED_AMOUNTS,
+                                          'source': 's3-partitions'})
+            ok, msg = lab._check_query()
+            self.assertTrue(ok)
+            self.assertIn('InvalidAccessKeyId', msg)
             lab._marker('query-curated', {'counts': {**lab.EXPECTED_FINAL, lab.DAY_ONE: 7},
                                           'revenue': lab.EXPECTED_AMOUNTS})
             self.assertFalse(lab._check_query()[0])

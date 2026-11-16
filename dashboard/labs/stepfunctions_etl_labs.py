@@ -3,12 +3,14 @@ valid rows go to date-partitioned JSON, bad rows and bad files are set aside, a 
 failures alert through SNS to SQS, new files start the workflow through EventBridge, a nightly EventBridge Scheduler
 sweep catches anything missed, and Athena queries the curated output.
 
-Floci 2.4.0 runs all of it for real: the Lambda function runs in a container and calls S3 and DynamoDB, the state
+Floci 2.5.0 runs all of it for real: the Lambda function runs in a container and calls S3 and DynamoDB, the state
 machine runs Map, Retry, Catch, Choice and JSONPath filters, S3 sends Object Created events to EventBridge, and
 Floci checks the IAM policy of both the workflow role and the function role. What Floci does not do: its Step
 Functions has no Athena or Glue service integrations ("Unsupported resource"), so the workflow calls Lambda, and
-the lab runs the Athena check itself. A Glue ETL job would not run its script on Floci, which is why the transform
-is a Lambda function.
+the lab runs the Athena check itself (when S3 signature validation is enabled, Floci's `floci-duck` sidecar gets
+`InvalidAccessKeyId` because Floci passes the account ID as its access key, so the lab totals the cataloged S3
+partitions directly). A Glue ETL job would not run its script on Floci, which is why the transform is a Lambda
+function.
 """
 
 from __future__ import annotations
@@ -507,8 +509,10 @@ LAB = {
                 f'({", ".join(f"{day}: {count}" for day, count in EXPECTED_FINAL.items())}). A check like this is a '
                 'cheap data quality gate at the end of a pipeline: in production a final workflow state would run it '
                 'and fail the execution if the numbers drift. '
-                + FLOCI + 'Athena runs the SQL on DuckDB over the S3 files. Step Functions in Floci cannot call '
-                'Athena directly, so the lab runs the query itself.'
+                + FLOCI + 'Athena runs the SQL on DuckDB over the S3 files; when S3 signature validation is on, '
+                'floci-duck\'s S3 read fails with InvalidAccessKeyId (Floci passes the account ID as the access key) '
+                'and the lab totals the cataloged S3 partitions directly. Step Functions in Floci cannot call Athena '
+                'directly, so the lab runs the query itself.'
             ),
         },
     ],
@@ -603,6 +607,17 @@ def curated_counts() -> dict[str, int]:
         body = _object(key) or ''
         counts[day] = counts.get(day, 0) + sum(1 for line in body.splitlines() if line.strip())
     return dict(sorted(counts.items()))
+
+
+def curated_revenue() -> dict[str, float]:
+    """Revenue per dt partition, summed from the curated JSON files."""
+    revenue: dict[str, float] = {}
+    for key in _keys(CURATED):
+        day = key[len(CURATED):].split('/', 1)[0].removeprefix('dt=')
+        body = _object(key) or ''
+        rows = [json.loads(line) for line in body.splitlines() if line.strip()]
+        revenue[day] = round(revenue.get(day, 0.0) + sum(_number(row.get('amount')) for row in rows), 2)
+    return dict(sorted(revenue.items()))
 
 
 def _manifest_table() -> dict[str, Any] | None:
@@ -875,6 +890,9 @@ def _check_query() -> tuple[bool, str]:
         return False, f'Athena counts {counts} should be {EXPECTED_FINAL}.'
     if marker.get('revenue') != EXPECTED_AMOUNTS:
         return False, f'Athena revenue {marker.get("revenue")} should be {EXPECTED_AMOUNTS}.'
+    if marker.get('source') == 's3-partitions':
+        return True, (f'Cataloged partitions agree with the manifest: {counts} '
+                      '(summed from S3 because floci-duck gets InvalidAccessKeyId when signature validation is on).')
     return True, f'Athena agrees with the manifest: {counts}.'
 
 
@@ -1103,13 +1121,21 @@ def step_query_curated() -> dict[str, Any]:
                                                     'Location': f's3://{BUCKET}/{CURATED}dt={day}/'}}
             for day in days])
     outcome = athena(f'SELECT dt, COUNT(*) AS orders, SUM(amount) AS revenue FROM {TABLE} GROUP BY dt ORDER BY dt')
-    counts = {row['dt']: int(_number(row.get('orders'))) for row in outcome['Rows']}
-    revenue = {row['dt']: round(_number(row.get('revenue')), 2) for row in outcome['Rows']}
-    _marker('query-curated', {'counts': counts, 'revenue': revenue})
+    if outcome['State'] == 'SUCCEEDED':
+        counts = {row['dt']: int(_number(row.get('orders'))) for row in outcome['Rows']}
+        revenue = {row['dt']: round(_number(row.get('revenue')), 2) for row in outcome['Rows']}
+        source = 'athena'
+    elif 'InvalidAccessKeyId' in (outcome.get('Reason') or ''):
+        counts = curated_counts()
+        revenue = curated_revenue()
+        source = 's3-partitions'
+    else:
+        counts, revenue, source = {}, {}, 'athena'
+    _marker('query-curated', {'counts': counts, 'revenue': revenue, 'source': source})
     verified, message = _check_query()
     return _result('query-curated', QUERY_COMMAND, {
         'Partitions': days, 'Athena': {'State': outcome['State'], 'Reason': outcome['Reason'], 'Rows': outcome['Rows']},
-        'Expected': EXPECTED_FINAL,
+        'Totals': {'Source': source, 'Orders': counts, 'Revenue': revenue}, 'Expected': EXPECTED_FINAL,
     }, verified, message, started)
 
 
