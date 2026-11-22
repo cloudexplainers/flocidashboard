@@ -7689,6 +7689,25 @@ class MultiSdkSnippetsTests(SimpleTestCase):
         self.assertNotIn('variable "key_id"', tf)
         self.assertNotIn('variable "web_sg_id"', tf)
 
+    def test_terraform_composite_alarm_waits_for_its_child_alarms(self):
+        """The rule names its alarms in a string, so Terraform needs depends_on or it creates them in parallel."""
+        from dashboard.labs.snippets import generate_terraform_snippet
+
+        tf = generate_terraform_snippet(
+            'aws cloudwatch put-metric-alarm --alarm-name web-1-down --metric-name StatusCheckFailed --namespace AWS/EC2 '
+            '--statistic Maximum --period 60 --evaluation-periods 1 --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold\n'
+            'aws cloudwatch put-metric-alarm --alarm-name web-2-down --metric-name StatusCheckFailed --namespace AWS/EC2 '
+            '--statistic Maximum --period 60 --evaluation-periods 1 --threshold 1 --comparison-operator GreaterThanOrEqualToThreshold\n'
+            'aws cloudwatch put-composite-alarm --alarm-name fleet-degraded '
+            '--alarm-rule \'ALARM("web-1-down") OR ALARM("web-2-down") OR ALARM("elsewhere")\''
+        )
+        block = tf[tf.index('resource "aws_cloudwatch_composite_alarm"'):]
+        self.assertIn('aws_cloudwatch_metric_alarm.web_1_down,', block)
+        self.assertIn('aws_cloudwatch_metric_alarm.web_2_down,', block)
+        self.assertNotIn('elsewhere,', block)
+        self.assertEqual(generate_terraform_snippet(
+            'aws cloudwatch put-composite-alarm --alarm-name a --alarm-rule \'ALARM("not-here")\'').count('depends_on'), 0)
+
     def test_terraform_flow_log_uses_log_destination(self):
         from dashboard.labs.snippets import generate_terraform_snippet
 

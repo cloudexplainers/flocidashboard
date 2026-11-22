@@ -10,6 +10,7 @@
 - Fixed: matched two labs to Floci's main branch after 2.5.0 (built from source at `5b9e842`):
   - `codepipeline/pipeline-quality-gates`: Floci now runs a CodeBuild build as its project's service role and, on a user-defined Docker network, serves the role's session at `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` with no access keys in the environment, as CodeBuild does. The build's hand-signed DynamoDB client read `AWS_ACCESS_KEY_ID` and failed with `'AWS_ACCESS_KEY_ID'`; it now reads the container credentials endpoint first and falls back to the environment, and the step's note says the role's policy decides what the build may call.
   - `kinesis/streaming-data-lake`: Athena on the curated table now reaches the results file, where S3 signature validation refuses `floci-duck` with a bare `Forbidden (HTTP code 403)` rather than `InvalidAccessKeyId`. The convert-parquet step treats that 403 like `InvalidAccessKeyId` and evaluates the partitions directly.
+- Fixed: the Terraform tab of a step that creates a composite alarm now gives it `depends_on` for the alarms its rule names. The rule is a string Terraform can't read, so it created all the alarms at once, and CloudWatch (and Floci's main branch since 2.5.0) refuses a rule naming alarms that don't exist yet (`cloudwatch/fleet-monitoring`, `cloudwatch/centralized-logging`, `eventbridge/drift-remediation`).
 
 ## 2.4.0 — 2026-11-08
 
