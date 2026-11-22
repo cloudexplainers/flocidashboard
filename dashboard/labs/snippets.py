@@ -2549,6 +2549,7 @@ def _generate_terraform(command: str) -> str:
                 previous[res.type] = f'{res.type}.{label}'
                 body = _link_references(body, res.type, refs)
                 body = _link_placeholders(body, declared, {**variables, **tf.variables})
+                body = _composite_depends_on(body, res.type, refs)
                 _register_references(body, res.type, label, refs)
                 declared.append((res.type, label))
                 lines = [f'resource "{res.type}" "{label}" {{', *_render_body(body, 1, tf), '}']
@@ -2608,6 +2609,25 @@ def _register_references(body: list[tuple[str, Any]], kind: str, label: str, ref
             if kind in _TF_ARN_SHAPES:
                 refs.setdefault(('arn', kind, value), (kind, _Hcl(f'{kind}.{label}.arn')))
             return
+
+
+_ALARM_RULE_NAME_RE = re.compile(r'\b(?:ALARM|OK|INSUFFICIENT_DATA)\(\s*"?([^")]+?)"?\s*\)')
+
+
+def _composite_depends_on(body: list[tuple[str, Any]], kind: str, refs: dict) -> list[tuple[str, Any]]:
+    """A composite alarm names its child alarms inside the alarm_rule string, which Terraform can't see,
+    so it would create them at the same time; CloudWatch refuses a rule naming alarms that don't exist yet."""
+    if kind != 'aws_cloudwatch_composite_alarm':
+        return body
+    rule = next((v for k, v in body if k == 'alarm_rule' and isinstance(v, str)), '')
+    deps: list[str] = []
+    for name in _ALARM_RULE_NAME_RE.findall(rule):
+        hit = refs.get(name.split(':alarm:')[-1])
+        if hit and hit[0] in ('aws_cloudwatch_metric_alarm', 'aws_cloudwatch_composite_alarm'):
+            address = hit[1].expr.rsplit('.', 1)[0]
+            if address not in deps:
+                deps.append(address)
+    return body + [('depends_on', [_Hcl(d) for d in deps])] if deps else body
 
 
 def _link_references(entries: list[tuple[str, Any]], kind: str, refs: dict) -> list[tuple[str, Any]]:
