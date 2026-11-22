@@ -421,6 +421,27 @@ class KinesisDataLakeLabTests(SimpleTestCase):
         self.assertEqual(result['errors'], [])
         self.assertEqual(result['deleted_resources'], [])
 
+    def test_parquet_falls_back_when_floci_duck_gets_a_bare_403_on_the_results_file(self):
+        for step in lab.STEP_KEYS[:8]:
+            run_lab_step(SERVICE, LAB, step)
+        forbidden = {'QueryExecutionId': 'q-403', 'State': 'FAILED',
+                     'StateChangeReason': ('floci-duck execute returned HTTP 500: HTTP Error: Unable to connect to URL '
+                                           's3://floci-athena-results/results/q-403.csv: Forbidden (HTTP code 403)'),
+                     'OutputLocation': 's3://floci-athena-results/results/q-403.csv', 'DataScannedInBytes': 0, 'Rows': []}
+        with patch.object(lab, '_athena', return_value=dict(forbidden)):
+            parquet = run_lab_step(SERVICE, LAB, 'convert-parquet')
+        self.assertTrue(parquet['verified'], parquet['verification'])
+        self.assertEqual(parquet['json']['PageViews'], dict(lab.PAGES))
+        self.assertTrue(parquet['json']['Prepare']['FallbackReason'])
+
+    def test_other_query_failures_still_fail(self):
+        for step in lab.STEP_KEYS[:8]:
+            run_lab_step(SERVICE, LAB, step)
+        broken = {'QueryExecutionId': 'q-x', 'State': 'FAILED', 'StateChangeReason': 'Catalog error: no such table',
+                  'OutputLocation': None, 'DataScannedInBytes': 0, 'Rows': []}
+        with patch.object(lab, '_athena', return_value=dict(broken)):
+            self.assertFalse(run_lab_step(SERVICE, LAB, 'convert-parquet')['verified'])
+
     def test_queries_fall_back_when_floci_duck_hits_invalid_access_key_id(self):
         for step in lab.STEP_KEYS[:7]:
             self.assertTrue(run_lab_step(SERVICE, LAB, step)['verified'], step)

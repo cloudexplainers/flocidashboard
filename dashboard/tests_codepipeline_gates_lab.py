@@ -37,6 +37,41 @@ def _run_unit_gate(release):
     return process, coverage, settings, junit
 
 
+class StoreCredentialsTests(SimpleTestCase):
+    """The build's DynamoDB client signs with the service role's session, read as the SDKs read it."""
+
+    def _store(self):
+        namespace = {}
+        exec(compile(lab.store_source('id'), 'store.py', 'exec'), namespace)
+        return namespace
+
+    def test_reads_the_container_credentials_endpoint_when_codebuild_serves_one(self):
+        store = self._store()
+        body = json.dumps({'AccessKeyId': 'ASIAROLE', 'SecretAccessKey': 'role-secret', 'Token': 'role-token'})
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return body.encode()
+
+        env = {'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI': '/v2/credentials/build-1'}
+        with patch.dict(os.environ, env, clear=True), \
+                patch.object(store['urllib'].request, 'urlopen', return_value=Response()) as urlopen:
+            self.assertEqual(store['credentials'](), ('ASIAROLE', 'role-secret', 'role-token'))
+        self.assertEqual(urlopen.call_args.args[0].full_url, 'http://169.254.170.2/v2/credentials/build-1')
+
+    def test_falls_back_to_keys_in_the_environment(self):
+        store = self._store()
+        env = {'AWS_ACCESS_KEY_ID': 'AKIA', 'AWS_SECRET_ACCESS_KEY': 'secret', 'AWS_SESSION_TOKEN': 'token'}
+        with patch.dict(os.environ, env, clear=True):
+            self.assertEqual(store['credentials'](), ('AKIA', 'secret', 'token'))
+
+
 class UnitGateTests(SimpleTestCase):
     def test_release_1_passes_with_full_coverage(self):
         process, coverage, settings, junit = _run_unit_gate(lab.RELEASE_1)

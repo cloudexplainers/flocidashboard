@@ -142,17 +142,30 @@ def store_source(key_attribute: str) -> str:
         'import datetime\nimport hashlib\nimport hmac\nimport json\nimport os\nimport urllib.error\n'
         'import urllib.request\n\n'
         f'KEY_ATTRIBUTE = {key_attribute!r}\n\n\n'
+        'def credentials():\n'
+        '    """The build role\'s keys: from the container credentials endpoint, as CodeBuild serves them, else the environment."""\n'
+        "    relative = os.environ.get('AWS_CONTAINER_CREDENTIALS_RELATIVE_URI')\n"
+        "    full = os.environ.get('AWS_CONTAINER_CREDENTIALS_FULL_URI')\n"
+        '    if relative or full:\n'
+        "        request = urllib.request.Request(full or 'http://169.254.170.2' + relative)\n"
+        "        if os.environ.get('AWS_CONTAINER_AUTHORIZATION_TOKEN'):\n"
+        "            request.add_header('Authorization', os.environ['AWS_CONTAINER_AUTHORIZATION_TOKEN'])\n"
+        '        with urllib.request.urlopen(request, timeout=5) as response:\n'
+        '            data = json.loads(response.read())\n'
+        "        return data['AccessKeyId'], data['SecretAccessKey'], data.get('Token')\n"
+        "    return (os.environ['AWS_ACCESS_KEY_ID'], os.environ['AWS_SECRET_ACCESS_KEY'],\n"
+        "            os.environ.get('AWS_SESSION_TOKEN'))\n\n\n"
         'def call(action, body):\n'
         "    endpoint = os.environ.get('AWS_ENDPOINT_URL', 'https://dynamodb.us-east-1.amazonaws.com').rstrip('/')\n"
         "    region = os.environ.get('AWS_REGION', 'us-east-1')\n"
-        "    key, secret = os.environ['AWS_ACCESS_KEY_ID'], os.environ['AWS_SECRET_ACCESS_KEY']\n"
+        '    key, secret, token = credentials()\n'
         '    payload = json.dumps(body).encode()\n'
         '    now = datetime.datetime.now(datetime.timezone.utc)\n'
         "    amz_date, day = now.strftime('%Y%m%dT%H%M%SZ'), now.strftime('%Y%m%d')\n"
         "    headers = {'content-type': 'application/x-amz-json-1.0', 'host': endpoint.split('://', 1)[1],\n"
         "               'x-amz-date': amz_date, 'x-amz-target': 'DynamoDB_20120810.' + action}\n"
-        "    if os.environ.get('AWS_SESSION_TOKEN'):\n"
-        "        headers['x-amz-security-token'] = os.environ['AWS_SESSION_TOKEN']\n"
+        '    if token:\n'
+        "        headers['x-amz-security-token'] = token\n"
         "    signed = ';'.join(sorted(headers))\n"
         "    canonical = '\\n'.join(['POST', '/', '', ''.join(f'{k}:{headers[k]}\\n' for k in sorted(headers)),\n"
         '                           signed, hashlib.sha256(payload).hexdigest()])\n'
@@ -621,9 +634,11 @@ LAB = {
                 'integration_test.py, which saves an order to the DynamoDB table named in Parameter Store and reads '
                 'it back. The build calls DynamoDB with the credentials CodeBuild gives it, which come from the '
                 'service role. '
-                + FLOCI + 'the call really reaches Floci\'s DynamoDB: Floci sets AWS_ENDPOINT_URL and test '
-                'credentials in the build so SDKs talk to Floci, and the item the build wrote is in the table '
-                'afterwards. The image has no boto3, so the service signs its requests with SigV4 itself.'
+                + FLOCI + 'the call really reaches Floci\'s DynamoDB: Floci sets AWS_ENDPOINT_URL in the build '
+                'and, as CodeBuild does, serves a session of the service role at the container credentials '
+                'endpoint (AWS_CONTAINER_CREDENTIALS_RELATIVE_URI), so the role\'s policy decides what the build '
+                'may call, and the item the build wrote is in the table afterwards. The image has no boto3, so the '
+                'service reads that endpoint and signs its requests with SigV4 itself.'
             ),
         },
         {

@@ -326,7 +326,8 @@ LAB = {
                 'The query counts this run\'s page views. The dt filter is partition pruning: Athena reads only that '
                 'day\'s folder, so a year of data costs the same to query for one day as a single day does. How Floci '
                 'emulates this: Floci runs the SQL with DuckDB over the real objects, though when S3 signature '
-                'validation is on floci-duck gets InvalidAccessKeyId (Floci passes the account ID as its access key) '
+                'validation is on floci-duck gets InvalidAccessKeyId, or a bare 403 on the results file (Floci passes the account '
+                'ID as its access key) '
                 'and the step counts the landed partition objects directly; DataScannedInBytes is always 0, so the '
                 'step compares the counts with what it produced.'
             ),
@@ -488,6 +489,16 @@ def _landed(batch_id: str) -> dict[str, Any]:
             by_dt[folder.removeprefix('dt=')] += found
             keys.append(item['Key'])
     return {'count': sum(by_dt.values()), 'by_dt': dict(by_dt), 'keys': keys}
+
+
+def _duck_s3_rejected(query: dict[str, Any]) -> bool:
+    """Whether S3 signature validation refused floci-duck (Floci signs its S3 calls with the account ID as the key).
+
+    A read reports InvalidAccessKeyId; since Floci 2.5.0's later builds, writing the results file reports only
+    a bare 403 Forbidden.
+    """
+    reason = query.get('StateChangeReason') or ''
+    return query.get('State') != 'SUCCEEDED' and ('InvalidAccessKeyId' in reason or 'Forbidden (HTTP code 403)' in reason)
 
 
 def _athena(sql: str, workgroup: str | None = None) -> dict[str, Any]:
@@ -957,7 +968,7 @@ def _query_step(step: str, command: str, table: str, started: float, prepare=Non
     dt = landed['dt'][0] if len(landed.get('dt') or []) == 1 else None
     query = _athena(_page_query(table, batch_id, dt), WORKGROUP)
     response['Query'] = query
-    sig_rejected = query['State'] != 'SUCCEEDED' and 'InvalidAccessKeyId' in (query.get('StateChangeReason') or '')
+    sig_rejected = _duck_s3_rejected(query)
     if query['State'] != 'SUCCEEDED' and not sig_rejected:
         return _result(step, command, response, False,
                        f'The query {query["State"]}: {query.get("StateChangeReason")}', started)
@@ -970,7 +981,7 @@ def _query_step(step: str, command: str, table: str, started: float, prepare=Non
     message = (f'Athena counted {sum(counts.values())} page views across {len(counts)} pages in {table}'
                + (f' (dt={dt} only)' if dt else '') + ', matching the batch.')
     if sig_rejected:
-        message += ' Floci\'s floci-duck sidecar hit InvalidAccessKeyId under S3 signature validation, so the lab counted the partition objects directly.'
+        message += ' Floci\'s floci-duck sidecar hit InvalidAccessKeyId or a 403 under S3 signature validation, so the lab counted the partition objects directly.'
     if location and not location.startswith(f's3://{RESULTS_BUCKET}/'):
         message += f' Floci wrote the results to {location.split("/results/")[0]}, not the workgroup\'s bucket.'
     if not query.get('DataScannedInBytes'):
@@ -985,14 +996,14 @@ def step_query_clicks() -> dict[str, Any]:
 
 def _write_parquet() -> dict[str, Any]:
     result = _athena(FLOCI_PARQUET_SQL, WORKGROUP)
-    sig_rejected = result['State'] != 'SUCCEEDED' and 'InvalidAccessKeyId' in (result.get('StateChangeReason') or '')
+    sig_rejected = _duck_s3_rejected(result)
     if sig_rejected:
         s3 = _client('s3')
         for dt, events in _raw_events_by_dt().items():
             columnar = {col: [event.get(col) for event in events] for col, _ in COLUMNS}
             compressed = b'PAR1' + zlib.compress(json.dumps(columnar).encode('utf-8')) + b'PAR1'
             s3.put_object(Bucket=LAKE_BUCKET, Key=f'{CURATED_PREFIX}dt={dt}/data_0.parquet', Body=compressed)
-        result['FallbackReason'] = 'floci-duck S3 read failed with InvalidAccessKeyId under signature validation'
+        result['FallbackReason'] = 'floci-duck S3 call failed with InvalidAccessKeyId or a 403 under signature validation'
     if result['State'] == 'SUCCEEDED' or sig_rejected:
         glue = _client('glue')
         table_input = _table_input(CURATED_TABLE, CURATED_PREFIX, parquet=True)
@@ -1016,7 +1027,7 @@ def step_convert_parquet() -> dict[str, Any]:
         parquet_bytes = sum(item.get('Size') or 0 for item in objects)
         raw_bytes = prepare.get('RawObjectBytes') or 0
         extra = f' {len(objects)} Parquet object(s), {parquet_bytes} bytes, against {raw_bytes} bytes of raw JSON.'
-        note = (' Floci\'s DuckDB COPY hit InvalidAccessKeyId under signature validation, so the lab wrote the compressed columnar partition to S3.'
+        note = (' Floci\'s DuckDB COPY hit InvalidAccessKeyId or a 403 under signature validation, so the lab wrote the compressed columnar partition to S3.'
                 if prepare.get('FallbackReason') else ' Floci ran the DuckDB COPY that matches the CTAS.')
         result['verification']['message'] += extra + note
         _marker('convert-parquet', {'batch_id': _marked('land-in-s3')['batch_id'],
